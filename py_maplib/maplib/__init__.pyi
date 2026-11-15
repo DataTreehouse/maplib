@@ -1666,7 +1666,10 @@ class Model:
         :param shape_graph: The IRI of the Shape Graph (defaults to the default graph).
         :param data_graph: The IRI of the Data Graph (defaults to the default graph).
         :param report_graph: When this IRI (or None for default graph) is supplied, the validation report (if any) is found in this named graph.
-        :param inferences_graph: If this IRI is supplied, any inference results from sh:rule can be found in this named graph.
+        :param inferences_graph: If this IRI is supplied, the triples inferred by the SHACL rules (SHACL Advanced Features and
+            SHACL 1.2 Inference Rules) are added to this named graph. When it is the data graph, the rules add their
+            triples to the data graph itself; when it is None, they go to the transient graph (TRANSIENT_GRAPH).
+            Validation sees the data graph together with the inferred triples.
         :param include_details: Include details of SHACL evaluation alongside the report. Currently uses a lot of memory.
         :param include_conforms: Include those results that conformed. Also applies to details.
         :param only_shapes: Validate only these shapes, None means all shapes are validated (must be IRI, cannot be used with deactivate_shapes).
@@ -1674,7 +1677,7 @@ class Model:
         :param dry_run: Only find targets of shapes, but do not validate them.
         :param max_rows: Maximum estimated rows in underlying SPARQL results, helps avoid out-of-memory errors.
         :param serial: Turns off most parallell validation of shapes.
-        :param max_iterations: Maximum number of iterations for SHACL rules.
+        :param max_iterations: Maximum number of rule executions for SHACL rules.
         :param debug_rules: Debug why rules returning no results do so. Included in rule log.
         :return: Validation report containing shape performance details and target counts and whether the graph conforms (report.conforms)
         """
@@ -2138,9 +2141,10 @@ class Model:
     ) -> "InferenceResult":
         """
         Run the inference rules that are provided
-        :param rulesets: The Datalog ruleset (a string), or a list of rulesets.
+        :param rulesets: The ruleset (a string), or a list of rulesets. A ruleset is written in maplib's datalog syntax,
+            as SPARQL CONSTRUCT queries, or in SPARQL-RL 1.2 (RULE { ... } WHERE { ... }, maplib Enterprise Edition).
         :param graph: Apply the ruleset to this graph, defaults to the default graph, or the graph specified in the rules.
-        :param max_iterations: Maximum number of iterations.
+        :param max_iterations: Maximum number of rule executions.
         :param include_graphs: IRIs of graphs whose triples are merged into the graph that is reasoned over, as with FROM.
             None includes the transient graph (TRANSIENT_GRAPH), use [] to query only the graph itself.
         :param max_rows: Maximum estimated rows in result, helps avoid out-of-memory errors.

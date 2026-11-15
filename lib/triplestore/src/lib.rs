@@ -369,6 +369,14 @@ impl Triplestore {
         s
     }
 
+    /// Whether the graph holds any triple with the predicate.
+    pub fn graph_has_predicate(&self, graph: &NamedGraph, predicate: &NamedNode) -> bool {
+        self.graph_triples_map
+            .get(graph)
+            .and_then(|m| m.get(predicate))
+            .is_some_and(|m| m.values().any(|t| t.get_height() > 0))
+    }
+
     pub fn contains_graph(&self, graph: &NamedGraph) -> bool {
         self.graph_triples_map.contains_key(graph)
     }

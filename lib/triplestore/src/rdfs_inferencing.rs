@@ -156,6 +156,30 @@ impl Triplestore {
         Ok(())
     }
 
+    /// Like `rdfs_class_inheritance`, but the rdf:type and rdfs:subClassOf triples of the included
+    /// graphs count as well (e.g. inferred triples kept in a separate graph).
+    pub fn rdfs_class_inheritance_including(
+        &mut self,
+        graph: &NamedGraph,
+        include_graphs: &[NamedGraph],
+    ) -> Result<(), TriplestoreError> {
+        let transient = NamedGraph::transient();
+        let qs = QuerySettings {
+            include_graphs: include_graphs
+                .iter()
+                .filter(|g| *g != &transient)
+                .cloned()
+                .collect(),
+            max_rows: None,
+            strict_project: false,
+            federation: None,
+            evaluation_hook: None,
+        };
+        self.insert(RDFS_9, None, &qs, graph, &transient, None, false)
+            .map_err(|x| TriplestoreError::RDFSClassInheritanceError(x.to_string()))?;
+        Ok(())
+    }
+
     /// Removes the rdf:type triples from the transient graph, where `rdfs_class_inheritance`
     /// puts them.
     pub fn drop_rdfs_class_inheritance(&mut self) -> Result<(), TriplestoreError> {

@@ -13,6 +13,7 @@
 use crate::algebra::*;
 use crate::diagnostics::{render_peg_error, DiagnosticContext, PrefixSyntax};
 use crate::query::*;
+use crate::srl::*;
 use crate::term::*;
 use crate::update::*;
 use oxilangtag::LanguageTag;
@@ -183,6 +184,84 @@ pub fn parse_construct_ruleset(
     let queries = parser::ConstructRulesetUnit(constructs, &mut state)
         .map_err(|e| SparqlSyntaxError::from_peg(constructs, &e, "ruleset", &state))?;
     Ok(queries)
+}
+
+/// Parses a SPARQL-RL (SRL) 1.2 rule set.
+pub fn parse_srl_ruleset(
+    ruleset: &str,
+    base_iri: Option<Iri<String>>,
+    prefixes: HashMap<String, String>,
+) -> Result<SrlRuleSet, SparqlSyntaxError> {
+    let mut state = ParserState::new(base_iri, prefixes, HashSet::new());
+    let rs = parser::SrlRuleSetUnit(ruleset, &mut state)
+        .map_err(|e| SparqlSyntaxError::from_peg(ruleset, &e, "rule set", &state))?;
+    Ok(rs)
+}
+
+fn srl_triples(patterns: Vec<TripleOrPathPattern>) -> Result<Vec<SrlElement>, &'static str> {
+    let mut out = Vec::new();
+    for p in patterns {
+        match p {
+            TripleOrPathPattern::Triple(t) => out.push(SrlElement::Triple(t)),
+            TripleOrPathPattern::Path {
+                subject,
+                path,
+                object,
+            } => expand_srl_path(subject, &path, object, &mut out)?,
+        }
+    }
+    Ok(out)
+}
+
+/// SRL paths only use `/` and `^`, which are expanded into triple patterns.
+fn expand_srl_path(
+    subject: TermPattern,
+    path: &PropertyPathExpression,
+    object: TermPattern,
+    out: &mut Vec<SrlElement>,
+) -> Result<(), &'static str> {
+    match path {
+        PropertyPathExpression::NamedNode(p) => {
+            out.push(SrlElement::Triple(TriplePattern {
+                subject,
+                predicate: NamedNodePattern::NamedNode(p.clone()),
+                object,
+            }));
+            Ok(())
+        }
+        PropertyPathExpression::Reverse(p) => expand_srl_path(object, p, subject, out),
+        PropertyPathExpression::Sequence(a, b) => {
+            let middle = TermPattern::Variable(variable());
+            expand_srl_path(subject, a, middle.clone(), out)?;
+            expand_srl_path(middle, b, object, out)
+        }
+        _ => Err("Only the / and ^ property path operators are allowed in SPARQL-RL"),
+    }
+}
+
+fn srl_check_elements(elements: &[SrlElement]) -> Result<(), &'static str> {
+    for e in elements {
+        match e {
+            SrlElement::Triple(_) => {}
+            SrlElement::Filter(e) => check_srl_expression(e)?,
+            SrlElement::Assignment { expression, .. } => check_srl_expression(expression)?,
+            SrlElement::Negation { body, .. } | SrlElement::Group { body, .. } => {
+                srl_check_elements(body)?
+            }
+        }
+    }
+    Ok(())
+}
+
+fn srl_ground(triples: &[TriplePattern]) -> Result<(), &'static str> {
+    for t in triples {
+        let mut vars = Vec::new();
+        triple_pattern_variables(t, &mut vars);
+        if !vars.is_empty() {
+            return Err("Variables are not allowed in DATA blocks");
+        }
+    }
+    Ok(())
 }
 
 /// Error returned during SPARQL parsing.
@@ -1013,6 +1092,7 @@ pub struct ParserState {
     used_bnodes: HashSet<BlankNode>,
     currently_used_bnodes: HashSet<BlankNode>,
     aggregates: Vec<Vec<(Variable, AggregateExpression)>>,
+    srl_imports: Vec<NamedNode>,
 }
 
 impl ParserState {
@@ -1028,6 +1108,7 @@ impl ParserState {
             used_bnodes: HashSet::new(),
             currently_used_bnodes: HashSet::new(),
             aggregates: Vec::new(),
+            srl_imports: Vec::new(),
         }
     }
 
@@ -1181,6 +1262,94 @@ parser! {
         rule ConstructRuleset() -> Vec<Query> = _ Prologue() _ qs: (ConstructQuery() ** (_ "."? _)) _ "."? _ {
             qs
         }
+
+        pub rule SrlRuleSetUnit() -> SrlRuleSet = _ (SrlPrologue1() _)* items:SrlItemOrPrologue()* _ {
+            SrlRuleSet {
+                base_iri: state.base_iri.as_ref().map(|i| i.as_str().to_string()),
+                imports: take(&mut state.srl_imports),
+                items: items.into_iter().flatten().collect(),
+            }
+        }
+        rule SrlPrologue1() = BaseDecl() / PrefixDecl() / SrlVersionDecl() / SrlImportsDecl()
+        rule SrlVersionDecl() = i("VERSION") _ VersionSpecifier()
+        rule SrlImportsDecl() = i("IMPORTS") _ i:iri() {
+            state.srl_imports.push(i)
+        }
+        rule SrlItemOrPrologue() -> Option<SrlItem> =
+            r:SrlItem() _ { Some(r) } /
+            SrlPrologue1() _ { None }
+        rule SrlItem() -> SrlItem = SrlRule() / SrlData()
+        rule SrlClear() = {
+            state.used_bnodes.clear();
+            state.currently_used_bnodes.clear();
+        }
+        rule SrlRule() -> SrlItem = i("RULE") _ SrlClear() name:(n:iri() _ { n })? h:SrlHeadTemplate() _ SrlClear() i("WHERE") _ d:(i("DATA") _)? b:SrlBodyPattern() {?
+            srl_check_elements(&b)?;
+            Ok(SrlItem::Rule(SrlRule {
+                name,
+                head: h,
+                evaldata: d.is_none(),
+                body: b,
+            }))
+        }
+        rule SrlData() -> SrlItem = i("DATA") _ SrlClear() "{" _ t:TriplesTemplate()? _ "}" {?
+            let t = t.unwrap_or_default();
+            srl_ground(&t)?;
+            Ok(SrlItem::Data(t))
+        }
+        rule SrlHeadTemplate() -> Vec<TriplePattern> = "{" _ t:TriplesTemplate()? _ "}" { t.unwrap_or_default() }
+        rule SrlTriples() -> Vec<SrlElement> = t:TriplesBlock() {? srl_triples(t) }
+        rule SrlBodyPattern() -> Vec<SrlElement> = "{" _ a:SrlTriples()? _ b:SrlBodyItem()* _ "}" {
+            let mut out = a.unwrap_or_default();
+            for x in b {
+                out.extend(x);
+            }
+            out
+        }
+        rule SrlBodyItem() -> Vec<SrlElement> = e:SrlBodyNotTriples() _ ("." _)? t:SrlTriples()? _ {
+            let mut out = vec![e];
+            out.extend(t.unwrap_or_default());
+            out
+        }
+        rule SrlBodyNotTriples() -> SrlElement = SrlFilter() / SrlNegation() / SrlAssignment() / SrlGroup()
+        rule SrlFilter() -> SrlElement = i("FILTER") _ c:Constraint() { SrlElement::Filter(c) }
+        rule SrlNegation() -> SrlElement = i("NOT") _ d:(i("DATA") _)? "{" _ a:SrlTriples()? _ b:SrlNegationItem()* _ "}" {
+            let mut body = a.unwrap_or_default();
+            for x in b {
+                body.extend(x);
+            }
+            SrlElement::Negation { evaldata: d.is_none(), body }
+        }
+        rule SrlNegationItem() -> Vec<SrlElement> = e:SrlFilter() _ ("." _)? t:SrlTriples()? _ {
+            let mut out = vec![e];
+            out.extend(t.unwrap_or_default());
+            out
+        }
+        rule SrlAssignment() -> SrlElement = i("SET") _ "(" _ v:Var() _ ":=" _ e:Expression() _ ")" {
+            SrlElement::Assignment { variable: v, expression: e }
+        }
+        rule SrlGroup() -> SrlElement = i("GROUP") _ k:(i("BY") _ vs:(v:Var() _ { v })+ { vs })? "{" _ a:SrlTriples()? _ b:SrlGroupItem()* _ "}" _ aggs:SrlAggregations() {
+            let mut body = a.unwrap_or_default();
+            for x in b {
+                body.extend(x);
+            }
+            SrlElement::Group { keys: k.unwrap_or_default(), body, aggregates: aggs }
+        }
+        rule SrlGroupItem() -> Vec<SrlElement> = e:(SrlFilter() / SrlAssignment()) _ ("." _)? t:SrlTriples()? _ {
+            let mut out = vec![e];
+            out.extend(t.unwrap_or_default());
+            out
+        }
+        rule SrlAggregations() -> Vec<(Variable, SrlAggregate)> =
+            ANON() { Vec::new() } /
+            "[" _ a:SrlAggregation() ** ("," _) _ "]" { a }
+        rule SrlAggregation() -> (Variable, SrlAggregate) = v:Var() _ ":=" _ f:SrlAggregationFunction() _ { (v, f) }
+        rule SrlAggregationFunction() -> SrlAggregate =
+            i("COUNT") _ "(" _ d:(i("DISTINCT") _)? "*" _ ")" { SrlAggregate { function: SrlAggregateFunction::Count, distinct: d.is_some(), argument: None } } /
+            i("COUNT") _ "(" _ d:(i("DISTINCT") _)? v:Var() _ ")" { SrlAggregate { function: SrlAggregateFunction::Count, distinct: d.is_some(), argument: Some(v) } } /
+            i("MIN") _ "(" _ v:Var() _ ")" { SrlAggregate { function: SrlAggregateFunction::Min, distinct: false, argument: Some(v) } } /
+            i("MAX") _ "(" _ v:Var() _ ")" { SrlAggregate { function: SrlAggregateFunction::Max, distinct: false, argument: Some(v) } } /
+            i("SUM") _ "(" _ v:Var() _ ")" { SrlAggregate { function: SrlAggregateFunction::Sum, distinct: false, argument: Some(v) } }
 
         pub rule QueryUnit() -> Query = Query()
 
