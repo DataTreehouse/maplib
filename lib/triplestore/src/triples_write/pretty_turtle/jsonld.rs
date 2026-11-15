@@ -127,8 +127,9 @@ impl JsonLdContext {
     fn compact<'a>(&self, iri: &'a str) -> io::Result<Cow<'a, str>> {
         if let Some(m) = self.matcher.find(iri) {
             let suffix = &iri[m.end()..];
-            // A suffix starting with // makes it an absolute IRI.
-            if m.start() == 0 && !suffix.starts_with("//") {
+            // A suffix starting with // makes it an absolute IRI with the prefix as its scheme, and
+            // one starting with a single / reads like a path, so the IRI is kept as it is.
+            if m.start() == 0 && !suffix.starts_with('/') {
                 let name = &self.prefixes[m.pattern().as_usize()].0;
                 return Ok(Cow::Owned(format!("{name}:{suffix}")));
             }
