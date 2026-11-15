@@ -1,6 +1,6 @@
 # Change log
 
-## Unreleased
+## v0.22.0
 ### Breaking changes
 - Transient triples are removed. Triples that should be available for querying, validation and reasoning, but not written, now go in a reserved named graph, `maplib.TRANSIENT_GRAPH` (`https://datatreehouse.github.io/maplib/vocab#TransientGraph`). The `transient` parameter of `map_json`, `map_xml`, `read`, `reads` and `insert` is removed: pass `graph=TRANSIENT_GRAPH` (or `target_graph=TRANSIENT_GRAPH` for `insert`) instead
 - `include_transient` is replaced by `include_graphs: Optional[List[str]]` in `query`, `update`, `insert`, `infer`, `get_predicate`, `get_predicate_iris` and the corresponding `ModelStream` steps. The included graphs are merged into the queried graph, as with FROM. For `query`, `update`, `insert` and `infer`, `None` includes the transient graph (as `include_transient=True` did) and `[]` includes nothing; for `get_predicate` and `get_predicate_iris`, `None` includes nothing. `GRAPH ?g` ranges over the transient graph as over any other named graph, and `GRAPH <g>` no longer sees transient triples added to `g`

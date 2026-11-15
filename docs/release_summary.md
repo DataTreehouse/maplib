@@ -1,6 +1,6 @@
 # What's new in v0.22.0 (since v0.20.32)
 
-A short guide for deciding whether to upgrade from v0.20.32 to v0.22.0. It covers v0.20.33, v0.21.0 and v0.22.0 (the "Unreleased" section of [CHANGES.md](../CHANGES.md) until the release). Features marked **EE** need [maplib Enterprise Edition](../README.md#open-source-and-enterprise-edition); everything else is in the open-source core. [CHANGES.md](../CHANGES.md) has the full details, and [API_USAGE.md](../API_USAGE.md) has worked examples.
+A short guide for deciding whether to upgrade from v0.20.32 to v0.22.0. It covers v0.20.33, v0.21.0 and v0.22.0. Features marked **EE** need [maplib Enterprise Edition](../README.md#open-source-and-enterprise-edition); everything else is in the open-source core. [CHANGES.md](../CHANGES.md) has the full details, and [API_USAGE.md](../API_USAGE.md) has worked examples.
 
 ## Highlights
 
