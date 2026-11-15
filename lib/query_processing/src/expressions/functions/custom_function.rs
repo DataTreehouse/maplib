@@ -49,6 +49,8 @@ pub fn custom_(
             | xsd::DATE_TIME
             | xsd::DATE
             | xsd::DURATION
+            | xsd::YEAR_MONTH_DURATION
+            | xsd::DAY_TIME_DURATION
             | xsd::TIME
     ) {
         if args.len() != 1 {

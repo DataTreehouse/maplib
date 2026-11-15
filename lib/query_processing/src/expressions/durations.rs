@@ -97,6 +97,8 @@ enum Val {
     Days(i32),
     Time(Time),
     Number(Decimal),
+    /// A double that is infinite or outside the range of xsd:decimal.
+    Float(f64),
 }
 
 /// A result value.
@@ -129,14 +131,39 @@ impl OutKind {
     }
 }
 
-fn parse_number(s: &str) -> Option<Decimal> {
+fn parse_number(s: &str) -> Option<Val> {
     if let Ok(d) = Decimal::from_str(s) {
-        return Some(d);
+        return Some(Val::Number(d));
     }
-    // Floating point values, e.g. 1e-5, NaN or inf. NaN and infinite values are errors.
+    // Floating point values, e.g. 1e-5, 1.7976931348623157E308, NaN or INF. NaN is an error,
+    // values that are infinite or too large for a decimal are kept as doubles.
     let f = f64::from_str(s).ok()?;
+    if f.is_nan() {
+        return None;
+    }
+    Some(match Decimal::try_from(Double::from(f)) {
+        Ok(d) => Val::Number(d),
+        Err(_) => Val::Float(f),
+    })
+}
+
+/// `a / b` for a non-zero `b`. Decimal::checked_div fails for a zero dividend and a divisor
+/// with a fractional part, e.g. 0 / 0.1.
+fn checked_div(a: Decimal, b: Decimal) -> Option<Decimal> {
+    if a == Decimal::from(0) {
+        Some(a)
+    } else {
+        a.checked_div(b)
+    }
+}
+
+/// A finite double as a decimal, values too small for a decimal are zero.
+fn f64_decimal(f: f64) -> Option<Decimal> {
     if !f.is_finite() {
         return None;
+    }
+    if f.abs() < 1e-18 {
+        return Some(Decimal::from(0));
     }
     Decimal::try_from(Double::from(f)).ok()
 }
@@ -151,7 +178,7 @@ fn parse_val(kind: Kind, s: &str) -> Option<Val> {
         Kind::DayTime => Val::DayTime(DayTimeDuration::from_str(s).ok()?),
         Kind::Duration => Val::Duration(Duration::from_str(s).ok()?),
         Kind::Time => Val::Time(Time::from_str(s).ok()?),
-        Kind::Numeric => Val::Number(parse_number(s)?),
+        Kind::Numeric => parse_number(s)?,
         Kind::DateTime | Kind::Date => unreachable!("Not a lexical form"),
     })
 }
@@ -401,7 +428,7 @@ fn apply(op: Op, l: Val, r: Val, l_offset: i64, r_offset: i64) -> Option<Out> {
             if n == Decimal::from(0) {
                 return None;
             }
-            months_out(round_half_up(Decimal::from(m).checked_div(n)?))
+            months_out(round_half_up(checked_div(Decimal::from(m), n)?))
         }
         (Op::Multiply, DayTime(d), Number(n)) | (Op::Multiply, Number(n), DayTime(d)) => {
             day_time_out(Some(DayTimeDuration::new(d.as_seconds().checked_mul(n)?)))
@@ -410,14 +437,29 @@ fn apply(op: Op, l: Val, r: Val, l_offset: i64, r_offset: i64) -> Option<Out> {
             if n == Decimal::from(0) {
                 return None;
             }
-            day_time_out(Some(DayTimeDuration::new(d.as_seconds().checked_div(n)?)))
+            day_time_out(Some(DayTimeDuration::new(checked_div(d.as_seconds(), n)?)))
+        }
+        // Doubles that are infinite or too large for a decimal: a zero duration times a finite
+        // double is zero, other products overflow. The quotients are close to zero.
+        (Op::Multiply, Months(m), Float(f)) | (Op::Multiply, Float(f), Months(m)) => {
+            (m == 0 && f.is_finite()).then(|| months_out(Some(0)))?
+        }
+        (Op::Multiply, DayTime(d), Float(f)) | (Op::Multiply, Float(f), DayTime(d)) => {
+            (d.as_seconds() == Decimal::from(0) && f.is_finite()).then(|| day_time_out(Some(d)))?
+        }
+        (Op::Divide, Months(m), Float(f)) => {
+            months_out(round_half_up(f64_decimal(m as f64 / f)?))
+        }
+        (Op::Divide, DayTime(d), Float(f)) => {
+            let seconds = f64::from(Double::from(d.as_seconds()));
+            day_time_out(Some(DayTimeDuration::new(f64_decimal(seconds / f)?)))
         }
         (Op::Divide, Months(a), Months(b)) => {
             if b == 0 {
                 return None;
             }
             Some(Out::Str(decimal_lexical(
-                Decimal::from(a).checked_div(Decimal::from(b))?,
+                checked_div(Decimal::from(a), Decimal::from(b))?,
             )))
         }
         (Op::Divide, DayTime(a), DayTime(b)) => {
@@ -425,7 +467,7 @@ fn apply(op: Op, l: Val, r: Val, l_offset: i64, r_offset: i64) -> Option<Out> {
                 return None;
             }
             Some(Out::Str(decimal_lexical(
-                a.as_seconds().checked_div(b.as_seconds())?,
+                checked_div(a.as_seconds(), b.as_seconds())?,
             )))
         }
 

@@ -381,8 +381,16 @@ impl SeriesBuilder {
 }
 
 fn parse_xsd_date(value: &str) -> Result<i32, RepresentationError> {
-    let use_value = if let Some(spot) = memchr(b'+', value.as_bytes()) {
+    // The time zone is not kept for xsd:date values: strip Z, +hh:mm or -hh:mm.
+    let use_value = if let Some(v) = value.strip_suffix('Z') {
+        v
+    } else if let Some(spot) = memchr(b'+', value.as_bytes()) {
         &value[0..spot]
+    } else if value.len() > 6
+        && value.as_bytes()[value.len() - 6] == b'-'
+        && value.as_bytes()[value.len() - 3] == b':'
+    {
+        &value[0..value.len() - 6]
     } else {
         value
     };
