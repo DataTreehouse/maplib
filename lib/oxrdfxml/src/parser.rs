@@ -12,6 +12,7 @@ use quick_xml::events::*;
 use quick_xml::name::{LocalName, Namespace, PrefixDeclaration, PrefixIter, ResolveResult};
 use quick_xml::{Decoder, Error, NsReader, Writer};
 use std::borrow::Cow;
+use std::cell::{Cell, RefCell};
 use std::collections::{HashMap, HashSet};
 use std::io::{BufReader, Read};
 use std::str;
@@ -58,6 +59,36 @@ use tokio::io::{AsyncRead, BufReader as AsyncBufReader};
 pub struct RdfXmlParser {
     lenient: bool,
     base: Option<Iri<String>>,
+    entity_limits: EntityExpansionLimits,
+}
+
+/// Default limit on the expanded size of one `<!ENTITY>` value: 1 MiB.
+pub const DEFAULT_MAX_ENTITY_EXPANSION: usize = 1024 * 1024;
+/// Default base budget for the text all custom entities expand to in one document: 10 MiB.
+pub const DEFAULT_MAX_TOTAL_ENTITY_EXPANSION: usize = 10 * 1024 * 1024;
+/// Default extra budget per input byte read for custom entity expansion.
+pub const DEFAULT_ENTITY_AMPLIFICATION_FACTOR: usize = 10;
+
+/// Bounds on the expansion of custom `<!ENTITY>` declarations.
+///
+/// They protect against entity expansion bombs ("billion laughs"):
+/// an entity value is expanded when it is declared, using the entities declared before it,
+/// so a few nested declarations would otherwise expand to gigabytes.
+#[derive(Clone, Copy, Debug)]
+struct EntityExpansionLimits {
+    max_entity: usize,
+    max_total: usize,
+    amplification_factor: usize,
+}
+
+impl Default for EntityExpansionLimits {
+    fn default() -> Self {
+        Self {
+            max_entity: DEFAULT_MAX_ENTITY_EXPANSION,
+            max_total: DEFAULT_MAX_TOTAL_ENTITY_EXPANSION,
+            amplification_factor: DEFAULT_ENTITY_AMPLIFICATION_FACTOR,
+        }
+    }
 }
 
 impl RdfXmlParser {
@@ -82,6 +113,37 @@ impl RdfXmlParser {
     #[inline]
     pub fn unchecked(self) -> Self {
         self.lenient()
+    }
+
+    /// Limits the expanded size, in bytes, of a single `<!ENTITY>` value
+    /// (default [`DEFAULT_MAX_ENTITY_EXPANSION`], 1 MiB).
+    ///
+    /// A declaration that expands beyond it is a syntax error naming the entity.
+    #[inline]
+    pub fn with_max_entity_expansion(mut self, max_bytes: usize) -> Self {
+        self.entity_limits.max_entity = max_bytes;
+        self
+    }
+
+    /// Limits the total text, in bytes, that custom entities expand to in one document,
+    /// counting both declarations and references
+    /// (default [`DEFAULT_MAX_TOTAL_ENTITY_EXPANSION`], 10 MiB).
+    ///
+    /// The budget grows by [`with_entity_amplification_factor`](Self::with_entity_amplification_factor)
+    /// bytes per input byte read, so large documents that use entities for namespace IRIs
+    /// (as many OWL files do) are not refused.
+    #[inline]
+    pub fn with_max_total_entity_expansion(mut self, max_bytes: usize) -> Self {
+        self.entity_limits.max_total = max_bytes;
+        self
+    }
+
+    /// Extra entity expansion budget granted per input byte read
+    /// (default [`DEFAULT_ENTITY_AMPLIFICATION_FACTOR`], 10).
+    #[inline]
+    pub fn with_entity_amplification_factor(mut self, factor: usize) -> Self {
+        self.entity_limits.amplification_factor = factor;
+        self
     }
 
     #[inline]
@@ -214,6 +276,9 @@ impl RdfXmlParser {
                 base_iri: self.base.clone(),
             }],
             custom_entities: HashMap::new(),
+            entity_limits: self.entity_limits,
+            entity_expansion: Cell::new(0),
+            entity_limit_error: RefCell::new(None),
             in_literal_depth: 0,
             known_rdf_id: HashSet::default(),
             is_end: false,
@@ -817,6 +882,11 @@ struct InternalRdfXmlParser<R> {
     reader: NsReader<R>,
     state: Vec<RdfXmlState>,
     custom_entities: HashMap<String, String>,
+    entity_limits: EntityExpansionLimits,
+    /// Bytes custom entities have expanded to so far (declarations and references).
+    entity_expansion: Cell<u64>,
+    /// Set when a reference was refused because the expansion budget ran out.
+    entity_limit_error: RefCell<Option<RdfXmlSyntaxError>>,
     in_literal_depth: usize,
     known_rdf_id: HashSet<String>,
     is_end: bool,
@@ -825,6 +895,20 @@ struct InternalRdfXmlParser<R> {
 
 impl<R> InternalRdfXmlParser<R> {
     fn parse_event(
+        &mut self,
+        event: Event<'_>,
+        results: &mut Vec<Triple>,
+    ) -> Result<(), RdfXmlParseError> {
+        let result = self.parse_event_inner(event, results);
+        // A refused entity reference surfaces from quick-xml as an unknown entity:
+        // report the limit instead.
+        if let Some(error) = self.entity_limit_error.get_mut().take() {
+            return Err(error.into());
+        }
+        result
+    }
+
+    fn parse_event_inner(
         &mut self,
         event: Event<'_>,
         results: &mut Vec<Triple>,
@@ -887,8 +971,26 @@ impl<R> InternalRdfXmlParser<R> {
                 })?;
 
                 // Resolves custom entities within the current entity definition.
-                let entity_value =
-                    unescape_with(entity_value, |e| self.resolve_entity(e)).map_err(Error::from)?;
+                // The expansion is bounded while it happens, so that nested declarations
+                // ("billion laughs") fail before allocating the expanded text.
+                let max_entity = self.entity_limits.max_entity;
+                let declared_size = Cell::new(entity_value.len());
+                let entity_value = unescape_with(entity_value, |e| {
+                    let value = self.resolve_entity(e)?;
+                    let size = declared_size.get().saturating_add(value.len());
+                    declared_size.set(size);
+                    (size <= max_entity).then_some(value)
+                });
+                if declared_size.get() > max_entity {
+                    return Err(RdfXmlSyntaxError::msg(format!(
+                        "The value of the entity '{entity_name}' expands to more than {max_entity} bytes, which is the limit for one entity. It may be an entity expansion attack (\"billion laughs\"). Raise the limit with RdfXmlParser::with_max_entity_expansion if the file is trusted."
+                    ))
+                    .into());
+                }
+                if let Some(error) = self.entity_limit_error.get_mut().take() {
+                    return Err(error.into());
+                }
+                let entity_value = entity_value.map_err(Error::from)?;
                 self.custom_entities
                     .insert(entity_name.to_owned(), entity_value.to_string());
             }
@@ -2072,7 +2174,32 @@ impl<R> InternalRdfXmlParser<R> {
     }
 
     fn resolve_entity(&self, e: &str) -> Option<&str> {
-        resolve_xml_entity(e).or_else(|| self.custom_entities.get(e).map(String::as_str))
+        if let Some(value) = resolve_xml_entity(e) {
+            return Some(value);
+        }
+        let value = self.custom_entities.get(e)?;
+        let total = self
+            .entity_expansion
+            .get()
+            .saturating_add(value.len() as u64);
+        self.entity_expansion.set(total);
+        let limits = self.entity_limits;
+        let budget = (limits.max_total as u64).saturating_add(
+            self.reader
+                .buffer_position()
+                .saturating_mul(limits.amplification_factor as u64),
+        );
+        if total > budget {
+            let mut error = self.entity_limit_error.borrow_mut();
+            if error.is_none() {
+                *error = Some(RdfXmlSyntaxError::msg(format!(
+                    "Expanding the entity '{e}' takes the total entity expansion past {budget} bytes ({} bytes plus {} per input byte read). It may be an entity expansion attack (\"billion laughs\"). Raise the limit with RdfXmlParser::with_max_total_entity_expansion if the file is trusted.",
+                    limits.max_total, limits.amplification_factor
+                )));
+            }
+            return None;
+        }
+        Some(value)
     }
 }
 
