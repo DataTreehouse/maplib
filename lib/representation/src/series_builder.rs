@@ -403,7 +403,9 @@ fn parse_xsd_date(value: &str) -> Result<i32, RepresentationError> {
     }
 }
 
-fn parse_xsd_datetime_micros(value: &str) -> Result<i64, RepresentationError> {
+/// Parses an xsd:dateTime lexical form into microseconds since the epoch. Values with a
+/// time zone are converted to UTC, values without one are read as UTC wall clock times.
+pub fn parse_xsd_datetime_micros(value: &str) -> Result<i64, RepresentationError> {
     if let Ok(dt) = value.parse::<DateTime<Utc>>() {
         Ok(dt.naive_utc().and_utc().timestamp_micros())
     } else if let Ok(dt) = value.parse::<NaiveDateTime>() {

@@ -29,6 +29,7 @@ use representation::cats::{
     distinct_codes, extend_codes, CatEncs, Cats, LockedCats, RankMap, OBJECT_RANK_COL_NAME,
     SUBJECT_RANK_COL_NAME,
 };
+use representation::rdf_to_polars::{default_datetime_type, normalize_datetime_columns};
 use representation::{
     BaseRDFNodeType, LANG_STRING_LANG_FIELD, LANG_STRING_VALUE_FIELD, OBJECT_COL_NAME,
     SUBJECT_COL_NAME,
@@ -142,10 +143,20 @@ impl Triples {
         height: Option<usize>,
     ) -> Result<Self, TriplestoreError> {
         let object_indexing_enabled = object_subject_file.is_some();
-        let subject_sort =
-            StoredTriples::from_parquet_file(subject_object_file, triples_folder, height)?;
+        // Models serialized before all xsd:dateTime values were stored as UTC instants can hold
+        // naive datetime objects, which are read as UTC wall clock times.
+        let utc_objects = matches!(
+            object_type.default_stored_polars_data_type(),
+            DataType::Datetime(..)
+        );
+        let subject_sort = StoredTriples::from_parquet_file(
+            subject_object_file,
+            triples_folder,
+            height,
+            utc_objects,
+        )?;
         let object_sort = object_subject_file
-            .map(|f| StoredTriples::from_parquet_file(f, triples_folder, height))
+            .map(|f| StoredTriples::from_parquet_file(f, triples_folder, height, utc_objects))
             .transpose()?;
         let height = subject_sort.height();
         let segment = TriplesSegment {
@@ -1054,14 +1065,16 @@ impl StoredTriples {
         file: SerializedFile<'_>,
         triples_folder: Option<&Path>,
         height: Option<usize>,
+        utc_objects: bool,
     ) -> Result<Self, TriplestoreError> {
         if let Some(triples_folder) = triples_folder {
-            let on_disk = match (file, height) {
+            let mut on_disk = match (file, height) {
                 (SerializedFile::Remote(location), Some(height)) => {
                     TriplesOnDisk::remote(location, height, triples_folder)
                 }
                 (file, _) => TriplesOnDisk::copy_from(file, triples_folder)?,
             };
+            on_disk.utc_objects = utc_objects;
             Ok(StoredTriples::TriplesOnDisk(Arc::new(on_disk)))
         } else {
             let df = match file {
@@ -1072,6 +1085,11 @@ impl StoredTriples {
                 SerializedFile::InBundle(..) | SerializedFile::Remote(..) => file
                     .read_parquet()
                     .map_err(TriplestoreError::LazyLoadError)?,
+            };
+            let df = if utc_objects {
+                normalize_datetime_columns(df)
+            } else {
+                df
             };
             Ok(StoredTriples::TriplesInMemory(Box::new(
                 TriplesInMemory::new(df),
@@ -1143,6 +1161,9 @@ pub struct TriplesOnDisk {
     remote: Option<Arc<remote_segments::RemoteSegment>>,
     /// The parquet metadata of the file, read on the first lookup.
     metadata: OnceLock<FileMetadataRef>,
+    /// Whether the objects are datetimes to read as UTC instants: tables of models serialized
+    /// before all xsd:dateTime values were stored as UTC instants can hold naive datetimes.
+    utc_objects: bool,
 }
 
 impl TriplesOnDisk {
@@ -1166,6 +1187,7 @@ impl TriplesOnDisk {
             height,
             remote: None,
             metadata: OnceLock::new(),
+            utc_objects: false,
         })
     }
 
@@ -1176,6 +1198,7 @@ impl TriplesOnDisk {
             path,
             height,
             metadata: OnceLock::new(),
+            utc_objects: false,
         }
     }
 
@@ -1197,6 +1220,7 @@ impl TriplesOnDisk {
             height: 0,
             remote: None,
             metadata: OnceLock::new(),
+            utc_objects: false,
         };
         let height_df = on_disk
             .scan()?
@@ -1225,7 +1249,12 @@ impl TriplesOnDisk {
     }
 
     fn scan(&self) -> Result<LazyFrame, TriplestoreError> {
-        scan_parquet(self.local_path()?).map_err(TriplestoreError::FileIOError)
+        let lf = scan_parquet(self.local_path()?).map_err(TriplestoreError::FileIOError)?;
+        Ok(if self.utc_objects {
+            lf.with_column(col(OBJECT_COL_NAME).cast(default_datetime_type()))
+        } else {
+            lf
+        })
     }
 
     fn open(path: &Path) -> Result<File, TriplestoreError> {
@@ -1267,7 +1296,12 @@ impl TriplesOnDisk {
                 out = Some(df);
             }
         }
-        Ok(out.expect("Lookups read at least one range"))
+        let out = out.expect("Lookups read at least one range");
+        Ok(if self.utc_objects {
+            normalize_datetime_columns(out)
+        } else {
+            out
+        })
     }
 
     pub(crate) fn get_lazy_frame(&self) -> Result<(LazyFrame, usize), TriplestoreError> {

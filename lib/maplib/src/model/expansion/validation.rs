@@ -11,6 +11,7 @@ use rayon::current_num_threads;
 use rayon::iter::IntoParallelIterator;
 use rayon::iter::ParallelIterator;
 use representation::polars_to_rdf::polars_type_to_literal_type;
+use representation::rdf_to_polars::normalize_datetime_columns;
 use representation::{
     BaseRDFNodeType, RDFNodeState, LANG_STRING_LANG_FIELD, LANG_STRING_VALUE_FIELD,
 };
@@ -121,7 +122,9 @@ pub fn validate(
                 }
             }
         }
-        Ok((Some(df), map))
+        // Types were inferred from the original datetime columns (naive or time zone aware),
+        // now store their values as UTC instants like all other dateTimes.
+        Ok((Some(normalize_datetime_columns(df)), map))
     } else {
         Ok((None, map))
     }

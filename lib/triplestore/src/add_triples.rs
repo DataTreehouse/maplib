@@ -6,6 +6,8 @@ use crate::errors::TriplestoreError;
 use crate::storage::Triples;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use representation::cats::CatTriples;
+use polars::prelude::{col, IntoLazy};
+use representation::rdf_to_polars::normalized_datetime_dtype;
 use representation::{BaseRDFNodeType, OBJECT_COL_NAME, SUBJECT_COL_NAME};
 use std::collections::HashMap;
 use std::time::Instant;
@@ -17,6 +19,7 @@ impl Triplestore {
         &mut self,
         ts: Vec<TriplesToAdd>,
     ) -> Result<Vec<NewTriples>, TriplestoreError> {
+        let ts: Vec<TriplesToAdd> = ts.into_iter().map(normalize_datetime_objects).collect();
         let prepare_triples_now = Instant::now();
         let dfs_to_add = if can_encode_globally(&ts, &self.global_cats) {
             prepare_add_triples_global(ts, self.global_cats.clone())?
@@ -215,4 +218,20 @@ impl Triplestore {
         self.add_to_geo_index(&out_new_triples)?;
         Ok(out_new_triples)
     }
+}
+
+/// Stores xsd:dateTime objects as UTC instants even when they come from naive or non-UTC
+/// datetime columns, so that all stored dateTimes compare and union with each other.
+fn normalize_datetime_objects(mut t: TriplesToAdd) -> TriplesToAdd {
+    if let Ok(c) = t.df.column(OBJECT_COL_NAME) {
+        if let Some(dt) = normalized_datetime_dtype(c.dtype()) {
+            t.df = t
+                .df
+                .lazy()
+                .with_column(col(OBJECT_COL_NAME).cast(dt))
+                .collect()
+                .unwrap();
+        }
+    }
+    t
 }

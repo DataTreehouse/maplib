@@ -3,10 +3,13 @@ use oxrdf::NamedNodeRef;
 use polars::datatypes::DataType;
 use crate::expressions::durations::{cast_to_duration, is_duration_datatype};
 use polars::prelude::{
-    lit, when, Expr, Field, IntoColumn, LiteralValue, StringChunked, StrptimeOptions,
+    lit, when, Expr, Field, Int64Chunked, IntoColumn, IntoSeries, LiteralValue, StringChunked,
+    StrptimeOptions,
 };
 use representation::cats::{maybe_decode_expr, LockedCats};
 use representation::formatting::literal_expr_to_string;
+use representation::rdf_to_polars::default_datetime_type;
+use representation::series_builder::parse_xsd_datetime_micros;
 use representation::solution_mapping::BaseCatState;
 use representation::{literal_is_numeric, BaseRDFNodeType};
 
@@ -108,6 +111,25 @@ fn cast_to_duration_expr(c: Expr, src: NamedNodeRef, trg: NamedNodeRef) -> Expr 
     )
 }
 
+/// Casting xsd:string to xsd:dateTime (XPath 19.1.7). Values are stored as UTC instants like
+/// all other dateTimes: values with a time zone ("Z", "+02:00") are converted to UTC, values
+/// without one are kept as wall clock times. Invalid lexical forms are errors (null).
+fn cast_string_to_datetime(c: Expr) -> Expr {
+    c.cast(DataType::String).map(
+        |x| {
+            let ca: Int64Chunked = x
+                .str()?
+                .iter()
+                .map(|v| v.and_then(|v| parse_xsd_datetime_micros(v).ok()))
+                .collect();
+            ca.into_series()
+                .cast(&default_datetime_type())
+                .map(|s| s.into_column())
+        },
+        |_, f| Ok(Field::new(f.name().clone(), default_datetime_type())),
+    )
+}
+
 pub fn cast_literal(
     mut c: Expr,
     src_bt: &BaseRDFNodeType,
@@ -130,17 +152,7 @@ pub fn cast_literal(
     } else if literal_is_numeric(trg) {
         cast_to_numeric(c, src, trg, trg_type)
     } else if src == xsd::STRING && trg == xsd::DATE_TIME {
-        c.cast(DataType::String).str().to_datetime(
-            None,
-            None,
-            StrptimeOptions {
-                format: None,
-                strict: true,
-                exact: false,
-                cache: false,
-            },
-            lit("raise"),
-        )
+        cast_string_to_datetime(c)
     } else if src == xsd::STRING && trg == xsd::DATE {
         c.cast(DataType::String).str().to_date(StrptimeOptions {
             format: None,

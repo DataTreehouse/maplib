@@ -15,6 +15,7 @@ use polars::prelude::{col, lit, Expr, LiteralValue, Scalar};
 use representation::cats::{maybe_decode_expr, LockedCats};
 use representation::query_context::Context;
 use representation::solution_mapping::{BaseCatState, SolutionMappings};
+use representation::rdf_to_polars::default_datetime_type;
 use representation::BaseRDFNodeType;
 use spargebra::algebra::{Expression, Function};
 use std::collections::HashMap;
@@ -131,6 +132,7 @@ pub fn custom_(
         solution_mappings.mappings = solution_mappings.mappings.with_column(
             col(first_context.as_str())
                 .cast(DataType::Datetime(TimeUnit::Microseconds, None))
+                .cast(default_datetime_type())
                 .alias(outer_context.as_str()),
         );
         solution_mappings.rdf_node_types.insert(
@@ -151,6 +153,7 @@ pub fn custom_(
             col(first_context.as_str())
                 .mul(Expr::Literal(LiteralValue::Scalar(Scalar::from(1000))))
                 .cast(DataType::Datetime(TimeUnit::Milliseconds, None))
+                .cast(default_datetime_type())
                 .alias(outer_context.as_str()),
         );
         solution_mappings.rdf_node_types.insert(
@@ -197,7 +200,8 @@ pub fn custom_(
         solution_mappings.mappings = solution_mappings.mappings.with_column(
             ((first_as_seconds.clone() - (first_as_seconds % col(second_context.as_str())))
                 .mul(Expr::Literal(LiteralValue::Scalar(Scalar::from(1000))))
-                .cast(DataType::Datetime(TimeUnit::Milliseconds, None)))
+                .cast(DataType::Datetime(TimeUnit::Milliseconds, None))
+                .cast(default_datetime_type()))
             .alias(outer_context.as_str()),
         );
         solution_mappings.rdf_node_types.insert(
