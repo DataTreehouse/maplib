@@ -12,6 +12,8 @@ pub const MODULUS: &str = "https://github.com/DataTreehouse/chrontext#modulus";
 pub const TIME_BUCKET: &str = "https://github.com/DataTreehouse/chrontext#time_bucket";
 
 pub const LIST_AGGREGATION: &str = "https://datatreehouse.github.io/maplib/vocab#ListAggregation";
+/// The chrontext name of the list aggregation.
+pub const NEST_AGGREGATION: &str = "https://github.com/DataTreehouse/chrontext#nestAggregation";
 
 pub const DECODE: &str = "https://datatreehouse.github.io/maplib/vocab#decodeString";
 

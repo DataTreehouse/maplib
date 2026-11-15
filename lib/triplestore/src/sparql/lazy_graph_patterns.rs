@@ -21,6 +21,7 @@ mod values;
 
 use super::{QuerySettings, Triplestore};
 use crate::sparql::errors::SparqlError;
+use crate::sparql::evaluation_hook::HookDecision;
 use tracing::{instrument, trace, warn};
 
 use crate::sparql::lazy_graph_patterns::triples_ordering::order_triple_patterns;
@@ -52,6 +53,32 @@ impl Triplestore {
             graph_pattern,
             context.as_str()
         );
+        if let Some(hook) = &query_settings.evaluation_hook {
+            let decision = {
+                let mut evaluate = |gp: &GraphPattern, sm: Option<SolutionMappings>, ctx: &Context| {
+                    self.lazy_graph_pattern(
+                        gp,
+                        sm,
+                        ctx,
+                        parameters,
+                        pushdowns.clone(),
+                        query_settings,
+                        dataset,
+                    )
+                };
+                hook.0.before_graph_pattern(
+                    self,
+                    graph_pattern,
+                    solution_mappings,
+                    context,
+                    &mut evaluate,
+                )?
+            };
+            match decision {
+                HookDecision::Evaluate(sm) => solution_mappings = sm,
+                HookDecision::Evaluated(sm) => return Ok(sm),
+            }
+        }
         let sm = match graph_pattern {
             GraphPattern::Bgp { patterns } => {
                 // Making sure we use the FTS belonging to the appropriate named graph.
@@ -302,7 +329,7 @@ impl Triplestore {
                 let mut newsols = self.lazy_graph_pattern(
                     inner,
                     None,
-                    &context.extension_with(PathEntry::ReducedInner),
+                    &context.extension_with(PathEntry::SliceInner),
                     parameters,
                     inner_pushdowns,
                     query_settings,

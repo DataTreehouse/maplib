@@ -84,6 +84,7 @@ impl Triplestore {
             max_rows: None,
             strict_project: false,
             federation: None,
+            evaluation_hook: None,
         };
         let qg = self.query_graph(&None, Some(graph), &query_settings);
         let mut eager_sms = vec![];

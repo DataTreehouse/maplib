@@ -6,7 +6,7 @@ use query_processing::aggregates::{
     avg, count_with_expression, count_without_expression, group_concat, list_aggregation, max, min,
     sample, sum, AggregateReturn,
 };
-use query_processing::constants::LIST_AGGREGATION;
+use query_processing::constants::{LIST_AGGREGATION, NEST_AGGREGATION};
 use representation::dataset::QueryGraph;
 use representation::query_context::{Context, PathEntry};
 use representation::solution_mapping::{EagerSolutionMappings, SolutionMappings};
@@ -91,7 +91,7 @@ impl Triplestore {
                             sample(&output_solution_mappings, column_context.as_ref().unwrap());
                     }
                     AggregateFunction::Custom(name) => {
-                        if name.as_str() == LIST_AGGREGATION {
+                        if name.as_str() == LIST_AGGREGATION || name.as_str() == NEST_AGGREGATION {
                             (out_expr, out_rdf_node_type) = list_aggregation(
                                 &output_solution_mappings,
                                 column_context.as_ref().unwrap(),

@@ -141,6 +141,7 @@ impl Triplestore {
             max_rows: None,
             strict_project: false,
             federation: None,
+            evaluation_hook: None,
         };
         self.insert(
             RDFS_9_TRANSITIVE,
@@ -172,6 +173,7 @@ impl Triplestore {
             max_rows: None,
             strict_project: false,
             federation: None,
+            evaluation_hook: None,
         };
         // Reflexivity of subproperty
         let c6 = self.insert_once(&[RDFS_6], graph, &qs)?;

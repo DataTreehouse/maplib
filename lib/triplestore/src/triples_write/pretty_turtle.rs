@@ -1019,6 +1019,7 @@ impl Triplestore {
                     max_rows: None,
                     strict_project: false,
                     federation: None,
+                    evaluation_hook: None,
                 },
                 Some(graph),
                 false,

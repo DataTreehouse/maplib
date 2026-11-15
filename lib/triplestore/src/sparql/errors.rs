@@ -56,6 +56,8 @@ pub enum SparqlError {
     QuadPatternsError(String),
     #[error("Path search error: {0}")]
     PathSearchError(String),
+    #[error("{0}")]
+    EvaluationHookError(Box<dyn std::error::Error + Send + Sync>),
 }
 
 impl<T> From<PoisonError<T>> for SparqlError {

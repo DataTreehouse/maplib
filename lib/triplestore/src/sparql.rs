@@ -1,6 +1,7 @@
 pub mod debug;
 pub mod delete;
 pub mod errors;
+pub mod evaluation_hook;
 mod insert;
 pub(crate) mod lazy_aggregate;
 mod lazy_expressions;
@@ -62,6 +63,8 @@ pub struct QuerySettings {
     /// Overrides the federation settings of the triplestore (SERVICE and LOAD), e.g. for
     /// queries to a served model.
     pub federation: Option<Arc<FederationSettings>>,
+    /// Called before each graph pattern is evaluated, see [evaluation_hook].
+    pub evaluation_hook: Option<evaluation_hook::EvaluationHookRef>,
 }
 
 impl Triplestore {
@@ -91,7 +94,14 @@ impl Triplestore {
         graph: Option<&NamedGraph>,
         debug_no_results: bool,
     ) -> Result<QueryResult, SparqlError> {
-        let query = rewrite(query.clone());
+        // A hook addresses graph patterns by their position in the query as given, so a query
+        // evaluated with a hook is not rewritten (its static parts are rewritten when the hook
+        // evaluates them as queries of their own).
+        let query = if query_settings.evaluation_hook.is_some() {
+            query.clone()
+        } else {
+            rewrite(query.clone())
+        };
         let context = Context::new();
         let mut no_results = false;
         let res = match &query {

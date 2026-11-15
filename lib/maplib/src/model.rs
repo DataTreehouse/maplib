@@ -743,6 +743,7 @@ SELECT ?loc ?crs ?seq ?x ?y ?z WHERE {{
             max_rows,
             strict_project: false,
             federation,
+            evaluation_hook: None,
         };
         if let Some(chrontext_settings) = &self.chrontext_settings {
             let engine = Engine::new(
@@ -857,6 +858,7 @@ SELECT ?loc ?crs ?seq ?x ?y ?z WHERE {{
             max_rows,
             strict_project: true,
             federation: None,
+            evaluation_hook: None,
         };
         self.triplestore
             .insert(
@@ -909,6 +911,7 @@ SELECT ?loc ?crs ?seq ?x ?y ?z WHERE {{
             max_rows,
             strict_project: true,
             federation,
+            evaluation_hook: None,
         };
         self.triplestore
             .update(
