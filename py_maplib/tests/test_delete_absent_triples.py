@@ -28,7 +28,7 @@ def model(request):
     if storage != "memory":
         shutil.rmtree(STORAGE_FOLDER, ignore_errors=True)
     m = Model(**storage_kwargs(storage))
-    m.reads(DATA, format="ntriples")
+    m.reads(DATA, format="turtle")
     yield m
     del m
     if storage != "memory":
