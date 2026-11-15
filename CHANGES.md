@@ -69,6 +69,7 @@
 - JSON results of SELECT queries (`return_format="json"`) list the variables in the order of the projection, instead of an arbitrary order
 - `Model.query_external` no longer panics ("entered unreachable code") on SELECT results where a variable is unbound in some rows, as with OPTIONAL. Unbound values are nulls, also before the first bound value, and a variable that is never bound is a column of nulls
 - `INSERT { GRAPH ?g { ... } } WHERE { ... }` and `DELETE { GRAPH ?g { ... } }` in `Model.update` use the graphs that `?g` is bound to. The graph name variable was left out of the solutions, so nothing was inserted or deleted when it appeared only as a graph name in the template
+- `Model.insert` returned only one of the tables of a predicate whose subjects or objects have several types (e.g. both IRIs and literals as objects); it now returns all of the inserted triples of the predicate in one DataFrame. In Rust, `triplestore::new_triples_by_predicate` merges new triples per predicate
 
 ### Performance
 In disk mode the triple tables and their deduplication index are no longer held in memory. With few triples per distinct IRI or literal (as in the CIM data), memory use is dominated by the dictionary and reading, and disk storage saves little.

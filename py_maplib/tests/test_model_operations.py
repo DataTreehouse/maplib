@@ -414,6 +414,25 @@ def test_insert_solution_mappings():
     assert sm.mappings.height == 2
 
 
+
+def test_insert_returns_all_types_of_a_predicate():
+    # The objects of <tag> are both IRIs and a literal, which are stored in two tables.
+    m = _model()
+    res = m.insert(
+        f"""CONSTRUCT {{ ?s <{EX}tag> ?o . ?s <{EX}tag> "t" }}
+        WHERE {{ ?s <{EX}p> ?o }}"""
+    )
+    assert list(res.keys()) == [f"{EX}tag"]
+    df = res[f"{EX}tag"]
+    assert df.height == 4
+    assert m.query(f"SELECT ?s ?o WHERE {{ ?s <{EX}tag> ?o }}").height == 4
+    res = m.insert(
+        f"""CONSTRUCT {{ ?s <{EX}tag> ?o . ?s <{EX}tag> "t" }}
+        WHERE {{ ?s <{EX}p> ?o }}""",
+        solution_mappings=True,
+    )
+    assert all(sm.mappings.height == 0 for sm in res.values())
+
 def test_insert_from_source_graph():
     m = _model(graph=G1)
     m.insert(

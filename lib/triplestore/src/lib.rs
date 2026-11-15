@@ -51,6 +51,7 @@ use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
+use query_processing::graph_patterns::union;
 use query_processing::udf::UdfRegistry;
 use representation::cats::maps::CatMaps;
 use representation::dataset::NamedGraph;
@@ -803,6 +804,56 @@ impl NewTriples {
             None
         }
     }
+}
+
+/// Merges new triples per predicate, so that a predicate with several subject or object types
+/// gives one solution mapping, with multi-type columns where needed. Tables without triples are
+/// left out, unless no table of the predicate has triples. Predicates are in the order in which
+/// they first occur.
+pub fn new_triples_by_predicate(
+    new_triples: Vec<NewTriples>,
+    global_cats: LockedCats,
+) -> Result<Vec<(NamedNode, EagerSolutionMappings)>, TriplestoreError> {
+    let mut by_predicate: HashMap<NamedNode, Vec<EagerSolutionMappings>> = HashMap::new();
+    let mut order = vec![];
+    for nt in new_triples {
+        let p = nt.predicate.clone();
+        if let Some(sm) = nt.to_eager_solution_mappings() {
+            by_predicate
+                .entry(p.clone())
+                .or_insert_with(|| {
+                    order.push(p);
+                    vec![]
+                })
+                .push(sm);
+        }
+    }
+    let mut out = Vec::with_capacity(order.len());
+    for p in order {
+        let mut sms = by_predicate.remove(&p).unwrap();
+        let non_empty: Vec<_> = sms
+            .iter()
+            .enumerate()
+            .filter(|(_, sm)| sm.mappings.height() > 0)
+            .map(|(i, _)| i)
+            .collect();
+        let sm = match non_empty.len() {
+            0 => sms.swap_remove(0),
+            1 => sms.swap_remove(non_empty[0]),
+            _ => {
+                let lazy: Vec<_> = sms
+                    .into_iter()
+                    .filter(|sm| sm.mappings.height() > 0)
+                    .map(|sm| sm.as_lazy())
+                    .collect();
+                union(lazy, true, global_cats.clone())
+                    .map_err(|x| TriplestoreError::SparqlQueryError(x.to_string()))?
+                    .as_eager()
+            }
+        };
+        out.push((p, sm));
+    }
+    Ok(out)
 }
 
 impl Triplestore {

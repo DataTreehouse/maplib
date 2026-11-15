@@ -79,7 +79,7 @@ use templates::python::xsd::PyXSD;
 use templates::python::{py_triple, PyArgument, PyInstance, PyParameter, PyTemplate};
 use templates::MappingColumnType;
 use triplestore::triples_read::ExtendedRdfFormat;
-use triplestore::{NewTriples, StorageOptions, Triplestore};
+use triplestore::{new_triples_by_predicate, NewTriples, StorageOptions, Triplestore};
 
 use virtualization::python::VirtualizedPythonDatabase;
 use virtualized_query::python::{
@@ -513,30 +513,20 @@ fn new_triples_to_dict(
     py: Python<'_>,
 ) -> PyResult<HashMap<String, Py<PyAny>>> {
     let mut map = HashMap::new();
-    //TODO: Handle case where same predicate occurs multiple times
-    for NewTriples {
-        df,
-        graph: _,
+    let by_predicate = new_triples_by_predicate(new_triples, global_cats.clone())
+        .map_err(|x| PyMaplibError::from(MaplibError::from(x)))?;
+    for (
         predicate,
-        subject_type,
-        object_type,
-    } in new_triples
+        EagerSolutionMappings {
+            mappings,
+            rdf_node_types,
+        },
+    ) in by_predicate
     {
-        if let Some(mut df) = df {
-            let mut types = HashMap::new();
-            types.insert(
-                SUBJECT_COL_NAME.to_string(),
-                subject_type.into_default_stored_rdf_node_state(),
-            );
-            types.insert(
-                OBJECT_COL_NAME.to_string(),
-                object_type.into_default_stored_rdf_node_state(),
-            );
-            (df, types) =
-                fix_cats_and_multicolumns(df, types, solution_mappings, global_cats.clone());
-            let py_sm = df_to_py_df(df, types, None, None, solution_mappings, py)?;
-            map.insert(predicate.as_str().to_string(), py_sm);
-        }
+        let (df, types) =
+            fix_cats_and_multicolumns(mappings, rdf_node_types, solution_mappings, global_cats.clone());
+        let py_sm = df_to_py_df(df, types, None, None, solution_mappings, py)?;
+        map.insert(predicate.as_str().to_string(), py_sm);
     }
     Ok(map)
 }
