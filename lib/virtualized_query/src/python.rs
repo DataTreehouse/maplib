@@ -486,7 +486,9 @@ impl PyExpression {
     #[getter]
     fn expression(&self) -> Option<Py<PyExpression>> {
         match self {
-            PyExpression::In { expression, .. } => Some(expression.clone()),
+            PyExpression::In { expression, .. } | PyExpression::Not { expression } => {
+                Some(expression.clone())
+            }
             _ => None,
         }
     }
