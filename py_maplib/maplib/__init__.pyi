@@ -1064,7 +1064,8 @@ class Model:
         """
         Read an OSIsoft PI (AVEVA PI) Asset Framework model through the PI Web API, and
         virtualize the time series of its attributes so that their data points can be queried
-        in SPARQL together with the model. Replaces any existing virtualization of the Model.
+        in SPARQL together with the model. The PI virtualization is used together with the other virtualizations
+        of the Model (see add_virtualization), and replaces an earlier PI virtualization.
 
         The model uses the prefix osipi: <urn:maplib_osipi:> and contains:
 
@@ -1787,6 +1788,21 @@ class Model:
                            resources: Dict[str, Template],
                            ):
         """
+        Add a virtualized database, with the templates of the resources it holds.
+
+        This may be called several times to use several virtualized databases together, e.g. time series in
+        two different databases. Each resource belongs to one virtualized database, and the parts of a query
+        that match time series of a resource are sent to the database it belongs to. The results from the
+        different databases are combined, so a single query can span all of them:
+
+        >>> m.add_virtualization(VirtualizedDatabase(snowflake_db, resource_sql_map={"sensors": sql_a}),
+        ...                      resources={"sensors": sensors_template})
+        >>> m.add_virtualization(VirtualizedDatabase(duckdb_db, resource_sql_map={"meters": sql_b}),
+        ...                      resources={"meters": meters_template})
+
+        Joins between time series are pushed down only when the time series are in the same database.
+        Adding a resource that was added before moves it to the new virtualized database.
+
         :param virtualized_database: We call the query-function of this object.
         :param resources: The templates associated with each resource
         """

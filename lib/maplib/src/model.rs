@@ -213,17 +213,20 @@ impl Model {
         db: VirtualizedPythonDatabase,
         resources: HashMap<String, Template>,
     ) -> Result<(), MaplibError> {
+        let virtualized_database = Arc::new(VirtualizedDatabase::VirtualizedPythonDatabase(db));
         let virtualization = Virtualization { resources };
-        self.chrontext_settings = Some(ChrontextSettings {
-            virtualized_database: Arc::new(VirtualizedDatabase::VirtualizedPythonDatabase(db)),
-            virtualization,
-        });
+        // Each call adds a virtualized database, and the virtualized databases are used together.
+        // A resource that was given before is moved to the new virtualized database.
+        self.chrontext_settings
+            .get_or_insert_with(ChrontextSettings::default)
+            .add_virtualization(virtualized_database, virtualization);
         Ok(())
     }
 
     /// Reads the element hierarchy, element templates and attributes of the PI Asset Framework
     /// through the PI Web API into `graph`, and virtualizes the time series of the attributes,
-    /// so that their data points can be queried in SPARQL. Replaces any existing virtualization.
+    /// so that their data points can be queried in SPARQL. The PI virtualization is added next to
+    /// the other virtualizations, replacing an earlier PI virtualization.
     #[instrument(skip_all)]
     pub fn map_osipi(
         &mut self,
@@ -252,12 +255,14 @@ impl Model {
             self.prefixes
                 .insert(k.to_string(), NamedNode::new_unchecked(v));
         }
-        self.chrontext_settings = Some(ChrontextSettings {
-            virtualized_database: Arc::new(VirtualizedDatabase::OSIPIDatabase(db)),
-            virtualization: Virtualization {
-                resources: HashMap::from([(OSIPI_RESOURCE.to_string(), template)]),
-            },
-        });
+        self.chrontext_settings
+            .get_or_insert_with(ChrontextSettings::default)
+            .add_virtualization(
+                Arc::new(VirtualizedDatabase::OSIPIDatabase(db)),
+                Virtualization {
+                    resources: HashMap::from([(OSIPI_RESOURCE.to_string(), template)]),
+                },
+            );
         Ok(asset_model)
     }
 
