@@ -88,6 +88,11 @@ impl Signature {
         for p in &self.parameter_list {
             p.find_named_nodes(nns);
         }
+        if let Some(annotations) = &self.annotation_list {
+            for a in annotations {
+                a.instance.find_named_nodes(nns);
+            }
+        }
     }
 }
 
@@ -106,11 +111,18 @@ impl Signature {
                 write!(f, ", ")?;
             }
         }
-        // The parser gives an empty list when there are no annotations.
-        if self.annotation_list.as_ref().is_some_and(|a| !a.is_empty()) {
-            todo!();
+        write!(f, " ]")?;
+        if let Some(annotations) = &self.annotation_list {
+            for (idx, a) in annotations.iter().enumerate() {
+                if idx == 0 {
+                    write!(f, "\n    @@ ")?;
+                } else {
+                    write!(f, ",\n    @@ ")?;
+                }
+                a.instance.fmt_prefixes(f, prefixes)?;
+            }
         }
-        write!(f, " ]")
+        Ok(())
     }
 }
 

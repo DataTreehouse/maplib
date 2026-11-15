@@ -975,3 +975,50 @@ def test_read_template():
 
     df = m.query("""SELECT * WHERE {?a ?b ?c}""")
     assert df.height == 4
+
+
+PRINT_ROUND_TRIP_TEMPLATES = """
+@prefix ex:<http://example.net/ns#>.
+ex:Person [ ottr:IRI ?id, ? xsd:string ?name, ?age = 42,
+            List<xsd:string> ?nicks = ("a", "b"), ! ottr:IRI ?knows ] :: {
+    ottr:Triple(?id, a, ex:Person) ,
+    ottr:Triple(?id, ex:name, ?name) ,
+    ottr:Triple(?id, ex:age, ?age) ,
+    cross | ottr:Triple(?id, ex:nick, ++?nicks) ,
+    ottr:Triple(?id, ex:knows, ?knows)
+} .
+ex:Annotated [ ottr:IRI ?id ]
+    @@ ex:Note("first"),
+    @@ cross | ex:Note(++("a", "b"))
+    :: {
+    ottr:Triple(?id, a, ex:Thing)
+} .
+"""
+
+
+def test_print_stottr_templates_round_trip():
+    """Templates parsed from stOTTR print (str and repr) without panicking, also with
+    annotations, and the printed text can be added back as templates."""
+    m = Model()
+    m.add_template(PRINT_ROUND_TRIP_TEMPLATES)
+    templates = m.get_templates()
+    assert len(templates) == 2
+    printed = {}
+    for t in templates:
+        s = str(t)
+        assert repr(t) == s
+        printed[s] = t
+    # Printing the list uses repr of each template
+    str(templates)
+    annotated = next(s for s in printed if "Annotated" in s)
+    assert annotated.count("@@") == 2
+    person = next(s for s in printed if "Person" in s)
+    assert "@@" not in person
+    assert "List<xsd:string> ?nicks = (\"a\", \"b\")" in person
+    assert "?age = \"42\"" in person
+
+    m2 = Model()
+    for s in printed:
+        m2.add_template(s)
+    reprinted = sorted(str(t) for t in m2.get_templates())
+    assert reprinted == sorted(printed)

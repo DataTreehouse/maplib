@@ -271,7 +271,7 @@ parser! {
                 annotation_list}
         }
 
-        rule StottrAnnotationList() -> Vec<Annotation> = ans:StottrAnnotation() ** (_ "," _) {
+        rule StottrAnnotationList() -> Vec<Annotation> = ans:StottrAnnotation() ++ (_ "," _) {
             ans
         }
 
