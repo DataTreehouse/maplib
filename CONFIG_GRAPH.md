@@ -225,7 +225,66 @@ with `mcfg:cacheVirtualized true`, set a `mcfg:ttl`. `apply_config` sets the cac
 (`Model.set_query_cache(QueryCacheConfig.options())`); without a `mcfg:QueryCache` the model's
 setting stays.
 
+## Common questions
+
+A common question is a saved SPARQL query with a name and a description: a question people often
+ask the model ("Which substations are there, and at which voltages?"). It is a SHACL Advanced
+Features [SPARQL executable](https://www.w3.org/TR/shacl-af/#SPARQLExecutable), named and described
+with Dublin Core terms, and linked to the vocabulary of the data it is about.
+
+```turtle
+@prefix mcfg: <https://datatreehouse.github.io/maplib/config#> .
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix dcterms: <http://purl.org/dc/terms/> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+
+<urn:maplib:config:question:cim:lines-lengths> a mcfg:CommonQuestion , sh:SPARQLSelectExecutable ;
+    dcterms:title "Lines and their lengths" ;
+    rdfs:label "Lines and their lengths" ;
+    dcterms:description "The AC line segments with their length (km), voltage and impedance, longest first." ;
+    sh:select """PREFIX cim: <http://iec.ch/TC57/2013/CIM-schema-cim16#>
+SELECT ?segment ?name ?length WHERE { ... }""" ;
+    mcfg:appliesTo <http://iec.ch/TC57/2013/CIM-schema-cim16#> ;   # optional: about CIM16 data
+    mcfg:bundled true ;                                            # shipped with maplib EE
+    sh:order 1 .                                                   # optional: listed by order, then name
+```
+
+| Term | On | Value |
+|---|---|---|
+| `mcfg:CommonQuestion` | class | a common question; also typed with its SHACL-AF executable class |
+| `sh:SPARQLSelectExecutable`, `sh:SPARQLConstructExecutable`, `sh:SPARQLAskExecutable` | class | the query form, with the query in `sh:select`, `sh:construct` or `sh:ask` |
+| `mcfg:SPARQLDescribeExecutable` | class | a DESCRIBE query (`rdfs:subClassOf sh:SPARQLExecutable`; SHACL-AF has none), the query in `mcfg:describe` |
+| `sh:select`, `sh:construct`, `sh:ask`, `mcfg:describe` | `mcfg:CommonQuestion` | the query, a string with its own `PREFIX` declarations |
+| `dcterms:title` | `mcfg:CommonQuestion` | the name (also written as `rdfs:label`, for tools that show labels) |
+| `dcterms:description` | `mcfg:CommonQuestion` | what it answers (optional) |
+| `mcfg:appliesTo` | `mcfg:CommonQuestion` | the vocabulary (namespace IRI) of the data it is about; none for a question about any model |
+| `mcfg:bundled` | `mcfg:CommonQuestion` | `xsd:boolean`: one of the questions maplib Enterprise Edition ships |
+| `sh:order` | `mcfg:CommonQuestion` | `xsd:integer`: where it is listed, lowest first |
+
+The domain is the vocabulary itself rather than a class, because not every kind of data has a class
+that all of it shares (OPC UA nodes have `opc:NodeClass`, not an `rdf:type`). Three have
+names in `maplib.config.QUESTION_DOMAINS`: `cim` (CIM16), `era` (the ERA vocabulary) and
+`opcua` (OPC UA nodes). maplib Enterprise Edition ships common questions for these, with a way
+to find which the model's data has (`maplib.bundled_questions`).
+
 ## Python
+
+```python
+from maplib.config import (
+    CommonQuestion, write_question, read_questions, remove_question, question_iri,
+)
+
+write_question(m, CommonQuestion(
+    iri=question_iri("Labels"),
+    name="Labels",
+    description="Everything with a label",
+    query="PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>\nSELECT ?s ?label WHERE { ?s rdfs:label ?label }",
+))
+for q in read_questions(m, "cim"):     # those about CIM, and those about any model
+    print(q.name, q.form, m.query(q.query))
+```
+
+The configuration in general:
 
 ```python
 from maplib.config import (
@@ -256,4 +315,7 @@ apply_config(m2)                       # connects (secrets from the environment)
 ## The Model portal
 
 The portal's Model › Connect page edits the config graph of the portal's model (the routes under
-`/api/config`) and applies it. Everything else reads it with SPARQL like any other graph.
+`/api/config`) and applies it. Its Query › Common questions page lists, runs, edits and removes the
+common questions (`/api/config/questions`), and offers the bundled ones for the data the model has;
+Query › SPARQL and Query › Paths save a query as a common question. Everything else reads the
+config graph with SPARQL like any other graph.

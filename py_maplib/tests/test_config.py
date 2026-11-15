@@ -854,3 +854,119 @@ def test_timescale_round_trip_probe_and_construction(monkeypatch):
     _virtualized_database(config, environ)
     assert isinstance(seen["database"], FakeTimescale)
     assert seen["resource_sql_map"] == {"readings": sql}
+
+
+# ── common questions ────────────────────────────────────────────────
+
+from maplib.config import (  # noqa: E402
+    QUESTION_DOMAINS,
+    CommonQuestion,
+    query_form,
+    question_iri,
+    read_questions,
+    remove_question,
+    write_question,
+)
+
+def question(**kw) -> CommonQuestion:
+    return CommonQuestion(
+        **{
+            "iri": "urn:example:question:labels",
+            "name": 'Labels "all"',
+            "description": "Every label\nof the model",
+            "query": "PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>\n# the labels\nSELECT ?s ?label WHERE { ?s rdfs:label ?label }",
+            **kw,
+        }
+    )
+
+
+def test_question_round_trip():
+    m = Model()
+    write_question(m, question(applies_to=QUESTION_DOMAINS["cim"], order=3))
+    [q] = read_questions(m)
+    assert q == question(applies_to=QUESTION_DOMAINS["cim"], order=3)
+    assert q.form == "select" and q.domain == "cim"
+    # replaced whole, by IRI
+    write_question(m, question(name="Labels", description="", query="ASK { ?s ?p ?o }"))
+    [q] = read_questions(m)
+    assert (q.name, q.description, q.query, q.applies_to, q.order, q.form) == (
+        "Labels", "", "ASK { ?s ?p ?o }", None, None, "ask")
+    remove_question(m, q.iri)
+    assert read_questions(m) == []
+
+
+def test_question_vocabulary():
+    """SHACL-AF executables with Dublin Core titles and descriptions, in the config graph."""
+    m = Model()
+    write_question(m, question(applies_to=QUESTION_DOMAINS["era"], bundled=True, order=1))
+    df = m.query(
+        """PREFIX sh: <http://www.w3.org/ns/shacl#>
+PREFIX dcterms: <http://purl.org/dc/terms/>
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+PREFIX mcfg: <https://datatreehouse.github.io/maplib/config#>
+SELECT ?title ?label ?description ?select ?applies ?bundled ?order WHERE { GRAPH mcfg:ConfigGraph {
+  ?q a mcfg:CommonQuestion , sh:SPARQLSelectExecutable ; dcterms:title ?title ; rdfs:label ?label ;
+     dcterms:description ?description ; sh:select ?select ; mcfg:appliesTo ?applies ;
+     mcfg:bundled ?bundled ; sh:order ?order } }"""
+    )
+    assert df.height == 1
+    r = df.row(0, named=True)
+    assert r["title"] == r["label"] == 'Labels "all"'
+    assert r["applies"] == "<http://data.europa.eu/949/>"
+    assert r["bundled"] is True and r["order"] == 1
+    assert "SELECT ?s ?label" in r["select"]
+    # the question is in the config graph only
+    assert m.query("SELECT ?s WHERE { ?s ?p ?o }").height == 0
+
+
+@pytest.mark.parametrize(
+    "query,form",
+    [
+        ("SELECT * WHERE { ?s ?p ?o }", "select"),
+        ("prefix ex: <http://example.org/#a>\n# a comment # with hashes\n  construct { ?s ?p ?o } WHERE { ?s ?p ?o }", "construct"),
+        ("BASE <http://example.org/>\nPREFIX : <http://example.org/>\nASK { :a ?p ?o }", "ask"),
+        ("DESCRIBE <http://example.org/a>", "describe"),
+    ],
+)
+def test_query_form(query, form):
+    assert query_form(query) == form
+    m = Model()
+    write_question(m, question(query=query))
+    [q] = read_questions(m)
+    assert q.query == query and q.form == form
+
+
+@pytest.mark.parametrize(
+    "kw",
+    [
+        {"name": " "},
+        {"query": ""},
+        {"query": "INSERT DATA { <urn:a> <urn:b> <urn:c> }"},
+        {"query": "PREFIX ex: <http://example.org/>\nDELETE WHERE { ?s ?p ?o }"},
+        {"iri": "not an iri"},
+        {"applies_to": "http://example.org/ space"},
+    ],
+)
+def test_question_rejected(kw):
+    m = Model()
+    with pytest.raises(ValueError):
+        write_question(m, question(**kw))
+    assert read_questions(m) == []
+
+
+def test_read_questions_order_and_domain():
+    m = Model()
+    write_question(m, question(iri="urn:q:b", name="B"))
+    write_question(m, question(iri="urn:q:a", name="a"))
+    write_question(m, question(iri="urn:q:cim", name="Z", applies_to=QUESTION_DOMAINS["cim"], order=0))
+    write_question(m, question(iri="urn:q:era", name="Y", applies_to=QUESTION_DOMAINS["era"], order=0))
+    assert [q.iri for q in read_questions(m)] == ["urn:q:era", "urn:q:cim", "urn:q:a", "urn:q:b"]
+    # a domain: its own questions and those for any model
+    assert [q.iri for q in read_questions(m, "cim")] == ["urn:q:cim", "urn:q:a", "urn:q:b"]
+    assert [q.iri for q in read_questions(m, QUESTION_DOMAINS["era"])] == ["urn:q:era", "urn:q:a", "urn:q:b"]
+
+
+def test_question_iri():
+    a, b = question_iri("Lines and their lengths!"), question_iri("Lines and their lengths!")
+    assert a.startswith("urn:maplib:config:question:lines-and-their-lengths-") and a != b
+    assert question_iri("§§").startswith("urn:maplib:config:question:question-")

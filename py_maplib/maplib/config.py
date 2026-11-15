@@ -3,7 +3,8 @@ maplib's configuration as triples, in the model itself.
 
 The configuration of a model, what it virtualizes, which indexes it has and how it caches query
 results, is kept in a named graph of its own, CONFIG_GRAPH, in the namespace CONFIG
-(https://datatreehouse.github.io/maplib/config#). It travels with the model: written, serialized
+(https://datatreehouse.github.io/maplib/config#), together with its common questions (saved SPARQL
+queries, CommonQuestion). It travels with the model: written, serialized
 and served like any other graph, and applied with apply_config. See CONFIG_GRAPH.md for the
 vocabulary.
 
@@ -271,6 +272,95 @@ class QueryCacheConfig:
         )
 
 
+SHACL = "http://www.w3.org/ns/shacl#"
+DCTERMS = "http://purl.org/dc/terms/"
+
+#: The query forms a common question can have: its SHACL-AF executable class and the property that
+#: holds the query (sh:select, sh:construct, sh:ask). SHACL-AF has no DESCRIBE executable, so a
+#: DESCRIBE query is a mcfg:SPARQLDescribeExecutable (a subclass of sh:SPARQLExecutable) in mcfg:describe.
+QUERY_FORMS: Dict[str, tuple] = {
+    "select": (SHACL + "SPARQLSelectExecutable", SHACL + "select"),
+    "construct": (SHACL + "SPARQLConstructExecutable", SHACL + "construct"),
+    "ask": (SHACL + "SPARQLAskExecutable", SHACL + "ask"),
+    "describe": (CONFIG + "SPARQLDescribeExecutable", CONFIG + "describe"),
+}
+
+#: Vocabularies common questions are often about, by name: the vocabulary (namespace) a
+#: question applies to, the value of mcfg:appliesTo. CIM is CIM16 (CGMES 2.4.15), ERA the vocabulary
+#: of the European Union Agency for Railways (the RINF register) and OPC UA nodes as maplib maps them.
+#: maplib Enterprise Edition ships common questions for each (maplib.bundled_questions).
+QUESTION_DOMAINS: Dict[str, str] = {
+    "cim": "http://iec.ch/TC57/2013/CIM-schema-cim16#",
+    "era": "http://data.europa.eu/949/",
+    "opcua": "http://opcfoundation.org/UA/",
+}
+
+#: The names of the QUESTION_DOMAINS for people.
+QUESTION_DOMAIN_LABELS: Dict[str, str] = {"cim": "CIM", "era": "ERA", "opcua": "OPC UA"}
+
+#: The IRIs of common questions start with this.
+QUESTION_IRI_PREFIX = "urn:maplib:config:question:"
+
+
+@dataclass
+class CommonQuestion:
+    """A saved SPARQL query with a name and a description: a question people ask the model often.
+    In the config graph a mcfg:CommonQuestion, which is a SHACL-AF SPARQL executable (sh:select,
+    sh:construct or sh:ask holds the query)."""
+
+    iri: str
+    name: str
+    """dcterms:title (and rdfs:label)."""
+    query: str
+    """The SPARQL query, with its PREFIX declarations: SELECT, CONSTRUCT, ASK or DESCRIBE."""
+    description: str = ""
+    """dcterms:description: what the question answers."""
+    applies_to: Optional[str] = None
+    """mcfg:appliesTo: the vocabulary (namespace IRI) of the data it is about, e.g. one of
+    QUESTION_DOMAINS; None for a question about any model."""
+    bundled: bool = False
+    """mcfg:bundled: one of the questions maplib Enterprise Edition ships (maplib.bundled_questions)."""
+    order: Optional[int] = None
+    """sh:order: where it is listed, lowest first (then by name)."""
+
+    @property
+    def form(self) -> str:
+        """The query form: select, construct, ask or describe."""
+        return query_form(self.query)
+
+    @property
+    def domain(self) -> Optional[str]:
+        """The name of its domain in QUESTION_DOMAINS (e.g. "cim"), if it is one of those."""
+        return next((k for k, v in QUESTION_DOMAINS.items() if v == self.applies_to), None)
+
+
+def query_form(query: str) -> str:
+    """The form of a SPARQL query (select, construct, ask or describe), after its prologue and
+    comments. Raises ValueError for an update or anything else that is not a query."""
+    import re
+
+    pos = 0
+    prologue = re.compile(r"\s*(?:#[^\n]*(?:\n|$)|PREFIX\s+[^\s:]*:\s*<[^>]*>|BASE\s*<[^>]*>)", re.IGNORECASE)
+    while True:
+        m = prologue.match(query, pos)
+        if not m or m.end() == pos:
+            break
+        pos = m.end()
+    word = re.match(r"\s*([A-Za-z]+)", query[pos:])
+    form = word.group(1).lower() if word else ""
+    if form not in QUERY_FORMS:
+        raise ValueError("A common question is a SPARQL query: SELECT, CONSTRUCT, ASK or DESCRIBE")
+    return form
+
+
+def question_iri(name: str) -> str:
+    """A new IRI for a common question, from its name and a random part."""
+    import uuid
+
+    slug = "-".join("".join(c.lower() if c.isalnum() else " " for c in name).split())[:48] or "question"
+    return f"{QUESTION_IRI_PREFIX}{slug}-{uuid.uuid4().hex[:8]}"
+
+
 # ── writing ─────────────────────────────────────────────────────────
 
 
@@ -446,6 +536,38 @@ def remove_query_cache(m: "Model"):
     _delete(m, CONFIG + "queryCache")
 
 
+def write_question(m: "Model", question: CommonQuestion):
+    """Adds a common question to the configuration, or replaces the one with its IRI."""
+    if not question.name.strip():
+        raise ValueError("A common question needs a name")
+    if not question.query.strip():
+        raise ValueError("A common question needs a query")
+    executable, holder = QUERY_FORMS[query_form(question.query)]
+    s = _iri(question.iri)
+    lines = [
+        f"{s} <{RDF_TYPE}> <{CONFIG}CommonQuestion> .",
+        f"{s} <{RDF_TYPE}> <{executable}> .",
+        f"{s} <{DCTERMS}title> {_literal(question.name.strip())} .",
+        f"{s} <{RDFS_LABEL}> {_literal(question.name.strip())} .",
+        f"{s} <{holder}> {_literal(question.query)} .",
+    ]
+    if question.description.strip():
+        lines.append(f"{s} <{DCTERMS}description> {_literal(question.description.strip())} .")
+    if question.applies_to:
+        lines.append(f"{s} <{CONFIG}appliesTo> {_iri(question.applies_to)} .")
+    if question.bundled:
+        lines.append(f"{s} <{CONFIG}bundled> {_boolean(True)} .")
+    if question.order is not None:
+        lines.append(f"{s} <{SHACL}order> {_literal(str(int(question.order)), XSD + 'integer')} .")
+    _delete(m, question.iri)
+    m.reads("\n".join(lines), format="ntriples", graph=CONFIG_GRAPH)
+
+
+def remove_question(m: "Model", iri: str):
+    """Removes a common question from the configuration."""
+    _delete(m, iri)
+
+
 # ── reading ─────────────────────────────────────────────────────────
 
 _PREFIXES = f"PREFIX mcfg: <{CONFIG}>\nPREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>\n"
@@ -561,6 +683,53 @@ def read_indexing(m: "Model") -> IndexingConfig:
         geo=truthy(rows[0].get("geo")),
         object_sort_all=truthy(rows[0].get("all")),
         object_sort_some=sorted(_strip(r["p"]) for r in predicates),
+    )
+
+
+def read_questions(m: "Model", domain: Optional[str] = None) -> List[CommonQuestion]:
+    """
+    The common questions in the configuration, in their order (sh:order, then name). With a domain
+    (one of QUESTION_DOMAINS, or a vocabulary IRI), only those that apply to it and those that apply
+    to any model.
+    """
+    holders = " ".join(f"<{holder}>" for _, holder in QUERY_FORMS.values())
+    rows = _rows(
+        m,
+        f"""PREFIX dcterms: <{DCTERMS}>
+PREFIX sh: <{SHACL}>
+SELECT ?q ?title ?label ?query ?description ?appliesTo ?bundled ?order WHERE {{ GRAPH {_iri(CONFIG_GRAPH)} {{
+  ?q a mcfg:CommonQuestion .
+  OPTIONAL {{ VALUES ?holder {{ {holders} }} ?q ?holder ?query }}
+  OPTIONAL {{ ?q dcterms:title ?title }}
+  OPTIONAL {{ ?q rdfs:label ?label }}
+  OPTIONAL {{ ?q dcterms:description ?description }}
+  OPTIONAL {{ ?q mcfg:appliesTo ?appliesTo }}
+  OPTIONAL {{ ?q mcfg:bundled ?bundled }}
+  OPTIONAL {{ ?q sh:order ?order }}
+}} }}""",
+    )
+    wanted = QUESTION_DOMAINS.get(domain, domain) if domain else None
+    questions: Dict[str, CommonQuestion] = {}
+    for r in rows:
+        iri = _strip(r["q"])
+        if iri in questions or not r.get("query"):
+            continue
+        applies_to = _strip(r.get("appliesTo"))
+        if wanted and applies_to not in (None, wanted):
+            continue
+        order = r.get("order")
+        bundled = r.get("bundled")
+        questions[iri] = CommonQuestion(
+            iri=iri,
+            name=_strip(r.get("title")) or _strip(r.get("label")) or iri,
+            query=_strip(r["query"]),
+            description=_strip(r.get("description")) or "",
+            applies_to=applies_to,
+            bundled=bundled is True or "true" in str(bundled).lower(),
+            order=None if order is None else int(float(str(order).split("^^")[0].strip('"'))),
+        )
+    return sorted(
+        questions.values(), key=lambda q: (q.order is None, q.applies_to or "", q.order or 0, q.name.lower(), q.iri)
     )
 
 
