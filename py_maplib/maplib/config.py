@@ -99,7 +99,9 @@ SQL_DIALECTS = ("duckdb", "postgres", "snowflake", "bigquery", "databricks")
 #: The usual connection parameters of each database, as maplib.virtualization takes them.
 DATABASE_PARAMETERS: Dict[str, List[str]] = {
     "sql": ["url"],
-    "duckdb": ["database", "timezone"],
+    # sandbox: no access to other files than the database file and the allowed directories and
+    # paths (comma separated); probe connects in the same sandbox as apply_virtualization
+    "duckdb": ["database", "timezone", "sandbox", "allowed_directories", "allowed_paths"],
     "snowflake": ["account", "user", "warehouse", "database", "schema", "role", "authenticator"],
     "bigquery": ["project", "location"],
     "databricks": ["server_hostname", "http_path", "catalog", "schema"],

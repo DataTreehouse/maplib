@@ -26,14 +26,30 @@ class DuckDBDatabase(SQLDatabase):
 
     connection: Any
 
+    sandbox: bool
+
     def __init__(self, connection: Any = None, database: str = ":memory:", timezone: Optional[str] = "UTC",
-                 sql_dialect: Union[str, "SQLDialect"] = "duckdb"):
+                 sql_dialect: Union[str, "SQLDialect"] = "duckdb", sandbox: Union[bool, str, None] = None,
+                 allowed_directories: Union[str, List[str], None] = None,
+                 allowed_paths: Union[str, List[str], None] = None):
         """
         :param connection: A duckdb connection. When not given, duckdb.connect(database) is used.
         :param database: The database file to connect to when no connection is given.
         :param timezone: The time zone set for the connection, so that timestamps with time zone come back in it.
             None leaves the connection's time zone as is.
         :param sql_dialect: Override the SQL dialect, e.g. with a subclass of DuckDBDialect.
+        :param sandbox: Turn off DuckDB's external access and lock the configuration before any resource SQL
+            runs, so that the SQL can not read local files, ATTACH databases, COPY to files, install extensions or
+            turn it back on. The database file and the allowed directories and paths stay usable. None (the
+            default): sandboxed when the environment variable MAPLIB_DUCKDB_SANDBOX is set. Recommended when the
+            resource SQL comes from users who should not read the process's files.
+        :param allowed_directories: Directories (with subdirectories) still readable in the sandbox: a list, or
+            a string with paths separated by commas or new lines.
+        :param allowed_paths: Files still readable in the sandbox, as for allowed_directories.
+
+        MAPLIB_DUCKDB_SANDBOX=1 enforces the sandbox: sandbox=False is refused, the database file must exist,
+        and the database file and allowed directories and paths must lie in MAPLIB_DUCKDB_ALLOWED_DIRECTORIES
+        (separated by os.pathsep); without it, no further directories or paths can be allowed.
         """
 
 class SnowflakeDatabase(SQLDatabase):

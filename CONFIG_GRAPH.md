@@ -120,7 +120,7 @@ The parameters are the keyword arguments of the database's constructor.
 | Database | Parameters | Secrets |
 |---|---|---|
 | General SQL | `url` (a SQLAlchemy URL without the password, e.g. `postgresql+psycopg://maplib@db:5432/plant`); `mcfg:sqlDialect` is required | `password` |
-| DuckDB | `database` (file), `timezone` | |
+| DuckDB | `database` (file), `timezone`, `sandbox` (`true`: the resource SQL can not read other local files, attach databases or reach the network; recommended when users configure it), `allowed_directories`, `allowed_paths` (comma separated, still readable in the sandbox) | |
 | Snowflake | `account`, `user`, `warehouse`, `database`, `schema`, `role`, `authenticator` | `password`, `private_key_file_pwd`, `token` |
 | BigQuery | `project`, `location` (credentials from the environment, e.g. `GOOGLE_APPLICATION_CREDENTIALS`) | |
 | Databricks | `server_hostname`, `http_path`, `catalog`, `schema` | `access_token` |
