@@ -68,6 +68,7 @@
 - Zero-length property paths (`ex:p*`, `ex:p?`, `ex:p{0,n}`) from a variable bound by other patterns or by VALUES now match each of its values that is a node of the queried graph (a subject or object of some triple), as SPARQL 1.1 requires, also nodes without `ex:p` triples. Before, `?x a ex:Node . ?x ex:p* ?y` left out the nodes without `ex:p` triples
 - JSON results of SELECT queries (`return_format="json"`) list the variables in the order of the projection, instead of an arbitrary order
 - `Model.query_external` no longer panics ("entered unreachable code") on SELECT results where a variable is unbound in some rows, as with OPTIONAL. Unbound values are nulls, also before the first bound value, and a variable that is never bound is a column of nulls
+- `INSERT { GRAPH ?g { ... } } WHERE { ... }` and `DELETE { GRAPH ?g { ... } }` in `Model.update` use the graphs that `?g` is bound to. The graph name variable was left out of the solutions, so nothing was inserted or deleted when it appeared only as a graph name in the template
 
 ### Performance
 In disk mode the triple tables and their deduplication index are no longer held in memory. With few triples per distinct IRI or literal (as in the CIM data), memory use is dominated by the dictionary and reading, and disk storage saves little.

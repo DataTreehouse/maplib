@@ -396,6 +396,9 @@ impl Triplestore {
                         if let NamedNodePattern::Variable(v) = &d.predicate {
                             variables.insert(v.clone());
                         }
+                        if let GraphNamePattern::Variable(v) = &d.graph_name {
+                            variables.insert(v.clone());
+                        }
                     }
                     for i in insert {
                         if let TermPattern::Variable(v) = &i.subject {
@@ -405,6 +408,9 @@ impl Triplestore {
                             variables.insert(v.clone());
                         }
                         if let NamedNodePattern::Variable(v) = &i.predicate {
+                            variables.insert(v.clone());
+                        }
+                        if let GraphNamePattern::Variable(v) = &i.graph_name {
                             variables.insert(v.clone());
                         }
                     }

@@ -186,3 +186,35 @@ def test_detach_default_graph():
     """)
     assert df2.height == 0
     m.writes(format="ntriples")
+
+
+GRAPH_VAR_DATA = """
+<http://example.net/ns#a> <http://example.net/ns#p> <http://example.net/ns#b> .
+<http://example.net/ns#b> <http://example.net/ns#p> <http://example.net/ns#c> .
+<http://example.net/ns#a> <http://example.net/ns#g> <http://example.net/ns#g1> .
+<http://example.net/ns#b> <http://example.net/ns#g> <http://example.net/ns#g2> .
+"""
+
+
+def test_update_graph_variable_only_in_template():
+    # ?g appears only as the graph name of the template, not as a subject or object there.
+    ex = "http://example.net/ns#"
+    m = Model()
+    m.reads(GRAPH_VAR_DATA, format="ntriples")
+    m.update(
+        f"""PREFIX ex:<{ex}>
+        INSERT {{ GRAPH ?g {{ ?s ex:t ?o }} }} WHERE {{ ?s ex:p ?o . ?s ex:g ?g }}"""
+    )
+    assert m.size(f"{ex}g1") == 1
+    assert m.size(f"{ex}g2") == 1
+    assert m.size() == 4
+    df = m.query("SELECT ?s ?o WHERE { ?s ?p ?o }", graph=f"{ex}g1", include_graphs=[])
+    assert df.rows() == [(f"<{ex}a>", f"<{ex}b>")]
+
+    m.update(
+        f"""PREFIX ex:<{ex}>
+        DELETE {{ GRAPH ?g {{ ?s ex:t ?o }} }} WHERE {{ ?s ex:p ?o . ?s ex:g ?g }}"""
+    )
+    assert m.size(f"{ex}g1") == 0
+    assert m.size(f"{ex}g2") == 0
+    assert m.size() == 4
