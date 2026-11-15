@@ -2348,29 +2348,41 @@ def explore(
     """
 
 
-def generate_templates(m: Model, graph: Optional[str] = None) -> Dict[str, Template]:
+def generate_templates(
+    m: Model,
+    graph: Optional[str] = None,
+    prefixes: Optional[Dict[str, str]] = None,
+) -> Dict[str, Template]:
     """Generate templates for instantiating the classes in an ontology
 
     :param m: The model where the ontology is stored. We rely on owl:Class/rdfs:Class declarations, rdfs:subClassOf, rdfs:domain, rdfs:range (also via owl:unionOf), owl:Restriction and the declared types of properties.
     :param graph: The named graph where the ontology is stored. Defaults to the default graph.
+    :param prefixes: Prefixes (prefix name to namespace IRI) used to name the parameters, e.g. {"ex": "https://example.net/"}.
+        Common prefixes such as rdf, rdfs, owl, xsd, skos and dcterms are known already.
+        Namespaces without a prefix get the generated prefixes ns1, ns2, ...
 
     :return A dictionary of templates for instantiating the classes in the ontology, where the keys are the class IRIs.
         For each class there is a template with the class IRI, which also produces the rdf:type triple, and one with
         the IRI of the class suffixed by "_notype", which does not. The subject is the parameter "id",
-        the other (optional) parameters are named after the local names of the properties.
-        Name clashes are resolved with suffixes ("_inverse" for reverse properties, then "_2", "_3", ...).
+        the other (optional) parameters are named by the prefixed IRIs of the properties, e.g. "ex:name",
+        so the columns of the data frame you map should be named like that.
+        Properties that have the class as their range are included in the reverse direction, with the suffix
+        "_inverse" on the local name (e.g. "ex:hasPart_inverse"). Remaining name clashes get the suffixes "_2", "_3", ...
         Templates of subclasses instantiate the "_notype" templates of their superclasses,
         so all templates must be added to the Model you want to populate.
 
-    Usage example - note that it is important to add the templates to the Model you want to populate.
+    Usage example - note that it is important to add the templates to the Model you want to populate,
+    and that the columns of the data frame are named by the prefixed IRIs of the properties.
+    >>> import polars as pl
     >>> from maplib import Model, generate_templates
     >>>
     >>> m_ont = Model()
     >>> m_ont.read("my_ontology.ttl")
-    >>> templates = generate_templates(m_ont)
+    >>> templates = generate_templates(m_ont, prefixes={"ex": "https://example.net/"})
     >>> m = Model()
     >>> for t in templates.values():
     >>>     m.add_template(t)
+    >>> df = pl.DataFrame({"id": ["https://example.net/thing1"], "ex:name": ["Thing 1"]})
     >>> m.map("https://example.net/MyClass", df)
     """
 
