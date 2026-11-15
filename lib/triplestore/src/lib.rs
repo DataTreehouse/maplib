@@ -131,9 +131,8 @@ impl Triplestore {
                             maintain_order: true,
                         },
                     )
-                    .unwrap()
-                    .collect()
-                    .unwrap();
+                    .and_then(|lf| lf.collect())
+                    .map_err(TriplestoreError::LazyLoadError)?;
                     let subject_cat_state = if subject_type.stored_cat() {
                         BaseCatState::CategoricalNative(Some(other.global_cats.clone()))
                     } else {

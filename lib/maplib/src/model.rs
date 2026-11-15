@@ -4,13 +4,13 @@ pub mod errors;
 pub mod expansion;
 pub mod shacl_report_mapping;
 
-use external_sparql::federation::FederationSettings;
 use crate::errors::MaplibError;
 use crate::model::errors::MappingError;
 use cimxml_export::export::{cim_xml_write, FullModelDetails};
+use cimxml_import::{cim_geometries_to_geosparql, CimPositionPoint};
 use datalog::inference::{infer, InferenceResult};
 use datalog::parser::parse_datalog_ruleset;
-use cimxml_import::{cim_geometries_to_geosparql, CimPositionPoint};
+use external_sparql::federation::FederationSettings;
 use file_io::remote::{RemoteLocation, RemoteOptions};
 use oxrdf::{NamedNode, Term};
 use oxrdfio::RdfFormat;
@@ -36,27 +36,26 @@ use triplestore::{IndexingOptions, NewTriples, StorageOptions, Triplestore};
 use chrontext::engine::{ChrontextSettings, Engine};
 use datalog::ast::DatalogRuleset;
 use external_sparql::{SparqlEndpoint, SparqlMethod};
+use query_processing::bindings::maybe_replace_bindings;
 use representation::constants::OTTR_TRIPLE;
 use representation::dataset::NamedGraph;
-use representation::prefixes::get_default_prefixes;
 use representation::polars_to_rdf::{df_as_result, QuerySolutions};
+use representation::prefixes::get_default_prefixes;
 use representation::result::{QueryResult, QueryResultKind};
 use spargebra::term::GroundTerm;
 use tracing::instrument;
 use triplestore::errors::TriplestoreError;
-use query_processing::bindings::maybe_replace_bindings;
 use triplestore::query_cache::{cache_plan, CachePlan, PlanContext, QueryCache, Touched};
 use triplestore::triples_read::ExtendedRdfFormat;
 use virtualization::insights_hub::{
     insights_hub_resource_template, InsightsHubAssetModel, INSIGHTS_HUB_NAMESPACE,
     INSIGHTS_HUB_RESOURCE,
 };
-use virtualization::python::VirtualizedPythonDatabase;
 use virtualization::osipi::{
-    osipi_resource_template, read_asset_framework, read_pi_points, OSIPIAssetModel,
-    OSIPIDatabase, OSIPIPointModel, OSIPISettings, PIPointSelection, OSIPI_NAMESPACE,
-    OSIPI_RESOURCE,
+    osipi_resource_template, read_asset_framework, read_pi_points, OSIPIAssetModel, OSIPIDatabase,
+    OSIPIPointModel, OSIPISettings, PIPointSelection, OSIPI_NAMESPACE, OSIPI_RESOURCE,
 };
+use virtualization::python::VirtualizedPythonDatabase;
 use virtualization::{Virtualization, VirtualizedDatabase};
 
 /// CGMES 3.0 and CGMES 2.4.15 namespaces.
@@ -595,8 +594,7 @@ SELECT ?loc ?crs ?seq ?x ?y ?z WHERE {{
         if points.is_empty() {
             return Ok(());
         }
-        let triples =
-            cim_geometries_to_geosparql(points).map_err(MaplibError::CIMGeometryError)?;
+        let triples = cim_geometries_to_geosparql(points).map_err(MaplibError::CIMGeometryError)?;
         let mut nt = String::new();
         for t in triples {
             nt.push_str(&t.to_string());
@@ -766,32 +764,34 @@ SELECT ?loc ?crs ?seq ?x ?y ?z WHERE {{
             federation,
             evaluation_hook: None,
         };
-        if let Some(chrontext_settings) = &self.chrontext_settings {
-            let engine = Engine::new(
-                chrontext_settings,
-                &self.triplestore,
-                parameters,
-                query_settings,
-                graph.cloned(),
-                debug_no_results,
-            );
-            let qr = engine
-                .query_blocking(query, Some(&self.prefixes), bindings)
-                .map_err(MaplibError::ChrontextError)?;
-            Ok(qr)
-        } else {
-            self.triplestore
-                .query(
-                    query,
+        on_big_stack(|| {
+            if let Some(chrontext_settings) = &self.chrontext_settings {
+                let engine = Engine::new(
+                    chrontext_settings,
+                    &self.triplestore,
                     parameters,
-                    &query_settings,
-                    graph,
-                    Some(&self.prefixes),
+                    query_settings,
+                    graph.cloned(),
                     debug_no_results,
-                    bindings,
-                )
-                .map_err(|x| x.into())
-        }
+                );
+                let qr = engine
+                    .query_blocking(query, Some(&self.prefixes), bindings)
+                    .map_err(MaplibError::ChrontextError)?;
+                Ok(qr)
+            } else {
+                self.triplestore
+                    .query(
+                        query,
+                        parameters,
+                        &query_settings,
+                        graph,
+                        Some(&self.prefixes),
+                        debug_no_results,
+                        bindings,
+                    )
+                    .map_err(|x| x.into())
+            }
+        })
     }
 
     /// The query result cache of this model, shared by everything that queries it.
@@ -881,17 +881,19 @@ SELECT ?loc ?crs ?seq ?x ?y ?z WHERE {{
             federation: None,
             evaluation_hook: None,
         };
-        self.triplestore
-            .insert(
-                query,
-                parameters,
-                &query_settings,
-                source_graph,
-                target_graph,
-                Some(&self.prefixes),
-                debug_no_results,
-            )
-            .map_err(|x| x.into())
+        on_big_stack(|| {
+            self.triplestore
+                .insert(
+                    query,
+                    parameters,
+                    &query_settings,
+                    source_graph,
+                    target_graph,
+                    Some(&self.prefixes),
+                    debug_no_results,
+                )
+                .map_err(|x| x.into())
+        })
     }
 
     pub fn update(
@@ -934,16 +936,18 @@ SELECT ?loc ?crs ?seq ?x ?y ?z WHERE {{
             federation,
             evaluation_hook: None,
         };
-        self.triplestore
-            .update(
-                update,
-                parameters,
-                &query_settings,
-                graph,
-                Some(&self.prefixes),
-                debug_no_results,
-            )
-            .map_err(|x| x.into())
+        on_big_stack(|| {
+            self.triplestore
+                .update(
+                    update,
+                    parameters,
+                    &query_settings,
+                    graph,
+                    Some(&self.prefixes),
+                    debug_no_results,
+                )
+                .map_err(|x| x.into())
+        })
     }
 
     pub fn insert_construct_result(
@@ -1086,25 +1090,27 @@ SELECT ?loc ?crs ?seq ?x ?y ?z WHERE {{
         max_iterations: Option<usize>,
         debug_rules: bool,
     ) -> Result<ValidationReport, MaplibError> {
-        let mut res = validate(
-            &mut self.triplestore,
-            data_graph,
-            shape_graph,
-            inferences_graph,
-            include_details,
-            include_conforms,
-            // The size of the report is bounded by the memory limit instead.
-            None,
-            include_graphs,
-            max_rows,
-            only_shapes,
-            deactivate_shapes,
-            dry_run,
-            Some(self.prefixes.clone()),
-            serial,
-            max_iterations,
-            debug_rules,
-        )
+        let mut res = on_big_stack(|| {
+            validate(
+                &mut self.triplestore,
+                data_graph,
+                shape_graph,
+                inferences_graph,
+                include_details,
+                include_conforms,
+                // The size of the report is bounded by the memory limit instead.
+                None,
+                include_graphs,
+                max_rows,
+                only_shapes,
+                deactivate_shapes,
+                dry_run,
+                Some(self.prefixes.clone()),
+                serial,
+                max_iterations,
+                debug_rules,
+            )
+        })
         .map_err(MaplibError::ShaclError)?;
         if let Some(report_graph) = report_graph {
             self.map_validation_result_to_report_graph(
@@ -1175,17 +1181,19 @@ SELECT ?loc ?crs ?seq ?x ?y ?z WHERE {{
             }
         }
 
-        let res = infer(
-            &mut self.triplestore,
-            graph,
-            ruleset.as_ref().unwrap(),
-            max_iterations,
-            // The number of inferred triples is bounded by the memory limit instead.
-            None,
-            include_graphs,
-            max_rows,
-            debug_no_results,
-        );
+        let res = on_big_stack(|| {
+            infer(
+                &mut self.triplestore,
+                graph,
+                ruleset.as_ref().unwrap(),
+                max_iterations,
+                // The number of inferred triples is bounded by the memory limit instead.
+                None,
+                include_graphs,
+                max_rows,
+                debug_no_results,
+            )
+        });
         res.map_err(MaplibError::DatalogError)
     }
 
@@ -1273,4 +1281,13 @@ SELECT ?loc ?crs ?seq ?x ?y ?z WHERE {{
     ) {
         self.triplestore.add_udf(iri, f, output_type, input_types);
     }
+}
+
+/// Queries are processed recursively, so long chains of UNION or || and deeply nested
+/// expressions can need far more stack than a thread has (8 MB on the main thread).
+/// The work is moved to a larger stack on the same thread, so Python signal checks still work.
+pub fn on_big_stack<R>(f: impl FnOnce() -> R) -> R {
+    const RED_ZONE: usize = 64 * 1024 * 1024;
+    const STACK_SIZE: usize = 1024 * 1024 * 1024;
+    stacker::maybe_grow(RED_ZONE, STACK_SIZE, f)
 }

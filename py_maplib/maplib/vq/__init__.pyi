@@ -160,6 +160,7 @@ class XSDDuration:
     hours: int
     minutes: int
     seconds: Tuple[int, int]
+    """Whole seconds and the fraction in nanoseconds, both with the sign of the duration."""
 
 
 class OrderExpression:

@@ -36,6 +36,7 @@ chrono-tz = { workspace = true }
 thiserror = { workspace = true }
 oxrdfio = { workspace = true }
 tracing = { workspace = true }
+stacker = { workspace = true }
 
 pyo3 = { workspace = true, optional = true }
 

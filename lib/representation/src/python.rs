@@ -529,16 +529,9 @@ impl PyXSDDuration {
     }
 
     #[getter]
+    /// The whole seconds and the fraction in nanoseconds, both with the sign of the duration.
     fn seconds(&self) -> (i64, i64) {
-        let duration_seconds_string = self.duration.seconds().to_string();
-        let mut split_dot = duration_seconds_string.split(".");
-        let whole = split_dot.next().unwrap().parse::<i64>().unwrap();
-        let fraction = if let Some(second) = split_dot.next() {
-            second.parse::<i64>().unwrap()
-        } else {
-            0
-        };
-        (whole, fraction)
+        split_seconds(&self.duration.seconds().to_string())
     }
 }
 
@@ -697,4 +690,24 @@ fn types_without_offsets(state: &RDFNodeState) -> std::collections::BTreeSet<Bas
             t => t.clone(),
         })
         .collect()
+}
+
+/// Splits a lexical decimal such as "-1.05" into whole seconds and nanoseconds: (-1, -50000000).
+/// Digits beyond nanoseconds are truncated.
+fn split_seconds(s: &str) -> (i64, i64) {
+    let (negative, s) = match s.strip_prefix('-') {
+        Some(rest) => (true, rest),
+        None => (false, s.strip_prefix('+').unwrap_or(s)),
+    };
+    let (whole, fraction) = s.split_once('.').unwrap_or((s, ""));
+    let whole = whole.parse::<i64>().unwrap_or(0);
+    let mut nanos = 0i64;
+    for (i, c) in fraction.chars().take(9).enumerate() {
+        nanos += c.to_digit(10).unwrap_or(0) as i64 * 10i64.pow(8 - i as u32);
+    }
+    if negative {
+        (-whole, -nanos)
+    } else {
+        (whole, nanos)
+    }
 }

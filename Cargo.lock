@@ -2249,6 +2249,7 @@ dependencies = [
  "representation",
  "shacl",
  "spargebra",
+ "stacker",
  "templates",
  "thiserror",
  "tracing",
