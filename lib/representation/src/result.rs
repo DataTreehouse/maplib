@@ -166,11 +166,28 @@ pub fn expand_graph_variable(
     qp: &QuadPattern,
     global_cats: LockedCats,
 ) -> Vec<(DataFrame, QuadPattern)> {
-    let v = if let GraphNamePattern::Variable(v) = &qp.graph_name {
-        v
-    } else {
+    let GraphNamePattern::Variable(v) = &qp.graph_name else {
         return vec![(df.clone(), qp.clone())];
     };
+    partition_by_graph_variable(df, rdf_node_types, v, global_cats)
+        .into_iter()
+        .map(|(g, part)| {
+            let mut new_qp = qp.clone();
+            new_qp.graph_name = GraphNamePattern::NamedNode(g);
+            (part, new_qp)
+        })
+        .collect()
+}
+
+/// Partitions the solutions by the IRI that the variable is bound to, in the order that the IRIs
+/// first appear. Rows where it is unbound or not an IRI are dropped. The rows are partitioned on
+/// the encoded IRIs in one pass, and only one IRI per partition is decoded.
+fn partition_by_graph_variable(
+    df: &DataFrame,
+    rdf_node_types: &HashMap<String, RDFNodeState>,
+    v: &Variable,
+    global_cats: LockedCats,
+) -> Vec<(NamedNode, DataFrame)> {
     let Some(t) = rdf_node_types.get(v.as_str()) else {
         return vec![];
     };
@@ -183,38 +200,56 @@ pub fn expand_graph_variable(
         col(v.as_str())
     };
     const GRAPH_COL: &str = "__maplib_graph_name";
-    let decoded = maybe_decode_expr(iri_col, &BaseRDFNodeType::IRI, bs, global_cats)
-        .cast(DataType::String)
-        .alias(GRAPH_COL);
-    let with_graph = df.clone().lazy().with_column(decoded).collect().unwrap();
-    let graphs = with_graph
+    let with_graph = df
+        .clone()
+        .lazy()
+        .with_column(iri_col.alias(GRAPH_COL))
+        .filter(col(GRAPH_COL).is_not_null())
+        .collect()
+        .unwrap();
+    if with_graph.height() == 0 {
+        return vec![];
+    }
+    let parts = with_graph.partition_by_stable([GRAPH_COL], true).unwrap();
+    let mut keys: Option<Series> = None;
+    for part in &parts {
+        let k = part
+            .column(GRAPH_COL)
+            .unwrap()
+            .as_materialized_series()
+            .head(Some(1));
+        if let Some(keys) = &mut keys {
+            keys.append(&k).unwrap();
+        } else {
+            keys = Some(k);
+        }
+    }
+    let keys = keys.unwrap();
+    let keys = DataFrame::new(keys.len(), vec![keys.into()]).unwrap();
+    let decoded = keys
+        .lazy()
+        .select([
+            maybe_decode_expr(col(GRAPH_COL), &BaseRDFNodeType::IRI, bs, global_cats)
+                .cast(DataType::String)
+                .alias(GRAPH_COL),
+        ])
+        .collect()
+        .unwrap();
+    let names = decoded
         .column(GRAPH_COL)
         .unwrap()
         .as_materialized_series()
-        .unique()
-        .unwrap();
-    let mut out = vec![];
-    let graphs: Vec<String> = graphs
         .str()
         .unwrap()
-        .iter()
-        .flatten()
-        .map(|x| x.to_string())
-        .collect();
-    for g in graphs {
-        let g = g.as_str();
-        let filtered = with_graph
-            .clone()
-            .lazy()
-            .filter(col(GRAPH_COL).eq(lit(g)))
-            .drop(by_name([GRAPH_COL], true, false))
-            .collect()
-            .unwrap();
-        let mut new_qp = qp.clone();
-        new_qp.graph_name = GraphNamePattern::NamedNode(NamedNode::new_unchecked(g));
-        out.push((filtered, new_qp));
-    }
-    out
+        .clone();
+    parts
+        .into_iter()
+        .zip(names.iter())
+        .map(|(part, g)| {
+            let part = part.drop(GRAPH_COL).unwrap();
+            (NamedNode::new_unchecked(g.unwrap()), part)
+        })
+        .collect()
 }
 
 pub fn ground_quad_pattern_to_quad_pattern(qp: &GroundQuadPattern) -> QuadPattern {

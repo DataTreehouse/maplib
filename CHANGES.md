@@ -89,6 +89,8 @@ ORDER BY on IRIs and strings no longer collects its input in memory for each sor
 
 ORDER BY with LIMIT (with or without OFFSET) is collected with the in-memory engine, which sorts much faster than the streaming engine when only part of the result is kept. Such queries are several times faster, and many times faster for some sort keys. Their working state is kept in memory, so they do not spill to disk under the memory limit. `MAPLIB_POLARS_ENGINE=streaming` keeps the streaming engine for them.
 
+`GRAPH ?g` in the templates of `Model.update` partitions the solutions by the encoded graph IRIs in one pass, and decodes one IRI per graph, instead of decoding every row and filtering the solutions once per graph.
+
 Deleting triples that are not in a table no longer rewrites the table, so DELETE DATA and DELETE WHERE of absent triples leave the stored triples and their indexes as they are. The count of deleted triples that decides when memory storage is compacted counts only the triples that existed.
 
 Tantivy answered exact matches from its term dictionary, but scanned all strings for substring matches, which it ran whenever the exact matches did not fill the limit. DuckDB scans the strings once per query for both. Reading without full text search is unchanged.

@@ -218,3 +218,30 @@ def test_update_graph_variable_only_in_template():
     assert m.size(f"{ex}g1") == 0
     assert m.size(f"{ex}g2") == 0
     assert m.size() == 4
+
+
+def test_update_graph_variable_many_graphs_and_non_iris():
+    # ?g is bound to 50 different IRIs, and also to literals and left unbound, which give no
+    # triples.
+    ex = "http://example.net/ns#"
+    lines = []
+    for i in range(500):
+        lines.append(f"<{ex}s{i}> <{ex}p> <{ex}o{i}> .")
+        if i % 10 == 0:
+            lines.append(f'<{ex}s{i}> <{ex}g> "not a graph" .')
+        elif i % 10 != 1:
+            lines.append(f"<{ex}s{i}> <{ex}g> <{ex}g{i % 50}> .")
+    m = Model()
+    m.reads("\n".join(lines) + "\n", format="ntriples")
+    m.update(
+        f"""PREFIX ex:<{ex}>
+        INSERT {{ GRAPH ?g {{ ?s ex:t ?o }} }}
+        WHERE {{ ?s ex:p ?o OPTIONAL {{ ?s ex:g ?g }} }}"""
+    )
+    sizes = {i: m.size(f"{ex}g{i}") for i in range(50) if i % 10 not in (0, 1)}
+    assert sizes == {i: 10 for i in sizes}
+    df = m.query(
+        f"SELECT ?s ?o WHERE {{ ?s ?p ?o }} ORDER BY ?s", graph=f"{ex}g7", include_graphs=[]
+    )
+    assert df["s"].to_list() == sorted(f"<{ex}s{i}>" for i in range(7, 500, 50))
+    assert m.size() == 500 + 450
