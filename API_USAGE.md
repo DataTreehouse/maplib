@@ -575,6 +575,22 @@ m.map_opc_ua("my_opc_ua_nodeset2_xmls", graph="urn:maplib:uagraphs")  # EE
 
 The folder must contain the Namespace 0 NodeSet2 XML.
 
+`m.opcua.add_typing_shapes(shapes_graph=None, type_namespaces=None, instance_namespaces=None)` generates
+SHACL shapes from the type definitions in the mapped nodesets: a shape for each ObjectType and VariableType
+(targeting the nodes with that `HasTypeDefinition`), one for each browse path of their fully inherited
+instance declarations, and cardinality shapes requiring each Mandatory instance declaration exactly once.
+Shapes of types with no instances are deactivated. All have `maplib:shapeCategory uamapper:OPCUATypingValidation`
+(`uamapper:` is `https://github.com/DataTreehouse/uamapper#`). Give either the instance namespaces or the
+type namespaces; without either, a namespace holds types when it has type nodes. The generation also adds
+helper triples that your own shapes can use, such as `?ns uamapper:typeNamespace false` for instance namespaces.
+
+<!-- skip: EE -->
+```python
+m.opcua.add_typing_shapes(shapes_graph="urn:shapes", instance_namespaces=["urn:my:instances"])
+m.read("my_opc_ua_shapes.ttl", graph="urn:shapes")  # your own rules
+report = m.validate(shape_graph="urn:shapes", report_graph="urn:report")
+```
+
 ## 5. Streaming with ModelStream
 
 `map`, `map_triples`, `map_json` and `map_xml` take `stream=True` and then return a lazy

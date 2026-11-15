@@ -63,6 +63,16 @@ http://www.w3.org/1999/02/22-rdf-syntax-ns#type
 """
 a = rdf.type
 
+
+def _opcua(self) -> "opcua.OPCUA":
+    """OPC UA functionality, e.g. m.opcua.add_typing_shapes(), see maplib.opcua.OPCUA."""
+    from .opcua import OPCUA
+
+    return OPCUA(self)
+
+
+Model.opcua = property(_opcua)
+
 if (pathlib.Path(__file__).parent.resolve() / "graph_explorer").exists():
     from .graph_explorer import explore as _explore
 else:

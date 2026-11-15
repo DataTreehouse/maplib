@@ -4,6 +4,7 @@ from typing import Any, Union, List, Dict, Optional, Callable, Iterable, Literal
 
 import polars as pl
 from maplib.maplib import rdf
+from maplib.opcua import OPCUA
 
 DEFAULT_GRAPH: str
 """
@@ -1061,9 +1062,21 @@ class Model:
         Usage:
         >>> m.map_opc_ua("my_opc_ua_nodeset2_xmls", graph="urn:maplib:uagraphs")
 
+        To generate SHACL shapes from the types in the nodesets, see m.opcua.add_typing_shapes.
+
         :param folder: OPC UA NodeSet2 XMLs are found in this folder
         :param graph: The IRI of the graph to add triples to.
         :return: None
+        """
+
+    @property
+    def opcua(self) -> OPCUA:
+        """
+        OPC UA functionality of this model, see maplib.opcua.OPCUA.
+
+        Usage:
+        >>> m.map_opc_ua("nodesets")
+        >>> m.opcua.add_typing_shapes(shapes_graph="urn:shapes", instance_namespaces=["urn:my:instances"])
         """
 
     def map_cdf(

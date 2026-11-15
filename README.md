@@ -87,7 +87,7 @@ Features marked **EE** need [maplib Enterprise Edition](#open-source-and-enterpr
 | `m.generate_template(data, primary_key_column)` | Generates a default template from a DataFrame's columns and returns it as stOTTR text for you to review. It doesn't map anything. |
 | `m.map_df(df)` / `m.map_json(...)` / `m.map_xml(...)` | Maps a DataFrame, JSON or XML document to triples with a generic Façade-X mapping that mirrors its structure. JSON and XML also accept an iterable of documents, such as the lines of a JSON Lines file. |
 | `m.map_csvw(source, metadata=None)` | Converts CSV and TSV files to RDF as specified by the W3C CSV on the Web recommendations, and returns the generated SPARQL Update so you can adapt it. |
-| `m.map_opc_ua(folder)` **EE** | Maps a folder of OPC UA NodeSet2 XML files to RDF. |
+| `m.map_opc_ua(folder)` **EE** | Maps a folder of OPC UA NodeSet2 XML files to RDF. `m.opcua.add_typing_shapes()` then generates SHACL shapes from their type definitions. |
 | `m.add_template(t)`, `m.read_template(path)` | Add templates from stOTTR text, a `Template` object or a file. |
 | Function calls in templates | Template arguments computed with SPARQL functions, e.g. `ottr:Triple((IRI (CONCAT "http://ex.org/" ?id)), ex:powerW, (* ?kw 1000))`, and functions defined with `def` ([API_USAGE.md](API_USAGE.md#function-calls-in-templates)). |
 | `m.get_templates()`, `m.templates_to_graph(graph)` | List the model's templates, or write them as RDF so you can query their structure with SPARQL. |

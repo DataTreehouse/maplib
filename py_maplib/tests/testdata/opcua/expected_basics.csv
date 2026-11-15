@@ -1,0 +1,3 @@
+focus_node,result_path,result_severity,source_constraint_component,source_shape,message,value
+<urn:DataTreehouse:uamodel#s%3DMissingStates>,<http://opcfoundation.org/UA/HasProperty>,<http://www.w3.org/ns/shacl#Violation>,<http://www.w3.org/ns/shacl#MinCountConstraintComponent>,<http://opcfoundation.org/UA/i%3D2374_CardinalityShape>,Missing mandatory node on path: FalseState,
+<urn:DataTreehouse:uamodel#s%3DMissingStates>,<http://opcfoundation.org/UA/HasProperty>,<http://www.w3.org/ns/shacl#Violation>,<http://www.w3.org/ns/shacl#MinCountConstraintComponent>,<http://opcfoundation.org/UA/i%3D2375_CardinalityShape>,Missing mandatory node on path: TrueState,
