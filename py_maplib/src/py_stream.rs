@@ -330,7 +330,7 @@ impl PyModelStream {
     fn collect(&self, py: Python<'_>) -> PyResult<()> {
         let model = self.model.bind(py).get();
         let carrier = py.detach(|| {
-            let mut inner = model.inner.write().unwrap();
+            let mut inner = model.inner.write().unwrap_or_else(|e| e.into_inner());
             empty_model_like(&mut inner, false)
         })?;
         let mut state = BatchState { carrier };

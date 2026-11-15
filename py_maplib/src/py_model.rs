@@ -90,7 +90,7 @@ impl PyModel {
     fn add_template(&self, py: Python<'_>, template: Bound<'_, PyAny>) -> PyResult<()> {
         let template = template.try_into()?;
         py.detach(move || {
-            let mut inner = self.inner.write().unwrap();
+            let mut inner = self.inner.write().unwrap_or_else(|e| e.into_inner());
             add_template_mutex(&mut inner, template)
         })
     }
@@ -99,7 +99,7 @@ impl PyModel {
     fn add_prefixes(&self, py: Python<'_>, prefixes: Bound<'_, PyAny>) -> PyResult<()> {
         let use_prefixes = create_prefix_map(Some(prefixes))?.unwrap();
         py.detach(move || {
-            let mut inner = self.inner.write().unwrap();
+            let mut inner = self.inner.write().unwrap_or_else(|e| e.into_inner());
             add_prefixes_mutex(&mut inner, use_prefixes)
         })
     }
@@ -110,7 +110,7 @@ impl PyModel {
         let graph = parse_optional_named_node(graph)?;
         let graph = NamedGraph::from_maybe_named_node(graph.as_ref());
         py.detach(move || {
-            let mut inner = self.inner.write().unwrap();
+            let mut inner = self.inner.write().unwrap_or_else(|e| e.into_inner());
             truncate_graph_mutex(&mut inner, &graph)
         })
     }
@@ -126,7 +126,7 @@ impl PyModel {
         let graph = parse_optional_named_node(graph)?;
         let graph = NamedGraph::from_maybe_named_node(graph.as_ref());
         py.detach(move || {
-            let mut inner = self.inner.write().unwrap();
+            let mut inner = self.inner.write().unwrap_or_else(|e| e.into_inner());
             detach_graph_mutex(&mut inner, &graph, preserve_name.unwrap_or(false))
         })
     }
@@ -148,7 +148,7 @@ impl PyModel {
             let data = stream_data(data)?;
             parse_optional_named_node(graph.clone())?;
             let template_iri = py.detach(|| {
-                let mut inner = this.inner.write().unwrap();
+                let mut inner = this.inner.write().unwrap_or_else(|e| e.into_inner());
                 resolve_template_mutex(&mut inner, template)
             })?;
             let stream = PyModelStream::new(
@@ -165,11 +165,11 @@ impl PyModel {
         let data = data.map(|x| classify_mapping_data(x, py)).transpose()?;
         match data {
             None => py.detach(move || {
-                let mut inner = this.inner.write().unwrap();
+                let mut inner = this.inner.write().unwrap_or_else(|e| e.into_inner());
                 map_mutex(&mut inner, template, None, graph, None, validate_iris)
             }),
             Some(MappingData::Eager(mappings, types)) => py.detach(move || {
-                let mut inner = this.inner.write().unwrap();
+                let mut inner = this.inner.write().unwrap_or_else(|e| e.into_inner());
                 map_mutex(
                     &mut inner,
                     template,
@@ -181,7 +181,7 @@ impl PyModel {
             }),
             Some(MappingData::Batched(data)) => {
                 let template_iri = py.detach(|| {
-                    let mut inner = this.inner.write().unwrap();
+                    let mut inner = this.inner.write().unwrap_or_else(|e| e.into_inner());
                     resolve_template_mutex(&mut inner, template)
                 })?;
                 for_each_mapping_batch(&data, py, &mut |py, mappings, types| {
@@ -189,7 +189,7 @@ impl PyModel {
                         return Ok(());
                     }
                     py.detach(|| {
-                        let mut inner = this.inner.write().unwrap();
+                        let mut inner = this.inner.write().unwrap_or_else(|e| e.into_inner());
                         map_resolved_mutex(
                             &mut inner,
                             &template_iri,
@@ -210,7 +210,7 @@ impl PyModel {
     #[instrument(skip_all)]
     fn size(&self, py: Python<'_>, graph: Option<String>) -> PyResult<usize> {
         py.detach(move || {
-            let inner = self.inner.read().unwrap();
+            let inner = self.inner.read().unwrap_or_else(|e| e.into_inner());
             size_mutex(&inner, graph)
         })
     }
@@ -302,7 +302,7 @@ impl PyModel {
         }
         match classify_mapping_data(data, py)? {
             MappingData::Eager(mappings, types) => py.detach(move || {
-                let mut inner = this.inner.write().unwrap();
+                let mut inner = this.inner.write().unwrap_or_else(|e| e.into_inner());
                 map_triples_mutex(&mut inner, mappings, predicate, graph, types, validate_iris)
             }),
             MappingData::Batched(data) => {
@@ -311,7 +311,7 @@ impl PyModel {
                         return Ok(());
                     }
                     py.detach(|| {
-                        let mut inner = this.inner.write().unwrap();
+                        let mut inner = this.inner.write().unwrap_or_else(|e| e.into_inner());
                         map_triples_mutex(
                             &mut inner,
                             mappings,
@@ -363,7 +363,7 @@ impl PyModel {
         let mut mappings: Vec<(String, PathBuf)> = iri_mappings.unwrap_or_default().into_iter().collect();
         mappings.sort();
         let res = py.detach(move || -> PyResult<csvw::CsvwResult> {
-            let mut inner = self.inner.write().unwrap();
+            let mut inner = self.inner.write().unwrap_or_else(|e| e.into_inner());
             let graph = parse_optional_named_node(graph)?;
             let named_graph = NamedGraph::from_maybe_named_node(graph.as_ref());
             inner
@@ -396,7 +396,7 @@ impl PyModel {
     ) -> PyResult<()> {
         let (df, _) = data_to_mappings_types(df, py)?;
         py.detach(move || -> PyResult<()> {
-            let mut inner = self.inner.write().unwrap();
+            let mut inner = self.inner.write().unwrap_or_else(|e| e.into_inner());
             let graph = parse_optional_named_node(graph)?;
             let named_graph = NamedGraph::from_maybe_named_node(graph.as_ref());
             map_df_mutex(&mut inner, df, named_graph, uuid_namespace)
@@ -449,7 +449,7 @@ impl PyModel {
         let graph = parse_optional_named_node(graph)?;
         let graph = NamedGraph::from_maybe_named_node(graph.as_ref());
         py.detach(|| {
-            let mut inner = self.inner.write().unwrap();
+            let mut inner = self.inner.write().unwrap_or_else(|e| e.into_inner());
             map_opc_ua(&mut inner, &folder, &graph);
         });
 
@@ -576,7 +576,7 @@ impl PyModel {
         resources: HashMap<String, PyTemplate>,
     ) -> PyResult<()> {
         py.detach(|| {
-            let mut inner = self.inner.write().unwrap();
+            let mut inner = self.inner.write().unwrap_or_else(|e| e.into_inner());
             add_virtualization_mutex(&mut inner, virtualized_database, resources)
         })?;
         Ok(())
@@ -636,7 +636,7 @@ impl PyModel {
                     .map_err(|e| PyMaplibError::RuntimeError(e.to_string()))?;
                 // The results have no dictionary encoded columns, the model's dictionaries
                 // are only used for formatting, and the model's prefixes for Turtle.
-                let inner = self.inner.read().unwrap();
+                let inner = self.inner.read().unwrap_or_else(|e| e.into_inner());
                 Ok((
                     kind,
                     inner.triplestore.global_cats.clone(),
@@ -664,7 +664,7 @@ impl PyModel {
         let graph = graph.map(|graph| NamedGraph::from_maybe_named_node(Some(&graph)));
         let parsed_bindings = maybe_parse_bindings(bindings, py)?;
         let (res, cats, prefixes) = py.detach(|| -> PyResult<(_, LockedCats, _)> {
-            let inner = self.inner.read().unwrap();
+            let inner = self.inner.read().unwrap_or_else(|e| e.into_inner());
             let cats = inner.triplestore.global_cats.clone();
             let res = query_mutex(
                 &inner,
@@ -734,7 +734,7 @@ impl PyModel {
         };
 
         let (res, cats, prefixes) = py.detach(|| -> PyResult<(_, LockedCats, _)> {
-            let inner = self.inner.read().unwrap();
+            let inner = self.inner.read().unwrap_or_else(|e| e.into_inner());
             let cats = inner.triplestore.global_cats.clone();
             let res =
                 query_external_mutex(&inner, query, endpoint, method, parsed_bindings, headers)?;
@@ -775,7 +775,7 @@ impl PyModel {
     ) -> PyResult<()> {
         let mapped_parameters = map_parameters(parameters, py)?;
         let res = py.detach(|| {
-            let mut inner = self.inner.write().unwrap();
+            let mut inner = self.inner.write().unwrap_or_else(|e| e.into_inner());
             update_mutex(
                 &mut inner,
                 update,
@@ -794,7 +794,7 @@ impl PyModel {
     #[instrument(skip_all)]
     fn create_index(&self, py: Python<'_>, options: Option<PyIndexingOptions>) -> PyResult<()> {
         py.detach(move || {
-            let mut inner = self.inner.write().unwrap();
+            let mut inner = self.inner.write().unwrap_or_else(|e| e.into_inner());
             create_index_mutex(&mut inner, options)
         })
     }
@@ -833,7 +833,7 @@ impl PyModel {
         debug_rules: Option<bool>,
     ) -> PyResult<PyValidationReport> {
         let res = py.detach(move || {
-            let mut inner = self.inner.write().unwrap();
+            let mut inner = self.inner.write().unwrap_or_else(|e| e.into_inner());
             validate_mutex(
                 &mut inner,
                 shape_graph,
@@ -883,7 +883,7 @@ impl PyModel {
         let target_graph = parse_optional_named_node(target_graph)?;
         let target_graph = NamedGraph::from_maybe_named_node(target_graph.as_ref());
         let (insert_result, cats) = py.detach(|| -> PyResult<(InsertResult, LockedCats)> {
-            let mut inner = self.inner.write().unwrap();
+            let mut inner = self.inner.write().unwrap_or_else(|e| e.into_inner());
 
             let cats = inner.triplestore.global_cats.clone();
 
@@ -944,7 +944,7 @@ impl PyModel {
         let source = ReadSource::extract(file_path)?;
         let storage_options = storage_options.unwrap_or_default();
         py.detach(move || {
-            let mut inner = self.inner.write().unwrap();
+            let mut inner = self.inner.write().unwrap_or_else(|e| e.into_inner());
             read_mutex(
                 &mut inner,
                 source,
@@ -975,7 +975,7 @@ impl PyModel {
         let file_path = file_path.str()?.to_string();
         let storage_options = storage_options.unwrap_or_default();
         py.detach(move || {
-            let mut inner = self.inner.write().unwrap();
+            let mut inner = self.inner.write().unwrap_or_else(|e| e.into_inner());
             read_template_mutex(&mut inner, file_path, &storage_options)
         })
     }
@@ -1011,7 +1011,7 @@ impl PyModel {
         strict: bool,
     ) -> PyResult<()> {
         py.detach(|| {
-            let mut inner = self.inner.write().unwrap();
+            let mut inner = self.inner.write().unwrap_or_else(|e| e.into_inner());
             reads_mutex(
                 &mut inner,
                 s,
@@ -1032,7 +1032,7 @@ impl PyModel {
     #[instrument(skip_all)]
     fn get_templates(&self, py: Python<'_>) -> PyResult<Vec<PyTemplate>> {
         py.detach(|| {
-            let inner = self.inner.read().unwrap();
+            let inner = self.inner.read().unwrap_or_else(|e| e.into_inner());
             let templates = inner
                 .get_templates()
                 .into_iter()
@@ -1048,7 +1048,7 @@ impl PyModel {
     #[instrument(skip_all)]
     fn templates_to_graph(&self, py: Python<'_>, graph: Option<String>) -> PyResult<()> {
         py.detach(move || {
-            let mut inner = self.inner.write().unwrap();
+            let mut inner = self.inner.write().unwrap_or_else(|e| e.into_inner());
             let graph = parse_optional_named_node(graph)?;
             let named_graph = NamedGraph::from_maybe_named_node(graph.as_ref());
             inner
@@ -1075,7 +1075,7 @@ impl PyModel {
         let storage_options = storage_options.unwrap_or_default();
 
         py.detach(move || {
-            let inner = self.inner.read().unwrap();
+            let inner = self.inner.read().unwrap_or_else(|e| e.into_inner());
             write_triples_mutex(&inner, target, format, graph, prefixes, &storage_options)
         })
     }
@@ -1092,7 +1092,7 @@ impl PyModel {
         let prefixes = create_prefix_map(prefixes)?;
         let graph = GraphArg::extract(graph.as_ref())?;
         let out = py.detach(move || {
-            let inner = self.inner.read().unwrap();
+            let inner = self.inner.read().unwrap_or_else(|e| e.into_inner());
             write_bytes_mutex(&inner, format, graph, prefixes)
         })?;
         Ok(PyBytes::new(py, &out))
@@ -1123,7 +1123,7 @@ impl PyModel {
         let storage_options = storage_options.unwrap_or_default();
 
         py.detach(move || {
-            let mut inner = self.inner.write().unwrap();
+            let mut inner = self.inner.write().unwrap_or_else(|e| e.into_inner());
             write_cim_xml_mutex(
                 &mut inner,
                 target,
@@ -1154,7 +1154,7 @@ impl PyModel {
         let graph = GraphArg::extract(graph.as_ref())?;
 
         py.detach(|| {
-            let inner = self.inner.read().unwrap();
+            let inner = self.inner.read().unwrap_or_else(|e| e.into_inner());
             writes_mutex(&inner, format, graph, use_prefixes)
         })
     }
@@ -1168,7 +1168,7 @@ impl PyModel {
         include_graphs: Option<Vec<String>>,
     ) -> PyResult<Vec<PyIRI>> {
         py.detach(move || {
-            let inner = self.inner.read().unwrap();
+            let inner = self.inner.read().unwrap_or_else(|e| e.into_inner());
             get_predicate_iris_mutex(&inner, graph, include_graphs)
         })
     }
@@ -1183,7 +1183,7 @@ impl PyModel {
         include_graphs: Option<Vec<String>>,
     ) -> PyResult<Vec<Py<PyAny>>> {
         let eager_sms = py.detach(|| {
-            let inner = self.inner.read().unwrap();
+            let inner = self.inner.read().unwrap_or_else(|e| e.into_inner());
             get_predicate_mutex(&inner, iri, graph, include_graphs)
         })?;
         let mut out = vec![];
@@ -1229,7 +1229,7 @@ impl PyModel {
         let graph = parse_optional_named_node(graph)?;
         let named_graph = graph.map(|graph| NamedGraph::from_maybe_named_node(Some(&graph)));
         let (res, ..) = py.detach(|| -> PyResult<(_, LockedCats)> {
-            let mut inner = self.inner.write().unwrap();
+            let mut inner = self.inner.write().unwrap_or_else(|e| e.into_inner());
 
             let cats = inner.triplestore.global_cats.clone();
 
@@ -1254,7 +1254,7 @@ impl PyModel {
         let graph = parse_optional_named_node(graph)?;
         let named_graph = NamedGraph::from_maybe_named_node(graph.as_ref());
         let res = py.detach(|| -> PyResult<usize> {
-            let mut inner = self.inner.write().unwrap();
+            let mut inner = self.inner.write().unwrap_or_else(|e| e.into_inner());
 
             let res = infer_rdfs_mutex(&mut inner, &named_graph)?;
 
@@ -1266,7 +1266,7 @@ impl PyModel {
     #[pyo3(signature = ())]
     fn compact(&self, py: Python<'_>) -> PyResult<()> {
         py.detach(move || {
-            let mut inner = self.inner.write().unwrap();
+            let mut inner = self.inner.write().unwrap_or_else(|e| e.into_inner());
             compact_mutex(&mut inner)
         })
     }
@@ -1282,7 +1282,7 @@ impl PyModel {
     ) -> PyResult<()> {
         let storage_options = storage_options.unwrap_or_default();
         py.detach(move || {
-            let mut inner = self.inner.write().unwrap();
+            let mut inner = self.inner.write().unwrap_or_else(|e| e.into_inner());
             serialize_triples_mutex(&mut inner, path.as_ref(), raw_db, single_file, &storage_options)
         })
     }
@@ -1339,7 +1339,7 @@ impl PyModel {
             None
         };
         let _ = py.detach(|| -> PyResult<()> {
-            let mut inner = self.inner.write().unwrap();
+            let mut inner = self.inner.write().unwrap_or_else(|e| e.into_inner());
             add_udf_mutex(&mut inner, iri, func, output, inputs)?;
             Ok(())
         })?;
@@ -1348,7 +1348,7 @@ impl PyModel {
 
     fn list_udfs(&self, py: Python<'_>) -> PyResult<Vec<String>> {
         let udfs = py.detach(|| -> PyResult<Vec<String>> {
-            let inner = self.inner.read().unwrap();
+            let inner = self.inner.read().unwrap_or_else(|e| e.into_inner());
             let udfs = list_udfs_mutex(&inner)?;
             Ok(udfs)
         });
@@ -1379,11 +1379,11 @@ impl PyModel {
             // Lock the two models in a fixed order, so that a.add_graph(b) and b.add_graph(a)
             // in two threads do not deadlock.
             let (mut inner, other_inner) = if (self as *const Self) < (other as *const Self) {
-                let inner = self.inner.write().unwrap();
-                (inner, other.inner.read().unwrap())
+                let inner = self.inner.write().unwrap_or_else(|e| e.into_inner());
+                (inner, other.inner.read().unwrap_or_else(|e| e.into_inner()))
             } else {
-                let other_inner = other.inner.read().unwrap();
-                (self.inner.write().unwrap(), other_inner)
+                let other_inner = other.inner.read().unwrap_or_else(|e| e.into_inner());
+                (self.inner.write().unwrap_or_else(|e| e.into_inner()), other_inner)
             };
             add_graph_mutex(
                 &mut inner,
@@ -1556,12 +1556,12 @@ fn map_documents(
     }
     match documents {
         DocumentData::Single(doc) => py.detach(|| {
-            let mut inner = this.inner.write().unwrap();
+            let mut inner = this.inner.write().unwrap_or_else(|e| e.into_inner());
             kind.map_mutex(&mut inner, doc, graph, uuid_namespace)
         })?,
         DocumentData::Many(docs) => for_each_document(&docs, kind.name(), &mut |py, i, doc| {
             py.detach(|| {
-                let mut inner = this.inner.write().unwrap();
+                let mut inner = this.inner.write().unwrap_or_else(|e| e.into_inner());
                 kind.map_mutex(
                     &mut inner,
                     doc,
