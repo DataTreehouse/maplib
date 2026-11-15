@@ -1,3 +1,4 @@
+use super::path::matches_zero_length;
 use super::Triplestore;
 use crate::sparql::errors::SparqlError;
 use std::cmp::{Ordering, Reverse};
@@ -342,7 +343,9 @@ fn bad_properties(
             )
         }
         GraphPattern::Path {
-            subject, object, ..
+            subject,
+            path,
+            object,
         } => {
             let mut variables: HashSet<_> = HashSet::new();
 
@@ -357,12 +360,15 @@ fn bad_properties(
                 variables.insert(b.to_string());
             }
 
-            let n_cross_joins = if let Some(incoming_vars) = &incoming_cols {
-                if incoming_vars.is_disjoint(&variables) {
-                    1
-                } else {
-                    0
-                }
+            let disjoint = incoming_cols
+                .map(|incoming_vars| incoming_vars.is_disjoint(&variables))
+                .unwrap_or(true);
+            // A zero length path matches each value its variables are bound to, which it only
+            // knows when the patterns binding them are evaluated first.
+            let n_cross_joins = if disjoint
+                && (incoming_cols.is_some() || (!variables.is_empty() && matches_zero_length(path)))
+            {
+                1
             } else {
                 0
             };

@@ -6,6 +6,7 @@ mod graph;
 mod group;
 mod join;
 mod left_join;
+pub mod length_path;
 mod minus;
 mod order_by;
 pub mod path;
@@ -98,6 +99,10 @@ impl Triplestore {
                         dataset,
                     );
                 }
+                // maplib:path patterns are evaluated after the rest of the basic graph pattern,
+                // so that the values it binds restrict where the paths start.
+                let (patterns, length_paths) =
+                    length_path::extract_length_path_patterns(&patterns)?;
                 pushdowns.add_patterns_pushdowns(&patterns);
                 let mut updated_solution_mappings = solution_mappings;
                 let bgp_context = context.extension_with(PathEntry::BGP);
@@ -109,6 +114,15 @@ impl Triplestore {
                         tp,
                         &bgp_context,
                         &mut pushdowns,
+                        query_settings,
+                        dataset,
+                    )?);
+                }
+                for lp in &length_paths {
+                    updated_solution_mappings = Some(self.lazy_length_path(
+                        lp,
+                        updated_solution_mappings,
+                        &pushdowns,
                         query_settings,
                         dataset,
                     )?);

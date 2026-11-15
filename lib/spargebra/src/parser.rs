@@ -1132,6 +1132,59 @@ fn variable() -> Variable {
     Variable::new_unchecked(format!("{:x}", random::<u128>()))
 }
 
+/// A modifier of a path element.
+enum PathMod {
+    ZeroOrOne,
+    ZeroOrMore,
+    OneOrMore,
+    Range(usize, Option<usize>),
+}
+
+/// The longest bounded repetition accepted, as each repetition is a node of the expression.
+const MAX_PATH_REPETITION: usize = 1000;
+
+/// `p{min,max}` (max None: unbounded) as an expression of the SPARQL 1.1 operators. Paths have
+/// set semantics in maplib, so `p{n,m}` is `p/.../p` (n times) followed by `p?/.../p?`
+/// (m - n times), and `p{n,}` is `p/.../p` (n - 1 times) followed by `p+`.
+fn repeat_path(
+    p: PropertyPathExpression,
+    min: usize,
+    max: Option<usize>,
+) -> Result<PropertyPathExpression, &'static str> {
+    if let Some(max) = max {
+        if max < min {
+            return Err("a path length range {n,m} with n <= m");
+        }
+        if max == 0 {
+            return Err("a path length range with a maximum above 0");
+        }
+        if max > MAX_PATH_REPETITION {
+            return Err("a path length of at most 1000");
+        }
+    } else if min > MAX_PATH_REPETITION {
+        return Err("a path length of at most 1000");
+    }
+    let mut parts = vec![];
+    match max {
+        Some(max) => {
+            parts.extend(std::iter::repeat_n(p.clone(), min));
+            parts.extend(std::iter::repeat_n(
+                PropertyPathExpression::ZeroOrOne(Box::new(p)),
+                max - min,
+            ));
+        }
+        None if min == 0 => parts.push(PropertyPathExpression::ZeroOrMore(Box::new(p))),
+        None => {
+            parts.extend(std::iter::repeat_n(p.clone(), min - 1));
+            parts.push(PropertyPathExpression::OneOrMore(Box::new(p)));
+        }
+    }
+    Ok(parts
+        .into_iter()
+        .reduce(|a, b| PropertyPathExpression::Sequence(Box::new(a), Box::new(b)))
+        .expect("at least one part"))
+}
+
 parser! {
     //See https://www.w3.org/TR/turtle/#sec-grammar
     grammar parser(state: &mut ParserState) for str {
@@ -1931,19 +1984,29 @@ parser! {
         }
         rule PathSequence_item() -> PropertyPathExpression = p:PathEltOrInverse() _ { p }
 
-        rule PathElt() -> PropertyPathExpression = p:PathPrimary() _ o:PathElt_op()? {
+        rule PathElt() -> PropertyPathExpression = p:PathPrimary() _ o:PathElt_op()? {?
             match o {
-                Some('?') => PropertyPathExpression::ZeroOrOne(Box::new(p)),
-                Some('*') => PropertyPathExpression::ZeroOrMore(Box::new(p)),
-                Some('+') => PropertyPathExpression::OneOrMore(Box::new(p)),
-                Some(_) => unreachable!(),
-                None => p
+                Some(PathMod::ZeroOrOne) => Ok(PropertyPathExpression::ZeroOrOne(Box::new(p))),
+                Some(PathMod::ZeroOrMore) => Ok(PropertyPathExpression::ZeroOrMore(Box::new(p))),
+                Some(PathMod::OneOrMore) => Ok(PropertyPathExpression::OneOrMore(Box::new(p))),
+                Some(PathMod::Range(min, max)) => repeat_path(p, min, max),
+                None => Ok(p)
             }
         }
-        rule PathElt_op() -> char =
-            "*" { '*' } /
-            "+" { '+' } /
-            "?" !(['0'..='9'] / PN_CHARS_U()) { '?' } // We mandate that this is not a variable
+        rule PathElt_op() -> PathMod =
+            "*" { PathMod::ZeroOrMore } /
+            "+" { PathMod::OneOrMore } /
+            "?" !(['0'..='9'] / PN_CHARS_U()) { PathMod::ZeroOrOne } / // We mandate that this is not a variable
+            "{" _ r:PathRange() _ "}" { r }
+        // Length bounds as in the SPARQL 1.1 working draft of January 2010 and Apache Jena ARQ:
+        // {n}, {n,m}, {n,} and {,m}.
+        rule PathRange() -> PathMod =
+            min:PathLength() _ "," _ max:PathLength()? { PathMod::Range(min, max) } /
+            "," _ max:PathLength() { PathMod::Range(0, Some(max)) } /
+            n:PathLength() { PathMod::Range(n, Some(n)) }
+        rule PathLength() -> usize = n:$(['0'..='9']+) {?
+            n.parse().map_err(|_| "a path length")
+        }
 
         rule PathEltOrInverse() -> PropertyPathExpression =
             "^" _ p:PathElt() { PropertyPathExpression::Reverse(Box::new(p)) } /

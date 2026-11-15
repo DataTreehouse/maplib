@@ -46,6 +46,8 @@ pub enum SparqlError {
     ParseLiteralError(RepresentationError),
     #[error(transparent)]
     ReplaceBindingsError(RepresentationError),
+    #[error("maplib:path error: {0}")]
+    PathError(String),
     #[error("Error constructing quads from quad patterns `{0}`")]
     QuadPatternsError(String),
     #[error("Path search error: {0}")]

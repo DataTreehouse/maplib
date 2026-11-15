@@ -244,7 +244,7 @@ Searches run on a graph of integers built from the triples of the edge predicate
 The [API](https://datatreehouse.github.io/maplib/maplib.html) is simple, and contains only one class and a few methods for:
 - expanding templates, also from LazyFrames and iterables of batches
 - streaming pipelines that map, transform and write large inputs batch by batch
-- querying with SPARQL
+- querying with SPARQL, with extensions such as [length-constrained paths](docs/length_constrained_paths.md) (`ex:p{2,4}` and `maplib:path`)
 - validating with SHACL
 - reading JSON and XML to triples using Façade-X, also from iterables of documents
 - importing triples (Turtle, RDF/XML, NTriples, JSON-LD, HDT)

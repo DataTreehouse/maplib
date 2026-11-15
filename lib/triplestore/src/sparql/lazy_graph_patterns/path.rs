@@ -24,7 +24,7 @@ use representation::solution_mapping::{BaseCatState, SolutionMappings};
 use representation::{BaseRDFNodeType, RDFNodeState};
 use representation::{OBJECT_COL_NAME, SUBJECT_COL_NAME};
 use spargebra::algebra::{Expression, GraphPattern, PropertyPathExpression};
-use spargebra::term::{NamedNodePattern, TermPattern, TriplePattern};
+use spargebra::term::{GroundTerm, NamedNodePattern, TermPattern, TriplePattern};
 use sprs::{CsMatBase, TriMatBase};
 use std::collections::{HashMap, HashSet};
 
@@ -131,11 +131,10 @@ impl Triplestore {
                 _ => None,
             })
             .collect();
-        let solution_mappings = solution_mappings
-            .map(|sm| {
-                // Paths walk outward from the pushed values, so no table size limits them.
-                pushdowns.add_from_solution_mappings(sm, self.global_cats.clone(), &focus, None)
-            });
+        let solution_mappings = solution_mappings.map(|sm| {
+            // Paths walk outward from the pushed values, so no table size limits them.
+            pushdowns.add_from_solution_mappings(sm, self.global_cats.clone(), &focus, None)
+        });
 
         let mut df_creator = U32DataFrameCreator::new(dataset.clone());
         df_creator.gather_namednode_dfs(ppe, self)?;
@@ -447,6 +446,55 @@ impl Triplestore {
         } else {
             drop(cats);
         }
+        // A zero length path from a variable matches each node of the graph (SPARQL 1.1 section
+        // 18.4), also nodes without triples of the path. When the variable is bound by the
+        // solution mappings so far, or its values are pushed down (as by VALUES), its values that
+        // are nodes of the graph are added.
+        let mut solution_mappings = solution_mappings;
+        if matches_zero_length(ppe) && !subject_constant && !object_constant {
+            let s = term_variable_name(subject).unwrap();
+            let o = term_variable_name(object).unwrap();
+            if let Some(sm) = &mut solution_mappings {
+                // The mappings are read twice, so they are computed once.
+                let df = sm.mappings.clone().collect().unwrap();
+                sm.mappings = df.lazy();
+            }
+            let in_mappings = solution_mappings.as_ref().and_then(|sm| {
+                [&s, &o]
+                    .into_iter()
+                    .find(|v| sm.rdf_node_types.contains_key(*v))
+                    .cloned()
+            });
+            let bound = in_mappings.clone().or_else(|| {
+                [&s, &o]
+                    .into_iter()
+                    .find(|v| pushdowns.variables_values.contains_key(*v))
+                    .cloned()
+            });
+            if let Some(b) = bound {
+                let sm = if in_mappings.is_some() {
+                    solution_mappings.as_ref()
+                } else {
+                    None
+                };
+                if let Some(zero_length) = self.zero_length_nodes(
+                    &b,
+                    &s,
+                    &o,
+                    sm,
+                    &pushdowns,
+                    context,
+                    query_settings,
+                    dataset,
+                )? {
+                    path_solution_mappings = distinct(union(
+                        vec![path_solution_mappings, zero_length],
+                        false,
+                        self.global_cats.clone(),
+                    )?)?;
+                }
+            }
+        }
         if let Some(mappings) = solution_mappings {
             path_solution_mappings = join(
                 path_solution_mappings,
@@ -457,6 +505,140 @@ impl Triplestore {
             )?;
         }
         Ok(path_solution_mappings)
+    }
+}
+
+impl Triplestore {
+    /// The values of the variable `b` that are nodes of the queried graph, as (`s`, `o`) pairs of
+    /// zero length paths. The values are those of `b` in `solution_mappings`, or else those pushed
+    /// down for it. None if there are none to check.
+    #[allow(clippy::too_many_arguments)]
+    fn zero_length_nodes(
+        &self,
+        b: &str,
+        s: &str,
+        o: &str,
+        solution_mappings: Option<&SolutionMappings>,
+        pushdowns: &Pushdowns,
+        context: &Context,
+        query_settings: &QuerySettings,
+        dataset: &QueryGraph,
+    ) -> Result<Option<SolutionMappings>, SparqlError> {
+        let var = Variable::new_unchecked(b);
+        let context = context.extension_with(PathEntry::PathRewrite);
+        let mut node_pushdowns = Pushdowns::new();
+        let candidates = if let Some(sm) = solution_mappings {
+            let state = sm.rdf_node_types.get(b).unwrap().clone();
+            let candidates = distinct(SolutionMappings::new(
+                sm.mappings
+                    .clone()
+                    .filter(col(b).is_not_null())
+                    .select([col(b)]),
+                HashMap::from([(b.to_string(), state)]),
+                sm.height_estimate,
+            ))?;
+            let df = candidates.mappings.collect().unwrap();
+            let height = df.height();
+            let candidates = SolutionMappings::new(df.lazy(), candidates.rdf_node_types, height);
+            // Small sets of values restrict the scan for nodes below.
+            node_pushdowns.add_from_solution_mappings(
+                candidates,
+                self.global_cats.clone(),
+                &[b],
+                None,
+            )
+        } else {
+            let Some(values) = pushdowns.variables_values.get(b) else {
+                return Ok(None);
+            };
+            let bindings: Vec<Vec<Option<GroundTerm>>> = values
+                .iter()
+                .filter_map(|t| match t {
+                    Term::NamedNode(nn) => Some(vec![Some(GroundTerm::NamedNode(nn.clone()))]),
+                    Term::Literal(l) => Some(vec![Some(GroundTerm::Literal(l.clone()))]),
+                    _ => None,
+                })
+                .collect();
+            if bindings.is_empty() {
+                return Ok(None);
+            }
+            node_pushdowns
+                .variables_values
+                .insert(b.to_string(), values.clone());
+            self.lazy_graph_pattern(
+                &GraphPattern::Values {
+                    variables: vec![var.clone()],
+                    bindings,
+                },
+                None,
+                &context,
+                None,
+                Pushdowns::new(),
+                query_settings,
+                dataset,
+            )?
+        };
+        // The values that occur as the subject or the object of a triple.
+        let fresh = || {
+            TermPattern::Variable(Variable::new_unchecked(format!(
+                "v{}",
+                uuid::Uuid::new_v4().simple()
+            )))
+        };
+        let fresh_predicate = || {
+            NamedNodePattern::Variable(Variable::new_unchecked(format!(
+                "v{}",
+                uuid::Uuid::new_v4().simple()
+            )))
+        };
+        let bound = TermPattern::Variable(var.clone());
+        let nodes_gp = GraphPattern::Distinct {
+            inner: Box::new(GraphPattern::Project {
+                inner: Box::new(GraphPattern::Union {
+                    left: Box::new(GraphPattern::Bgp {
+                        patterns: vec![TriplePattern {
+                            subject: bound.clone(),
+                            predicate: fresh_predicate(),
+                            object: fresh(),
+                        }],
+                    }),
+                    right: Box::new(GraphPattern::Bgp {
+                        patterns: vec![TriplePattern {
+                            subject: fresh(),
+                            predicate: fresh_predicate(),
+                            object: bound,
+                        }],
+                    }),
+                }),
+                variables: vec![var],
+            }),
+        };
+        let nodes = self.lazy_graph_pattern(
+            &nodes_gp,
+            None,
+            &context,
+            None,
+            node_pushdowns,
+            query_settings,
+            dataset,
+        )?;
+        let mut zero_length = join(
+            nodes,
+            candidates,
+            JoinType::Inner,
+            self.global_cats.clone(),
+            query_settings.max_rows,
+        )?;
+        let state = zero_length.rdf_node_types.remove(b).unwrap();
+        let mut exprs = vec![col(b).alias(s)];
+        let mut types = HashMap::from([(s.to_string(), state.clone())]);
+        if o != s {
+            exprs.push(col(b).alias(o));
+            types.insert(o.to_string(), state);
+        }
+        zero_length.mappings = zero_length.mappings.select(exprs);
+        zero_length.rdf_node_types = types;
+        Ok(Some(zero_length))
     }
 }
 
@@ -1087,7 +1269,7 @@ fn is_constant(t: &TermPattern) -> bool {
     matches!(t, TermPattern::NamedNode(_) | TermPattern::Literal(_))
 }
 
-fn matches_zero_length(ppe: &PropertyPathExpression) -> bool {
+pub(super) fn matches_zero_length(ppe: &PropertyPathExpression) -> bool {
     match ppe {
         PropertyPathExpression::ZeroOrMore(_) | PropertyPathExpression::ZeroOrOne(_) => true,
         PropertyPathExpression::Sequence(a, b) => matches_zero_length(a) && matches_zero_length(b),
@@ -1099,7 +1281,7 @@ fn matches_zero_length(ppe: &PropertyPathExpression) -> bool {
     }
 }
 
-fn term_variable_name(t: &TermPattern) -> Option<String> {
+pub(super) fn term_variable_name(t: &TermPattern) -> Option<String> {
     match t {
         TermPattern::Variable(v) => Some(v.as_str().to_string()),
         TermPattern::BlankNode(b) => Some(b.to_string()),
@@ -1110,7 +1292,7 @@ fn term_variable_name(t: &TermPattern) -> Option<String> {
 /// The lookup keys of the nodes that one end of the path is bound to, and whether that end is
 /// the object (so the path is followed backwards), or None if neither end is bound to IRIs that
 /// can be listed. The end with fewer values is chosen.
-fn bound_start_keys(
+pub(super) fn bound_start_keys(
     subject: &TermPattern,
     object: &TermPattern,
     pushdowns: &Pushdowns,
@@ -1291,7 +1473,7 @@ fn paths_from(
 }
 
 /// The leaves of a path expression, with whether each is followed backwards.
-fn path_leaves(
+pub(super) fn path_leaves(
     ppe: &PropertyPathExpression,
     reversed: bool,
     leaves: &mut HashSet<(PathLeaf, bool)>,

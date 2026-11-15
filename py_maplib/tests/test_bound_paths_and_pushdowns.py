@@ -93,7 +93,14 @@ def test_values_bound_subject(path_model, path, n_values):
     df = path_model.query(
         f"SELECT ?s ?o WHERE {{ VALUES ?s {{ {values} }} ?s {path} ?o }}"
     )
-    assert pairs(df) == {(s, o) for s, o in expected_all if s in set(starts)}
+    expected = {(s, o) for s, o in expected_all if s in set(starts)}
+    # A zero length path matches each bound value that is a node of the graph, also nodes
+    # without triples of the path.
+    if path in (f"{P}*", f"{P}?", f"({P}/^{Q})*"):
+        triples = path_model.query("SELECT ?s ?o WHERE { ?s ?p ?o }")
+        nodes = set(triples["s"].to_list()) | set(triples["o"].cast(str).to_list())
+        expected |= {(s, s) for s in starts if s in nodes}
+    assert pairs(df) == expected
 
 
 @pytest.mark.parametrize("path", PATHS)
