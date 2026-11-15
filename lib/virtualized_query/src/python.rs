@@ -1,5 +1,6 @@
 use crate::VirtualizedQuery;
 use polars::prelude::AnyValue;
+use pyo3::exceptions::PyNotImplementedError;
 use pyo3::prelude::*;
 use representation::python::{PyIRI, PyLiteral, PyVariable};
 use spargebra::algebra::{
@@ -330,6 +331,12 @@ pub enum PyExpression {
     Not {
         expression: Py<PyExpression>,
     },
+    UnaryMinus {
+        expression: Py<PyExpression>,
+    },
+    UnaryPlus {
+        expression: Py<PyExpression>,
+    },
     Bound {
         variable: Py<PyVariable>,
     },
@@ -393,6 +400,8 @@ impl PyExpression {
             PyExpression::LessOrEqual { .. } => "LessOrEqual",
             PyExpression::Or { .. } => "Or",
             PyExpression::Not { .. } => "Not",
+            PyExpression::UnaryMinus { .. } => "UnaryMinus",
+            PyExpression::UnaryPlus { .. } => "UnaryPlus",
             PyExpression::If { .. } => "If",
             PyExpression::Add { .. } => "Add",
             PyExpression::Subtract { .. } => "Subtract",
@@ -460,6 +469,14 @@ impl PyExpression {
     }
 
     #[getter]
+    fn iri(&self, py: Python) -> Option<Py<PyIRI>> {
+        match self {
+            PyExpression::IRI { iri } => Some(iri.clone_ref(py)),
+            _ => None,
+        }
+    }
+
+    #[getter]
     fn literal(&self, py: Python) -> Option<Py<PyLiteral>> {
         match self {
             PyExpression::Literal { literal } => Some(literal.clone_ref(py)),
@@ -486,7 +503,10 @@ impl PyExpression {
     #[getter]
     fn expression(&self) -> Option<Py<PyExpression>> {
         match self {
-            PyExpression::In { expression, .. } | PyExpression::Not { expression } => {
+            PyExpression::In { expression, .. }
+            | PyExpression::Not { expression }
+            | PyExpression::UnaryMinus { expression }
+            | PyExpression::UnaryPlus { expression } => {
                 Some(expression.clone())
             }
             _ => None,
@@ -517,6 +537,15 @@ impl PyExpression {
             },
             Expression::Not(expression) => PyExpression::Not {
                 expression: Py::new(py, PyExpression::new(expression, py)?)?,
+            },
+            Expression::UnaryMinus(expression) => PyExpression::UnaryMinus {
+                expression: Py::new(py, PyExpression::new(expression, py)?)?,
+            },
+            Expression::UnaryPlus(expression) => PyExpression::UnaryPlus {
+                expression: Py::new(py, PyExpression::new(expression, py)?)?,
+            },
+            Expression::NamedNode(nn) => PyExpression::IRI {
+                iri: Py::new(py, PyIRI { iri: nn.clone() })?,
             },
             Expression::Coalesce(expressions) => {
                 let mut py_expressions = vec![];
@@ -610,7 +639,11 @@ impl PyExpression {
                     expressions: py_expressions,
                 }
             }
-            _ => todo!(),
+            other => {
+                return Err(PyNotImplementedError::new_err(format!(
+                    "The expression {other} can not be passed to a Python database"
+                )))
+            }
         })
     }
 }

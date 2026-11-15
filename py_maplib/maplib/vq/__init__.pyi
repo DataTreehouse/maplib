@@ -15,6 +15,8 @@ class Expression:
     And: Type["PyExpression__And"]
     Or: Type["PyExpression__Or"]
     Not: Type["PyExpression__Not"]
+    UnaryMinus: Type["PyExpression__UnaryMinus"]
+    UnaryPlus: Type["PyExpression__UnaryPlus"]
     Bound: Type["PyExpression__Bound"]
     If: Type["PyExpression__If"]
     Variable: Type["PyExpression__Variable"]
@@ -32,13 +34,14 @@ class Expression:
     middle: Optional[Expression]
     right: Optional[Expression]
     variable: Optional[Variable]
+    iri: Optional[IRI]
     literal: Optional[Literal]
     function: Optional[str]
     arguments: Optional[List[Expression]]
     expression: Optional[Expression]
     expressions: Optional[List[Expression]]
 
-    def expression_type(self) -> LiteralType["Greater", "Less", "GreaterOrEqual", "LessOrEqual", "Equal", "And", "Or", "Not", "Bound", "If", "Variable", "IRI", "Literal", "FunctionCall", "Divide", "Add", "Subtract", "Multiply", "In", "Coalesce"]:
+    def expression_type(self) -> LiteralType["Greater", "Less", "GreaterOrEqual", "LessOrEqual", "Equal", "And", "Or", "Not", "UnaryMinus", "UnaryPlus", "Bound", "If", "Variable", "IRI", "Literal", "FunctionCall", "Divide", "Add", "Subtract", "Multiply", "In", "Coalesce"]:
         """
         The name of the expression variant (workaround for pyo3 issue with matching on enums).
         """
@@ -80,6 +83,14 @@ class PyExpression__Or(Expression):
 
 
 class PyExpression__Not(Expression):
+    expression: Expression
+
+
+class PyExpression__UnaryMinus(Expression):
+    expression: Expression
+
+
+class PyExpression__UnaryPlus(Expression):
     expression: Expression
 
 

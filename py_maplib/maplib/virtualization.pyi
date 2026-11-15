@@ -1,9 +1,10 @@
 """
-Ready-made databases and SQL dialects for virtualizing data in SQL databases with VirtualizedDatabase.
+Ready-made databases and SQL dialects for virtualizing data in SQL databases with VirtualizedDatabase,
+and KustoDatabase for Azure Data Explorer and Microsoft Fabric Eventhouses, which are queried in KQL.
 
 Not available in the open source build: raises NotImplementedError.
 """
-from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple, Type, Union
+from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence, Tuple, Type, Union
 
 import polars as pl
 
@@ -267,6 +268,67 @@ class TimescaleDatabase(SQLDatabase):
         """
     def close(self) -> None:
         """Close the connection."""
+
+class KustoDatabase:
+    """
+    An Azure Data Explorer (Kusto) database or a Microsoft Fabric Eventhouse KQL database, queried in KQL
+    with the azure-kusto-data package (and azure-identity for default credentials).
+
+    The resources in resource_sql_map are KQL tabular expressions with an id column of type string and a
+    column for each of the other template parameters, e.g.
+    "Telemetry | project id=DeviceId, timestamp=Timestamp, value=Value".
+    """
+
+    cluster: Optional[str]
+    database: str
+    client: Any
+    sql_dialect: "KQLDialect"
+
+    def __init__(self, cluster: Optional[str] = None, database: Optional[str] = None,
+                 tenant_id: Optional[str] = None, client_id: Optional[str] = None,
+                 client_secret: Optional[str] = None, authentication: Optional[str] = None,
+                 client: Any = None, sql_dialect: Optional["KQLDialect"] = None):
+        """
+        :param cluster: The cluster or query URI, e.g. https://mycluster.westeurope.kusto.windows.net,
+            or the query URI of a Fabric Eventhouse (https://<id>.<region>.kusto.fabric.microsoft.com).
+        :param database: The database (in Fabric: the KQL database).
+        :param tenant_id: The Microsoft Entra ID tenant, for a service principal.
+        :param client_id: The application (client) id of a service principal.
+        :param client_secret: The client secret of the service principal. Without client_id and client_secret,
+            DefaultAzureCredential from azure-identity is used (environment, managed identity, Azure CLI, ...).
+        :param authentication: "service_principal", "default", "azure_cli" or "none" (for the Kusto emulator).
+            Chosen from the other arguments when not given.
+        :param client: An azure.kusto.data.KustoClient to use instead of connecting.
+        :param sql_dialect: Override the KQL dialect, e.g. with a subclass of KQLDialect.
+        """
+    def query(self, kql: str) -> pl.DataFrame:
+        """Run a KQL query and return the result as a polars DataFrame."""
+    def column_types(self, resource: str, kql: str) -> Dict[str, str]:
+        """The Kusto types of the columns of a resource expression, from getschema."""
+
+class KQLDialect:
+    """
+    The translation from virtualized queries to KQL. Subclass it to change the KQL that is generated,
+    then pass an instance as sql_dialect.
+    """
+
+    name: str
+    query_language: str
+
+    def __init__(self, column_types: Optional[Callable[[str, str], Optional[Mapping[str, str]]]] = None):
+        """
+        :param column_types: Optional function from (resource name, resource KQL) to the Kusto types of the
+            columns of the resource. They let the translation convert numbers where KQL needs equal types.
+        """
+    def string_literal(self, value: str) -> str: ...
+    def datetime_literal(self, value: Any) -> str: ...
+    def date_literal(self, value: Any) -> str: ...
+    def timespan_literal(self, value: XSDDuration) -> str: ...
+    def real_literal(self, value: float) -> str: ...
+    def decimal_literal(self, value: Any) -> str: ...
+
+def translate_kql(vq: VirtualizedQuery, dialect: Union[str, KQLDialect, None], resource_kql_map: Mapping[str, str]) -> str:
+    """Translate a virtualized query to KQL."""
 
 class SQLDialect:
     """
