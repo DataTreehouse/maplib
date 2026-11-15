@@ -1,278 +1,192 @@
-## maplib: High-performance RDF knowledge graph construction, SHACL validation, SPARQL and Datalog in Python
-maplib is written in Rust, it is built on [Apache Arrow](https://arrow.apache.org/) using [Pola.rs](https://www.pola.rs/) and uses libraries from [Oxigraph](https://github.com/oxigraph/oxigraph) for handling linked data as well as parsing SPARQL queries.
+<h1 align="center">maplib</h1>
 
-maplib allows you to leverage your existing skills with Pandas or Polars to extract and wrangle data from existing databases and spreadsheets, before applying simple templates to them to build a knowledge graph. 
-You can also read knowledge graphs extremely quickly from a wide variety of serialization formats. 
-Using the built-in SPARQL, SHACL and Datalog engines means you can query, inspect, enrich and validate and then serialize the knowledge graph immediately. 
-All query results are Polars Dataframes that are transferred zero-copy from Rust to Python. 
-Currently, maplib is in-memory and supports around 100M triples on 32GB of RAM. 
+<p align="center">
+  <strong>Build, query, reason over and validate RDF knowledge graphs at DataFrame speed, from Python.</strong>
+</p>
 
-The core functionality of maplib (mapping, querying, serialization) is open source, but SHACL and Datalog functionality are not.
-Please send us a message, e.g. on LinkedIn (search for Data Treehouse) or on email (magnus at data-treehouse.com) if you want to try out these features.
-See our roadmap for upcoming features.
+<p align="center">
+  <a href="https://pypi.org/project/maplib/"><img alt="PyPI" src="https://img.shields.io/pypi/v/maplib.svg"></a>
+  <a href="https://pypi.org/project/maplib/"><img alt="Python versions" src="https://img.shields.io/pypi/pyversions/maplib.svg"></a>
+  <a href="LICENSE"><img alt="License: Apache 2.0" src="https://img.shields.io/badge/license-Apache%202.0-blue.svg"></a>
+  <a href="https://datatreehouse.github.io/maplib/maplib.html"><img alt="API docs" src="https://img.shields.io/badge/docs-API-green.svg"></a>
+</p>
 
-## Installing
-The package is published on [PyPi](https://pypi.org/project/maplib/) and the API documented [here](https://datatreehouse.github.io/maplib/maplib.html):
+maplib is a knowledge graph engine that runs inside your Python process. It turns DataFrames, CSV, JSON, XML and RDF files into a knowledge graph, which you can query with SPARQL and GeoSPARQL, enrich with rules, validate with SHACL and write out in any standard RDF format. You don't need a server or a database: `pip install maplib`, create a `Model`, and query results come back as Polars DataFrames.
+
+maplib is written in Rust and stores triples column-wise in [Apache Arrow](https://arrow.apache.org/) via [Polars](https://pola.rs/). Mapping and querying therefore run as vectorised, multi-threaded table operations, not one triple at a time.
+
+## Installation
+
 ```shell
 pip install maplib
 ```
-## Model
-We can easily map DataFrames to RDF-graphs using the Python library. Below is a reproduction of the example in the paper [1]. Assume that we have a DataFrame given by: 
+
+Prebuilt wheels are available for Linux, macOS and Windows (Python 3.9+).
+
+## Quickstart
+
+Load a plant model, reason over it, validate it, and query it together with sensor data that stays in a database:
 
 ```python
-import polars as pl
-pl.Config.set_fmt_str_lengths(150)
-
-pi = "https://github.com/DataTreehouse/maplib/pizza#"
-df = pl.DataFrame({
-    "p":[pi + "Hawaiian", pi + "Grandiosa"],
-    "c":[pi + "CAN", pi + "NOR"],
-    "ings": [[pi + "Pineapple", pi + "Ham"],
-             [pi + "Pepper", pi + "Meat"]]
-})
-print(df)
-```
-That is, our DataFrame is:
-
-| p                             | c                              | ings                                     |
-|-------------------------------|--------------------------------|------------------------------------------|
-| str                           | str                            | list[str]                                |
-| "https://.../pizza#Hawaiian"  | "https://.../maplib/pizza#CAN" | [".../pizza#Pineapple", ".../pizza#Ham"] |
-| "https://.../pizza#Grandiosa" | "https://.../maplib/pizza#NOR" | [".../pizza#Pepper", ".../pizza#Meat"]   |
-
-Then we can define a OTTR template, and create our knowledge graph by expanding this template with our DataFrame as input:
-```python
-from maplib import Model, Prefix, Template, Argument, Parameter, Variable, RDFType, Triple, a
-pi = Prefix(pi)
-
-p_var = Variable("p")
-c_var = Variable("c")
-ings_var = Variable("ings")
-
-template = Template(
-    iri= pi.suf("PizzaTemplate"),
-    parameters= [
-        Parameter(variable=p_var, rdf_type=RDFType.IRI),
-        Parameter(variable=c_var, rdf_type=RDFType.IRI),
-        Parameter(variable=ings_var, rdf_type=RDFType.Nested(RDFType.IRI))
-    ],
-    instances= [
-        Triple(p_var, a, pi.suf("Pizza")),
-        Triple(p_var, pi.suf("fromCountry"), c_var),
-        Triple(
-            p_var, 
-            pi.suf("hasIngredient"), 
-            Argument(term=ings_var, list_expand=True), 
-            list_expander="cross")
-    ]
-)
+import duckdb
+from maplib import Model, VirtualizedDatabase
+from maplib.virtualization import DuckDBDatabase
 
 m = Model()
-m.map(template, df)
-hpizzas = """
-    PREFIX pi:<https://github.com/DataTreehouse/maplib/pizza#>
-    CONSTRUCT { ?p a pi:HeterodoxPizza } 
-    WHERE {
-        ?p a pi:Pizza .
-        ?p pi:hasIngredient pi:Pineapple .
-    }"""
-m.insert(hpizzas)
+
+# Load: any RDF format, from a path, a URL or s3:// / gs:// / az://
+m.read("ontology.ttl")                     # ex:CentrifugalPump rdfs:subClassOf ex:Pump
+m.read("plant.ttl")                        # ex:pump1 a ex:CentrifugalPump ; ct:hasTimeseries ex:ts1 ...
+m.read("shapes.ttl", graph="urn:shapes")   # SHACL: every ex:Pump needs an ex:ratedPower
+
+# Infer: RDFS reasoning makes every centrifugal pump an ex:Pump
+m.infer_rdfs()
+
+# Validate with SHACL (EE)
+report = m.validate(shape_graph="urn:shapes")
+print(report.conforms, report.results())   # the violations, as a DataFrame
+
+# Virtualize (EE): readings stay in DuckDB and are fetched only when a query needs them
+m.add_template("""@prefix ct: <https://github.com/DataTreehouse/chrontext#> .
+ct:Speed [ xsd:string ?id, xsd:dateTime ?timestamp, xsd:double ?value ] :: {
+  ottr:Triple(?id, ct:hasDataPoint, ?dp) , ottr:Triple(?dp, ct:hasTimestamp, ?timestamp) ,
+  ottr:Triple(?dp, ct:hasValue, ?value) } .""")
+db = DuckDBDatabase(duckdb.connect("plant.duckdb"))
+m.add_virtualization(VirtualizedDatabase(db, resource_sql_map={"speed": "SELECT id, timestamp, value FROM speed"}),
+                     resources={"speed": m.get_templates()[0]})
+
+# Query the graph, the inferred types and the time series in one SPARQL query; returns a Polars DataFrame
+print(m.query("""
+PREFIX ex: <http://example.org/>
+PREFIX ct: <https://github.com/DataTreehouse/chrontext#>
+SELECT ?pump (AVG(?speed) AS ?avg_speed) WHERE {
+    ?pump a ex:Pump ; ct:hasTimeseries ?ts .                # ex:Pump comes from inference
+    ?ts ct:hasDataPoint ?dp . ?dp ct:hasValue ?speed .      # the data points come from DuckDB
+} GROUP BY ?pump"""))
 ```
 
-We can immediately query the mapped knowledge graph:
+Loading, inference and querying run on the open-source build; validation and virtualization need [Enterprise Edition](#open-source-and-enterprise-edition). To build a graph from DataFrames instead, use templates with `m.map(...)` (see [Build the graph](#build-the-graph) and [API_USAGE.md](API_USAGE.md)).
 
-```python
-m.query("""
-PREFIX pi:<https://github.com/DataTreehouse/maplib/pizza#>
-SELECT ?p ?i WHERE {
-?p a pi:Pizza .
-?p pi:hasIngredient ?i .
-}
-""")
-```
+## Core concepts
 
-The query gives the following result (a DataFrame):
+- **`Model`** is the knowledge graph. It holds the triples (in a default graph and any number of named graphs), the templates and the prefixes, and every operation is a method on it.
+- **Templates** are reusable patterns of triples, written in [OTTR](https://ottr.xyz/) (as text, or built in Python with `Template`, `Parameter`, `Triple` and friends). Mapping a template with a DataFrame fills each parameter from the column of the same name, for all rows at once.
+- **DataFrames in, DataFrames out.** IRIs appear as `"<...>"` strings and literals as native Polars types.
+- **Named graphs** keep data, ontologies, shapes and inferences apart. Triples in the reserved graph `maplib.TRANSIENT_GRAPH` take part in queries, reasoning and validation, but are not written out unless you ask for them.
 
-| p                               | i                                     |
-|---------------------------------|---------------------------------------|
-| str                             | str                                   |
-| "<https://.../pizza#Grandiosa>" | "<https://.../pizza#Meat>"      |
-| "<https://.../pizza#Grandiosa>" | "<https://.../pizza#Pepper>"    |
-| "<https://.../pizza#Hawaiian>"  | "<https://.../pizza#Pineapple>" |
-| "<https://.../pizza#Hawaiian>"  | "<https://.../pizza#Ham>"       |
+## What you can do
 
-Next, we are able to perform a construct query, which creates new triples but does not insert them. 
+Features marked **EE** need [maplib Enterprise Edition](#open-source-and-enterprise-edition). For worked examples of every method, see **[API_USAGE.md](API_USAGE.md)**. Each method's docstring documents its parameters (`help(Model.map)`).
 
-```python
-hpizzas = """
-PREFIX pi:<https://github.com/DataTreehouse/maplib/pizza#>
-CONSTRUCT { ?p a pi:UnorthodoxPizza } 
-WHERE {
-    ?p a pi:Pizza .
-    ?p pi:hasIngredient pi:Pineapple .
-}"""
-res = m.query(hpizzas)
-res[0]
-```
+### Build the graph
 
-The resulting triples are given below:
-
-| subject                        | verb                                 | object                                |
-|--------------------------------|--------------------------------------|---------------------------------------|
-| str                            | str                                  | str                                   |
-| "<https://.../pizza#Hawaiian>" | "<http://.../22-rdf-syntax-ns#type>" | "<https://.../pizza#UnorthodoxPizza>" |
-
-If we are happy with the output of this construct-query, we can insert it in the model state. Afterwards we check that the triple is added with a query.
-
-```python
-m.insert(hpizzas)
-m.query("""
-PREFIX pi:<https://github.com/DataTreehouse/maplib/pizza#>
-
-SELECT ?p WHERE {
-?p a pi:UnorthodoxPizza
-}
-""")
-```
-
-Indeed, we have added the triple: 
-
-| p                                                          |
-|------------------------------------------------------------|
-| str                                                        |
-| "<https://github.com/DataTreehouse/maplib/pizza#Hawaiian>" |
-
-## Streaming large inputs
-The mapping methods `map` and `map_triples` accept a DataFrame, but also a Polars LazyFrame (consumed in one pass with `collect_batches()`) or any iterable of DataFrames, LazyFrames or SolutionMappings. Each batch is mapped into the model as it arrives, so the input never has to fit in memory as a whole:
-
-```python
-m.map(template, pl.scan_parquet("pizzas/*.parquet"))
-```
-
-The triples still end up in the model. When the result is too large for that, or when you only want to transform data from one format to another, pass `stream=True`. You then get a lazy `ModelStream` instead, and add steps to it that run batch by batch when you call `collect()`:
-
-```python
-(
-    m.map(template, pl.scan_parquet("pizzas/*.parquet"), stream=True)
-    .insert(hpizzas)                          # CONSTRUCT, as Model.insert
-    .update(some_sparql_update)               # SPARQL Update, as Model.update
-    .infer(rules)                             # Datalog, as Model.infer
-    .write("pizzas.nt")                       # N-Triples (the default)
-    .write("pizzas.ttl", format="turtle")
-    .collect()
-)
-```
-
-For each batch, `collect()`:
-1. maps the batch into a fresh in-memory model that has the templates, prefixes and UDFs of `m`,
-2. runs the steps on it in the order you added them; a `write` step appends the triples of the batch to its file (not those in the transient graph), so writing before and after a step gives you both versions,
-3. drops the batch model before the next batch.
-
-Memory use therefore depends on the batch size and not on the size of the input. Things to be aware of:
-- The steps only see the triples of the current batch. A query that joins triples from different batches finds nothing, so split the input so that what belongs together is in the same batch.
-- `m` itself is not changed: its triples are neither read nor written by the stream.
-- Each step returns a new `ModelStream`, so a partial pipeline can be reused; nothing runs before `collect()`. Iterators given as input are consumed by `collect()`.
-- Write steps support `"ntriples"`, `"turtle"` (prefixes are declared once at the top) and `"nquads"`. Files are created, or overwritten, when `collect()` starts.
-- Blank nodes, both from templates and from SPARQL updates, get labels that are unique across batches.
-- Datalog (`infer`) requires maplib Enterprise Edition.
-
-### JSON and XML documents
-`map_json` and `map_xml` accept a single document (a string or a path) or an iterable of documents, which are mapped one at a time. Without a `uuid_namespace`, IRIs are generated from the path of a document, or randomly for a document given as a string. With a `uuid_namespace`, document number `i` of an iterable uses the namespace `<uuid_namespace>/<i>`, so the documents get different but reproducible IRIs.
-
-With `stream=True`, `documents_per_batch` documents (default 1) are mapped into each batch. A useful pattern is to map the documents into the transient graph, construct the triples you want, and write only those. For example, converting a JSON Lines file with one record per line:
-
-```python
-records = """
-PREFIX fx:  <http://sparql.xyz/facade-x/ns/>
-PREFIX xyz: <http://sparql.xyz/facade-x/data/>
-PREFIX ex:  <http://example.net/>
-CONSTRUCT { ?r a ex:Record ; ex:name ?name } WHERE { ?r a fx:root ; xyz:name ?name }
-"""
-from maplib import TRANSIENT_GRAPH
-
-with open("records.jsonl") as lines:
-    (
-        Model()
-        .map_json(lines, graph=TRANSIENT_GRAPH, stream=True, documents_per_batch=10_000)
-        .insert(records)
-        .write("records.nt")
-        .collect()
-    )
-```
-
-## Shortest paths in SPARQL
-The magic predicate `maplib:shortestPath` (`PREFIX maplib: <https://datatreehouse.github.io/maplib/vocab#>`) finds shortest paths between resources, with the path, inside an ordinary SELECT query. Its subject is the source and its object a node that carries the options, which have the same names as those of the length-constrained `maplib:path`:
-
-```sparql
-PREFIX maplib: <https://datatreehouse.github.io/maplib/vocab#>
-PREFIX cim: <http://iec.ch/TC57/CIM100#>
-SELECT ?breaker ?len ?nodes WHERE {
-  ?src cim:IdentifiedObject.name "T1" .
-  ?src maplib:shortestPath ?p .
-  ?p maplib:predicate cim:Terminal.ConductingEquipment, cim:Terminal.ConnectivityNode ;
-     maplib:inversePredicate cim:Terminal.ConductingEquipment, cim:Terminal.ConnectivityNode ;
-     maplib:object ?breaker ;
-     maplib:limit 3 ;
-     maplib:avoid ?open ;
-     maplib:length ?len ;
-     maplib:pathNodes ?nodes .
-  ?breaker a cim:Breaker .
-  ?open cim:Switch.open true .
-}
-```
-
-The other patterns of the group are evaluated first, and the values they give the source, the object and the avoided nodes are the sources, the targets and the nodes to avoid. Patterns that share no variables are evaluated on their own, so many sources and many targets are not multiplied together: each source is searched once, for all its targets. FILTERs apply to the whole group and so after the search; to restrict the targets with a FILTER, put the target pattern and the FILTER in a subquery or a nested group (`{ ?t ... FILTER(...) }`) in the same group as the search.
-
-| Option | |
+| Method | What it does |
 |---|---|
-| `maplib:object` | The targets: a variable or constants. A variable bound by the group's other patterns gives the targets; an unbound variable makes every node reached a target and binds it. |
-| `maplib:predicate`, `maplib:inversePredicate` | The edges, followed from subject to object, and from object to subject. Give a predicate as both to follow it both ways. At least one, or `anyPredicate`, is required. |
-| `maplib:anyPredicate`, `maplib:excludePredicate` | `"forward"`, `"backward"` or `"both"`: follow every predicate whose objects are IRIs or blank nodes, except `rdf:type`, leaving out the excluded ones. Useful for exploring unknown data; hubs such as shared types or regions then give short paths, so exclude their predicates. |
-| `maplib:minLength`, `maplib:maxLength` | The fewest edges (default 1) and the most. With a minimum of 1 the source is not its own target, unless a cycle leads back to it; targets whose shortest path is shorter than the minimum are left out. |
-| `maplib:limit` | The number of nearest targets of each source. |
-| `maplib:weight`, `maplib:defaultWeight` | A numeric predicate whose value is the cost of entering a node, and the cost of nodes without one (default 0). With weights the cheapest paths are found (Dijkstra), otherwise those with the fewest edges (breadth first search). |
-| `maplib:maxCost` | The highest cost of a path. |
-| `maplib:avoid` | Nodes that paths may start or end at, but not pass through: a variable bound by the group's other patterns, or constants. |
-| `maplib:kShortest` | The k shortest paths (without repeated nodes) to each target, by Yen's algorithm. |
-| `maplib:allShortest`, `maplib:maxPaths` | All shortest paths to each target, at most `maxPaths` (default 1000). |
+| `m.map(template, data)` | Instantiates an OTTR template once per row of a DataFrame, LazyFrame or iterable of batches, so data larger than memory can be mapped. With `stream=True` it returns a lazy `ModelStream` instead (see below). |
+| `m.map_triples(data, predicate=None)` | Adds triples straight from a DataFrame with `subject` and `object` columns (and optionally `predicate`). |
+| `m.generate_template(data, primary_key_column)` | Generates a default template from a DataFrame's columns and returns it as stOTTR text for you to review. It doesn't map anything. |
+| `m.map_df(df)` / `m.map_json(...)` / `m.map_xml(...)` | Maps a DataFrame, JSON or XML document to triples with a generic Façade-X mapping that mirrors its structure. JSON and XML also accept an iterable of documents, such as the lines of a JSON Lines file. |
+| `m.map_csvw(source, metadata=None)` | Converts CSV and TSV files to RDF as specified by the W3C CSV on the Web recommendations, and returns the generated SPARQL Update so you can adapt it. |
+| `m.map_opc_ua(folder)` **EE** | Maps a folder of OPC UA NodeSet2 XML files to RDF. |
+| `m.add_template(t)`, `m.read_template(path)` | Add templates from stOTTR text, a `Template` object or a file. |
+| `m.get_templates()`, `m.templates_to_graph(graph)` | List the model's templates, or write them as RDF so you can query their structure with SPARQL. |
+| `maplib.generate_templates(m, graph)` | Generates one template per class of an ontology from its `rdfs:subClassOf`, `rdfs:domain` and `rdfs:range`. |
+| `m.add_prefixes({...})` | Registers prefixes for use in SPARQL, Datalog and OTTR. |
 
-The outputs are variables: `maplib:length` (the number of edges), `maplib:cost`, `maplib:pathIndex` (the rank of the path for its source and target, from 0) and `maplib:pathNodes`, the nodes of the path as a JSON array of strings (IRIs, `_:` blank nodes and the lexical forms of literals). With `maplib:pathNode`, `maplib:nodeIndex`, `maplib:stepPredicate` and `maplib:stepInverse` the result has one row per node of each path: the node, its position from 0, and the predicate of the edge that reached it and whether that edge was followed from object to subject (unbound for the source).
+**Streaming.** `m.map(..., stream=True)` (also `map_triples`, `map_json` and `map_xml`) returns a `ModelStream`: a lazy pipeline of `.update()`, `.insert()`, `.infer()` **EE** and `.write()` steps. `.collect()` then runs the pipeline batch by batch in a fresh model, so arbitrarily large inputs go to file with bounded memory.
 
-Searches run on a graph of integers built from the triples of the edge predicates in the queried graph, which is kept until those triples change, so repeated searches over the same predicates do not rebuild it. A search costs what it visits: a single target is found by a bidirectional breadth first search, and searches with many targets or a limit stop as soon as the targets are found. Searches from different sources run in parallel.
+### Read and write RDF
 
-## API
-The [API](https://datatreehouse.github.io/maplib/maplib.html) is simple, and contains only one class and a few methods for:
-- expanding templates, also from LazyFrames and iterables of batches
-- streaming pipelines that map, transform and write large inputs batch by batch
-- querying with SPARQL, with extensions such as [length-constrained paths](docs/length_constrained_paths.md) (`ex:p{2,4}` and `maplib:path`)
-- validating with SHACL
-- reading JSON and XML to triples using Façade-X, also from iterables of documents
-- importing triples (Turtle, RDF/XML, NTriples, JSON-LD, HDT)
-- writing triples (Turtle, RDF/XML, NTriples)
-- creating a new Model from a named graph
+| Method | What it does |
+|---|---|
+| `m.read(source, format=None, graph=None)` | Reads Turtle, N-Triples, N-Quads, TriG, RDF/XML, JSON-LD, HDT or CIM/XML **EE** from a path, an object storage URL, bytes or a file-like object. N-Triples, Turtle and RDF/XML are parsed in parallel. |
+| `m.reads(string, format)` | Reads triples from a string. |
+| `m.write(target, format, graph=None)` | Writes Turtle (pretty-printed), N-Triples, N-Quads, TriG, RDF/XML, JSON-LD or HDT to a path, an object storage URL or a binary file-like object. For dataset formats, `graph` can be a list of graphs. |
+| `m.writes(format)`, `m.write_bytes(format)` | Write to a string, or to bytes (any format, including HDT). |
+| `m.write_cim_xml(path, profile_graph)` **EE** | Writes IEC 61970-552 / CGMES-compliant CIM/XML, driven by the profile ontologies. |
+| `m.serialize(path)`, `Model.deserialize(path)` | Save and restore a whole model in maplib's own Parquet-based format, by default as one `.maplib` file, which is much faster to reload than RDF text. `raw_db=True` **EE** keeps DuckDB dictionaries for fast disk-mode loads. |
 
-The API is documented [HERE](https://datatreehouse.github.io/maplib/maplib.html)
+**Object storage.** `read`, `read_template`, `write`, `write_cim_xml`, `serialize` and `deserialize` also take `s3://`, `gs://`, `az://`/`abfss://`, `https://` and `file://` URLs, with credentials from the environment or `storage_options`.
 
-## Roadmap of features and optimizations
-Spring 2026
-- SHACL Rules
-- Disk based storage and internal serialization format
-- Jelly
+### Query and update with SPARQL
 
-Roadmap is subject to changes,particularly user and customer requests. 
+| Method | What it does |
+|---|---|
+| `m.query(sparql)` | Runs SPARQL 1.1 `SELECT` (returns a DataFrame), `CONSTRUCT` (a list of DataFrames) or `ASK` (a bool). Options include `bindings=` for parameterised queries, `return_format="json"` or `"turtle"`, `graph=` and `include_graphs=`, and `endpoint=` to send the query to a remote SPARQL endpoint. |
+| `m.insert(construct)` | Runs a `CONSTRUCT` and adds the resulting triples, returning only the new ones. Use `query` first to inspect the triples, then `insert` the same string to commit them. |
+| `m.update(sparql_update)` | Runs SPARQL 1.1 Update (`INSERT`/`DELETE … WHERE`, `CLEAR`, `DROP`, `LOAD`, …). |
+| `m.query_external(sparql, endpoint)` | Queries another SPARQL endpoint and returns a DataFrame. |
+| `m.set_federation(allowed_endpoints=[...])` | Enables SPARQL 1.1 Federated Query (`SERVICE`) and `LOAD` for the listed endpoints, using bind joins so remote endpoints only return matching rows. |
+| `m.add_udf(iri, func, output_type)`, `m.list_udfs()` | Register a Polars function that SPARQL can call, and list the registered ones. |
+| `m.set_query_cache(...)`, `get_query_cache()`, `query_cache_stats()`, `clear_query_cache()` | Cache query results, invalidating each one only when a write touches the graphs and predicates the query reads. |
 
-## References
-There is an associated paper [1] with associated benchmarks showing superior performance and scalability that can be found [here](https://ieeexplore.ieee.org/document/10106242). OTTR is described in [2].
+Beyond standard SPARQL 1.1, maplib supports:
+- length-constrained paths (`ex:p{2,4}`);
+- the magic predicates `maplib:path` (hop counts and path enumeration) and `maplib:shortestPath` (shortest routes with costs and nodes to avoid);
+- arithmetic on durations, dates and times;
+- full-text search with `maplib:fts` **EE**;
+- **GeoSPARQL** **EE**. Enable it with `IndexingOptions(geo=True)`; `m.read(..., format="cim/xml", geo=True)` also turns CIM position points into geometries. WKT, WKB and GeoJSON geometry literals are then indexed spatially, and the GeoSPARQL functions work across coordinate reference systems: simple features, Egenhofer and RCC8 relations, distances and areas with units of measure, and constructions such as buffers and intersections. Spatial filters and spatial joins use the index.
 
-[1] M. Bakken, "maplib: Interactive, literal RDF model model for industry," in IEEE Access, doi: 10.1109/ACCESS.2023.3269093.
+Ctrl-C stops a running query, and syntax errors show the offending source with a hint.
 
-[2] M. G. Skjæveland, D. P. Lupp, L. H. Karlsen, and J. W. Klüwer, “Ottr: Formal templates for pattern-based ontology engineering.” in WOP (Book),
-2021, pp. 349–377.
+### Reason and validate
 
-## Contributing
-Any contributions will fall under the Apache 2.0 license of maplib. 
+| Method | What it does |
+|---|---|
+| `m.infer_rdfs()` | Applies RDFS entailment (subclass, subproperty, domain and range) and puts the inferred triples in the transient graph. |
+| `m.infer(rules)` **EE** | Runs Datalog rules to a fixpoint. |
+| `m.validate(shape_graph=...)` **EE** | Validates the graph with SHACL Core and SHACL-SPARQL, evaluating shapes in parallel, and runs SHACL rules (`sh:rule`). Returns a `ValidationReport` with `.conforms`, `.results()` and `.details()` as DataFrames, and can also write the report as RDF. |
 
-## Licensing
-All code produced since August 1st. 2023 is copyrighted to [Data Treehouse AS](https://www.data-treehouse.com/) with an Apache 2.0 license unless otherwise noted. 
+### Virtualize time series **EE**
 
-All code which was produced before August 1st. 2023 copyrighted to [Prediktor AS](https://www.prediktor.com/) with an Apache 2.0 license unless otherwise noted, and has been financed by [The Research Council of Norway](https://www.forskningsradet.no/en/) (grant no. 316656) and [Prediktor AS](https://www.prediktor.com/) as part of a PhD Degree. The code at this state is archived in the repository at [https://github.com/magbak/maplib](https://github.com/magbak/maplib).
+Leave large time series in the databases that hold them, and query them in SPARQL together with the graph.
+
+| Method | What it does |
+|---|---|
+| `m.add_virtualization(db, resources)` | Adds a virtualized database, with a template per resource. You can add several databases and query them together. Filters, grouping and ordering are pushed down to the database. |
+| `maplib.virtualization.*` | Connectors for DuckDB, Snowflake, BigQuery, Databricks, TimescaleDB, InfluxDB 1.8/2/3, Microsoft Fabric (Lakehouse and Warehouse), Azure Data Explorer / Kusto, plus `maplib.opcua.OPCUAHistoryDatabase` for OPC UA Historical Access. |
+| `m.map_cdf(client)` | Maps a Cognite Data Fusion data model to RDF and virtualizes its time series. |
+| `m.map_osipi(url, ...)`, `m.map_pi_points(url, ...)` | Read an OSIsoft/AVEVA PI Asset Framework model or the PI Points of a PI Data Archive, and virtualize their recorded values. |
+| `m.map_insights_hub(host, tenant, ...)` | Reads a Siemens Insights Hub asset model and virtualizes its time series. |
+| `maplib.ip21.map_ip21(m, url, data_source)` | Adds the tags of an AspenTech InfoPlus.21 historian and virtualizes their values. |
+| `maplib.config` | Stores a model's virtualizations, indexes, query cache settings and saved questions as triples in its own config graph, and applies them with `apply_config(m)`. Secrets are read from environment variables. |
+
+### Serve and explore **EE**
+
+| Method | What it does |
+|---|---|
+| `m.serve(port=...)` | Serves the live model over the SPARQL 1.1 Protocol and Arrow Flight in the background. Includes optional updates, auth, CORS, a query log and static web apps, and returns a `Server`. |
+| `m.explore()` | Opens the Model portal, a browser UI for browsing, searching and querying the model, and returns an `ExploreServer` with `.url`. |
+
+### Manage the model
+
+| Method | What it does |
+|---|---|
+| `Model(storage=..., storage_folder=...)` | Chooses `"memory"` (the default) or, with **EE**, `"hybrid"` (dictionaries on disk) or `"disk"` (triple tables on disk as Parquet too) for graphs larger than RAM. |
+| `m.size(graph)`, `m.get_predicate_iris()`, `m.get_predicate(iri)` | Count triples, list predicates, or get the stored tables of a predicate as DataFrames. |
+| `m.add_graph(other, ...)`, `maplib.add_triples(...)` | Copy a graph from another model into this one. |
+| `m.detach_graph(graph)`, `m.truncate_graph(graph)` | Split a named graph off into its own model, or empty it. |
+| `m.create_index(IndexingOptions(...))`, `m.compact()` | Build object, full-text and geo indexes, and merge stored segments. |
+| `maplib.set_memory_limit(...)`, `memory_usage()`, `memory_limit()` | Bound the memory queries may use (80% of system memory by default). Over the limit, joins, sorts and aggregations spill to disk. |
+
+A `Model` can be shared between threads: queries and writes to file run concurrently, while changes take an exclusive lock.
+
+## Open source and Enterprise Edition
+
+The maplib core (everything above that isn't marked **EE**) is open source under the Apache 2.0 license and is what `pip install maplib` installs. **maplib Enterprise Edition** from [Data Treehouse](https://www.data-treehouse.com/) adds SHACL, Datalog, disk-backed storage, full-text search, GeoSPARQL, CIM/CGMES, OPC UA, time series virtualization, the SPARQL server and the Model portal. To try it, email **magnus at data-treehouse.com** or find **Data Treehouse** on LinkedIn.
+
+## Learn more
+
+- [API usage guide with examples](API_USAGE.md)
+- [API reference](https://datatreehouse.github.io/maplib/maplib.html)
+- [Example notebook](examples/mapping/mapping.ipynb)
+- [Changelog](CHANGES.md)
+- [GitHub issues](https://github.com/DataTreehouse/maplib/issues)
+
+To cite maplib: M. Bakken, "maplib: Interactive, Literal RDF Model Mapping for Industry," *IEEE Access*, vol. 11, 2023, doi: [10.1109/ACCESS.2023.3269093](https://ieeexplore.ieee.org/document/10106242).
+
+## Contributing and license
+
+Contributions are welcome: open an issue to discuss larger changes. All contributions fall under the project's [Apache 2.0 license](LICENSE), and the [Code of Conduct](CODE_OF_CONDUCT.md) applies. Third-party licenses are in [licensing/](licensing/).
+
+Code produced since 1 August 2023 is copyright [Data Treehouse AS](https://www.data-treehouse.com/). Earlier code is copyright [Prediktor AS](https://www.prediktor.com/), was financed by [The Research Council of Norway](https://www.forskningsradet.no/en/) (grant no. 316656) and Prediktor AS as part of a PhD degree, and is archived at [github.com/magbak/maplib](https://github.com/magbak/maplib). Both are licensed under Apache 2.0 unless otherwise noted.
