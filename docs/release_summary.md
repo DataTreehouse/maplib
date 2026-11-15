@@ -1,6 +1,6 @@
-# What's new since v0.20.32
+# What's new in v0.22.0 (since v0.20.32)
 
-A short guide for deciding whether to upgrade from v0.20.32. It covers v0.20.33, v0.21.0 and the changes that have landed since (the "Unreleased" section of [CHANGES.md](../CHANGES.md)). Features marked **EE** need [maplib Enterprise Edition](../README.md#open-source-and-enterprise-edition); everything else is in the open-source core. [CHANGES.md](../CHANGES.md) has the full details, and [API_USAGE.md](../API_USAGE.md) has worked examples.
+A short guide for deciding whether to upgrade from v0.20.32 to v0.22.0. It covers v0.20.33, v0.21.0 and v0.22.0 (the "Unreleased" section of [CHANGES.md](../CHANGES.md) until the release). Features marked **EE** need [maplib Enterprise Edition](../README.md#open-source-and-enterprise-edition); everything else is in the open-source core. [CHANGES.md](../CHANGES.md) has the full details, and [API_USAGE.md](../API_USAGE.md) has worked examples.
 
 ## Highlights
 
@@ -80,7 +80,7 @@ These numbers compare v0.21.0 with v0.20.33 on an Apple M-series laptop:
 | Datalog inference, CIM enrichment **EE** | about 2× faster (12.4 s → 6.3 s) |
 | Writing Turtle for some CIM models | no longer hangs |
 
-Since v0.21.0, reading N-Triples is up to 81% faster than in v0.21.0, RDF/XML reading is up to 68% faster and template mapping is up to 89% faster, with up to 39% lower peak memory. Other improvements since v0.21.0:
+v0.22.0 adds more on top of v0.21.0: reading N-Triples is up to 81% faster, RDF/XML reading is up to 68% faster and template mapping is up to 89% faster, with up to 39% lower peak memory. Other improvements in v0.22.0:
 
 - Disk-mode lookups of a subject's properties are about 10× faster **EE**.
 - Bound property paths are 84–92% faster.
