@@ -1,22 +1,24 @@
 """
-W3C JSON-LD 1.1 compliance tests for the JSON-LD writer.
+W3C JSON-LD 1.1 compliance tests for reading (toRdf) and writing JSON-LD.
 
 The test data in ``testdata/w3c_jsonld`` is a copy of ``tests/fromRdf``, ``tests/toRdf`` and
 their manifests from https://github.com/w3c/json-ld-api (commit
 55514738d854e56bb8bad4c53cda2f0e23be4a50), see ``testdata/w3c_jsonld/LICENSE.md``.
 
-maplib writes JSON-LD in its own compacted form, so the expected documents of the fromRdf tests
-are not compared literally. Instead, for each positive fromRdf and toRdf evaluation test the
-input (N-Quads or JSON-LD) is read with maplib, written as JSON-LD, read back, and the dataset
-must be the one that was read, up to blank node renaming. The toRdf inputs cover lists, nested
-and shared blank nodes, language tags, datatypes and unusual IRIs, and the fromRdf inputs are the
-graphs the JSON-LD serialization algorithm is tested with. These are tests of the writer: an
-input maplib can not read is skipped, the reader is tested by its own suite in oxjsonld.
+* Reading (``test_w3c_jsonld_to_rdf``, ids ``toRdf/<test>``): each toRdf evaluation test reads
+  the input with maplib and compares the dataset with the expected N-Quads, parsed by the
+  N-Quads parser in ``w3c_rdf.py`` (not by maplib), up to blank node renaming. Each negative
+  evaluation test must fail with an error (a panic does not count).
+* Writing (``test_w3c_jsonld_round_trip``, ids ``<manifest>/<test>@round-trip``): maplib writes
+  JSON-LD in its own compacted form, so the expected documents of the fromRdf tests are not
+  compared literally. Instead the input (N-Quads or JSON-LD) is read, written as JSON-LD with
+  all its graphs, read back, and must give the dataset that was read. The reader is tested on
+  its own by the toRdf tests, so a round trip of an input maplib can not read is skipped.
 
-All graphs of the input are written, as a list in ``graph``.
-
-Tests that maplib currently does not pass are listed in ``w3c_jsonld_known_failures.txt`` and are
-marked as strict xfails.
+Tests for JSON-LD 1.0 processors, and toRdf tests with options ``Model.read`` has no
+counterpart for (generalized RDF, ``rdfDirection``, ``expandContext``, 1.0 processing mode),
+are left out. Tests that maplib currently does not pass are listed in
+``w3c_jsonld_known_failures.txt`` and are marked as strict xfails.
 """
 
 import json
@@ -26,11 +28,20 @@ import pytest
 
 from maplib import DEFAULT_GRAPH, Model
 
-from .w3c_rdf import dataset_graphs, dump_dataset, format_quads, isomorphic
+from .w3c_rdf import (
+    check_known_failures,
+    dataset_graphs,
+    dump_dataset,
+    format_quads,
+    isomorphic,
+    parse_nquads,
+)
 
 SUITE_DIR = Path(__file__).parent / "testdata" / "w3c_jsonld"
 KNOWN_FAILURES = Path(__file__).parent / "w3c_jsonld_known_failures.txt"
 BASE = "https://w3c.github.io/json-ld-api/tests/"
+# toRdf options that Model.read can not be given.
+UNSUPPORTED_OPTIONS = ("produceGeneralizedRdf", "rdfDirection", "expandContext")
 
 
 def load_known_failures():
@@ -45,23 +56,52 @@ def load_known_failures():
     return known
 
 
+def manifest_tests(manifest: str):
+    m = json.loads((SUITE_DIR / f"{manifest}-manifest.jsonld").read_text(encoding="utf-8"))
+    for test in m["sequence"]:
+        option = test.get("option", {})
+        # Tests only for JSON-LD 1.0 processors.
+        if option.get("specVersion") == "json-ld-1.0":
+            continue
+        yield f"{manifest}/{test['@id'].lstrip('#')}", test
+
+
+def marks_for(tid: str, known: dict):
+    return [pytest.mark.xfail(reason=known[tid], strict=True)] if tid in known else []
+
+
+ALL_IDS = set()
+
+
 def build_params():
     known = load_known_failures()
     params = []
     for manifest in ("fromRdf", "toRdf"):
-        m = json.loads((SUITE_DIR / f"{manifest}-manifest.jsonld").read_text(encoding="utf-8"))
-        for test in m["sequence"]:
+        for tid, test in manifest_tests(manifest):
             if "jld:PositiveEvaluationTest" not in test["@type"]:
                 continue
-            option = test.get("option", {})
-            # Tests only for JSON-LD 1.0 processors.
-            if option.get("specVersion") == "json-ld-1.0":
-                continue
-            tid = f"{manifest}/{test['@id'].lstrip('#')}"
-            marks = []
-            if tid in known:
-                marks.append(pytest.mark.xfail(reason=known[tid], strict=True))
-            params.append(pytest.param(manifest, test, id=tid, marks=marks))
+            tid = f"{tid}@round-trip"
+            params.append(pytest.param(manifest, test, id=tid, marks=marks_for(tid, known)))
+    ALL_IDS.update(p.id for p in params)
+    return params
+
+
+def build_to_rdf_params():
+    known = load_known_failures()
+    params = []
+    for tid, test in manifest_tests("toRdf"):
+        types = test["@type"]
+        if not ("jld:PositiveEvaluationTest" in types or "jld:NegativeEvaluationTest" in types):
+            continue
+        option = test.get("option", {})
+        marks = marks_for(tid, known)
+        unsupported = [o for o in UNSUPPORTED_OPTIONS if o in option]
+        if option.get("processingMode") == "json-ld-1.0":
+            unsupported.append("processingMode json-ld-1.0")
+        if unsupported:
+            marks = [pytest.mark.skip(reason=f"Model.read has no option for {unsupported}")]
+        params.append(pytest.param(test, id=tid, marks=marks))
+    ALL_IDS.update(p.id for p in params)
     return params
 
 
@@ -87,12 +127,26 @@ def read_input(manifest: str, test: dict) -> Model:
     return m
 
 
+@pytest.mark.parametrize("test", build_to_rdf_params())
+def test_w3c_jsonld_to_rdf(test: dict):
+    if "jld:NegativeEvaluationTest" in test["@type"]:
+        # An error must be reported: pyo3's PanicException is not an Exception.
+        with pytest.raises(Exception):
+            read_input("toRdf", test)
+        return
+    actual = dump_dataset(read_input("toRdf", test))
+    expected = parse_nquads((SUITE_DIR / test["expect"]).read_bytes().decode("utf-8"))
+    assert isomorphic(expected, actual), (
+        f"Datasets differ.\nExpected:\n{format_quads(expected)}\nActual:\n{format_quads(actual)}"
+    )
+
+
 @pytest.mark.parametrize("manifest,test", build_params())
 def test_w3c_jsonld_round_trip(manifest: str, test: dict):
     try:
         m = read_input(manifest, test)
     except Exception as e:
-        pytest.skip(f"maplib can not read the input: {e}")
+        pytest.skip(f"maplib can not read the input (see the toRdf tests): {e}")
     expected = dump_dataset(m)
     written = m.writes(format="json-ld", graph=dataset_graphs(expected))
     # The document must be JSON, not only something the JSON-LD parser accepts.
@@ -104,6 +158,10 @@ def test_w3c_jsonld_round_trip(manifest: str, test: dict):
         f"Datasets differ after writing JSON-LD.\nExpected:\n{format_quads(expected)}\n"
         f"Actual:\n{format_quads(actual)}\nWritten:\n{written}"
     )
+
+
+def test_known_failures_are_tests():
+    check_known_failures(load_known_failures(), ALL_IDS, KNOWN_FAILURES.name)
 
 
 def test_writes_compacted_document():

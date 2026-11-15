@@ -98,6 +98,9 @@ def test_infer_syntax_error_raises():
         m.infer("this is not datalog :- ")
     if _unavailable(e.value):
         pytest.skip("Datalog inference is not available in this build")
+    # BaseException is caught only to recognise the open source stub, which panics. A panic
+    # (pyo3's PanicException is not an Exception) is not a reported syntax error.
+    assert isinstance(e.value, Exception), f"panicked instead of reporting an error: {e.value!r}"
 
 
 # --- SHACL ---------------------------------------------------------------------------
@@ -259,7 +262,7 @@ def test_validate_include_details_for_logical_constraints():
     assert report_none.details() is None
 
 
-def test_validate_dry_run_counts_targets():
+def test_validate_dry_run_reports_shape_targets():
     m = _shacl_model(NON_CONFORMING)
     report = _validate_or_skip(m, shape_graph=SHAPES, dry_run=True)
     assert report.shape_targets.height > 0

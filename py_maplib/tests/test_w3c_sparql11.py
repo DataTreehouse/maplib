@@ -44,8 +44,12 @@ from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
 import pytest
+import rdflib
 
 from maplib import Model
+
+# Keep the lexical forms of literals as written, so that expected results are not canonicalized.
+rdflib.NORMALIZE_LITERALS = False
 
 TESTS_DIR = Path(__file__).parent
 SUITE_DIR = TESTS_DIR / "testdata" / "w3c_sparql11"
@@ -206,12 +210,10 @@ class Manifest:
 
     def __init__(self, rel_path: str):
         self.iri = ("uri", BASE + rel_path)
-        m = Model()
-        load_into_model(m, self.iri)
-        res = run_select(m, "SELECT ?s ?p ?o WHERE { ?s ?p ?o }")
+        # Read with rdflib, so that a maplib parser bug cannot drop tests from the suite.
         self.index = defaultdict(lambda: defaultdict(list))
-        for row in res["rows"]:
-            self.index[row["s"]][row["p"]].append(row["o"])
+        for s, p, o in rdflib_graph(self.iri):
+            self.index[rdflib_term(s)][rdflib_term(p)].append(rdflib_term(o))
 
     def objects(self, s, p) -> list:
         return self.index.get(s, {}).get(p, [])
@@ -278,6 +280,8 @@ def build_params():
             strict = "[flaky]" not in known[tid]
             marks.append(pytest.mark.xfail(reason=known[tid], strict=strict))
         params.append(pytest.param(g, entry, id=tid, marks=marks))
+    unknown = sorted(set(known) - {p.id for p in params})
+    assert not unknown, f"Known failures that are not tests: {unknown}"
     return params
 
 
@@ -305,11 +309,44 @@ def load_into_model(m: Model, iri, graph: Optional[str] = None):
     )
 
 
+RDFLIB_FORMATS = {".ttl": "turtle", ".nt": "nt", ".rdf": "xml", ".trig": "trig"}
+
+
+def rdflib_term(t):
+    if isinstance(t, rdflib.URIRef):
+        return ("uri", str(t))
+    if isinstance(t, rdflib.BNode):
+        return ("bnode", str(t))
+    return literal(str(t), str(t.datatype) if t.datatype else None, t.language)
+
+
+def rdflib_graph(iri) -> rdflib.Graph:
+    path = iri_to_path(iri)
+    g = rdflib.Graph()
+    g.parse(
+        data=path.read_text(encoding="utf-8"),
+        format=RDFLIB_FORMATS[path.suffix],
+        publicID=iri[1] if isinstance(iri, tuple) else iri,
+    )
+    return g
+
+
 def load_graph(iri) -> List[tuple]:
-    """Reads an expected graph with maplib and returns its triples."""
-    m = Model()
-    load_into_model(m, iri)
-    return dump_graph(m, None)
+    """Reads an expected graph with rdflib (not maplib) and returns its triples."""
+    return [tuple(rdflib_term(x) for x in t) for t in rdflib_graph(iri)]
+
+
+# The literals of the dataset of the running test. A literal that is in the data must be returned
+# with the lexical form it has there; other literals (computed values) are compared by value.
+DATA_LITERALS = set()
+
+
+def note_data_literals(files):
+    DATA_LITERALS.clear()
+    for f in files:
+        for t in load_graph(f):
+            if t[2][0] == "literal":
+                DATA_LITERALS.add(t[2])
 
 
 def dump_graph(m: Model, graph: Optional[str]) -> List[tuple]:
@@ -341,6 +378,8 @@ def numeric_value(t):
 def terms_equal(a, b) -> bool:
     if a == b:
         return True
+    if a in DATA_LITERALS or b in DATA_LITERALS:
+        return False
     # SPARQL does not require canonical lexical forms of numerics.
     if a[0] == b[0] == "literal" and a[2] == b[2]:
         va = numeric_value(a)
@@ -354,6 +393,8 @@ def term_key(t):
         return None
     if is_bnode(t):
         return ("bnode",)
+    if t in DATA_LITERALS:
+        return t
     v = numeric_value(t)
     if v is not None:
         return ("num", t[2], v)
@@ -574,36 +615,25 @@ RS = "http://www.w3.org/2001/sw/DataAccess/tests/result-set#"
 
 
 def parse_rdf_results(iri) -> dict:
-    """SELECT and ASK results written as RDF with the DAWG result set vocabulary."""
-    m = Model()
-    load_into_model(m, iri)
-    boolean = run_select(
-        m, f"SELECT ?b WHERE {{ ?rs a <{RS}ResultSet> ; <{RS}boolean> ?b }}"
-    )["rows"]
-    variables = [
-        r["v"][1]
-        for r in run_select(
-            m, f"SELECT ?v WHERE {{ ?rs a <{RS}ResultSet> ; <{RS}resultVariable> ?v }}"
-        )["rows"]
-    ]
-    if boolean:
-        return {"vars": variables, "boolean": boolean[0]["b"][1] == "true", "rows": []}
-    # Solutions without bindings are rows too, so the solutions are listed separately.
-    solutions = run_select(
-        m, f"SELECT ?s WHERE {{ ?rs a <{RS}ResultSet> ; <{RS}solution> ?s }}"
-    )["rows"]
-    rows = {r["s"]: {} for r in solutions}
-    bindings = run_select(
-        m,
-        f"""SELECT ?s ?var ?value WHERE {{
-            ?rs a <{RS}ResultSet> ; <{RS}solution> ?s .
-            ?s <{RS}binding> ?b .
-            ?b <{RS}variable> ?var ; <{RS}value> ?value .
-        }}""",
-    )["rows"]
-    for r in bindings:
-        rows[r["s"]][r["var"][1]] = r["value"]
-    return {"vars": variables, "boolean": None, "rows": list(rows.values())}
+    """SELECT and ASK results written as RDF with the DAWG result set vocabulary, read with
+    rdflib."""
+    g = rdflib_graph(iri)
+    rs = rdflib.Namespace(RS)
+    sets = list(g.subjects(rdflib.RDF.type, rs.ResultSet))
+    assert len(sets) == 1, f"Expected one result set in {iri}"
+    (result_set,) = sets
+    variables = [str(v) for v in g.objects(result_set, rs.resultVariable)]
+    boolean = g.value(result_set, rs.boolean)
+    if boolean is not None:
+        return {"vars": variables, "boolean": str(boolean) == "true", "rows": []}
+    # Solutions without bindings are rows too.
+    rows = []
+    for solution in g.objects(result_set, rs.solution):
+        row = {}
+        for b in g.objects(solution, rs.binding):
+            row[str(g.value(b, rs.variable))] = rdflib_term(g.value(b, rs.value))
+        rows.append(row)
+    return {"vars": variables, "boolean": None, "rows": rows}
 
 
 def parse_expected_result(iri) -> dict:
@@ -622,8 +652,10 @@ def parse_expected_result(iri) -> dict:
 
 
 def graph_isomorphic(expected: List[tuple], actual: List[tuple]) -> bool:
-    # Graphs are sets of triples.
-    return match_rows(list(set(expected)), list(set(actual)), ordered=False)
+    # Graphs are sets of triples: the same triple twice in maplib's output is an error.
+    if len(set(actual)) != len(actual):
+        return False
+    return match_rows(list(set(expected)), actual, ordered=False)
 
 
 def format_graph(triples: List[tuple], limit=30) -> str:
@@ -639,6 +671,7 @@ def format_graph(triples: List[tuple], limit=30) -> str:
 
 
 def model_with_dataset(g: Manifest, action) -> Model:
+    note_data_literals(g.objects(action, QT.data) + g.objects(action, QT.graphData))
     m = Model()
     for data in g.objects(action, QT.data):
         load_into_model(m, data)
@@ -762,6 +795,7 @@ def check_update_evaluation(g: Manifest, entry):
     action = g.value(entry, MF.action)
     request_iri = g.value(action, UT.request)
     default, named = update_dataset(g, action)
+    note_data_literals(list(default) + list(named.values()))
     m = Model()
     for d in default:
         load_into_model(m, d)
@@ -773,6 +807,10 @@ def check_update_evaluation(g: Manifest, entry):
         # The W3C LOAD tests only load sources that cannot be fetched (LOAD SILENT).
         m.set_federation(allow_load=True)
     m.update(text)
+    graphs = {
+        r["g"][1]
+        for r in run_select(m, "SELECT DISTINCT ?g WHERE { GRAPH ?g { ?s ?p ?o } }")["rows"]
+    }
 
     exp_default, exp_named = update_dataset(g, g.value(entry, MF.result))
     expected = []
@@ -783,7 +821,7 @@ def check_update_evaluation(g: Manifest, entry):
         f"Default graph differs.\nExpected:\n{format_graph(expected)}\n"
         f"Actual:\n{format_graph(actual)}"
     )
-    for name in set(exp_named) | set(named):
+    for name in set(exp_named) | set(named) | graphs:
         expected = load_graph(exp_named[name]) if name in exp_named else []
         actual = dump_graph(m, name)
         assert graph_isomorphic(expected, actual), (

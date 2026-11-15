@@ -63,7 +63,7 @@ def test_generate_template_missing_primary_key():
 
 
 @pytest.mark.parametrize("value", [[1], {"x": 1}])
-def test_generate_template_nested_primary_key(value):
+def test_generate_template_nested_primary_key_does_not_panic(value):
     Model().generate_template(pl.DataFrame({"a": [value], "b": [1]}), "a")
 
 
@@ -163,7 +163,9 @@ def test_map_list_expand_non_list():
 def _map_sm(df, types):
     from maplib import SolutionMappings
 
-    Model().map_triples(SolutionMappings(df, types), predicate="http://p")
+    m = Model()
+    m.map_triples(SolutionMappings(df, types), predicate="http://p")
+    return m
 
 
 @pytest.mark.parametrize(
@@ -208,7 +210,10 @@ def test_solution_mappings_nested_type():
 def test_solution_mappings_matching_types_still_work():
     from maplib import RDFType
 
-    _map_sm(
+    m = _map_sm(
         pl.DataFrame({"subject": ["http://a"], "object": pl.Series([1], dtype=pl.Int32)}),
         {"subject": RDFType.IRI, "object": RDFType.Literal(xsd.integer)},
     )
+    df = m.query("SELECT ?s ?o WHERE { ?s <http://p> ?o }")
+    assert df["s"].to_list() == ["<http://a>"]
+    assert df["o"].to_list() == [1]

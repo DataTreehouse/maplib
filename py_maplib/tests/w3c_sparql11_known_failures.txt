@@ -19,3 +19,15 @@ negation/partial-minuend  # PanicException: MINUS on variables with differing ty
 property-path/pp16  # Results differ (ordered): zero length paths between two variables only include the nodes of the path, not all nodes of the graph
 service/service4a  # Results differ: unbound variables in the solutions are not treated as compatible with VALUES (as bindings/values7)
 syntax-query/test_4  # MaplibException: Custom function not found: <http://example/function>, it is possible to define a fu
+
+# Numeric literals from the data are returned in canonical form (they are stored as values),
+# found once the harness required the lexical form of literals that are in the data.
+aggregates/agg-min-01  # Results differ: a numeric literal of the data is returned in canonical form ("1.0"^^xsd:decimal -> "1", "3.0E4" -> "30000.0")
+aggregates/agg-min-02  # Results differ: a numeric literal of the data is returned in canonical form ("1.0"^^xsd:decimal -> "1", "3.0E4" -> "30000.0")
+aggregates/agg-max-01  # Results differ: a numeric literal of the data is returned in canonical form ("1.0"^^xsd:decimal -> "1", "3.0E4" -> "30000.0")
+aggregates/agg-max-02  # Results differ: a numeric literal of the data is returned in canonical form ("1.0"^^xsd:decimal -> "1", "3.0E4" -> "30000.0")
+aggregates/agg-max-distinct  # Results differ: a numeric literal of the data is returned in canonical form ("1.0"^^xsd:decimal -> "1", "3.0E4" -> "30000.0")
+aggregates/agg-min-distinct  # Results differ: a numeric literal of the data is returned in canonical form ("1.0"^^xsd:decimal -> "1", "3.0E4" -> "30000.0")
+functions/plus-1-corrected  # Results differ: a numeric literal of the data is returned in canonical form ("1.0"^^xsd:decimal -> "1", "3.0E4" -> "30000.0")
+functions/plus-2-corrected  # Results differ: a numeric literal of the data is returned in canonical form ("1.0"^^xsd:decimal -> "1", "3.0E4" -> "30000.0")
+aggregates/agg-err-02  # Results differ: AVG gives 2.5 for "2.5E0"; the harness compares lexically because "2.5E0" is in the data

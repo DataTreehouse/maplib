@@ -23,8 +23,8 @@ def test_incorrect_prefix_syntax_fails():
         m.add_template(doc)
 
 
-def test_missing_ottr_prefix_fails():
-    """Test that missing ottr prefix definition fails"""
+def test_ottr_prefix_is_predefined():
+    """The ottr prefix does not have to be declared"""
     doc = """
     @prefix ex: <http://example.net/ns#> .
     
@@ -34,6 +34,7 @@ def test_missing_ottr_prefix_fails():
     """
     m = Model()
     m.add_template(doc)
+    assert [t.iri.iri for t in m.get_templates()] == ["http://example.net/ns#ExampleTemplate"]
 
 
 def test_all_iri_case():

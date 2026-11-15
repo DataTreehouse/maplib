@@ -32,6 +32,12 @@ from maplib import Model
 
 from . import hdt_spec
 from .fetch_hdt_reference import FILES as REFERENCE_FILES
+from .w3c_rdf import isomorphic
+
+
+def same_graph(expected: List[tuple], actual: List[tuple]) -> bool:
+    """Equal up to blank node renaming, with no triple twice in ``actual``."""
+    return isomorphic([t + (None,) for t in expected], [t + (None,) for t in actual])
 
 TESTS_DIR = Path(__file__).parent
 REFERENCE_DIR = TESTS_DIR / "testdata" / "hdt_reference"
@@ -128,8 +134,11 @@ def canonical(triples: List[tuple], rounds: int = 6):
 
 def assert_same_triples(expected: List[tuple], actual: List[tuple]):
     assert len(actual) == len(expected)
-    e, a = canonical(expected), canonical(actual)
-    if e != a:
+    # canonical() is only a fingerprint (colour refinement can not tell all non-isomorphic
+    # graphs apart), so the check is the exact isomorphism with a search for a blank node
+    # bijection; canonical() only shows the differences.
+    if not same_graph(expected, actual):
+        e, a = canonical(expected), canonical(actual)
         missing = sorted(set(e) - set(a))[:10]
         extra = sorted(set(a) - set(e))[:10]
         pytest.fail(f"triples differ\nmissing: {missing}\nunexpected: {extra}", pytrace=False)
@@ -298,7 +307,7 @@ def test_maplib_writes_spec_conformant_hdt_reference(name, tmp_path):
         ours = hdt_spec.read_hdt(
             (tmp_path / "out.hdt").read_bytes(), tolerate=hdt_spec.DEVIATIONS
         )
-        assert canonical(decoded_triples(ours)) == canonical(decoded_triples(ref))
+        assert same_graph(decoded_triples(ref), decoded_triples(ours))
 
 
 # ---------------------------------------------------------------------------

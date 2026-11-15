@@ -17,7 +17,8 @@ The manifests are read with maplib and a pytest case is generated for each of:
 
 Entailment tests are skipped. The dataset of a model is read back with a SPARQL query with
 JSON results, which carry triple terms and base directions, so that the eval tests do not
-depend on the writers.
+depend on the writers. The manifests are read with rdflib, not maplib, so that a parser bug
+cannot drop tests from the suite.
 
 Tests that maplib currently does not pass are listed in the known failures file of the suite
 and are marked as strict xfails, so a test that starts passing is reported (XPASS) and
@@ -37,6 +38,7 @@ from pathlib import Path
 from typing import Dict, List, Optional
 
 import pytest
+import rdflib
 
 from maplib import DEFAULT_GRAPH, Model
 
@@ -294,6 +296,9 @@ def refine(quads: List[tuple], bnodes: set) -> Dict[str, int]:
 
 
 def isomorphic(expected: List[tuple], actual: List[tuple]) -> bool:
+    # A dataset is a set of quads: the same quad twice in maplib's output is an error.
+    if len(set(actual)) != len(actual):
+        return False
     expected, actual = set(expected), set(actual)
     if len(expected) != len(actual):
         return False
@@ -348,6 +353,14 @@ def read_file(iri) -> str:
     return iri_to_path(iri).read_bytes().decode("utf-8")
 
 
+def rdflib_term(t):
+    if isinstance(t, rdflib.URIRef):
+        return ("uri", str(t))
+    if isinstance(t, rdflib.BNode):
+        return ("bnode", str(t))
+    return literal(str(t), str(t.datatype) if t.datatype else None, t.language)
+
+
 def iri_to_path(iri) -> Path:
     s = iri[1] if isinstance(iri, tuple) else iri
     for suite in SUITES:
@@ -359,12 +372,11 @@ def iri_to_path(iri) -> Path:
 class Manifest:
     def __init__(self, suite: Suite, rel_path: str):
         self.iri = ("uri", suite.base + rel_path)
-        m = Model()
-        m.reads(read_file(self.iri), format="turtle",
-                base_iri=self.iri[1])
+        g = rdflib.Graph()
+        g.parse(data=read_file(self.iri), format="turtle", publicID=self.iri[1])
         self.index = defaultdict(lambda: defaultdict(list))
-        for row in select(m, "SELECT ?s ?p ?o WHERE { ?s ?p ?o }"):
-            self.index[row["s"]][row["p"]].append(row["o"])
+        for s, p, o in g:
+            self.index[rdflib_term(s)][rdflib_term(p)].append(rdflib_term(o))
         # The manifest node is not always the document IRI, e.g. trs:manifest.
         self.nodes = [s for s, ps in self.index.items() if MF.Manifest in ps.get(RDF.type, [])]
 
@@ -404,6 +416,13 @@ def collect_tests(suite: Suite, rel_path="manifest.ttl"):
 def make_test_id(directory: str, entry) -> str:
     name = entry[1].rsplit("#", 1)[-1].rsplit("/", 1)[-1]
     return f"{directory}/{name}"
+
+
+def check_known_failures(known: Dict[str, str], ids: set, name: str):
+    """Every known failure must be the id of a test, so that a renamed or mistyped id is not
+    silently ignored."""
+    unknown = sorted(set(known) - ids)
+    assert not unknown, f"Known failures in {name} that are not tests: {unknown}"
 
 
 def load_known_failures(suite: Suite) -> Dict[str, str]:
@@ -446,6 +465,10 @@ def build_round_trip_params(suite: Suite):
                 # A dataset that is not read correctly is not written correctly either.
                 marks.append(pytest.mark.xfail(reason=f"reading: {known[base_tid]}", strict=True))
             params.append(pytest.param(g, entry, fmt, id=tid, marks=marks))
+    check_known_failures(
+        {k: v for k, v in known.items() if "@" in k}, {p.id for p in params},
+        suite.known_failures.name,
+    )
     return params
 
 
@@ -497,6 +520,10 @@ def build_params(suite: Suite):
         elif tid in known:
             marks.append(pytest.mark.xfail(reason=known[tid], strict=True))
         params.append(pytest.param(g, entry, id=tid, marks=marks))
+    check_known_failures(
+        {k: v for k, v in known.items() if "@" not in k}, {p.id for p in params},
+        suite.known_failures.name,
+    )
     return params
 
 

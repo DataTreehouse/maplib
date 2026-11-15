@@ -44,3 +44,31 @@ def test_rdfs_inference(folder:pathlib.Path):
 
 
 
+
+
+def test_rdfs_type_over_long_subclass_chain():
+    # rdfs9 over the transitive closure of rdfs:subClassOf (rdfs11): an instance of a class is
+    # an instance of every superclass, also those more than one subClassOf step away.
+    m = Model()
+    m.reads(
+        """
+        @prefix : <http://data.treehouse.example/> .
+        @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+        :Planet rdfs:subClassOf :RockyBody .
+        :RockyBody rdfs:subClassOf :PlanetaryBody .
+        :PlanetaryBody rdfs:subClassOf :AstronomicalBody .
+        :Mars a :Planet .
+        """,
+        format="turtle",
+    )
+    m.infer_rdfs()
+    df = m.query(
+        """
+        PREFIX : <http://data.treehouse.example/>
+        SELECT ?c WHERE { :Mars a ?c FILTER(STRSTARTS(STR(?c), STR(:))) }
+        """
+    )
+    assert sorted(df["c"].to_list()) == sorted(
+        f"<http://data.treehouse.example/{c}>"
+        for c in ["Planet", "RockyBody", "PlanetaryBody", "AstronomicalBody"]
+    )
