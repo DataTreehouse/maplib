@@ -130,8 +130,9 @@ impl RemoteSegment {
         tmp.push(".download");
         let tmp = PathBuf::from(tmp);
         let res = self.location.download_to(&tmp).and_then(|n| {
-            std::fs::rename(&tmp, &self.path)
-                .map_err(|e| file_io::remote::RemoteError::Io(self.path.display().to_string(), e))?;
+            std::fs::rename(&tmp, &self.path).map_err(|e| {
+                file_io::remote::RemoteError::Io(self.path.display().to_string(), e)
+            })?;
             Ok(n)
         });
         let downloaded = match res {
@@ -172,7 +173,10 @@ impl RemoteSegment {
         }
         if let Err(e) = std::fs::remove_file(&self.path) {
             if e.kind() != std::io::ErrorKind::NotFound {
-                warn!("Could not remove cached triples file {:?}: {}", self.path, e);
+                warn!(
+                    "Could not remove cached triples file {:?}: {}",
+                    self.path, e
+                );
                 return 0;
             }
         }
@@ -191,7 +195,10 @@ impl Drop for RemoteSegment {
         if *self.local_size.get_mut().unwrap() > 0 {
             if let Err(e) = std::fs::remove_file(&self.path) {
                 if e.kind() != std::io::ErrorKind::NotFound {
-                    warn!("Could not remove cached triples file {:?}: {}", self.path, e);
+                    warn!(
+                        "Could not remove cached triples file {:?}: {}",
+                        self.path, e
+                    );
                 }
             }
         }
@@ -253,4 +260,3 @@ fn evict_to_limit(keep: &Path, grace: Duration) {
         );
     }
 }
-

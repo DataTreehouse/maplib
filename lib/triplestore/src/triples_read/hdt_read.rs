@@ -150,9 +150,7 @@ impl Triplestore {
             batch_start = batch_end;
         }
         if dropped_triples > 0 {
-            warn!(
-                "Dropped {dropped_triples} HDT triples with invalid or unparseable terms"
-            );
+            warn!("Dropped {dropped_triples} HDT triples with invalid or unparseable terms");
         }
         self.parser_call += 1;
         Ok(())

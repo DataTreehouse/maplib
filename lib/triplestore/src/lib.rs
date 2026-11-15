@@ -19,12 +19,12 @@ pub mod storage;
 pub mod triples_read;
 pub mod triples_write;
 
-use external_sparql::federation::FederationSettings;
 use crate::errors::TriplestoreError;
 use crate::graph_map::GraphTriplesMap;
 use crate::query_cache::{QueryCache, Touched};
 use crate::storage::codes_to_ranks;
 use crate::storage::Triples;
+use external_sparql::federation::FederationSettings;
 use file_io::create_folder_if_not_exists;
 use fts::{FtsIndex, FtsOptions};
 use geo::GeoIndex;
@@ -542,7 +542,7 @@ impl Triplestore {
                 n_triples_deleted: 0,
                 path_graph_cache: Default::default(),
                 udf_registry: Arc::new(UdfRegistry::new()),
-            federation: self.federation.clone(),
+                federation: self.federation.clone(),
             };
             if detached.indexing.geo {
                 detached.geo_index =

@@ -371,8 +371,14 @@ mod tests {
         ]);
         assert_eq!(c.compact("http://example.com/a").unwrap(), "ex:a");
         assert_eq!(c.compact("http://example.com/ns#a").unwrap(), "exns:a");
-        assert_eq!(c.compact("http://example.com//a").unwrap(), "http://example.com//a");
-        assert_eq!(c.compact("http://empty.com/a").unwrap(), "http://empty.com/a");
+        assert_eq!(
+            c.compact("http://example.com//a").unwrap(),
+            "http://example.com//a"
+        );
+        assert_eq!(
+            c.compact("http://empty.com/a").unwrap(),
+            "http://empty.com/a"
+        );
         assert_eq!(
             c.compact("http://other.com/http://example.com/a").unwrap(),
             "http://other.com/http://example.com/a"

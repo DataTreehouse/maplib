@@ -126,7 +126,7 @@ class MockEndpoints:
                     return self._respond(404, b"No such endpoint", "text/plain")
                 with mock.lock:
                     ep.queries.append(query or "")
-                    ep.headers_seen.append(dict(self.headers))
+                    ep.headers_seen.append({k.lower(): v for k, v in self.headers.items()})
                 if ep.delay:
                     import time
 

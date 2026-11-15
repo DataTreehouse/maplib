@@ -540,8 +540,18 @@ fn statistics_header(dict: &FourSectDict, num_triples: usize) -> Header {
 
     // Like hdt-java and hdt-cpp. The reader takes a literal "...#HDTv1" type as the mark of a file
     // from an earlier maplib version, which stored literals escaped.
-    insert_id(&mut body, &base, RDF_TYPE, &Id::Named(HDT_DATASET.to_owned()));
-    insert_id(&mut body, &base, RDF_TYPE, &Id::Named(VOID_DATASET.to_owned()));
+    insert_id(
+        &mut body,
+        &base,
+        RDF_TYPE,
+        &Id::Named(HDT_DATASET.to_owned()),
+    );
+    insert_id(
+        &mut body,
+        &base,
+        RDF_TYPE,
+        &Id::Named(VOID_DATASET.to_owned()),
+    );
     insert_literal(&mut body, &base, VOID_TRIPLES, num_triples);
     insert_literal(
         &mut body,

@@ -120,8 +120,8 @@ def test_construct_with_literal_predicate_is_skipped():
     assert m.size() == 3
 
 
-def test_service_is_an_error():
-    with pytest.raises(MaplibException, match="SERVICE"):
+def test_unreachable_service_is_an_error():
+    with pytest.raises(MaplibException, match="localhost:1"):
         Model().query("SELECT * WHERE { SERVICE <http://localhost:1/sparql> { ?a ?b ?c } }")
 
 

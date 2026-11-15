@@ -395,13 +395,13 @@ impl Triplestore {
                         .map_err(|x| TriplestoreError::WriteTurtleError(x.to_string()))?;
                 }
                 self.write_pretty_body(
-                writer,
-                graph,
-                map,
-                prefixes,
-                PrettySyntax::Turtle,
-                &HashSet::new(),
-            )?;
+                    writer,
+                    graph,
+                    map,
+                    prefixes,
+                    PrettySyntax::Turtle,
+                    &HashSet::new(),
+                )?;
             }
             PrettyFormat::RdfXml => {
                 let ns = rdfxml::XmlNamespaces::new(prefixes, map.keys());
@@ -495,11 +495,7 @@ impl Triplestore {
         }
         let top = top_graph.and_then(|g| self.graph_triples_map.get(g).map(|m| (g, m)));
 
-        let all_maps: Vec<_> = top
-            .iter()
-            .chain(named.iter())
-            .map(|(_, m)| *m)
-            .collect();
+        let all_maps: Vec<_> = top.iter().chain(named.iter()).map(|(_, m)| *m).collect();
         let mut used: BTreeMap<&String, &NamedNode> = BTreeMap::new();
         for map in &all_maps {
             used.extend(self.possibly_used_prefixes(map, prefixes)?);

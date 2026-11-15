@@ -23,6 +23,7 @@ use external_sparql::federation::{
 use polars::prelude::{BooleanChunked, IntoLazy, JoinType, NewChunkedArray};
 use polars_core::frame::DataFrame;
 use query_processing::graph_patterns::{distinct, join, union};
+use representation::dataset::QueryGraph;
 use representation::polars_to_rdf::column_as_terms;
 use representation::query_context::Context;
 use representation::solution_mapping::{EagerSolutionMappings, SolutionMappings};
@@ -136,8 +137,9 @@ impl Triplestore {
         inner: &GraphPattern,
         silent: bool,
         solution_mappings: Option<SolutionMappings>,
-        _context: &Context,
+        context: &Context,
         query_settings: &QuerySettings,
+        dataset: &QueryGraph,
     ) -> Result<SolutionMappings, SparqlError> {
         let settings = self.federation_settings(query_settings);
         let variables = in_scope_variables(inner);
@@ -156,6 +158,8 @@ impl Triplestore {
                     silent,
                     &settings,
                     query_settings,
+                    context,
+                    dataset,
                 )
             }
             NamedNodePattern::Variable(v) => {
@@ -231,6 +235,8 @@ impl Triplestore {
                         silent,
                         &settings,
                         query_settings,
+                        context,
+                        dataset,
                     )?);
                 }
                 if n_not_iri > 0 {
@@ -264,29 +270,83 @@ impl Triplestore {
         silent: bool,
         settings: &Arc<FederationSettings>,
         query_settings: &QuerySettings,
+        context: &Context,
+        dataset: &QueryGraph,
     ) -> Result<SolutionMappings, SparqlError> {
         match self.service_results(endpoint, inner, variables, incoming.as_ref(), settings) {
             Ok(results) => {
                 if let Some(incoming) = incoming {
-                    Ok(join(
-                        incoming.as_lazy(),
-                        results,
-                        JoinType::Inner,
-                        self.global_cats.clone(),
-                        query_settings.max_rows,
-                    )?)
+                    self.compatible_join(incoming, results, query_settings, context, dataset)
                 } else {
                     Ok(results)
                 }
             }
             Err(SparqlError::ServiceError(e)) if silent && !e.is_policy_error() => {
                 warn!("SERVICE SILENT <{endpoint}> failed, its results are left out: {e}");
-                Ok(incoming
-                    .map(|x| x.as_lazy())
-                    .unwrap_or_else(empty_solution))
+                Ok(incoming.map(|x| x.as_lazy()).unwrap_or_else(empty_solution))
             }
             Err(e) => Err(e),
         }
+    }
+
+    /// The SPARQL join of the incoming solutions with the results of the endpoint. Shared
+    /// variables that are unbound in some rows of either side are compatible with any value
+    /// there, so they are joined by renaming them on the results side and merging them after an
+    /// equi-join on the shared variables that are bound everywhere.
+    fn compatible_join(
+        &self,
+        incoming: EagerSolutionMappings,
+        results: SolutionMappings,
+        query_settings: &QuerySettings,
+        context: &Context,
+        dataset: &QueryGraph,
+    ) -> Result<SolutionMappings, SparqlError> {
+        let mut results = collect(results)?;
+        let shared: Vec<String> = incoming
+            .rdf_node_types
+            .keys()
+            .filter(|k| results.rdf_node_types.contains_key(*k))
+            .cloned()
+            .collect();
+        let mut renamed = vec![];
+        for v in shared {
+            if self.fully_bound(&incoming, &v) && self.fully_bound(&results, &v) {
+                continue;
+            }
+            let outer = format!("__maplib_service_{v}");
+            results
+                .mappings
+                .rename(&v, outer.as_str().into())
+                .map_err(|e| SparqlError::QueryExecutionError(e.to_string()))?;
+            let state = results.rdf_node_types.remove(&v).unwrap();
+            results.rdf_node_types.insert(outer.clone(), state);
+            renamed.push((Variable::new_unchecked(v), Variable::new_unchecked(outer)));
+        }
+        let mut sm = join(
+            incoming.as_lazy(),
+            results.as_lazy(),
+            JoinType::Inner,
+            self.global_cats.clone(),
+            query_settings.max_rows,
+        )?;
+        for (i, (v, outer)) in renamed.iter().enumerate() {
+            sm = self.merge_outer_binding(sm, v, outer, i, context, query_settings, dataset)?;
+        }
+        Ok(sm)
+    }
+
+    /// Whether the variable is bound to the same kind of term in every row.
+    fn fully_bound(&self, sm: &EagerSolutionMappings, v: &str) -> bool {
+        let Some(state) = sm.rdf_node_types.get(v) else {
+            return false;
+        };
+        if state.is_multi() || state.map.keys().any(|t| matches!(t, BaseRDFNodeType::None)) {
+            return false;
+        }
+        sm.mappings
+            .column(v)
+            .map(|c| c.null_count() == 0)
+            .unwrap_or(false)
     }
 
     /// The solutions of the pattern at the endpoint, only those compatible with the incoming
@@ -403,7 +463,15 @@ impl Triplestore {
                 }
             }
         }
-        let results: Vec<SolutionMappings> = results.into_iter().map(|x| x.as_lazy()).collect();
+        // Results parsed from SPARQL results have IRIs and strings as strings: they are encoded
+        // like the local data, so that they can be joined with it.
+        let results: Vec<SolutionMappings> = {
+            let cats = self.global_cats.read()?;
+            results
+                .into_iter()
+                .map(|x| cats.encode_solution_mappings(x).as_lazy())
+                .collect()
+        };
         if results.is_empty() {
             Ok(empty())
         } else {

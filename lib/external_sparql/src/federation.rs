@@ -143,9 +143,29 @@ impl FederationSettings {
 
     pub fn check_allowed(&self, url: &str, load: bool) -> Result<(), ServiceError> {
         if self.is_allowed(url, load) {
-            Ok(())
-        } else {
-            Err(ServiceError::NotAllowed(url.to_string()))
+            return Ok(());
+        }
+        // A URL that cannot be fetched at all is an error of the endpoint (which SILENT
+        // ignores), not a refusal by the policy.
+        match Url::parse(url) {
+            Err(e) => Err(ServiceError::InvalidEndpoint(url.to_string(), e.to_string())),
+            Ok(u) => {
+                let scheme = u.scheme();
+                let supported = matches!(scheme, "http" | "https")
+                    || (load
+                        && matches!(
+                            scheme,
+                            "s3" | "s3a" | "gs" | "az" | "abfs" | "abfss" | "file"
+                        ));
+                if supported {
+                    Err(ServiceError::NotAllowed(url.to_string()))
+                } else {
+                    Err(ServiceError::InvalidEndpoint(
+                        url.to_string(),
+                        format!("the scheme {scheme} is not supported"),
+                    ))
+                }
+            }
         }
     }
 

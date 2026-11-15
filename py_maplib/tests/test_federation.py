@@ -3,6 +3,8 @@ SPARQL 1.1 Federated Query (SERVICE) and SPARQL Update LOAD, against local mock 
 (sparql_mock_endpoint.py). The W3C service tests are run by test_w3c_sparql11.py.
 """
 
+import re
+
 import polars as pl
 import pytest
 from polars.testing import assert_frame_equal
@@ -133,8 +135,9 @@ def test_unbound_incoming_variable_is_not_sent(mock):
     )
     # ?nick is unbound in some local rows, so only ?p is sent.
     q = mock.endpoint(url).queries[-1]
-    values = q[q.index("VALUES") : q.index("}")]
-    assert "?p" in values and "?nick" not in values
+    values = re.search(r"VALUES\s*(\([^)]*\)|\?\w+)", q)
+    assert values is not None, q
+    assert "?p" in values.group(1) and "?nick" not in values.group(1), q
     assert df.height == 3
 
 
@@ -226,7 +229,7 @@ def test_headers_and_max_rows(mock):
     m = Model()
     m.set_federation(headers={mock.base: {"Authorization": "Bearer secret"}})
     m.query(f"SELECT * WHERE {{ SERVICE <{url}> {{ ?s ?p ?o }} }}")
-    assert mock.endpoint(url).headers_seen[-1]["Authorization"] == "Bearer secret"
+    assert mock.endpoint(url).headers_seen[-1]["authorization"] == "Bearer secret"
     m.set_federation(max_rows=2)
     with pytest.raises(MaplibException, match="more than the maximum of 2 rows"):
         m.query(f"SELECT * WHERE {{ SERVICE SILENT <{url}> {{ ?s ?p ?o }} }}")

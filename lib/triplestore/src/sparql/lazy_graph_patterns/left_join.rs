@@ -4,10 +4,11 @@ use crate::sparql::errors::SparqlError;
 use tracing::{instrument, trace};
 
 use crate::sparql::QuerySettings;
+use oxrdf::Variable;
 use polars::prelude::{col, JoinType};
 use query_processing::expressions::contains_graph_pattern;
 use query_processing::expressions::effective_boolean_value;
-use query_processing::graph_patterns::{filter, join};
+use query_processing::graph_patterns::{extend, filter, join};
 use query_processing::pushdowns::Pushdowns;
 use representation::dataset::QueryGraph;
 use representation::query_context::{Context, PathEntry};
@@ -34,6 +35,32 @@ impl Triplestore {
         let left_context = context.extension_with(PathEntry::LeftJoinLeftSide);
         let right_context = context.extension_with(PathEntry::LeftJoinRightSide);
         let expression_context = context.extension_with(PathEntry::LeftJoinExpression);
+        // Incoming solutions that bind a variable which only the optional side binds are renamed
+        // before they are passed to the left side, and made compatible after the left join:
+        // otherwise a left row whose optional match differs on that variable would be kept
+        // with the incoming value instead of dropped.
+        let mut left_scope = vec![];
+        left.on_in_scope_variable(|v| left_scope.push(v.as_str().to_string()));
+        let mut outer_only = vec![];
+        let solution_mappings = solution_mappings.map(|mut sm| {
+            right.on_in_scope_variable(|v| {
+                let v = v.as_str();
+                if !left_scope.iter().any(|l| l == v)
+                    && !outer_only
+                        .iter()
+                        .any(|(o, _): &(Variable, Variable)| o.as_str() == v)
+                {
+                    if let Some(state) = sm.rdf_node_types.remove(v) {
+                        let renamed = format!("__maplib_outer_{v}");
+                        sm.mappings = sm.mappings.clone().rename([v], [renamed.as_str()], true);
+                        sm.rdf_node_types.insert(renamed.clone(), state);
+                        outer_only
+                            .push((Variable::new_unchecked(v), Variable::new_unchecked(renamed)));
+                    }
+                }
+            });
+            sm
+        });
         let left_solution_mappings = self.lazy_graph_pattern(
             left,
             solution_mappings,
@@ -65,14 +92,15 @@ impl Triplestore {
         // join) instead of fetching all its solutions. The right side then only has solutions
         // compatible with these values, extended with them, which gives the same left join.
         let (left_solution_mappings, right_incoming) = if contains_service(right) {
-            let left_eager = left_solution_mappings.as_eager_interruptable().map_err(|e| {
-                match e {
-                    utils::polars::InterruptableCollectError::Interrupted => {
-                        SparqlError::InterruptSignal
-                    }
-                    e => SparqlError::QueryExecutionError(e.to_string()),
-                }
-            })?;
+            let left_eager =
+                left_solution_mappings
+                    .as_eager_interruptable()
+                    .map_err(|e| match e {
+                        utils::polars::InterruptableCollectError::Interrupted => {
+                            SparqlError::InterruptSignal
+                        }
+                        e => SparqlError::QueryExecutionError(e.to_string()),
+                    })?;
             let keys = self.bind_keys(&left_eager, &in_scope_variables(right))?;
             (left_eager.as_lazy(), keys.map(|k| k.as_lazy()))
         } else {
@@ -123,6 +151,74 @@ impl Triplestore {
             self.global_cats.clone(),
             query_settings.max_rows,
         )?;
-        Ok(left_solution_mappings)
+        let mut sm = left_solution_mappings;
+        for (i, (v, outer)) in outer_only.iter().enumerate() {
+            sm = self.merge_outer_binding(sm, v, outer, i, context, query_settings, dataset)?;
+        }
+        Ok(sm)
     }
+
+    /// Keeps the rows where `v` and `outer` are compatible (one is unbound, or they are the same
+    /// term) and binds `v` to whichever is bound.
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn merge_outer_binding(
+        &self,
+        sm: SolutionMappings,
+        v: &Variable,
+        outer: &Variable,
+        i: usize,
+        context: &Context,
+        query_settings: &QuerySettings,
+        dataset: &QueryGraph,
+    ) -> Result<SolutionMappings, SparqlError> {
+        let var = |x: &Variable| Box::new(Expression::Variable(x.clone()));
+        let not_bound =
+            |x: &Variable| Box::new(Expression::Not(Box::new(Expression::Bound(x.clone()))));
+        let compatible = Expression::Or(
+            Box::new(Expression::Or(not_bound(v), not_bound(outer))),
+            Box::new(Expression::SameTerm(var(v), var(outer))),
+        );
+        let filter_context = context.extension_with(PathEntry::Coalesce(u16::MAX - 2 * i as u16));
+        let mut sm = self.lazy_expression(
+            &compatible,
+            sm,
+            &filter_context,
+            None,
+            None,
+            query_settings,
+            dataset,
+        )?;
+        sm = effective_boolean_value(sm, &filter_context, self.global_cats.clone());
+        sm = filter(sm, &filter_context)?;
+        let coalesce_context =
+            context.extension_with(PathEntry::Coalesce(u16::MAX - 2 * i as u16 - 1));
+        sm = self.lazy_expression(
+            &Expression::Coalesce(vec![
+                Expression::Variable(v.clone()),
+                Expression::Variable(outer.clone()),
+            ]),
+            sm,
+            &coalesce_context,
+            None,
+            None,
+            query_settings,
+            dataset,
+        )?;
+        sm = drop_columns(sm, &[v.as_str(), outer.as_str()]);
+        Ok(extend(sm, &coalesce_context, v, self.global_cats.clone())?)
+    }
+}
+
+fn drop_columns(mut sm: SolutionMappings, names: &[&str]) -> SolutionMappings {
+    let keep: Vec<_> = sm
+        .rdf_node_types
+        .keys()
+        .filter(|x| !names.contains(&x.as_str()))
+        .map(col)
+        .collect();
+    sm.mappings = sm.mappings.select(keep);
+    for n in names {
+        sm.rdf_node_types.remove(*n);
+    }
+    sm
 }

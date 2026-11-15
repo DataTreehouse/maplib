@@ -19,6 +19,7 @@ use crate::sparql::rewrite::rewrite;
 use crate::triples_read::{
     subject_to_oxrdf_subject, term_to_oxrdf_term, triples_to_triples_to_add,
 };
+use external_sparql::federation::FederationSettings;
 use oxrdf::NamedNode;
 use oxrdf::{Term, Triple};
 use query_processing::bindings::maybe_replace_bindings;
@@ -39,7 +40,6 @@ use spargebra::term::{
     NamedNodePattern, QuadPattern, TermPattern,
 };
 use spargebra::{GraphUpdateOperation, Query, Update};
-use external_sparql::federation::FederationSettings;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 

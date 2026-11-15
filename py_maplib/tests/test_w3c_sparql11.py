@@ -768,7 +768,11 @@ def check_update_evaluation(g: Manifest, entry):
     for name, file in named.items():
         load_into_model(m, file, graph=name)
 
-    m.update(with_base(read_text(request_iri), request_iri))
+    text = with_base(read_text(request_iri), request_iri)
+    if "LOAD" in text:
+        # The W3C LOAD tests only load sources that cannot be fetched (LOAD SILENT).
+        m.set_federation(allow_load=True)
+    m.update(text)
 
     exp_default, exp_named = update_dataset(g, g.value(entry, MF.result))
     expected = []
@@ -800,7 +804,13 @@ def check_syntax(g: Manifest, entry, update: bool, positive: bool):
             m.query(text)
 
     if positive:
-        run()
+        try:
+            run()
+        except Exception as e:
+            # The update parsed; LOAD is refused by the default federation policy, and the
+            # syntax tests must not fetch their (remote) LOAD sources.
+            if not (update and "LOAD is not allowed" in str(e)):
+                raise
     else:
         with pytest.raises(Exception):
             run()

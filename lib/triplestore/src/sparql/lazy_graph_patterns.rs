@@ -366,6 +366,7 @@ impl Triplestore {
                 solution_mappings,
                 context,
                 query_settings,
+                dataset,
             ),
             GraphPattern::PValues {
                 variables,

@@ -1,4 +1,3 @@
-use external_sparql::federation::FederationSettings;
 use super::{
     maybe_create_fts_index_map, maybe_create_geo_index, prepare_storage, IndexingOptions,
     StorageOptions, Triplestore,
@@ -7,12 +6,13 @@ use crate::graph_map::GraphTriplesMap;
 use crate::query_cache::QueryCache;
 use crate::errors::TriplestoreError;
 use crate::storage::{Triples, DISK_ROW_GROUP_SIZE};
+use external_sparql::federation::FederationSettings;
+use file_io::remote::{RemoteLocation, RemoteOptions, TempFile};
 use file_io::FileIOError;
 use oxrdf::NamedNode;
 use polars::prelude::{IntoLazy, ParquetCompression, PolarsError};
 use query_processing::udf::UdfRegistry;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
-use file_io::remote::{RemoteLocation, RemoteOptions, TempFile};
 use representation::bundle::{
     BundleWriter, RemoteFolderWriter, SerializationSource, SerializationTarget,
 };
