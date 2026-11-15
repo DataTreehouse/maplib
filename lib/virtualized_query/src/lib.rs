@@ -9,7 +9,8 @@ use spargebra::term::{NamedNodePattern, TermPattern, TriplePattern, Variable};
 use std::collections::{HashMap, HashSet};
 use std::error::Error;
 use std::fmt::{Display, Formatter};
-use templates::ast::{ConstantTerm, ConstantTermOrList, StottrTerm, Template};
+use templates::ast::{ConstantTerm, ConstantTermOrList, FunctionCall, StottrTerm, Template};
+use templates::functions::{function_call_to_expression, FunctionLibrary};
 
 pub const ID_VARIABLE_NAME: &str = "id";
 
@@ -78,6 +79,22 @@ pub struct GroupedVirtualizedQuery {
     pub aggregations: Vec<(Variable, AggregateExpression)>,
 }
 
+/// A query term matched to a function call in a template.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ComputedVariable {
+    /// The query term: a variable that is bound to the result, or a constant that the result
+    /// must equal.
+    pub target: TermPattern,
+    /// The function call, over the query variables (and constants) of the template parameters.
+    pub expression: Expression,
+    /// Variables only introduced to get the template parameters the function uses from the
+    /// virtualized database. They are removed when the function has been evaluated.
+    pub helper_variables: Vec<Variable>,
+}
+
+/// The prefix of the helper variables of computed variables.
+pub const FUNCTION_ARGUMENT_VARIABLE_PREFIX: &str = "_ottr_fn_arg_";
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct BasicVirtualizedQuery {
     pub identifier_variable: Variable,
@@ -87,6 +104,11 @@ pub struct BasicVirtualizedQuery {
     /// created by the template. They have no column in the virtualized database, and are bound
     /// to a fresh blank node per row when the results are attached.
     pub blank_node_variables: HashSet<Variable>,
+    /// Query variables matched to function calls in the template, e.g. the object of
+    /// `ottr:Triple(?point, ex:value, (* ?value 1000))`. The virtualized database returns the
+    /// template parameters the functions use, and the functions are evaluated when the results
+    /// are attached.
+    pub computed_variables: Vec<ComputedVariable>,
     pub resource_variable: Variable,
     pub query_source_context: Context,
     pub query_source_variable: Variable,
@@ -115,6 +137,7 @@ impl BasicVirtualizedQuery {
             HashSet::new()
         };
         let mut new_mappings = vec![];
+        let mut function_objects: Vec<(&FunctionCall, TermPattern)> = vec![];
         let mut visited_query_vars = HashSet::new();
         while let Some((current_query_var, current_template_var)) = queue.pop() {
             if !visited_query_vars.contains(&current_query_var) {
@@ -165,14 +188,20 @@ impl BasicVirtualizedQuery {
                                                                             queue.push((obj, tobj));
                                                                         }
                                                                     }
-                                                                    StottrTerm::ConstantTerm(_) => {
+                                                                    StottrTerm::FunctionCall(fc) => {
+                                                                        function_objects.push((
+                                                                            fc,
+                                                                            p.object.clone(),
+                                                                        ));
                                                                     }
-                                                                    StottrTerm::List(_) => {}
+                                                                    StottrTerm::ConstantTerm(_)
+                                                                    | StottrTerm::List(_) => {}
                                                                 }
                                                             }
                                                         }
-                                                        StottrTerm::ConstantTerm(_) => {}
-                                                        StottrTerm::List(_) => {}
+                                                        StottrTerm::ConstantTerm(_)
+                                                        | StottrTerm::List(_)
+                                                        | StottrTerm::FunctionCall(_) => {}
                                                     }
                                                 }
                                             }
@@ -194,6 +223,128 @@ impl BasicVirtualizedQuery {
             }
         }
         self.column_mapping.extend(new_mappings);
+        for (fc, target) in function_objects {
+            self.add_computed_variable(fc, target, &param_vars);
+        }
+    }
+
+    /// Binds a query term to a function call of the template. The template parameters that the
+    /// function uses are taken from the query variables they are matched to, or else fetched from
+    /// the virtualized database as helper variables.
+    fn add_computed_variable(
+        &mut self,
+        function_call: &FunctionCall,
+        target: TermPattern,
+        param_vars: &HashSet<&Variable>,
+    ) {
+        if self.computed_variables.iter().any(|c| c.target == target) {
+            return;
+        }
+        // Functions defined with def are inlined, and function calls are checked, when the
+        // virtualization is added, so the translation does not fail here.
+        let Ok(expression) = function_call_to_expression(function_call, &FunctionLibrary::new())
+        else {
+            return;
+        };
+        let mut used = HashSet::new();
+        find_all_used_variables_in_expression(&expression, &mut used, true, true);
+        let mut substitution = HashMap::new();
+        let mut helper_variables = vec![];
+        let mut used: Vec<_> = used.into_iter().collect();
+        used.sort();
+        for v in used {
+            let e = if let Some(tp) = self.column_mapping.get(&v) {
+                match tp {
+                    TermPattern::Variable(q) => Some(Expression::Variable(q.clone())),
+                    TermPattern::NamedNode(nn) => Some(Expression::NamedNode(nn.clone())),
+                    TermPattern::Literal(l) => Some(Expression::Literal(l.clone())),
+                    _ => None,
+                }
+            } else if param_vars.contains(&v) {
+                let n = self
+                    .column_mapping
+                    .values()
+                    .filter(|x| {
+                        matches!(x, TermPattern::Variable(q) if q.as_str().starts_with(FUNCTION_ARGUMENT_VARIABLE_PREFIX))
+                    })
+                    .count();
+                let helper = Variable::new_unchecked(format!(
+                    "{FUNCTION_ARGUMENT_VARIABLE_PREFIX}{}_{n}",
+                    self.identifier_variable.as_str()
+                ));
+                self.column_mapping
+                    .insert(v.clone(), TermPattern::Variable(helper.clone()));
+                helper_variables.push(helper.clone());
+                Some(Expression::Variable(helper))
+            } else {
+                None
+            };
+            substitution.insert(v, e);
+        }
+        self.computed_variables.push(ComputedVariable {
+            target,
+            expression: substitute_variables(&expression, &substitution),
+            helper_variables,
+        });
+    }
+}
+
+/// Replaces the variables of an expression. Variables mapped to None are unbound.
+fn substitute_variables(
+    expression: &Expression,
+    substitution: &HashMap<Variable, Option<Expression>>,
+) -> Expression {
+    let s = |e: &Expression| Box::new(substitute_variables(e, substitution));
+    match expression {
+        Expression::Variable(v) => match substitution.get(v) {
+            Some(Some(e)) => e.clone(),
+            Some(None) => Expression::Variable(Variable::new_unchecked(
+                templates::functions::NONE_VARIABLE,
+            )),
+            None => expression.clone(),
+        },
+        Expression::NamedNode(_) | Expression::Literal(_) | Expression::Exists(_) => {
+            expression.clone()
+        }
+        Expression::Bound(v) => match substitution.get(v) {
+            Some(Some(Expression::Variable(q))) => Expression::Bound(q.clone()),
+            Some(Some(_)) => Expression::Literal(spargebra::term::Literal::from(true)),
+            Some(None) => Expression::Literal(spargebra::term::Literal::from(false)),
+            None => expression.clone(),
+        },
+        Expression::Or(a, b) => Expression::Or(s(a), s(b)),
+        Expression::And(a, b) => Expression::And(s(a), s(b)),
+        Expression::Equal(a, b) => Expression::Equal(s(a), s(b)),
+        Expression::SameTerm(a, b) => Expression::SameTerm(s(a), s(b)),
+        Expression::Greater(a, b) => Expression::Greater(s(a), s(b)),
+        Expression::GreaterOrEqual(a, b) => Expression::GreaterOrEqual(s(a), s(b)),
+        Expression::Less(a, b) => Expression::Less(s(a), s(b)),
+        Expression::LessOrEqual(a, b) => Expression::LessOrEqual(s(a), s(b)),
+        Expression::Add(a, b) => Expression::Add(s(a), s(b)),
+        Expression::Subtract(a, b) => Expression::Subtract(s(a), s(b)),
+        Expression::Multiply(a, b) => Expression::Multiply(s(a), s(b)),
+        Expression::Divide(a, b) => Expression::Divide(s(a), s(b)),
+        Expression::In(a, l) => Expression::In(
+            s(a),
+            l.iter()
+                .map(|x| substitute_variables(x, substitution))
+                .collect(),
+        ),
+        Expression::UnaryPlus(a) => Expression::UnaryPlus(s(a)),
+        Expression::UnaryMinus(a) => Expression::UnaryMinus(s(a)),
+        Expression::Not(a) => Expression::Not(s(a)),
+        Expression::If(a, b, c) => Expression::If(s(a), s(b), s(c)),
+        Expression::Coalesce(l) => Expression::Coalesce(
+            l.iter()
+                .map(|x| substitute_variables(x, substitution))
+                .collect(),
+        ),
+        Expression::FunctionCall(f, l) => Expression::FunctionCall(
+            f.clone(),
+            l.iter()
+                .map(|x| substitute_variables(x, substitution))
+                .collect(),
+        ),
     }
 }
 
@@ -454,6 +605,27 @@ impl VirtualizedQuery {
         }
     }
 
+    /// The query terms matched to function calls in templates, see
+    /// BasicVirtualizedQuery::computed_variables. Grouped queries have none, since the rows are
+    /// aggregated in the virtualized database.
+    pub fn get_computed_variables(&self) -> Vec<&ComputedVariable> {
+        match self {
+            VirtualizedQuery::Basic(b) => b.computed_variables.iter().collect(),
+            VirtualizedQuery::Filtered(inner, _)
+            | VirtualizedQuery::Sliced(inner, ..)
+            | VirtualizedQuery::Ordered(inner, ..) => inner.get_computed_variables(),
+            VirtualizedQuery::InnerJoin(inners, _) => {
+                let mut vs = vec![];
+                for inner in inners {
+                    vs.extend(inner.get_computed_variables())
+                }
+                vs
+            }
+            VirtualizedQuery::Grouped(_) => vec![],
+            VirtualizedQuery::ExpressionAs(t, ..) => t.get_computed_variables(),
+        }
+    }
+
     pub fn get_resource_variables(&self) -> Vec<&Variable> {
         match self {
             VirtualizedQuery::Basic(b) => {
@@ -532,6 +704,7 @@ impl BasicVirtualizedQuery {
             grouping_col: None,
             expected_unknown_cols: Default::default(),
             blank_node_variables: Default::default(),
+            computed_variables: Default::default(),
         }
     }
 }

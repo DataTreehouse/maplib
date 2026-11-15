@@ -12,6 +12,7 @@ pub enum TemplateError {
     ResolveDirectoryEntryError(walkdir::Error),
     ParsingError(ParseErrorKind),
     TemplateNotFound(String, String),
+    FunctionError(crate::functions::FunctionError),
 }
 
 impl Display for TemplateError {
@@ -37,6 +38,9 @@ impl Display for TemplateError {
             }
             TemplateError::ParsingError(p) => {
                 write!(f, "{p}")
+            }
+            TemplateError::FunctionError(e) => {
+                write!(f, "Function call error: {e}")
             }
             TemplateError::TemplateNotFound(container, inner) => {
                 write!(

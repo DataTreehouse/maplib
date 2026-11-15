@@ -341,13 +341,38 @@ class Parameter:
         """
 
 
+class FunctionCall:
+    """
+    A function call term, which computes a template argument from other terms when the
+    template is expanded, e.g. building an IRI from a string column. Function calls are
+    evaluated for all rows at once by maplib's SPARQL expression engine.
+
+    Corresponds to the stOTTR syntax ``(CONCAT "http://example.net/" ?id)``.
+
+    >>> FunctionCall("IRI", [FunctionCall("CONCAT", [Literal("http://example.net/"), Variable("id")])])
+    """
+
+    def __init__(
+            self,
+            function: Union[str, IRI],
+            arguments: Optional[List[Union["FunctionCall", Variable, IRI, Literal, None]]] = None,
+    ):
+        """
+        :param function: The name of a SPARQL built-in function or operator, such as "CONCAT",
+                         "IRI", "STR", "IF", "+" or "=", or the IRI of a function, such as an
+                         XSD datatype for casts (e.g. xsd.integer) or a function defined with
+                         ``def`` in a stOTTR document.
+        :param arguments: The arguments. None means ottr:none, which is unbound.
+        """
+
+
 class Argument:
     variable: Optional[Variable]
     "The variable, if the term is a variable."
 
     def __init__(
             self,
-            term: Union["Argument", Variable, IRI, Literal, BlankNode, None],
+            term: Union["Argument", Variable, IRI, Literal, BlankNode, FunctionCall, None],
             list_expand: Optional[bool] = False,
     ):
         """
@@ -364,7 +389,7 @@ class Instance:
     def __init__(
             self,
             iri: "IRI",
-            arguments: List[Union[Argument, Variable, IRI, Literal, BlankNode, None]],
+            arguments: List[Union[Argument, Variable, IRI, Literal, BlankNode, FunctionCall, None]],
             list_expander: Optional[LiteralType["cross", "zipMin", "zipMax"]] = None,
     ):
         """
@@ -400,7 +425,7 @@ class Template:
 
     def instance(
             self,
-            arguments: List[Union[Argument, Variable, IRI, Literal, BlankNode, None]],
+            arguments: List[Union[Argument, Variable, IRI, Literal, BlankNode, FunctionCall, None]],
             list_expander: Optional[LiteralType["cross", "zipMin", "zipMax"]] = None,
     ) -> Instance:
         """

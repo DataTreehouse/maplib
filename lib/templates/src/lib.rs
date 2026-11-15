@@ -7,6 +7,7 @@ mod compatible;
 pub mod dataset;
 pub mod document;
 mod parsing;
+pub mod functions;
 pub mod python;
 pub mod subtypes_ext;
 

@@ -1,9 +1,10 @@
 pub mod errors;
 
 use crate::ast::{
-    Instance, PType, Parameter, Signature, Statement, StottrDocument, StottrTerm, Template,
+    Function, Instance, PType, Parameter, Signature, Statement, StottrDocument, StottrTerm, Template,
 };
 use crate::document::document_from_file;
+use crate::functions::FunctionLibrary;
 use errors::TemplateError;
 use representation::constants::{OTTR_IRI, OTTR_TRIPLE};
 use std::cmp::min;
@@ -21,6 +22,8 @@ use walkdir::WalkDir;
 #[derive(Clone, Debug)]
 pub struct TemplateDataset {
     pub templates: Vec<Template>,
+    /// Functions defined with Frog's `def` syntax, by IRI.
+    pub functions: FunctionLibrary,
     pub ground_instances: Vec<Instance>,
     pub prefix_map: HashMap<String, NamedNode>,
     pub inferred_types: bool,
@@ -41,6 +44,7 @@ impl TemplateDataset {
         mut documents: Vec<StottrDocument>,
     ) -> Result<TemplateDataset, TemplateError> {
         let mut templates = vec![];
+        let mut functions = FunctionLibrary::new();
         let mut ground_instances = vec![];
         let mut prefix_map = HashMap::new();
         let mut defined_prefixes = HashSet::new();
@@ -70,11 +74,15 @@ impl TemplateDataset {
                     Statement::Instance(i) => {
                         ground_instances.push(i);
                     }
+                    Statement::Function(f) => {
+                        functions.insert(f.iri.as_str().to_string(), f);
+                    }
                 }
             }
         }
         let mut td = TemplateDataset {
             templates,
+            functions,
             ground_instances,
             prefix_map,
             inferred_types: false,
@@ -236,6 +244,12 @@ impl TemplateDataset {
         self.inferred_types = false;
         Ok(())
     }
+
+    /// Adds a function, replacing any function with the same IRI.
+    pub fn add_function(&mut self, function: Function) {
+        self.functions
+            .insert(function.iri.as_str().to_string(), function);
+    }
 }
 
 impl Display for TemplateDataset {
@@ -243,6 +257,11 @@ impl Display for TemplateDataset {
         let mut nns = vec![];
         for t in &self.templates {
             t.find_named_nodes(&mut nns);
+        }
+        let mut functions: Vec<_> = self.functions.values().collect();
+        functions.sort_by(|a, b| a.iri.cmp(&b.iri));
+        for func in &functions {
+            func.find_named_nodes(&mut nns);
         }
         let mut new_prefixes: HashMap<String, NamedNode> = HashMap::new();
         let mut p = 0usize;
@@ -284,6 +303,10 @@ impl Display for TemplateDataset {
         }
         if !new_prefixes.is_empty() {
             writeln!(f, "")?;
+        }
+        for func in &functions {
+            func.fmt_prefixes(f, &new_prefixes)?;
+            writeln!(f)?;
         }
         for t in &self.templates {
             if t.signature.iri.as_str() != OTTR_TRIPLE {
@@ -364,6 +387,8 @@ fn infer_template_types(
                 }
                 StottrTerm::ConstantTerm(_) => {}
                 StottrTerm::List(_) => {}
+                // The types of function results are inferred from the data during expansion.
+                StottrTerm::FunctionCall(_) => {}
             }
         }
     }

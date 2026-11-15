@@ -260,13 +260,43 @@ from maplib import MaplibException
 
 try:
     m.add_template("""@prefix ex: <http://example.net/ns#> .
-ex:T [ ?a ] :: { ottr:Triple(?a, ex:p, none) } .""")
+ex:T [ ?a ] :: { ottr:Triple(?a, ex:p, nothing) } .""")
 except MaplibException as e:
     print(e)
-# OTTR syntax error at line 2, column 39: `none` is not a valid term
+# OTTR syntax error at line 2, column 39: `nothing` is not a valid term
 # ...
-#   = help: write a variable as `?none`, a prefixed name as `ex:none`, or a full IRI as ...
+#   = help: write a variable as `?nothing`, a prefixed name as `ex:nothing`, or a full IRI as ...
 ```
+
+### Function calls in templates
+Templates can compute their arguments with SPARQL functions, so that IRIs, casts and string or date manipulations are defined once in the template instead of in every data source. A function call is written Lisp-style, `(function argument ...)`, with the arguments separated by spaces, and can be used wherever a template argument can. The syntax and semantics follow Frog, an extension of OTTR with functions [3]:
+
+```python
+m = Model()
+m.add_template("""
+@prefix ex: <http://example.net/ns#> .
+
+def ex:toIRI(xsd:string ?localName) -> ottr:IRI :: (
+    IRI (CONCAT "http://example.net/" (ENCODE_FOR_URI ?localName))
+) .
+
+ex:Planet [ xsd:string ?name, ? xsd:string ?starName, xsd:string ?mass ] :: {
+    ottr:Triple((ex:toIRI ?name), rdfs:label, ?name),
+    ottr:Triple((ex:toIRI ?name), ex:orbits, (ex:toIRI ?starName)),
+    ottr:Triple((ex:toIRI ?name), ex:mass, (xsd:decimal ?mass))
+} .
+""")
+m.map("ex:Planet", pl.DataFrame({"name": ["11 Com b"], "starName": ["11 Com"], "mass": ["19.4"]}))
+```
+
+- Functions are the SPARQL built-in functions (`CONCAT`, `STR`, `IRI`, `REPLACE`, `UCASE`, `SUBSTR`, `YEAR`, `NOW`, `SHA256`, `IF`, `COALESCE`, `BOUND`, `IN`, ...; case insensitive), the operators `+ - * / = != < > <= >= && || !` (`+`, `*`, `&&` and `||` take two or more arguments), XSD casts such as `(xsd:integer ?x)`, functions registered as UDFs, and functions defined with `def` as above. Frog's base functions (`fn:plus`, `fn:concat`, `fn:castToIRI`, ... in `http://ns.frog.ottr.xyz/0.1/function/`) can be used where SPARQL has the same function. A call without arguments of a function given by an IRI must be written `(frog:functionCall ex:f)`, as `(ex:f)` is a list.
+- Function calls are evaluated by maplib's SPARQL expression engine, for all rows at once, when the instance that contains them is expanded, before list expansion.
+- As in SPARQL, errors give no value (`none`): then an optional parameter is left out, a parameter with a default value gets the default, and otherwise the instance is not expanded.
+- Function calls can not be list expanded, and lists can not be function arguments. Functions defined with `def` can not be recursive, and their parameter and return types are documentation; maplib infers the types of the results from the data.
+- From Python, use `FunctionCall`, e.g. `Triple(p, label, FunctionCall("UCASE", [name]))`.
+- In the templates of virtualized resources (maplib Enterprise Edition), e.g. `ottr:Triple(?dp, ex:valueW, (* ?value 1000))`, function calls are evaluated on the rows the virtualized database returns. Filters on their values are evaluated by maplib, not pushed down.
+
+Function calls follow Frog: M. Jarholt, "Frog: Functions for ontologies — An extension for the OTTR-framework", Master's thesis, University of Oslo, 2022, https://hdl.handle.net/10852/96925.
 
 ### Building templates in Python
 

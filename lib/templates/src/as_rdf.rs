@@ -221,6 +221,13 @@ fn instance_to_triples(
             StottrTerm::ConstantTerm(ConstantTermOrList::ConstantList(_)) | StottrTerm::List(_) => {
                 triples.push(Triple::new(sa.clone(), vocab("isList"), bool_lit(true)));
             }
+            StottrTerm::FunctionCall(fc) => {
+                triples.push(Triple::new(
+                    sa.clone(),
+                    vocab("functionCall"),
+                    string_lit(&fc.to_string()),
+                ));
+            }
         }
     }
 }

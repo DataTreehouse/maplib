@@ -77,7 +77,9 @@ use templates::python::owl::PyOWL;
 use templates::python::rdf::PyRDF;
 use templates::python::rdfs::PyRDFS;
 use templates::python::xsd::PyXSD;
-use templates::python::{py_triple, PyArgument, PyInstance, PyParameter, PyTemplate};
+use templates::python::{
+    py_triple, PyArgument, PyFunctionCall, PyInstance, PyParameter, PyTemplate,
+};
 use templates::MappingColumnType;
 use triplestore::triples_read::ExtendedRdfFormat;
 use triplestore::{new_triples_by_predicate, NewTriples, StorageOptions, Triplestore};
@@ -218,6 +220,7 @@ fn _maplib(py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyOWL>()?;
     m.add_class::<PyParameter>()?;
     m.add_class::<PyArgument>()?;
+    m.add_class::<PyFunctionCall>()?;
     m.add_class::<PyTemplate>()?;
     m.add_class::<PyInstance>()?;
     m.add_function(wrap_pyfunction!(py_triple, m)?)?;

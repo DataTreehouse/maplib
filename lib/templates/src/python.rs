@@ -4,9 +4,10 @@ pub mod rdfs;
 pub mod xsd;
 
 use crate::ast::{
-    ptype_nn_to_rdf_node_type, Argument, ConstantTerm, ConstantTermOrList, Instance,
-    ListExpanderType, PType, Parameter, Signature, StottrTerm, Template,
+    ptype_nn_to_rdf_node_type, Argument, ConstantTerm, ConstantTermOrList, FunctionCall,
+    FunctionName, Instance, ListExpanderType, PType, Parameter, Signature, StottrTerm, Template,
 };
+use crate::functions::is_builtin_name;
 use crate::MappingColumnType;
 use oxrdf::IriParseError;
 use pyo3::prelude::*;
@@ -210,19 +211,10 @@ impl PyArgument {
     #[pyo3(signature = (term, list_expand=None))]
     pub fn new(term: &Bound<'_, PyAny>, list_expand: Option<bool>) -> PyResult<Self> {
         let list_expand = list_expand.unwrap_or(false);
-        let term = if let Ok(r) = term.extract::<PyVariable>() {
-            StottrTerm::Variable(r.clone().into_inner())
-        } else if let Some(ct) = extract_constant_term(term) {
-            StottrTerm::ConstantTerm(ConstantTermOrList::ConstantTerm(ct))
-        } else if let Ok(a) = term.extract::<PyArgument>() {
+        if let Ok(a) = term.extract::<PyArgument>() {
             return Ok(a);
-        } else {
-            return Err(PyRepresentationError::BadArgumentError(format!(
-                "term should be Variable, IRI, Literal, BlankNode, Argument or None, but was {}",
-                term.get_type().name()?
-            ))
-            .into());
-        };
+        }
+        let term = extract_term(term, "Argument")?;
         let argument = Argument { list_expand, term };
         Ok(PyArgument { argument })
     }
@@ -434,6 +426,77 @@ pub fn py_rdf_type_to_rdf_node_state(
                 .clone()
                 .expect("non-nested RDFType is flat"),
         ))
+    }
+}
+
+fn extract_term(term: &Bound<'_, PyAny>, allowed_extra: &str) -> PyResult<StottrTerm> {
+    if let Ok(r) = term.extract::<PyVariable>() {
+        Ok(StottrTerm::Variable(r.into_inner()))
+    } else if let Ok(fc) = term.extract::<PyFunctionCall>() {
+        Ok(StottrTerm::FunctionCall(fc.function_call))
+    } else if let Some(ct) = extract_constant_term(term) {
+        Ok(StottrTerm::ConstantTerm(ConstantTermOrList::ConstantTerm(ct)))
+    } else {
+        Err(PyRepresentationError::BadArgumentError(format!(
+            "term should be Variable, IRI, Literal, BlankNode, FunctionCall, {allowed_extra} or None, but was {}",
+            term.get_type().name()?
+        ))
+        .into())
+    }
+}
+
+/// A function call term, e.g. `FunctionCall("CONCAT", [Literal("http://ex.net/"), Variable("id")])`.
+/// The function is the name of a SPARQL built-in function or operator, or an IRI.
+#[derive(Clone)]
+#[pyclass(name = "FunctionCall", from_py_object)]
+pub struct PyFunctionCall {
+    function_call: FunctionCall,
+}
+
+#[pymethods]
+impl PyFunctionCall {
+    #[new]
+    #[pyo3(signature = (function, arguments=None))]
+    pub fn new(
+        function: &Bound<'_, PyAny>,
+        arguments: Option<Vec<Bound<'_, PyAny>>>,
+    ) -> PyResult<Self> {
+        let function = if let Ok(iri) = function.extract::<PyIRI>() {
+            FunctionName::Iri(iri.into_inner())
+        } else if let Ok(name) = function.extract::<String>() {
+            if is_builtin_name(&name) {
+                FunctionName::Builtin(name.to_uppercase())
+            } else {
+                return Err(PyRepresentationError::BadArgumentError(format!(
+                    "{name} is not the name of a SPARQL built-in function or operator, use an IRI for other functions"
+                ))
+                .into());
+            }
+        } else {
+            return Err(PyRepresentationError::BadArgumentError(
+                "function should be a str naming a SPARQL built-in function or an IRI".to_string(),
+            )
+            .into());
+        };
+        let mut new_arguments = vec![];
+        for a in arguments.unwrap_or_default() {
+            new_arguments.push(extract_term(&a, "nested FunctionCall")?);
+        }
+        Ok(PyFunctionCall {
+            function_call: FunctionCall {
+                function,
+                type_arguments: vec![],
+                arguments: new_arguments,
+            },
+        })
+    }
+
+    fn __str__(&self) -> String {
+        self.function_call.to_string()
+    }
+
+    fn __repr__(&self) -> String {
+        format!("FunctionCall({})", self.function_call)
     }
 }
 

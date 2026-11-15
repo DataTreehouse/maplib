@@ -29,6 +29,7 @@ pub enum Directive {
 pub enum Statement {
     Template(Template),
     Instance(Instance),
+    Function(Function),
 }
 
 #[derive(PartialEq, Debug, Clone)]
@@ -105,7 +106,8 @@ impl Signature {
                 write!(f, ", ")?;
             }
         }
-        if self.annotation_list.is_some() {
+        // The parser gives an empty list when there are no annotations.
+        if self.annotation_list.as_ref().is_some_and(|a| !a.is_empty()) {
             todo!();
         }
         write!(f, " ]")
@@ -526,6 +528,9 @@ pub enum StottrTerm {
     Variable(Variable),
     ConstantTerm(ConstantTermOrList),
     List(Vec<StottrTerm>),
+    /// A function call term, e.g. `(CONCAT "http://example.net/" ?id)`, following the
+    /// function call terms of Frog (Jarholt, "Frog: Functions for ontologies", UiO 2022).
+    FunctionCall(FunctionCall),
 }
 
 impl StottrTerm {
@@ -540,7 +545,173 @@ impl StottrTerm {
                     st.find_named_nodes(nns);
                 }
             }
+            StottrTerm::FunctionCall(fc) => fc.find_named_nodes(nns),
         }
+    }
+
+    /// The variables this term refers to, including the variables used inside function calls.
+    pub fn variables<'a>(&'a self, out: &mut Vec<&'a Variable>) {
+        match self {
+            StottrTerm::Variable(v) => out.push(v),
+            StottrTerm::ConstantTerm(_) => {}
+            StottrTerm::List(l) => {
+                for t in l {
+                    t.variables(out);
+                }
+            }
+            StottrTerm::FunctionCall(fc) => {
+                for a in &fc.arguments {
+                    a.variables(out);
+                }
+            }
+        }
+    }
+}
+
+/// The IRI that can be put first in a function call to mark it as a function call, which is
+/// needed to call a function given by an IRI without arguments: `(frog:functionCall ex:f)`
+/// would otherwise be read as a list with one element.
+pub const FROG_FUNCTION_CALL: &str = "http://ns.frog.ottr.xyz/0.1#functionCall";
+
+/// The namespace of the Frog base functions, e.g. `fn:plus` and `fn:concat`.
+pub const FROG_FUNCTION_NS: &str = "http://ns.frog.ottr.xyz/0.1/function/";
+
+#[derive(PartialEq, Debug, Clone)]
+pub enum FunctionName {
+    /// A function named by an IRI: a function defined with `def`, a Frog base function, an XSD
+    /// cast such as `xsd:integer`, or another function known to the SPARQL engine.
+    Iri(NamedNode),
+    /// A SPARQL built-in function or operator, e.g. `CONCAT`, `STR`, `+` or `=`, stored in
+    /// upper case.
+    Builtin(String),
+}
+
+impl FunctionName {
+    pub fn fmt_prefixes(
+        &self,
+        f: &mut Formatter<'_>,
+        prefixes: &HashMap<String, NamedNode>,
+    ) -> std::fmt::Result {
+        match self {
+            FunctionName::Iri(nn) => write_prefixed_namednode(f, nn, prefixes),
+            FunctionName::Builtin(b) => write!(f, "{b}"),
+        }
+    }
+}
+
+#[derive(PartialEq, Debug, Clone)]
+pub struct FunctionCall {
+    pub function: FunctionName,
+    /// Frog generic (type) arguments, e.g. `<<xsd:decimal>>`. They are kept so that Frog
+    /// documents round-trip, but maplib infers the types of function results from the data.
+    pub type_arguments: Vec<PType>,
+    pub arguments: Vec<StottrTerm>,
+}
+
+impl FunctionCall {
+    pub(crate) fn find_named_nodes(&self, nns: &mut Vec<NamedNode>) {
+        if let FunctionName::Iri(nn) = &self.function {
+            nns.push(nn.clone());
+        }
+        for t in &self.type_arguments {
+            t.find_named_nodes(nns);
+        }
+        for a in &self.arguments {
+            a.find_named_nodes(nns);
+        }
+    }
+
+    pub fn fmt_prefixes(
+        &self,
+        f: &mut Formatter<'_>,
+        prefixes: &HashMap<String, NamedNode>,
+    ) -> std::fmt::Result {
+        write!(f, "(")?;
+        if self.arguments.is_empty() && matches!(self.function, FunctionName::Iri(_)) {
+            write_prefixed_namednode(f, &NamedNode::new_unchecked(FROG_FUNCTION_CALL), prefixes)?;
+            write!(f, " ")?;
+        }
+        self.function.fmt_prefixes(f, prefixes)?;
+        if !self.type_arguments.is_empty() {
+            write!(f, "<<")?;
+            for (idx, t) in self.type_arguments.iter().enumerate() {
+                t.fmt_prefix(f, prefixes)?;
+                if idx + 1 != self.type_arguments.len() {
+                    write!(f, ", ")?;
+                }
+            }
+            write!(f, ">>")?;
+        }
+        for a in &self.arguments {
+            write!(f, " ")?;
+            a.fmt_prefixes(f, prefixes)?;
+        }
+        write!(f, ")")
+    }
+}
+
+impl Display for FunctionCall {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        self.fmt_prefixes(f, &HashMap::new())
+    }
+}
+
+#[derive(PartialEq, Debug, Clone)]
+pub struct FunctionParameter {
+    pub ptype: Option<PType>,
+    pub variable: Variable,
+}
+
+/// A function defined in a stOTTR document with Frog's syntax, e.g.
+/// `def ex:toIri(xsd:string ?local) -> ottr:IRI :: (IRI (CONCAT "http://ex.net/" ?local)) .`
+#[derive(PartialEq, Debug, Clone)]
+pub struct Function {
+    pub iri: NamedNode,
+    pub parameter_list: Vec<FunctionParameter>,
+    pub return_type: Option<PType>,
+    pub body: FunctionCall,
+}
+
+impl Function {
+    pub fn find_named_nodes(&self, nns: &mut Vec<NamedNode>) {
+        nns.push(self.iri.clone());
+        for p in &self.parameter_list {
+            if let Some(t) = &p.ptype {
+                t.find_named_nodes(nns);
+            }
+        }
+        if let Some(t) = &self.return_type {
+            t.find_named_nodes(nns);
+        }
+        self.body.find_named_nodes(nns);
+    }
+
+    pub fn fmt_prefixes(
+        &self,
+        f: &mut Formatter<'_>,
+        prefixes: &HashMap<String, NamedNode>,
+    ) -> std::fmt::Result {
+        write!(f, "def ")?;
+        write_prefixed_namednode(f, &self.iri, prefixes)?;
+        write!(f, "(")?;
+        for (idx, p) in self.parameter_list.iter().enumerate() {
+            if let Some(t) = &p.ptype {
+                t.fmt_prefix(f, prefixes)?;
+                write!(f, " ")?;
+            }
+            std::fmt::Display::fmt(&p.variable, f)?;
+            if idx + 1 != self.parameter_list.len() {
+                write!(f, ", ")?;
+            }
+        }
+        write!(f, ")")?;
+        if let Some(t) = &self.return_type {
+            write!(f, " -> ")?;
+            t.fmt_prefix(f, prefixes)?;
+        }
+        write!(f, " :: ")?;
+        self.body.fmt_prefixes(f, prefixes)?;
+        writeln!(f, " .")
     }
 }
 
@@ -563,6 +734,7 @@ impl StottrTerm {
                 }
                 write!(f, ")")
             }
+            StottrTerm::FunctionCall(fc) => fc.fmt_prefixes(f, prefixes),
         }
     }
 }

@@ -29,6 +29,7 @@ __all__ = [
     "Instance",
     "Template",
     "Argument",
+    "FunctionCall",
     "Parameter",
     "Variable",
     "RDFType",

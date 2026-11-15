@@ -1,9 +1,13 @@
+mod functions;
 pub mod validation;
 
 use super::{MapOptions, Model, OTTRTripleInstance, StaticColumn};
 use crate::errors::MaplibError;
 use crate::model::constant_terms::{constant_blank_node_to_series, constant_to_expr};
 use crate::model::errors::MappingError;
+use crate::model::expansion::functions::{
+    evaluate_function_call, function_call_variables, function_result_is_null, FunctionContext,
+};
 use crate::model::expansion::validation::validate;
 use oxrdf::vocab::rdf;
 use oxrdf::{NamedNode, Variable};
@@ -155,23 +159,44 @@ impl Model {
                 };
                 for i in &template.pattern_list {
                     let mut instance_columns = vec![];
+                    let mut function_input_columns = vec![];
                     let vs = get_variable_names(i);
+                    let mut fvs = vec![];
+                    for a in &i.argument_list {
+                        function_call_variables(&a.term, &mut fvs);
+                    }
                     if let Some(df) = &df {
                         for v in vs {
                             if colnames.contains(v) {
                                 instance_columns.push(df.column(v).unwrap().clone());
                             }
                         }
+                        for v in fvs {
+                            if colnames.contains(v) {
+                                function_input_columns.push(df.column(v).unwrap().clone());
+                            }
+                        }
                     }
-                    expand_params_vec.push((i, instance_columns));
+                    expand_params_vec.push((i, instance_columns, function_input_columns));
                 }
 
                 let use_df_height = if let Some(df) = &df { df.height() } else { 1 };
+                // An instance with only constant arguments has a DataFrame without columns (height 0),
+                // which stands for one row, as in process_results.
+                let function_context = FunctionContext {
+                    triplestore: &self.triplestore,
+                    functions: &self.template_dataset.functions,
+                    height: if dynamic_columns.is_empty() && use_df_height == 0 {
+                        1
+                    } else {
+                        use_df_height
+                    },
+                };
 
                 let results: Vec<_> = expand_params_vec
                     .par_drain(..)
                     .enumerate()
-                    .map(|(i, (instance, series_vec))| {
+                    .map(|(i, (instance, series_vec, function_input_columns))| {
                         let target_template = if let Some(target_template) =
                             self.template_dataset.get(instance.template_iri.as_str())
                         {
@@ -194,6 +219,8 @@ impl Model {
                             &target_template.signature,
                             calling_signature,
                             series_vec,
+                            &function_input_columns,
+                            &function_context,
                             &dynamic_columns,
                             &static_columns,
                             use_df_height,
@@ -674,6 +701,8 @@ fn create_remapped(
     signature: &Signature,
     calling_signature: &Signature,
     mut columns_vec: Vec<Column>,
+    function_input_columns: &[Column],
+    function_context: &FunctionContext,
     dynamic_columns: &HashMap<String, MappingColumnType>,
     constant_columns: &HashMap<String, StaticColumn>,
     input_df_height: usize,
@@ -690,11 +719,16 @@ fn create_remapped(
     let mut new = vec![];
     let mut rename_map: HashMap<&str, Vec<&str>> = HashMap::new();
     let mut out_blank_node_counter = blank_node_counter;
+    // Function results that must have a value: instances where they are none are discarded.
+    let mut required_function_results = vec![];
+    // Function results that are filled with the default value of the parameter where none.
+    let mut defaulted_function_results = vec![];
 
-    for (original, target) in instance
+    for (argument_index, (original, target)) in instance
         .argument_list
         .iter()
         .zip(signature.parameter_list.iter())
+        .enumerate()
     {
         let target_colname = target.variable.as_str();
         if original.list_expand {
@@ -783,6 +817,37 @@ fn create_remapped(
             StottrTerm::List(_l) => {
                 todo!()
             }
+            StottrTerm::FunctionCall(fc) => {
+                if original.list_expand {
+                    return Err(MappingError::FunctionError(
+                        templates::functions::FunctionError::ListExpandFunctionCall(
+                            argument_index,
+                            instance.template_iri.to_string(),
+                        ),
+                    ));
+                }
+                let (column, mapped_column) = evaluate_function_call(
+                    function_context,
+                    fc,
+                    function_input_columns,
+                    dynamic_columns,
+                    constant_columns,
+                    target_colname,
+                )?;
+                new_columns.push(column);
+                if let Some(default) = &target.default_value {
+                    defaulted_function_results.push((target_colname, default));
+                } else if !target.optional {
+                    if let MappingColumnType::Flat(state) = &mapped_column {
+                        required_function_results.push(function_result_is_null(
+                            target_colname,
+                            state,
+                        ));
+                    }
+                }
+                new_dynamic_columns.insert(target_colname.to_string(), mapped_column);
+                new_dynamic_from_constant.push(target_colname);
+            }
         }
     }
 
@@ -812,6 +877,13 @@ fn create_remapped(
     let mut lf = DataFrame::new(l, column_vec).unwrap().lazy();
     for expr in expressions {
         lf = lf.with_column(expr);
+    }
+    // As in OTTR, an instance with none for a mandatory parameter is not expanded.
+    for is_null in required_function_results {
+        lf = lf.filter(is_null.not());
+    }
+    for (name, default) in defaulted_function_results {
+        lf = fill_nulls_with_defaults(lf, &mut new_dynamic_columns, name, default)?;
     }
     let new_column_expressions: Vec<Expr> = new
         .iter()

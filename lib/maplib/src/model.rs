@@ -208,6 +208,9 @@ impl Model {
         self.template_dataset
             .prefix_map
             .extend(dataset.prefix_map.drain());
+        for (_, f) in dataset.functions.drain() {
+            self.template_dataset.add_function(f);
+        }
         for t in dataset.templates {
             self.add_template(t)?
         }
@@ -221,8 +224,23 @@ impl Model {
         db: VirtualizedPythonDatabase,
         resources: HashMap<String, Template>,
     ) -> Result<(), MaplibError> {
+        // Functions defined with def are inlined into the templates of the resources, and the
+        // function calls are checked, as chrontext evaluates them without the function library.
+        let mut inlined = HashMap::new();
+        for (r, t) in resources {
+            let t = templates::functions::inline_template_functions(
+                &t,
+                &self.template_dataset.functions,
+            )
+            .map_err(|e| {
+                MaplibError::TemplateError(
+                    templates::dataset::errors::TemplateError::FunctionError(e),
+                )
+            })?;
+            inlined.insert(r, t);
+        }
         let virtualized_database = Arc::new(VirtualizedDatabase::VirtualizedPythonDatabase(db));
-        let virtualization = Virtualization { resources };
+        let virtualization = Virtualization { resources: inlined };
         // Queries over the newly virtualized predicates now read the virtualized database.
         self.triplestore.query_cache.versions.record(Touched::All);
         // Each call adds a virtualized database, and the virtualized databases are used together.
@@ -605,6 +623,9 @@ SELECT ?loc ?crs ?seq ?x ?y ?z WHERE {{
         self.template_dataset
             .prefix_map
             .extend(dataset.prefix_map.drain());
+        for (_, f) in dataset.functions.drain() {
+            self.template_dataset.add_function(f);
+        }
         for t in dataset.templates {
             self.add_template(t)?
         }

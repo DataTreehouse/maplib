@@ -3,6 +3,7 @@ use polars::prelude::{DataFrame, DataType};
 use representation::errors::RepresentationError;
 use templates::ast::{ConstantTermOrList, PType};
 use templates::dataset::errors::TemplateError;
+use templates::functions::FunctionError;
 use templates::MappingColumnType;
 use thiserror::Error;
 use triplestore::errors::TriplestoreError;
@@ -65,4 +66,10 @@ pub enum MappingError {
     EmptyConstantListNotSupported(ConstantTermOrList),
     #[error("Argument {} is list expanded, but has the non-list type {:?}", .0, .1)]
     ListExpandNonList(String, MappingColumnType),
+    #[error("Function call error: {}", .0)]
+    FunctionError(#[from] FunctionError),
+    #[error("Variable {} is a list, but lists can not be used as arguments of the function call {}", .0, .1)]
+    FunctionListArgument(String, String),
+    #[error("Could not evaluate the function call {}: {}", .0, .1)]
+    FunctionEvaluationError(String, String),
 }

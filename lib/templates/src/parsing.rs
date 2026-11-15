@@ -4,9 +4,11 @@
 //See lib/spargebra for a copy.
 
 use crate::ast::{
-    Annotation, Argument, ConstantTerm, ConstantTermOrList, Instance, ListExpanderType, PType,
-    Parameter, Signature, Statement, StottrDocument, StottrTerm, Template,
+    Annotation, Argument, ConstantTerm, ConstantTermOrList, Function, FunctionCall,
+    FunctionName, FunctionParameter, Instance, ListExpanderType, PType, Parameter, Signature,
+    Statement, StottrDocument, StottrTerm, Template, FROG_FUNCTION_CALL,
 };
+use crate::functions::is_builtin_name;
 use crate::dataset::errors::TemplateError;
 use oxilangtag::LanguageTag;
 use oxiri::{Iri, IriParseError};
@@ -171,6 +173,9 @@ parser! {
         }
 
         rule StottrStatement() -> Statement =
+        f:StottrFunctionDefinition() {
+            Statement::Function(f)
+        } /
         i:StottrInstance() {
             Statement::Instance(i)
         } /
@@ -203,6 +208,44 @@ parser! {
             StottrTerm::ConstantTerm(cl)
         } / c:StottrTermList() {
             StottrTerm::List(c)
+        } / f:StottrFunctionCall() {
+            StottrTerm::FunctionCall(f)
+        }
+
+        // Function calls follow the human readable syntax of Frog (Jarholt 2022): the function
+        // name followed by the arguments separated by whitespace, Lisp-style. A call of a
+        // function given by an IRI without arguments must start with frog:functionCall, as
+        // (ex:f) is a list with one element.
+        rule StottrFunctionCall() -> FunctionCall = "(" _ marker:FrogFunctionCallMarker()? _ function:StottrFunctionName() _ type_arguments:StottrGenericArguments()? _ arguments:StottrTerm() ** _ _ ")" {?
+            if marker.is_none() && arguments.is_empty() && matches!(function, FunctionName::Iri(_)) {
+                Err("a function call without arguments")
+            } else {
+                Ok(FunctionCall { function, type_arguments: type_arguments.unwrap_or_default(), arguments })
+            }
+        }
+
+        rule FrogFunctionCallMarker() -> () = i:iri() __ {?
+            if i.as_str() == FROG_FUNCTION_CALL { Ok(()) } else { Err("frog:functionCall") }
+        }
+
+        rule StottrFunctionName() -> FunctionName = i:iri() {
+            FunctionName::Iri(i)
+        } / b:$(['a'..='z' | 'A'..='Z'] ['a'..='z' | 'A'..='Z' | '0'..='9' | '_']*) !":" {?
+            if is_builtin_name(b) { Ok(FunctionName::Builtin(b.to_uppercase())) } else { Err("a SPARQL function name") }
+        } / o:$("||" / "&&" / "!=" / "<=" / ">=" / "=" / "<" / ">" / "+" / "-" / "*" / "/" / "!") {
+            FunctionName::Builtin(o.to_string())
+        }
+
+        rule StottrGenericArguments() -> Vec<PType> = "<<" _ ts:StottrPType() ** (_ "," _) _ ">>" {
+            ts
+        }
+
+        rule StottrFunctionDefinition() -> Function = i("def") __ iri:iri() _ "(" _ parameter_list:StottrFunctionParameter() ** (_ "," _) _ ","? _ ")" _ return_type:("->" _ t:StottrPType() { t })? _ "::" _ body:StottrFunctionCall() _ "." {
+            Function { iri, parameter_list, return_type, body }
+        }
+
+        rule StottrFunctionParameter() -> FunctionParameter = ptype:StottrPType()? _ variable:Var() {
+            FunctionParameter { ptype, variable }
         }
 
         rule StottrTermList() -> Vec<StottrTerm> = "(" _ ts:StottrTerm() ** (_ "," _) _ ")" {
@@ -315,6 +358,7 @@ parser! {
             l:NumericLiteral() { ConstantTerm::Literal(l) } /
             l:BooleanLiteral() { ConstantTerm::Literal(l) } /
             b:BlankNode() { ConstantTerm::BlankNode(b) } /
+            "none" !['a'..='z' | 'A'..='Z' | '0'..='9' | '_' | '-' | ':'] { ConstantTerm::None } /
             i("a") {ConstantTerm::Iri(rdf::TYPE.into_owned())}
 
         rule RDFLiteral() -> Literal =
@@ -477,6 +521,9 @@ parser! {
         rule HEX() = ['0' ..= '9' | 'A' ..= 'F' | 'a' ..= 'f']
 
         rule PN_LOCAL_ESC() = ['\\'] ['_' | '~' | '.' | '-' | '!' | '$' | '&' | '\'' | '(' | ')' | '*' | '+' | ',' | ';' | '=' | '/' | '?' | '#' | '@' | '%'] //TODO: added '/' to make tests pass but is it valid?
+
+        //mandatory space
+        rule __() = quiet! { ([' ' | '\t' | '\n' | '\r'] / comment())+ }
 
         //space
         rule _() = quiet! { ([' ' | '\t' | '\n' | '\r'] / comment())* }
