@@ -104,7 +104,10 @@ fn pl_interruptable_collect_in_memory(
 
     #[cfg(feature = "pyo3")]
     {
-        Python::attach(move |py| {
+        // The GIL is only held to check for signals, not while waiting: the query may need it
+        // on another thread, e.g. to release buffers that Python owns (NumPy arrays behind the
+        // results of a Python virtualized database), and would otherwise never finish.
+        {
             // TODO: https://github.com/pola-rs/polars/issues/22513
             //                     min  med  avg  95%   99%   99.9%
             // check_signals takes 20 - 30 - 85 - 261 - 691 - 908
@@ -114,7 +117,7 @@ fn pl_interruptable_collect_in_memory(
                 sleep(sleeptime);
                 match future.fetch() {
                     None => {
-                        if py.check_signals().is_err() {
+                        if Python::attach(|py| py.check_signals()).is_err() {
                             // Polars has some kind of race condition and panics as it tries to tx on our dropped rx
                             // We've already decided to bail out, so waiting a few ms for rayon to clean up or whatever should be fine
                             // TODO: https://github.com/pola-rs/polars/issues/22515
@@ -128,7 +131,7 @@ fn pl_interruptable_collect_in_memory(
                     Some(dfr) => break Ok(dfr?),
                 }
             }
-        })
+        }
     }
 
     #[cfg(not(feature = "pyo3"))]
