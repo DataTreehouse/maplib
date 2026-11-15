@@ -144,6 +144,100 @@ class InfluxDB2Database:
     def flux_request(self, basic: VirtualizedQuery, filters: List[Any]) -> Optional[FluxRequest]:
         """What to read for a basic query and the filters above it, or None when nothing can match."""
 
+class FabricLakehouseDatabase(DuckDBDatabase):
+    """
+    The Delta tables of a Microsoft Fabric Lakehouse, read directly from OneLake with DuckDB's delta and azure
+    extensions, signed in to with Microsoft Entra ID. Each table is a view in the DuckDB connection, so resource SQL
+    is DuckDB SQL over the table names, e.g. "SELECT sensor_id AS id, ts AS timestamp, value FROM readings".
+    Tables of lakehouses with schemas are views in that schema ("dbo.readings"), and also have their plain name
+    when it is unique.
+    """
+
+    workspace: Optional[str]
+    lakehouse: Optional[str]
+    root: str
+    endpoint: str
+    table_urls: Dict[str, str]
+
+    def __init__(self, workspace: Optional[str] = None, lakehouse: Optional[str] = None,
+                 authentication: Optional[str] = None, tenant_id: Optional[str] = None,
+                 client_id: Optional[str] = None, client_secret: Optional[str] = None, chain: str = "cli",
+                 tables: Union[str, Sequence[str], None] = None, root: Optional[str] = None,
+                 endpoint: str = "onelake.dfs.fabric.microsoft.com", azure_transport: Optional[str] = None,
+                 connection: Any = None, timezone: Optional[str] = "UTC",
+                 sql_dialect: Union[str, "SQLDialect"] = "duckdb"):
+        """
+        :param workspace: The workspace name or id.
+        :param lakehouse: The lakehouse name or id (a name may end with ".Lakehouse").
+        :param authentication: "service_principal" (with tenant_id, client_id and client_secret), "credential_chain"
+            (one Azure credential, chosen with chain), "azure_cli", "managed_identity" or "none". By default
+            "service_principal" when a client secret is given, otherwise "credential_chain".
+        :param tenant_id: The Microsoft Entra tenant (directory) id.
+        :param client_id: The application (client) id of the service principal.
+        :param client_secret: The client secret of the service principal.
+        :param chain: The credential of "credential_chain": "cli", "managed_identity", "env" or "workload_identity".
+        :param tables: The tables to make views of, as a list or a comma separated string ("readings, dbo/sensors").
+            By default all tables in the lakehouse.
+        :param root: The folder with the tables, instead of the lakehouse's Tables folder in OneLake
+            (e.g. a local folder of Delta tables).
+        :param endpoint: The OneLake host name.
+        :param azure_transport: The azure extension's azure_transport_option_type ("default" or "curl").
+        :param connection: A duckdb connection to use. When not given, an in-memory database is used.
+        :param timezone: The time zone of the connection.
+        :param sql_dialect: Override the SQL dialect, e.g. with a subclass of DuckDBDialect.
+        """
+    def workspace_url(self) -> str:
+        """The OneLake URL of the workspace."""
+    def table_url(self, table: str) -> str:
+        """The URL (or path) of a table of the lakehouse, e.g. "readings" or "dbo/readings"."""
+    def list_tables(self) -> Sequence[str]:
+        """The tables in the lakehouse ("name" or "schema/name"), found by listing the Tables folder."""
+    def add_tables(self, tables: Sequence[str]) -> None:
+        """Make views of the given tables."""
+
+class FabricDatabase(SQLDatabase):
+    """
+    A Microsoft Fabric Warehouse, or the SQL analytics endpoint of a Fabric Lakehouse, signed in to with
+    Microsoft Entra ID. Resource SQL is T-SQL. Needs azure-identity, and mssql-python or pyodbc.
+    """
+
+    server: Optional[str]
+    database: Optional[str]
+    driver: str
+    timezone: Optional[str]
+
+    def __init__(self, server: Optional[str] = None, database: Optional[str] = None,
+                 authentication: str = "default", tenant_id: Optional[str] = None,
+                 client_id: Optional[str] = None, client_secret: Optional[str] = None,
+                 driver: str = "mssql-python", odbc_driver: str = "ODBC Driver 18 for SQL Server",
+                 timezone: Optional[str] = "UTC", credential: Any = None, connection: Any = None,
+                 sql_dialect: Union[str, "SQLDialect"] = "fabric"):
+        """
+        :param server: The SQL endpoint host name, e.g. <id>.datawarehouse.fabric.microsoft.com, optionally with
+            ",port" (default 1433).
+        :param database: The warehouse or lakehouse name.
+        :param authentication: "service_principal" (with tenant_id, client_id and client_secret), "default"
+            (azure-identity's DefaultAzureCredential; client_id selects a user-assigned managed identity),
+            "interactive" (a browser window) or "azure_cli".
+        :param tenant_id: The Microsoft Entra tenant (directory) id.
+        :param client_id: The application (client) id of the service principal.
+        :param client_secret: The client secret of the service principal.
+        :param driver: "mssql-python" (includes the ODBC driver) or "pyodbc" (needs ODBC Driver 18 for SQL Server).
+        :param odbc_driver: The ODBC driver name used with pyodbc.
+        :param timezone: The time zone given to timestamps without one in the results (Fabric's datetime2).
+            None leaves them without a time zone.
+        :param credential: An azure-identity credential to use instead of the authentication arguments.
+        :param connection: A DB-API connection to use instead of connecting.
+        :param sql_dialect: Override the SQL dialect, e.g. with a subclass of FabricDialect.
+        """
+    def connection_string(self) -> str:
+        """The connection string, without credentials."""
+    def connect(self) -> Any:
+        """Connect to the SQL endpoint, and return the DB-API connection."""
+    @property
+    def connection(self) -> Any: ...
+    def close(self) -> None: ...
+
 class SQLDialect:
     """
     The database specific parts of the translation from virtualized queries to SQL.
@@ -152,6 +246,8 @@ class SQLDialect:
     """
 
     name: str
+    limit_for_offset_only: Optional[int]
+    offset_requires_order_by: bool
 
     def sqlalchemy_dialect(self) -> Any:
         """The SQLAlchemy dialect used to compile queries."""
@@ -171,6 +267,11 @@ class SQLDialect:
     def ends_with(self, s: Any, suffix: Any) -> Any: ...
     def string_agg(self, expression: Any, separator: str) -> Any: ...
     def any_value(self, expression: Any) -> Any: ...
+    def avg_argument(self, expression: Any) -> Any: ...
+    def ceil(self, expression: Any) -> Any: ...
+    def round(self, expression: Any) -> Any: ...
+    def as_value(self, expression: Any) -> Any:
+        """An expression used as a selected value (BIND), e.g. a condition as a value where there are no booleans."""
 
 class PostgresDialect(SQLDialect): ...
 class DuckDBDialect(PostgresDialect): ...
@@ -179,6 +280,10 @@ class SnowflakeDialect(SQLDialect): ...
 class DatabricksDialect(SQLDialect): ...
 class InfluxDBDialect(PostgresDialect):
     """InfluxDB 3 SQL (Apache DataFusion), by the names "influxdb", "influxdb3" and "datafusion"."""
+class MSSQLDialect(SQLDialect):
+    """T-SQL for SQL Server 2022 and later, Azure SQL Database and Managed Instance ("mssql", "sqlserver", "tsql")."""
+class FabricDialect(MSSQLDialect):
+    """T-SQL for Microsoft Fabric Warehouses and Lakehouse SQL analytics endpoints ("fabric")."""
 
 DIALECTS: Dict[str, Type[SQLDialect]]
 
