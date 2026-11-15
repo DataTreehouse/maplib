@@ -42,6 +42,7 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, OnceLock};
 use std::time::Instant;
 use tracing::{debug, instrument, trace, warn};
+use utils::polars::collect_in_memory;
 use uuid::Uuid;
 
 const OFFSET_STEP: usize = 100;
@@ -324,7 +325,7 @@ impl Triples {
                 );
             }
         };
-        let mut df = lf.collect().unwrap();
+        let mut df = collect_in_memory(lf).unwrap();
         if self.subject_type.stored_cat() {
             // The subject codes are now ranks in string order and the triples are sorted by
             // subject, so the codes should be sorted. Telling Polars lets it use its fast paths
@@ -939,20 +940,17 @@ fn create_indices(
         } else {
             vec![col(OBJECT_RANK_COL_NAME), col(SUBJECT_RANK_COL_NAME)]
         };
-        df = df
-            .lazy()
-            .sort_by_exprs(
-                sort_by,
-                SortMultipleOptions {
-                    descending: vec![false],
-                    nulls_last: vec![false],
-                    multithreaded: true,
-                    maintain_order: false,
-                    limit: None,
-                },
-            )
-            .collect()
-            .unwrap();
+        df = collect_in_memory(df.lazy().sort_by_exprs(
+            sort_by,
+            SortMultipleOptions {
+                descending: vec![false],
+                nulls_last: vec![false],
+                multithreaded: true,
+                maintain_order: false,
+                limit: None,
+            },
+        ))
+        .unwrap();
         let object_encs = maybe_get_cat_encs(cats, obj_type);
         let sparse = create_sparse_index(
             df.column(OBJECT_COL_NAME).unwrap().as_materialized_series(),

@@ -36,6 +36,18 @@ fn query_engine(height_estimate: Option<usize>) -> Engine {
     }
 }
 
+/// Collects a lazy frame over data that is already in memory (or in storage files) with the
+/// in-memory engine. Used for the storage work of adding, compacting and deleting triples, which
+/// runs one item per table in parallel with Rayon. The in-memory engine is plain Rayon
+/// fork-join, so it is safe on a Rayon worker. The streaming engine is not: its collect blocks
+/// the thread in a way that lets Rayon hand it further items of the same loop, so streaming
+/// queries nest until no thread is left to drive them and the add deadlocks. It also has a
+/// fixed cost of a few milliseconds per collect, paid once or more per table.
+pub fn collect_in_memory(lf: LazyFrame) -> Result<DataFrame, PolarsError> {
+    lf.collect_with_engine(Engine::InMemory)
+        .map(|r| r.unwrap_single())
+}
+
 /// Collects a sort followed by a slice (ORDER BY with LIMIT) with the in-memory engine, many
 /// times cheaper than the streaming engine. The working state is in memory, so such sorts do
 /// not spill. `MAPLIB_POLARS_ENGINE=streaming` still selects the streaming engine.

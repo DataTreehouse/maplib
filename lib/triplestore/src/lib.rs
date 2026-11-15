@@ -38,8 +38,8 @@ use polars_core::prelude::IntoSeries;
 use polars_core::prelude::{Column, IntoColumn, Series, SortMultipleOptions, StructChunked};
 use pyo3::{Py, PyAny};
 use range_set_blaze::RangeSetBlaze;
-use rayon::iter::IntoParallelRefIterator;
 use rayon::iter::{IntoParallelIterator, IntoParallelRefMutIterator, ParallelIterator};
+use rayon::iter::{IntoParallelRefIterator, ParallelDrainRange};
 use representation::cats::{
     cat_encode_triples, distinct_codes, extend_codes, CatTriples, CatType, Cats, EncodedTriples,
     LockedCats, OBJECT_RANK_COL_NAME, SUBJECT_RANK_COL_NAME,
@@ -54,6 +54,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use utils::polars::collect_in_memory;
 
 use query_processing::graph_patterns::union;
 use query_processing::udf::UdfRegistry;
@@ -61,13 +62,14 @@ use representation::cats::maps::CatMaps;
 use representation::dataset::NamedGraph;
 use tracing::{debug, instrument};
 
-// SEQUENTIAL_COLLECT_LOOPS: loops whose items collect a Polars LazyFrame (directly or through
-// Triples::new, add_triples, compaction and so on) iterate sequentially, not with Rayon. A
-// collect runs Polars' streaming engine, which blocks the calling thread until the query is
-// done. On a Rayon worker that wait lets Rayon hand the thread further items of the same loop,
-// so streaming queries pile up on top of each other until no thread is left to drive them and
-// adding triples deadlocks. This happens whether the loop runs on Rayon's global pool or on
-// Polars' own pool. Each collect is still parallel inside Polars.
+// IN_MEMORY_COLLECT_LOOPS: several loops run one item per table in parallel with Rayon
+// (partitioning triples to add, ranking and sorting them, building tables in
+// add_global_cat_triples, compaction and splitting solution mappings for DELETE). Every
+// LazyFrame these items collect, directly or through Triples::new, add_triples and so on, must
+// be collected with `utils::polars::collect_in_memory`. The streaming engine blocks its thread
+// in a way that lets Rayon hand it further items of the same loop, so streaming queries nest
+// until no thread is left to drive them and adding triples deadlocks. The in-memory engine is
+// plain Rayon fork-join and nests safely.
 
 pub struct Triplestore {
     /// The maplib storage folder, set in hybrid and disk storage modes.
@@ -322,13 +324,13 @@ impl Triplestore {
             .write()
             .expect("Should be writable")
             .compact();
-        // Sequential on purpose: each item collects with Polars, see SEQUENTIAL_COLLECT_LOOPS.
+        // Collects in memory, see IN_MEMORY_COLLECT_LOOPS.
         let data_and_triples: Result<Vec<_>, TriplestoreError> = compacted
-            .into_iter()
+            .into_par_iter()
             .map(
                 |((graph, pred, subject_type, object_type), object_indexing_enabled, st)| {
                     let triples = Triples::new_compacted(
-                        st.get_lazy_frame()?.collect().unwrap(),
+                        collect_in_memory(st.get_lazy_frame()?).unwrap(),
                         subject_type.clone(),
                         object_type.clone(),
                         object_indexing_enabled,
@@ -1080,11 +1082,11 @@ struct TriplesToAddPartitionedPredicate {
 
 /// Splits the triples to add into one data frame per predicate.
 fn partition_triples_to_add(
-    ts: Vec<TriplesToAdd>,
+    mut ts: Vec<TriplesToAdd>,
     global_cats: &LockedCats,
 ) -> Vec<TriplesToAddPartitionedPredicate> {
-    // Sequential on purpose: each item collects with Polars, see SEQUENTIAL_COLLECT_LOOPS.
-    ts.into_iter()
+    // Collects in memory, see IN_MEMORY_COLLECT_LOOPS.
+    ts.par_drain(..)
         .map(|t| {
             let TriplesToAdd {
                 df,
@@ -1300,7 +1302,7 @@ pub fn add_rank_sort_triples(
             .and(repeated_from_last_row_expr(OBJECT_COL_NAME))
             .not(),
     );
-    let df = lf.collect().unwrap();
+    let df = collect_in_memory(lf).unwrap();
     Ok(EncodedTriples {
         df,
         subject,
@@ -1422,7 +1424,7 @@ pub fn partition_unpartitioned_predicate(
     for (c, t) in &map {
         lf = lf.with_column(set_struct_all_null_to_null_row(col(c), t).alias(c));
     }
-    let mut df = lf.collect().unwrap();
+    let mut df = collect_in_memory(lf).unwrap();
     if let Some(predicate) = predicate {
         df = df.select([SUBJECT_COL_NAME, OBJECT_COL_NAME]).unwrap();
         if let Some(df) = drop_nulls(df) {

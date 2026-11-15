@@ -4,6 +4,7 @@ use super::Triplestore;
 use crate::errors::TriplestoreError;
 use crate::{NewTriples, TriplesToAdd};
 use std::cmp;
+use utils::polars::collect_in_memory;
 
 use cimxml_import::{fix_cim_quad, Remapper};
 use memmap2::MmapOptions;
@@ -363,20 +364,21 @@ impl Triplestore {
                         for tta in ttas {
                             lfs.push(tta.df.lazy());
                         }
-                        let df = concat(
-                            lfs,
-                            UnionArgs {
-                                parallel: true,
-                                rechunk: false,
-                                to_supertypes: false,
-                                diagonal: false,
-                                strict: false,
-                                from_partitioned_ds: false,
-                                maintain_order: false,
-                            },
+                        let df = collect_in_memory(
+                            concat(
+                                lfs,
+                                UnionArgs {
+                                    parallel: true,
+                                    rechunk: false,
+                                    to_supertypes: false,
+                                    diagonal: false,
+                                    strict: false,
+                                    from_partitioned_ds: false,
+                                    maintain_order: false,
+                                },
+                            )
+                            .unwrap(),
                         )
-                        .unwrap()
-                        .collect()
                         .unwrap();
                         let subject_cat_state = subject_type.default_input_cat_state();
                         let object_cat_state = object_type.default_input_cat_state();

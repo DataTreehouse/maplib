@@ -19,6 +19,7 @@ use representation::{
     BaseRDFNodeType, LANG_STRING_LANG_FIELD, LANG_STRING_VALUE_FIELD, OBJECT_COL_NAME,
     SUBJECT_COL_NAME,
 };
+use utils::polars::collect_in_memory;
 
 pub fn bool_chunked(c: &Column) -> &BooleanChunked {
     c.bool().unwrap()
@@ -353,23 +354,24 @@ macro_rules! binary_nonlang_lang_index_impl {
                     .into_column();
                     let cols = vec![subj_column, obj_v_column, obj_l_column, subj_rank, obj_rank];
                     let mut new_df = DataFrame::new(l, cols).unwrap();
-                    new_df = new_df
-                        .lazy()
-                        .with_column(
-                            as_struct(vec![
-                                col(LANG_STRING_VALUE_FIELD),
-                                col(LANG_STRING_LANG_FIELD),
-                            ])
-                            .alias(OBJECT_COL_NAME),
-                        )
-                        .select([
-                            col(SUBJECT_COL_NAME),
-                            col(OBJECT_COL_NAME),
-                            col(SUBJECT_RANK_COL_NAME),
-                            col(OBJECT_RANK_COL_NAME),
-                        ])
-                        .collect()
-                        .unwrap();
+                    new_df = collect_in_memory(
+                        new_df
+                            .lazy()
+                            .with_column(
+                                as_struct(vec![
+                                    col(LANG_STRING_VALUE_FIELD),
+                                    col(LANG_STRING_LANG_FIELD),
+                                ])
+                                .alias(OBJECT_COL_NAME),
+                            )
+                            .select([
+                                col(SUBJECT_COL_NAME),
+                                col(OBJECT_COL_NAME),
+                                col(SUBJECT_RANK_COL_NAME),
+                                col(OBJECT_RANK_COL_NAME),
+                            ]),
+                    )
+                    .unwrap();
                     Some(new_df)
                 }
             }

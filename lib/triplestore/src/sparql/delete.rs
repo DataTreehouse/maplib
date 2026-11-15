@@ -18,6 +18,7 @@ use representation::{
 use std::collections::HashMap;
 use std::time::Instant;
 use tracing::trace;
+use utils::polars::collect_in_memory;
 
 impl Triplestore {
     pub fn delete_construct_result(
@@ -183,10 +184,9 @@ fn triples_solution_mappings_to_global_cat_triples(
     global_cats: LockedCats,
     graph: &NamedGraph,
 ) -> Result<Vec<CatTriples>, TriplestoreError> {
-    // Sequential on purpose: each item collects with Polars, see SEQUENTIAL_COLLECT_LOOPS in
-    // lib.rs.
+    // Collects in memory, see IN_MEMORY_COLLECT_LOOPS in lib.rs.
     let mappings_maps_preds: Vec<_> = sm_preds
-        .into_iter()
+        .into_par_iter()
         .map(|(sm, predicate)| {
             let EagerSolutionMappings {
                 mappings,
@@ -202,7 +202,7 @@ fn triples_solution_mappings_to_global_cat_triples(
                     lf = lf.with_column(set_struct_all_null_to_null_row(col(k), v));
                 }
                 lf = lf.drop_nulls(None);
-                df = lf.collect().unwrap();
+                df = collect_in_memory(lf).unwrap();
                 if df.height() > 0 {
                     dfs_maps_preds.push((df, map, predicate.clone()));
                 }

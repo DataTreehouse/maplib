@@ -11,6 +11,7 @@ use representation::{OBJECT_COL_NAME, SUBJECT_COL_NAME};
 use std::path::Path;
 use std::time::Instant;
 use tracing::trace;
+use utils::polars::collect_in_memory;
 
 /// A trailing run of segments is merged when the segment before it is at most this many times
 /// larger than the run. Segment sizes then shrink geometrically towards the end, so a table has
@@ -87,8 +88,7 @@ impl Triples {
             let mut dfs = Vec::with_capacity(n - first + 1);
             for seg in self.segments.drain(first..) {
                 dfs.push(
-                    seg.get_subject_sort_lazy_frame()?
-                        .collect()
+                    collect_in_memory(seg.get_subject_sort_lazy_frame()?)
                         .map_err(TriplestoreError::LazyLoadError)?,
                 );
             }
@@ -139,9 +139,7 @@ impl Triples {
             let triples_folder = self
                 .segment_folder(i == 0, seg.height)
                 .map(|x| x.to_owned());
-            let df = seg
-                .get_subject_sort_lazy_frame()?
-                .collect()
+            let df = collect_in_memory(seg.get_subject_sort_lazy_frame()?)
                 .map_err(TriplestoreError::LazyLoadError)?;
             // The old segment (and its files in disk storage mode) is dropped before the new one
             // is written.
@@ -181,7 +179,7 @@ impl Triples {
                 SubjectObjectIndex::new(&self.subject_type, &self.object_type);
             // In disk storage mode the index is rebuilt from all stored segments.
             for lf in self.get_all_triples_lazy_frames(true)? {
-                let df = lf.collect().map_err(TriplestoreError::LazyLoadError)?;
+                let df = collect_in_memory(lf).map_err(TriplestoreError::LazyLoadError)?;
                 subject_object_index.insert(&df);
             }
             self.subject_object_index = Some(subject_object_index);
@@ -234,7 +232,7 @@ impl Triples {
                 .unwrap()
                 .get_lazy_frames(Some(offsets))?
             {
-                let stored = lf.collect().map_err(TriplestoreError::LazyLoadError)?;
+                let stored = collect_in_memory(lf).map_err(TriplestoreError::LazyLoadError)?;
                 index.insert(&stored);
             }
         }
@@ -275,10 +273,9 @@ impl Triples {
         }
         if !lfs.is_empty() {
             let lf = concat_lfs(lfs);
-            let stored = lf
-                .select([col(SUBJECT_COL_NAME), col(OBJECT_COL_NAME)])
-                .collect()
-                .map_err(TriplestoreError::LazyLoadError)?;
+            let stored =
+                collect_in_memory(lf.select([col(SUBJECT_COL_NAME), col(OBJECT_COL_NAME)]))
+                    .map_err(TriplestoreError::LazyLoadError)?;
             index.insert(&stored);
         }
         Ok(index)
