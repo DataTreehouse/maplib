@@ -528,6 +528,15 @@ pub fn unique_workaround(
     stable: bool,
     unique_keep_strategy: UniqueKeepStrategy,
 ) -> LazyFrame {
+    let mut lf = lf;
+    let original_order: Option<Vec<PlSmallStr>> =
+        if rdf_node_types.values().any(|t| t.is_multi()) {
+            lf.collect_schema()
+                .ok()
+                .map(|s| s.iter_names().cloned().collect())
+        } else {
+            None
+        };
     let (mut lf, maps) = unnest_multicols(lf, rdf_node_types);
     let unique_set = if let Some(subset) = subset {
         let mut u = vec![];
@@ -554,5 +563,10 @@ pub fn unique_workaround(
         );
     }
     lf = nest_multicolumns(lf, maps);
+    // Nesting appends the multi-type columns at the end in hash order, so put the columns back
+    // in their original order (DISTINCT runs after the final projection).
+    if let Some(order) = original_order {
+        lf = lf.select(order.into_iter().map(col).collect::<Vec<_>>());
+    }
     lf
 }
