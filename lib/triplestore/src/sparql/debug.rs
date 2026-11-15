@@ -34,6 +34,9 @@ impl Triplestore {
             }
             | Query::Ask {
                 dataset, pattern, ..
+            }
+            | Query::Describe {
+                dataset, pattern, ..
             } => {
                 let qg = &self.query_graph(dataset, graph, qs);
                 let partial = self.debug_gp(pattern, parameters, qs, qg)?;
@@ -43,7 +46,6 @@ impl Triplestore {
                 };
                 Ok(DebugOutputs::new(dbg))
             }
-            _ => todo!(),
         }
     }
 
@@ -73,35 +75,17 @@ impl Triplestore {
                 self.debug_minus(left, right, parameters, qs, qg)
             }
             GraphPattern::Values { .. } | GraphPattern::PValues { .. } => {
-                let sm = self.lazy_graph_pattern(
-                    gp,
-                    None,
-                    &Context::new(),
-                    parameters,
-                    Pushdowns::new(),
-                    qs,
-                    qg,
-                )?;
-                let df = sm.mappings.first().collect().unwrap();
-                if df.height() == 0 {
-                    Ok(PartialDebugOutput::DebugOutputs(vec![
-                        DebugOutput::NoResultsGraphPattern(gp.clone()),
-                    ]))
-                } else {
-                    Ok(PartialDebugOutput::PartialResults)
+                self.debug_whole_gp(gp, parameters, qs, qg)
+            }
+            GraphPattern::Graph { name, inner } => match name {
+                NamedNodePattern::NamedNode(nn) => {
+                    let qg = QueryGraph::NamedGraph(NamedGraph::from_maybe_named_node(Some(nn)));
+                    self.debug_gp(inner, parameters, qs, &qg)
                 }
-            }
-            GraphPattern::Graph { name, inner } => {
-                let qg = match name {
-                    NamedNodePattern::NamedNode(nn) => {
-                        QueryGraph::NamedGraph(NamedGraph::from_maybe_named_node(Some(nn)))
-                    }
-                    NamedNodePattern::Variable(_) => {
-                        todo!()
-                    }
-                };
-                self.debug_gp(inner, parameters, qs, &qg)
-            }
+                // The inner pattern is matched against every named graph, so there is no
+                // single graph to explain it in. Report the GRAPH pattern as a whole.
+                NamedNodePattern::Variable(_) => self.debug_whole_gp(gp, parameters, qs, qg),
+            },
             GraphPattern::Extend { inner, .. }
             | GraphPattern::LeftJoin { left: inner, .. }
             | GraphPattern::OrderBy { inner, .. }
@@ -112,6 +96,37 @@ impl Triplestore {
             | GraphPattern::Group { inner, .. } => self.debug_gp(inner, parameters, qs, qg),
             // The remote endpoint is not asked why it has no results.
             GraphPattern::Service { .. } => Ok(PartialDebugOutput::PartialResults),
+        }
+    }
+
+    /// Evaluates the pattern as a whole and reports it when it has no solution mappings.
+    fn debug_whole_gp(
+        &self,
+        gp: &GraphPattern,
+        parameters: Option<&HashMap<String, EagerSolutionMappings>>,
+        qs: &QuerySettings,
+        qg: &QueryGraph,
+    ) -> Result<PartialDebugOutput, SparqlError> {
+        let sm = self.lazy_graph_pattern(
+            gp,
+            None,
+            &Context::new(),
+            parameters,
+            Pushdowns::new(),
+            qs,
+            qg,
+        )?;
+        let df = sm
+            .mappings
+            .first()
+            .collect()
+            .map_err(|e| SparqlError::QueryExecutionError(e.to_string()))?;
+        if df.height() == 0 {
+            Ok(PartialDebugOutput::DebugOutputs(vec![
+                DebugOutput::NoResultsGraphPattern(gp.clone()),
+            ]))
+        } else {
+            Ok(PartialDebugOutput::PartialResults)
         }
     }
 
@@ -138,7 +153,11 @@ impl Triplestore {
                 qs,
                 qg,
             )?;
-            let f = sm.mappings.first().collect().unwrap();
+            let f = sm
+                .mappings
+                .first()
+                .collect()
+                .map_err(|e| SparqlError::QueryExecutionError(e.to_string()))?;
             if f.height() == 0 {
                 errs.push(DebugOutput::NoResultsTriplePattern(p.clone()));
             }
@@ -162,7 +181,11 @@ impl Triplestore {
                     qs,
                     qg,
                 )?;
-                let df = sm.mappings.first().collect().unwrap();
+                let df = sm
+                    .mappings
+                    .first()
+                    .collect()
+                    .map_err(|e| SparqlError::QueryExecutionError(e.to_string()))?;
                 if df.height() == 0 {
                     let bad_pattern = processed_patterns.pop().unwrap();
                     return Ok(PartialDebugOutput::DebugOutputs(vec![
@@ -197,7 +220,11 @@ impl Triplestore {
                 qs,
                 qg,
             )?;
-            let df = sm.mappings.first().collect().unwrap();
+            let df = sm
+                .mappings
+                .first()
+                .collect()
+                .map_err(|e| SparqlError::QueryExecutionError(e.to_string()))?;
             if df.height() == 0 {
                 Ok(PartialDebugOutput::DebugOutputs(vec![
                     DebugOutput::NoResultsPath(ppe.clone()),
@@ -235,7 +262,11 @@ impl Triplestore {
                     qs,
                     qg,
                 )?;
-                let df = sm.mappings.first().collect().unwrap();
+                let df = sm
+                    .mappings
+                    .first()
+                    .collect()
+                    .map_err(|e| SparqlError::QueryExecutionError(e.to_string()))?;
                 if df.height() == 0 {
                     Ok(PartialDebugOutput::DebugOutputs(vec![
                         DebugOutput::NoResultsFilter(inner.clone(), expression.clone()),
@@ -274,7 +305,11 @@ impl Triplestore {
                             qs,
                             qg,
                         )?;
-                        let df = sm.mappings.first().collect().unwrap();
+                        let df = sm
+                            .mappings
+                            .first()
+                            .collect()
+                            .map_err(|e| SparqlError::QueryExecutionError(e.to_string()))?;
                         if df.height() == 0 {
                             Ok(PartialDebugOutput::DebugOutputs(vec![
                                 DebugOutput::NoResultsJoin(left.clone(), right.clone()),
@@ -313,7 +348,11 @@ impl Triplestore {
                     qs,
                     qg,
                 )?;
-                let df = sm.mappings.first().collect().unwrap();
+                let df = sm
+                    .mappings
+                    .first()
+                    .collect()
+                    .map_err(|e| SparqlError::QueryExecutionError(e.to_string()))?;
                 if df.height() == 0 {
                     Ok(PartialDebugOutput::DebugOutputs(vec![
                         DebugOutput::NoResultsMinus(left.clone(), right.clone()),

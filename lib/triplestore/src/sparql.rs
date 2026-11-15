@@ -225,7 +225,13 @@ impl Triplestore {
             _ => return Err(SparqlError::QueryTypeNotSupported),
         };
         let debug_output = if debug_no_results && no_results {
-            Some(self.debug(&query, parameters, query_settings, graph)?)
+            // The query itself ran, so a failing explanation should not fail it:
+            // return the results without debug output instead.
+            match self.debug(&query, parameters, query_settings, graph) {
+                Ok(d) => Some(d),
+                Err(SparqlError::InterruptSignal) => return Err(SparqlError::InterruptSignal),
+                Err(_) => None,
+            }
         } else if debug_no_results {
             Some(DebugOutputs::new(vec![DebugOutput::HasResults]))
         } else {
