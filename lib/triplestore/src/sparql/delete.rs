@@ -49,11 +49,8 @@ impl Triplestore {
         graph: &NamedGraph,
     ) -> Result<(), TriplestoreError> {
         let add_triples_now = Instant::now();
-        //TODO: more precise estimate..
-        for t in &ts {
-            self.n_triples_deleted += t.encoded_triples.df.height();
-        }
-        self.delete_global_cat_triples(ts, graph)?;
+        let n = self.delete_global_cat_triples(ts, graph)?;
+        self.n_triples_deleted += n;
         trace!(
             "Deleting triples df took {} seconds",
             add_triples_now.elapsed().as_secs_f32()
@@ -61,32 +58,49 @@ impl Triplestore {
         Ok(())
     }
 
+    /// Deletes the triples, and returns the number of triples that existed and were deleted.
+    /// Tables that contain none of the triples are left as they are.
     fn delete_global_cat_triples(
         &mut self,
         gcts: Vec<CatTriples>,
         graph: &NamedGraph,
-    ) -> Result<(), TriplestoreError> {
+    ) -> Result<usize, TriplestoreError> {
         self.check_graph_exists(graph)?;
+        let mut n_deleted = 0;
         for gct in gcts {
-            if self.graph_triples_map.contains_key(graph) {
-                let remaining_gct =
-                    get_triples_after_deletion(&gct, self.graph_triples_map.get(graph).unwrap())?;
-
-                if let Some(mut gct) = remaining_gct {
-                    self.delete_if_exists(&gct, graph)?;
-                    gct.encoded_triples = add_rank_sort_triples(
-                        gct.encoded_triples,
-                        &gct.subject_type,
-                        &gct.object_type,
-                        self.global_cats.clone(),
-                    )?;
-                    self.add_global_cat_triples(vec![gct])?;
-                } else {
-                    self.delete_if_exists(&gct, graph)?;
-                }
+            let Some(map) = self.graph_triples_map.get(graph) else {
+                continue;
+            };
+            let Some(existing_len) = map
+                .get(&gct.predicate)
+                .and_then(|m| m.get(&(gct.subject_type.clone(), gct.object_type.clone())))
+                .map(|t| t.len())
+            else {
+                continue;
+            };
+            let remaining_gct = get_triples_after_deletion(&gct, map)?;
+            let remaining_len = remaining_gct
+                .as_ref()
+                .map(|x| x.encoded_triples.df.height())
+                .unwrap_or(0);
+            let n = existing_len.saturating_sub(remaining_len);
+            if n == 0 {
+                // None of the triples existed, so the table is left as it is.
+                continue;
+            }
+            n_deleted += n;
+            self.delete_if_exists(&gct, graph)?;
+            if let Some(mut gct) = remaining_gct {
+                gct.encoded_triples = add_rank_sort_triples(
+                    gct.encoded_triples,
+                    &gct.subject_type,
+                    &gct.object_type,
+                    self.global_cats.clone(),
+                )?;
+                self.add_global_cat_triples(vec![gct])?;
             }
         }
-        Ok(())
+        Ok(n_deleted)
     }
 
     fn delete_if_exists(
