@@ -1,6 +1,6 @@
 # What's new since v0.20.32
 
-A short guide for deciding whether to upgrade from v0.20.32. It covers v0.20.33, v0.21.0 and the changes that have landed since (the "Unreleased" section of [CHANGES.md](CHANGES.md)). Features marked **EE** need [maplib Enterprise Edition](README.md#open-source-and-enterprise-edition); everything else is in the open-source core. [CHANGES.md](CHANGES.md) has the full details, and [API_USAGE.md](API_USAGE.md) has worked examples.
+A short guide for deciding whether to upgrade from v0.20.32. It covers v0.20.33, v0.21.0 and the changes that have landed since (the "Unreleased" section of [CHANGES.md](../CHANGES.md)). Features marked **EE** need [maplib Enterprise Edition](../README.md#open-source-and-enterprise-edition); everything else is in the open-source core. [CHANGES.md](../CHANGES.md) has the full details, and [API_USAGE.md](../API_USAGE.md) has worked examples.
 
 ## Highlights
 
@@ -35,7 +35,7 @@ A short guide for deciding whether to upgrade from v0.20.32. It covers v0.20.33,
 
 **Query result cache.** `m.set_query_cache(QueryCacheOptions(...))` keeps query results until a write changes a graph and predicate they read. It is shared with `serve`, and `query_cache_stats()` and `clear_query_cache()` report on it and empty it. It is off by default.
 
-**The config graph.** A model keeps its configuration (virtualized databases, indexes, the query cache) as triples in `maplib.config.CONFIG_GRAPH`. `maplib.config` writes and reads that configuration, and `apply_config(m)` connects and applies it. Secrets are never stored, only the names of the environment variables that hold them. See [CONFIG_GRAPH.md](CONFIG_GRAPH.md).
+**The config graph.** A model keeps its configuration (virtualized databases, indexes, the query cache) as triples in `maplib.config.CONFIG_GRAPH`. `maplib.config` writes and reads that configuration, and `apply_config(m)` connects and applies it. Secrets are never stored, only the names of the environment variables that hold them. See [CONFIG_GRAPH.md](../CONFIG_GRAPH.md).
 
 **`serve` and `explore` (EE).** `m.serve()` serves a live model over the SPARQL 1.1 Protocol, the Graph Store Protocol and Arrow Flight, with a query log and optional static web apps. Updates, `SERVICE` and `LOAD` are refused unless you allow them. `m.query(q, endpoint=server.url)` queries another maplib server. `m.explore()` now runs the full Model portal on the model.
 
