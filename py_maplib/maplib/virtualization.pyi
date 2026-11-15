@@ -3,7 +3,7 @@ Ready-made databases and SQL dialects for virtualizing data in SQL databases wit
 
 Not available in the open source build: raises NotImplementedError.
 """
-from typing import Any, Dict, Mapping, Optional, Sequence, Tuple, Type, Union
+from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple, Type, Union
 
 import polars as pl
 
@@ -71,6 +71,79 @@ class DatabricksDatabase(SQLDatabase):
         :param sql_dialect: Override the SQL dialect, e.g. with a subclass of DatabricksDialect.
         """
 
+class InfluxDBDatabase(SQLDatabase):
+    """
+    InfluxDB 3 (Core, Enterprise, Cloud Dedicated, Cloud Serverless, Clustered), queried with SQL over Arrow Flight
+    with influxdb3-python. The resource SQL selects from measurements, e.g.
+    ``SELECT sensor AS id, time AS timestamp, value FROM readings``. Timestamps without a time zone are returned as UTC.
+    """
+
+    client: Any
+
+    def __init__(self, client: Any = None, host: Optional[str] = None, database: Optional[str] = None,
+                 token: Optional[str] = None, org: Optional[str] = None,
+                 sql_dialect: Union[str, "SQLDialect"] = "influxdb", **client_kwargs: Any):
+        """
+        :param client: An influxdb_client_3.InfluxDBClient3, or an object with query(sql, language="sql") returning
+            a pyarrow Table. When not given, one is created with host, database, token, org and the keyword arguments.
+        :param host: The InfluxDB URL, e.g. http://localhost:8181
+        :param database: The database (bucket) to query.
+        :param token: The API token.
+        :param org: The organization, only needed by some InfluxDB Cloud versions.
+        :param sql_dialect: Override the SQL dialect, e.g. with a subclass of InfluxDBDialect.
+        """
+
+class FluxRequest:
+    """What InfluxDB2Database reads with Flux for a basic query: the times are [start_ns, stop_ns)."""
+
+    bucket: str
+    measurement: str
+    id_column: str
+    field: Optional[str]
+    ids: List[str]
+    start_ns: int
+    stop_ns: int
+    extra_columns: List[str]
+
+    def flux(self) -> str:
+        """The Flux query."""
+
+class InfluxDB2Database:
+    """
+    InfluxDB 2, InfluxDB Cloud (TSM) or InfluxDB 1.8 (2.0 compatible API), queried with Flux through influxdb-client.
+    Use it without a resource_sql_map. Each resource is a measurement:
+    ``resources={"my_resource": {"measurement": "readings", "id": "sensor", "field": "value"}}``, where id is the
+    column with the external ids (a tag, "_field" (the default) or "_measurement") and field optionally restricts
+    the values to one field. The resource templates have the parameters id, timestamp and value; other parameters
+    are read from the tags with the same names. The time range of the filters and the ids are sent to InfluxDB,
+    everything else is evaluated by maplib.
+    """
+
+    pushdowns: List[str]
+    client: Any
+    bucket: str
+    resources: Dict[str, Dict[str, Optional[str]]]
+
+    def __init__(self, url: Optional[str] = None, token: Optional[str] = None, org: Optional[str] = None,
+                 bucket: Optional[str] = None, resources: Optional[Mapping[str, Mapping[str, str]]] = None,
+                 client: Any = None, timeout: int = 60000, timestamp_parameter: str = "timestamp",
+                 value_parameter: str = "value", **client_kwargs: Any):
+        """
+        :param url: The InfluxDB URL, e.g. http://localhost:8086
+        :param token: The API token. For InfluxDB 1.8, "username:password".
+        :param org: The organization.
+        :param bucket: The bucket to read (for InfluxDB 1.8, "database/retention_policy").
+        :param resources: The measurement, id column and field of each resource.
+        :param client: An influxdb_client.InfluxDBClient. When not given, one is created with url, token, org,
+            timeout and the keyword arguments.
+        :param timeout: Request timeout in milliseconds.
+        :param timestamp_parameter: The name of the timestamp parameter of the resource templates.
+        :param value_parameter: The name of the value parameter of the resource templates.
+        """
+    def query(self, vq: VirtualizedQuery) -> pl.DataFrame: ...
+    def flux_request(self, basic: VirtualizedQuery, filters: List[Any]) -> Optional[FluxRequest]:
+        """What to read for a basic query and the filters above it, or None when nothing can match."""
+
 class SQLDialect:
     """
     The database specific parts of the translation from virtualized queries to SQL.
@@ -104,6 +177,8 @@ class DuckDBDialect(PostgresDialect): ...
 class BigQueryDialect(SQLDialect): ...
 class SnowflakeDialect(SQLDialect): ...
 class DatabricksDialect(SQLDialect): ...
+class InfluxDBDialect(PostgresDialect):
+    """InfluxDB 3 SQL (Apache DataFusion), by the names "influxdb", "influxdb3" and "datafusion"."""
 
 DIALECTS: Dict[str, Type[SQLDialect]]
 
