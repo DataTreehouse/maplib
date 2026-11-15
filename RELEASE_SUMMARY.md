@@ -1,0 +1,107 @@
+# What's new since v0.20.32
+
+A short guide for deciding whether to upgrade from v0.20.32. It covers v0.20.33, v0.21.0 and the changes that have landed since (the "Unreleased" section of [CHANGES.md](CHANGES.md)). Features marked **EE** need [maplib Enterprise Edition](README.md#open-source-and-enterprise-edition); everything else is in the open-source core. [CHANGES.md](CHANGES.md) has the full details, and [API_USAGE.md](API_USAGE.md) has worked examples.
+
+## Highlights
+
+- **Queries no longer run out of memory.** Over a memory limit (80% of system memory by default), joins, aggregations, sorts and results spill to disk.
+- **Much faster.** Turtle is read 40–60% faster, RDF/XML is written 56× faster, SHACL validation is 67–93% faster **EE**, and Datalog is about 2× faster **EE**.
+- **Graphs larger than RAM.** `Model(storage="memory" | "hybrid" | "disk")` **EE** keeps dictionaries and triple tables on disk.
+- **One-file models, in the open-source core.** `m.serialize()` writes a single Parquet-based `.maplib` file, locally or to `s3://`, `gs://` or `az://`.
+- **More SPARQL.** Federated `SERVICE` and `LOAD`, length-constrained and shortest paths, `ASK`, date and duration arithmetic, `INSERT DATA`/`DELETE DATA`, and many W3C compliance fixes.
+- **Serve and stream.** `m.serve()` **EE** exposes a model over the SPARQL 1.1 Protocol and Arrow Flight, and `stream=True` maps unbounded inputs batch by batch.
+
+## Major features
+
+**Storage modes.** `Model(storage=..., storage_folder=...)`, also for `Model.deserialize`. `"memory"` is the default. `"hybrid"` **EE** keeps the IRI and literal dictionaries on disk (what `storage_folder` alone used to mean, and still does). `"disk"` **EE** also keeps the triple tables on disk as Parquet. Disk-mode subject lookups are about 10× faster than before.
+
+**Single-file `.maplib` serialization, now open source.** Serialization is Parquet throughout, so it no longer needs EE. `serialize` writes one file by default (`./model.maplib`), never leaves a partial file behind, and is about 4× faster to write and 3× smaller than the old DuckDB dictionaries. `deserialize` reads files, folders and older serializations. `raw_db=True` **EE** keeps DuckDB dictionaries, which hybrid and disk storage can use in place.
+
+**Object storage.** `read`, `read_template`, `write`, `write_cim_xml`, `serialize` and `deserialize` accept `s3://`, `gs://`, `az://`/`abfss://`, HTTP(S) and `file://` URLs. Credentials come from the cloud SDKs or from `storage_options`. A folder serialization publishes atomically, so readers see either the old model or the new one. **EE**: a disk-mode model deserialized from object storage downloads its triple tables only when they are first read, with an optional local cache size.
+
+**Streaming with `ModelStream`.** `m.map(..., stream=True)` (also `map_triples`, `map_json` and `map_xml`) returns a lazy pipeline of `.update()`, `.insert()`, `.infer()` **EE** and `.write()` steps. `.collect()` runs the pipeline one batch at a time, so memory use depends on the batch size, not the input size. `map_json` and `map_xml` also take an iterable of documents, e.g. JSON Lines.
+
+**CSV on the Web.** `m.map_csvw(source, metadata=None, ...)` implements the W3C CSVW recommendations (standard and minimal mode, dialects, datatypes, foreign keys) and is tested against the W3C test suite.
+
+**SPARQL additions.**
+- Federated query: `SERVICE`, `SERVICE SILENT` and `SERVICE ?endpoint`, evaluated as bind joins. SPARQL Update `LOAD`. Configure both with `m.set_federation(...)`; `LOAD` is off until `allow_load=True`.
+- Length-constrained property paths (`ex:p{2,4}`), plus the `maplib:path` and `maplib:shortestPath` magic predicates (weights, k shortest paths, path nodes).
+- `ASK`, `INSERT DATA`/`DELETE DATA`, `isNUMERIC`, `RAND`, `SHA256`/`SHA384`/`SHA512`.
+- Arithmetic and comparisons on `xsd:dayTimeDuration`, `xsd:yearMonthDuration`, dates, dateTimes and times.
+- Many corrections from the W3C test suites: typed `COUNT` and `SUM`/`AVG`/`MIN`/`MAX`, decimal division, `GROUP_CONCAT`, casts, effective boolean values, and left-associative arithmetic.
+- Syntax errors in SPARQL and stOTTR are reported compiler-style, with the line, the source and hints.
+
+**Formats and I/O.** TriG and N-Quads are read and written. JSON-LD output is compacted JSON-LD 1.1. `graph=[DEFAULT_GRAPH, "http://…/g1"]` writes exactly those graphs. `m.read` takes bytes or file-like objects, and `m.write_bytes(format=...)` and `write(<binary file-like>)` write to memory. RDF/XML is read in parallel and written by a new pretty serializer. HDT reading and writing are much faster.
+
+**Query result cache.** `m.set_query_cache(QueryCacheOptions(...))` keeps query results until a write changes a graph and predicate they read. It is shared with `serve`, and `query_cache_stats()` and `clear_query_cache()` report on it and empty it. It is off by default.
+
+**The config graph.** A model keeps its configuration (virtualized databases, indexes, the query cache) as triples in `maplib.config.CONFIG_GRAPH`. `maplib.config` writes and reads that configuration, and `apply_config(m)` connects and applies it. Secrets are never stored, only the names of the environment variables that hold them. See [CONFIG_GRAPH.md](CONFIG_GRAPH.md).
+
+**`serve` and `explore` (EE).** `m.serve()` serves a live model over the SPARQL 1.1 Protocol, the Graph Store Protocol and Arrow Flight, with a query log and optional static web apps. Updates, `SERVICE` and `LOAD` are refused unless you allow them. `m.query(q, endpoint=server.url)` queries another maplib server. `m.explore()` now runs the full Model portal on the model.
+
+**GeoSPARQL and full-text search (EE).** `IndexingOptions(geo=True)` indexes WKT, WKB and GeoJSON geometries spatially and supports the GeoSPARQL relation, measurement and construction functions. Full-text search now uses DuckDB on the stored dictionaries, with options for which predicates, local names and IRIs to index.
+
+**Time series virtualization (EE).** One model can use several virtualized databases together. New connectors: SQL databases through `maplib.virtualization` (DuckDB, Snowflake, BigQuery, Databricks, TimescaleDB, Microsoft Fabric warehouses and lakehouses, SQL Server), InfluxDB 1.8/2/3, Azure Data Explorer and Fabric Eventhouses (KQL), OPC UA History Access, AspenTech IP.21, OSIsoft PI (`map_osipi`, `map_pi_points`), Siemens Insights Hub (`map_insights_hub`) and Cognite Data Fusion (`map_cdf`).
+
+**SHACL rules and SHACL fixes (EE).** Rules no longer loop when they re-assert existing triples (#76), and they run for focus nodes that become targets later (#77). Shapes with several `sh:message` values no longer lose results (#86). `sh:not` gives correct results. Reports include `sh:sourceConstraint`. RDFS inference follows `subClassOf` chains of any length.
+
+**Thread-safe concurrent reads.** A `Model` shared between threads runs reads such as `query` and `write` at the same time, and writes wait for exclusive access. Ctrl-C stops a running query.
+
+## Memory cap and spill to disk
+
+maplib now caps its memory use for the whole process. By default, the cap is **80% of system memory**, and it respects container (cgroup) limits. When a query goes over the cap, its **joins, aggregations, sorts and query results** move intermediate data to disk instead of failing or being killed by the OS.
+
+```python
+import maplib
+maplib.set_memory_limit(
+    max_memory_mb=8000,          # spill above 8 GB
+    spill_dir="/scratch/maplib", # default: system temp folder; set before the first query
+    max_spill_mb=100_000,        # most to spill (default 64 GB)
+    abort_above_mb=None,         # optional hard stop of the process (off by default)
+)
+maplib.memory_usage(), maplib.memory_limit()   # bytes in use, current limit
+```
+
+- The cap counts everything maplib allocates, including stored triples, but only query state spills.
+- `ORDER BY ... LIMIT` does not spill, because it uses the faster in-memory engine. `MAPLIB_POLARS_ENGINE=streaming` makes it spill.
+- **Replaces** the removed `max_results` parameter of `infer` and the removed `max_shape_constraint_results` parameter of `validate`: the memory limit now bounds inference and validation. `max_iterations` and `max_rows` are unchanged.
+
+## Performance
+
+These numbers compare v0.21.0 with v0.20.33 on an Apple M-series laptop:
+
+| Workload | Change |
+|---|---|
+| Reading Turtle (260 MB – 2.9 GB) | 40–61% faster |
+| Reading RDF/XML (CIM, 2.2 M triples) | 52% faster |
+| Writing RDF/XML (CIM, 2.2 M triples) | 42 s → 0.76 s (56× faster) |
+| Writing CIM/XML (`write_cim_xml`) **EE** | 50–92% faster |
+| SHACL validation, in memory **EE** | 67–93% faster |
+| Datalog inference, CIM enrichment **EE** | about 2× faster (12.4 s → 6.3 s) |
+| Writing Turtle for some CIM models | no longer hangs |
+
+Since v0.21.0, reading N-Triples is up to 81% faster than in v0.21.0, RDF/XML reading is up to 68% faster and template mapping is up to 89% faster, with up to 39% lower peak memory. Other improvements since v0.21.0:
+
+- Disk-mode lookups of a subject's properties are about 10× faster **EE**.
+- Bound property paths are 84–92% faster.
+- `VALUES` joins with large tables are about 80% faster.
+- `ORDER BY ... LIMIT` over millions of strings is up to 90% faster.
+- `COUNT(*)` over all triples is answered immediately, from the table sizes.
+
+## Breaking changes
+
+| Change | Migration |
+|---|---|
+| Transient triples are gone; the `transient=` parameter is removed | Pass `graph=maplib.TRANSIENT_GRAPH` (`target_graph=` for `insert`) |
+| `include_transient` is removed | Use `include_graphs=[...]`. For `query`, `update`, `insert` and `infer`, `None` includes the transient graph and `[]` includes nothing |
+| `infer_rdfs` and SHACL rules write inferences to the transient graph | Write them with `graph=TRANSIENT_GRAPH`; TriG/N-Quads writes of all graphs leave the transient graph out |
+| `Model.map_default` is removed | Call `m.generate_template(df, primary_key_column)`, which returns stOTTR, then `m.map(template, df)` |
+| The `streaming` parameter is removed (`query`, `update`, `insert`, `validate`, report methods) | Delete the argument; it had no effect |
+| `max_results` (`infer`) and `max_shape_constraint_results` (`validate`) are removed | Use `maplib.set_memory_limit` |
+| `serialize`/`deserialize` default to one file at `./model.maplib` (was the folder `./serialized_triples`) | Pass `single_file=False` and an explicit path to keep a folder |
+| `ValidationReport` `message` column is a list of strings | Use `.explode("message")` for one row per message |
+| RDF/XML and CIM/XML are read in parallel by default | Pass `parallel=False` for sequential parsing; error line numbers may be relative to a chunk |
+| RDF/XML output is laid out differently (same triples) | No code change; diff-based tests may need new baselines |
+| `write_cim_xml` uses `rdf:ID="_<mRID>"` as CGMES requires | Read the output with the same `base_iri` as the source data |
+| `explore()`: `page`, `graph` and `fts_path` are ignored; `flight_port` and `cors_origins` are removed **EE** | Drop the arguments |
+| SPARQL fixes change some results: `COUNT` is `xsd:integer`, `5 / 2` is `2.5`, `8 - 3 - 2` is `3` | Check queries that relied on the old behaviour |
