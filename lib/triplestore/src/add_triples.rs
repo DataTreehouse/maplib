@@ -92,7 +92,7 @@ impl Triplestore {
             local_cats: _,
         } in global_cat_triples
         {
-            self.add_graph_if_not_exists(&graph);
+            self.add_graph_if_not_exists(&graph)?;
             let k = (subject_type.clone(), object_type.clone());
 
             let use_map = self.graph_triples_map.get_mut(&graph).unwrap();
@@ -186,8 +186,14 @@ impl Triplestore {
             let m = use_map.get_mut(&p).unwrap();
             m.insert(k, v);
         }
+        let fts_iris = self.indexing.fts_iris;
         for nt in &out_new_triples {
-            if matches!(nt.object_type, BaseRDFNodeType::Literal(..)) {
+            let fts_object = match nt.object_type {
+                BaseRDFNodeType::Literal(..) => true,
+                BaseRDFNodeType::IRI => fts_iris,
+                _ => false,
+            };
+            if fts_object {
                 if let Some(df) = &nt.df {
                     if let Some(fts_index) = self.fts_index.get_mut(&nt.graph) {
                         let fts_now = Instant::now();

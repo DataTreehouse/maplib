@@ -22,6 +22,9 @@ impl PyIndexingOptions {
         fts=None,
         fts_path=None,
         geo=None,
+        fts_predicates=None,
+        fts_local_names=None,
+        fts_iris=None,
     ))]
     pub fn new(
         object_sort_all: Option<bool>,
@@ -29,6 +32,9 @@ impl PyIndexingOptions {
         fts: Option<bool>,
         fts_path: Option<String>,
         geo: Option<bool>,
+        fts_predicates: Option<Vec<PyIRI>>,
+        fts_local_names: Option<bool>,
+        fts_iris: Option<bool>,
     ) -> PyIndexingOptions {
         let fts = fts.unwrap_or(DEFAULT_FTS) || fts_path.is_some();
         let fts_path = fts_path.map(|fts_path| Path::new(&fts_path).to_owned());
@@ -44,7 +50,15 @@ impl PyIndexingOptions {
             });
             IndexingOptions::new(object_sort_all, object_sort_some, fts, fts_path)
         };
-        let inner = inner.with_geo(geo.unwrap_or(false));
+        let fts_predicates =
+            fts_predicates.map(|ps| ps.into_iter().map(|x| x.into_inner()).collect());
+        let inner = inner
+            .with_geo(geo.unwrap_or(false))
+            .with_fts_options(
+            fts_predicates,
+            fts_local_names.unwrap_or(false),
+            fts_iris.unwrap_or(false),
+        );
         PyIndexingOptions { inner }
     }
 }

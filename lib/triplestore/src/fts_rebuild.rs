@@ -18,6 +18,7 @@ impl Triplestore {
                     for ((subject_type, object_type), ts) in map {
                         if !object_type.is_lit_type(oxrdf::vocab::xsd::STRING)
                             && !object_type.is_lang_string()
+                            && !(self.indexing.fts_iris && object_type.is_iri())
                         {
                             continue;
                         }

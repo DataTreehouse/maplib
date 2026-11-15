@@ -447,6 +447,9 @@ class IndexingOptions:
             fts: bool = None,
             fts_path: str = None,
             geo: bool = None,
+            fts_predicates: List["IRI"] = None,
+            fts_local_names: bool = None,
+            fts_iris: bool = None,
     ):
         """
         Defaults to indexing on subjects and objects for select types (e.g. rdf:type and rdfs:label)
@@ -459,6 +462,15 @@ class IndexingOptions:
         :param geo: Enable the GeoSPARQL index (maplib EE). Geometry literals (geo:wktLiteral,
                     geo:wkbLiteral, geo:geoJSONLiteral) are stored with a spatial index, and GeoSPARQL
                     filters use it. GeoSPARQL functions also work without the index, but slower.
+        :param fts_predicates: Only index the string literals of these predicates for full text search
+                               (all predicates by default). Enables full text search.
+        :param fts_local_names: Also index the local names of the subject IRIs of indexed triples
+                                (after the last #, / or :), so that e.g. a CGMES rdf:ID is searchable.
+                                They are matched with the pseudo-predicate maplib:ftsLocalName.
+                                Enables full text search.
+        :param fts_iris: Also index IRIs in the object position for full text search, by the whole IRI,
+                         with the predicate of the triple: <http://ex.org/ns#BreakerType> has the tokens
+                         http, ex, org, ns and breakertype. Enables full text search.
         """
 
 

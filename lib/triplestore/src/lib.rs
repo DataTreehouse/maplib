@@ -21,7 +21,7 @@ use crate::errors::TriplestoreError;
 use crate::storage::codes_to_ranks;
 use crate::storage::Triples;
 use file_io::create_folder_if_not_exists;
-use fts::FtsIndex;
+use fts::{FtsIndex, FtsOptions};
 use geo::GeoIndex;
 use oxrdf::vocab::{rdf, rdfs};
 use oxrdf::NamedNode;
@@ -666,6 +666,15 @@ pub struct IndexingOptions {
     pub fts: bool,
     #[serde(skip)]
     pub fts_path: Option<PathBuf>,
+    /// Only index string literals of these predicates for full text search. All when `None`.
+    #[serde(skip)]
+    pub fts_predicates: Option<Vec<NamedNode>>,
+    /// Also index the local names of subject IRIs for full text search.
+    #[serde(skip)]
+    pub fts_local_names: bool,
+    /// Also index IRIs in the object position for full text search, by the whole IRI.
+    #[serde(skip)]
+    pub fts_iris: bool,
     /// Index geometry literals for GeoSPARQL. Kept when serializing, and the index is rebuilt
     /// when the triplestore is read back.
     #[serde(default)]
@@ -685,7 +694,33 @@ impl IndexingOptions {
             object_sort_some,
             fts,
             fts_path,
+            fts_predicates: None,
+            fts_local_names: false,
+            fts_iris: false,
             geo: false,
+        }
+    }
+
+    /// Restricts the full text search index to some predicates, and/or adds subject IRI local
+    /// names or object IRIs to it. Any of these enables full text search.
+    pub fn with_fts_options(
+        mut self,
+        fts_predicates: Option<Vec<NamedNode>>,
+        fts_local_names: bool,
+        fts_iris: bool,
+    ) -> Self {
+        self.fts = self.fts || fts_predicates.is_some() || fts_local_names || fts_iris;
+        self.fts_predicates = fts_predicates;
+        self.fts_local_names = fts_local_names;
+        self.fts_iris = fts_iris;
+        self
+    }
+
+    pub fn fts_options(&self) -> FtsOptions {
+        FtsOptions {
+            predicates: self.fts_predicates.clone(),
+            local_names: self.fts_local_names,
+            iris: self.fts_iris,
         }
     }
 
@@ -801,8 +836,11 @@ impl Triplestore {
                 // Only doing anything if the fts index does not already exist.
                 // If it exists, then it should be updated as well.
                 if !self.fts_index.contains_key(graph) {
-                    let index = FtsIndex::new(indexing.fts_path.as_ref().map(|x| x.as_ref()))
-                        .map_err(TriplestoreError::FtsError)?;
+                    let index = FtsIndex::new(
+                        indexing.fts_path.as_ref().map(|x| x.as_ref()),
+                        indexing.fts_options(),
+                    )
+                    .map_err(TriplestoreError::FtsError)?;
                     self.fts_index.insert(graph.clone(), index);
                     for (predicate, map) in self.graph_triples_map.get(graph).unwrap() {
                         for ((subject_type, object_type), ts) in map {
@@ -839,10 +877,21 @@ impl Triplestore {
         Ok(())
     }
 
-    fn add_graph_if_not_exists(&mut self, graph: &NamedGraph) {
+    /// Adds an empty graph, with an empty full text search index if FTS indexing is enabled,
+    /// so that triples added to a new named graph are indexed like the default graph.
+    fn add_graph_if_not_exists(&mut self, graph: &NamedGraph) -> Result<(), TriplestoreError> {
         if !self.graph_triples_map.contains_key(graph) {
             self.graph_triples_map.insert(graph.clone(), HashMap::new());
         }
+        if self.indexing.fts && !self.fts_index.contains_key(graph) {
+            let index = FtsIndex::new(
+                self.indexing.fts_path.as_ref().map(|x| x.as_ref()),
+                self.indexing.fts_options(),
+            )
+            .map_err(TriplestoreError::FtsError)?;
+            self.fts_index.insert(graph.clone(), index);
+        }
+        Ok(())
     }
 }
 
@@ -851,8 +900,11 @@ fn maybe_create_fts_index_map(
 ) -> Result<HashMap<NamedGraph, FtsIndex>, TriplestoreError> {
     let fts_index = if indexing.fts {
         Some(
-            FtsIndex::new(indexing.fts_path.as_ref().map(|x| x.as_ref()))
-                .map_err(TriplestoreError::FtsError)?,
+            FtsIndex::new(
+                indexing.fts_path.as_ref().map(|x| x.as_ref()),
+                indexing.fts_options(),
+            )
+            .map_err(TriplestoreError::FtsError)?,
         )
     } else {
         None

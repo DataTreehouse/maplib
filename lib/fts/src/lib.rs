@@ -10,11 +10,22 @@ use thiserror::Error;
 #[derive(Debug, Error)]
 pub enum FtsError {}
 
+/// What the full text search index covers.
+#[derive(Debug, Clone, Default)]
+pub struct FtsOptions {
+    /// Only index string literals of these predicates. All predicates when `None`.
+    pub predicates: Option<Vec<NamedNode>>,
+    /// Also index the local names of subject IRIs (after the last `#`, `/` or `:`).
+    pub local_names: bool,
+    /// Also index IRIs in the object position, by the whole IRI.
+    pub iris: bool,
+}
+
 #[derive(Debug, Clone)]
 pub struct FtsIndex {}
 
 impl FtsIndex {
-    pub fn new(_path: Option<&Path>) -> Result<FtsIndex, FtsError> {
+    pub fn new(_path: Option<&Path>, _options: FtsOptions) -> Result<FtsIndex, FtsError> {
         unimplemented!("Contact Data Treehouse to enable full text search")
     }
 
