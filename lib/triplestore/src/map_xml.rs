@@ -4,7 +4,7 @@ use oxrdf::vocab::{rdf, xsd};
 use oxrdf::NamedNode;
 use polars::prelude::{DataFrame, PlSmallStr};
 use polars_core::prelude::IntoColumn;
-use quick_xml::escape::unescape;
+use quick_xml::escape::{resolve_xml_entity, unescape};
 use quick_xml::events::Event;
 use quick_xml::Reader;
 use representation::constants::{
@@ -34,7 +34,9 @@ impl Triplestore {
         uuid_namespace: Option<String>,
     ) -> Result<(), TriplestoreError> {
         let mut reader = Reader::from_reader(Cursor::new(u8s.as_slice()));
-        reader.config_mut().trim_text(true);
+        // Text is trimmed after adjacent text, CDATA and reference pieces are joined, not per
+        // fragment, so whitespace around a reference (`Pump &amp; motor`) is kept.
+        reader.config_mut().trim_text(false);
 
         let mut pred_map: PredMap = HashMap::new();
         let mut datatypes_map = HashMap::new();
@@ -47,6 +49,9 @@ impl Triplestore {
         let mut path = Vec::new();
         let mut current_counter = 0; // keep track of how many elements that are on the same level for uuid v5
         let mut counter_stack: Vec<usize> = Vec::new();
+        // Text content of the current element since the last start, end or empty tag. quick-xml
+        // reports text, CDATA sections and `&ref;` / `&#N;` references as separate events.
+        let mut pending_text = String::new();
         let use_uuid_namespace = if let Some(uuid_namespace) = uuid_namespace {
             Uuid::new_v5(&Uuid::NAMESPACE_DNS, uuid_namespace.as_bytes())
         } else {
@@ -59,6 +64,7 @@ impl Triplestore {
             {
                 Event::Eof => break,
                 Event::Start(e) => {
+                    flush_text(&mut pending_text, &mut stack, &mut pred_map, &string_type)?;
                     let name = e.name();
                     let name_bytes = name.as_ref();
                     let name_path = std::str::from_utf8(name_bytes)
@@ -93,6 +99,7 @@ impl Triplestore {
                     });
                 }
                 Event::Empty(e) => {
+                    flush_text(&mut pending_text, &mut stack, &mut pred_map, &string_type)?;
                     current_counter += 1;
                     path.push(current_counter.to_string());
                     let _ = open_element(
@@ -109,6 +116,7 @@ impl Triplestore {
                     path.pop();
                 }
                 Event::End(_) => {
+                    flush_text(&mut pending_text, &mut stack, &mut pred_map, &string_type)?;
                     if let Some(Frame {
                         previous_base_prefix,
                         introduced_prefixed_namespaces,
@@ -130,23 +138,18 @@ impl Triplestore {
                     path.pop();
                 }
                 Event::Text(t) => {
-                    let raw = t
+                    let s = t
                         .decode()
                         .map_err(|e| TriplestoreError::XMLError(e.to_string()))?;
-                    let s = unescape(&raw)
-                        .map_err(|e| TriplestoreError::XMLError(e.to_string()))?
-                        .into_owned();
-                    if !s.is_empty() {
-                        push_text_child(&s, &mut stack, &mut pred_map, string_type.as_ref())?;
-                    }
+                    pending_text.push_str(&s);
                 }
                 Event::CData(t) => {
                     let s = std::str::from_utf8(t.as_ref())
-                        .map_err(|e| TriplestoreError::XMLError(e.to_string()))?
-                        .to_string();
-                    if !s.is_empty() {
-                        push_text_child(&s, &mut stack, &mut pred_map, string_type.as_ref())?;
-                    }
+                        .map_err(|e| TriplestoreError::XMLError(e.to_string()))?;
+                    pending_text.push_str(s);
+                }
+                Event::GeneralRef(r) => {
+                    resolve_reference(&r, &mut pending_text)?;
                 }
                 _ => {}
             }
@@ -257,6 +260,46 @@ fn open_element(
     push_iri_object(pred_map, rdf::TYPE.as_str(), &subject, type_iri.as_str());
 
     Ok((subject, new_base_prefix, introduced_prefixed_namespaces))
+}
+
+/// Appends the replacement text of a `&name;` or `&#N;` reference.
+///
+/// Character references and the five predefined XML entities (`amp`, `lt`, `gt`, `apos`, `quot`)
+/// are resolved. Any other entity reference is dropped: `map_xml` ignores the DOCTYPE (NodeSet2
+/// files and other untrusted XML go through it), so entities declared there are never expanded,
+/// which keeps entity-expansion bombs harmless.
+fn resolve_reference(
+    r: &quick_xml::events::BytesRef,
+    text: &mut String,
+) -> Result<(), TriplestoreError> {
+    if let Some(ch) = r
+        .resolve_char_ref()
+        .map_err(|e| TriplestoreError::XMLError(e.to_string()))?
+    {
+        text.push(ch);
+        return Ok(());
+    }
+    let name = r
+        .decode()
+        .map_err(|e| TriplestoreError::XMLError(e.to_string()))?;
+    if let Some(replacement) = resolve_xml_entity(&name) {
+        text.push_str(replacement);
+    }
+    Ok(())
+}
+
+/// Pushes the joined text pieces collected since the last tag as one text child, trimmed.
+fn flush_text(
+    pending_text: &mut String,
+    stack: &mut [Frame],
+    pred_map: &mut PredMap,
+    string_type: &BaseRDFNodeType,
+) -> Result<(), TriplestoreError> {
+    if !pending_text.trim().is_empty() {
+        push_text_child(pending_text, stack, pred_map, string_type)?;
+    }
+    pending_text.clear();
+    Ok(())
 }
 
 fn push_text_child(
