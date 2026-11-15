@@ -238,6 +238,36 @@ class FabricDatabase(SQLDatabase):
     def connection(self) -> Any: ...
     def close(self) -> None: ...
 
+class TimescaleDatabase(SQLDatabase):
+    """
+    A TimescaleDB (PostgreSQL) database, queried with psycopg (version 3).
+    Time buckets are computed with TimescaleDB's time_bucket.
+    """
+
+    connection: Any
+
+    def __init__(self, url: Optional[str] = None, host: Optional[str] = None, port: Union[int, str, None] = None,
+                 database: Optional[str] = None, user: Optional[str] = None, password: Optional[str] = None,
+                 sslmode: Optional[str] = None, connection: Any = None, timezone: Optional[str] = "UTC",
+                 sql_dialect: Union[str, "SQLDialect"] = "timescale", **connect_kwargs: Any):
+        """
+        :param url: A connection URI or conninfo string, e.g. postgresql://user:password@host:5432/database.
+            The other connection arguments are added to it, and take precedence.
+        :param host: The host name of the server.
+        :param port: The port of the server (5432 when not given).
+        :param database: The database to connect to.
+        :param user: The user to connect as.
+        :param password: The password of the user.
+        :param sslmode: The libpq sslmode, e.g. require or verify-full.
+        :param connection: A DB-API connection (e.g. from psycopg.connect) to use instead of connecting.
+        :param timezone: The time zone set for the session, so that timestamps with time zone come back in it.
+            None leaves the session's time zone as is.
+        :param sql_dialect: Override the SQL dialect, e.g. with a subclass of TimescaleDialect.
+        :param connect_kwargs: Other keyword arguments for psycopg.connect (e.g. connect_timeout, sslrootcert).
+        """
+    def close(self) -> None:
+        """Close the connection."""
+
 class SQLDialect:
     """
     The database specific parts of the translation from virtualized queries to SQL.
@@ -274,6 +304,7 @@ class SQLDialect:
         """An expression used as a selected value (BIND), e.g. a condition as a value where there are no booleans."""
 
 class PostgresDialect(SQLDialect): ...
+class TimescaleDialect(PostgresDialect): ...
 class DuckDBDialect(PostgresDialect): ...
 class BigQueryDialect(SQLDialect): ...
 class SnowflakeDialect(SQLDialect): ...
