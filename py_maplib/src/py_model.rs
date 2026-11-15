@@ -31,13 +31,16 @@ use cdf::map_cdf;
 use opc_ua::mappings::map_opc_ua;
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
-use pyo3::types::{PyBytes, PyDict, PyString};
+use pyo3::types::{PyBytes, PyDict};
 use pyo3::{pyclass, pymethods, Bound, Py, PyAny, PyRef, PyResult, Python};
+use oxrdf::NamedNode;
 use representation::cats::LockedCats;
 use representation::dataset::NamedGraph;
 use representation::df_to_python::df_to_py_df;
 use representation::python::PyIRI;
-use representation::result::QueryResult;
+use representation::result::{QueryResult, QueryResultKind};
+use triplestore::query_cache::{CachePlan, KeyBuilder, Lookup, QueryCache};
+use crate::py_query_cache::{options_from, stats_dict, PyQueryCacheOptions};
 use representation::solution_mapping::EagerSolutionMappings;
 use representation::BaseRDFNodeType;
 use std::collections::HashMap;
@@ -58,13 +61,31 @@ use virtualization::python::VirtualizedPythonDatabase;
 pub struct PyModel {
     // Shared with the endpoints started by serve().
     pub inner: Arc<RwLock<InnerModel>>,
+    // The query result cache of the inner model, used without locking it.
+    query_cache: Arc<QueryCache>,
 }
 
 impl PyModel {
     pub fn from_inner_mapping(inner: InnerModel) -> PyModel {
         PyModel {
+            query_cache: inner.query_cache(),
             inner: Arc::new(RwLock::new(inner)),
         }
+    }
+}
+
+/// A query result kept in the query cache for Model.query().
+struct CachedQueryResult {
+    kind: QueryResultKind,
+    cats: LockedCats,
+    prefixes: HashMap<String, NamedNode>,
+}
+
+fn result_bytes(kind: &QueryResultKind) -> usize {
+    match kind {
+        QueryResultKind::Select(sm) => sm.mappings.estimated_size(false),
+        QueryResultKind::Construct(v) => v.iter().map(|(sm, _)| sm.mappings.estimated_size(false)).sum(),
+        QueryResultKind::Ask(_) => 1,
     }
 }
 
@@ -773,6 +794,7 @@ impl PyModel {
         bindings=None,
         endpoint=None,
         endpoint_token=None,
+        cache=true,
     ))]
     #[instrument(skip_all)]
     fn query(
@@ -790,6 +812,7 @@ impl PyModel {
         bindings: Option<HashMap<String, Py<PyAny>>>,
         endpoint: Option<String>,
         endpoint_token: Option<String>,
+        cache: bool,
     ) -> PyResult<Py<PyAny>> {
         if let Some(endpoint) = endpoint {
             if parameters.is_some() {
@@ -836,25 +859,99 @@ impl PyModel {
                 py,
             );
         }
+        let use_cache = cache
+            && parameters.is_none()
+            && !debug.unwrap_or(false)
+            && self.query_cache.enabled();
+        if !use_cache && cache && self.query_cache.enabled() {
+            self.query_cache.note_bypass();
+        }
         let mapped_parameters = map_parameters(parameters, py)?;
         let graph = parse_optional_named_node(graph)?;
         let graph = graph.map(|graph| NamedGraph::from_maybe_named_node(Some(&graph)));
         let parsed_bindings = maybe_parse_bindings(bindings, py)?;
-        let (res, cats, prefixes) = py.detach(|| -> PyResult<(_, LockedCats, _)> {
-            let inner = self.inner.read().unwrap_or_else(|e| e.into_inner());
-            let cats = inner.triplestore.global_cats.clone();
-            let res = query_mutex(
-                &inner,
-                query,
-                mapped_parameters,
-                graph,
-                include_graphs,
-                max_rows,
-                debug,
-                parsed_bindings,
-            )?;
-            Ok((res, cats, inner.prefixes.clone()))
-        })?;
+        let key = use_cache.then(|| {
+            let include = parse_include_graphs(include_graphs.clone(), true);
+            let mut b: Vec<(&String, String)> = parsed_bindings
+                .iter()
+                .flatten()
+                .map(|(k, v)| (k, v.to_string()))
+                .collect();
+            b.sort();
+            KeyBuilder::new("model.query")
+                .part("query", query.trim())
+                .part("graph", format!("{graph:?}"))
+                .part("include", format!("{:?}", include.ok()))
+                .part("max_rows", format!("{max_rows:?}"))
+                .part("bindings", format!("{b:?}"))
+                .finish()
+        });
+        let mut key = key;
+        let hit = match key.as_ref().map(|k| self.query_cache.get(k)) {
+            Some(Lookup::Hit(v)) => v.downcast::<CachedQueryResult>().ok(),
+            Some(Lookup::Bypass) => {
+                key = None;
+                None
+            }
+            _ => None,
+        };
+        let (res, cats, prefixes) = if let Some(hit) = hit {
+            let res = QueryResult {
+                kind: hit.kind.clone(),
+                debug: None,
+                pushdown_paths: vec![],
+            };
+            (res, hit.cats.clone(), hit.prefixes.clone())
+        } else {
+            let query_cache = self.query_cache.clone();
+            py.detach(|| -> PyResult<(_, LockedCats, _)> {
+                let inner = self.inner.read().unwrap_or_else(|e| e.into_inner());
+                // Read under the read lock: no write runs until it is released.
+                let stamp = query_cache.versions.stamp();
+                let plan = if key.is_some() {
+                    let include = parse_include_graphs(include_graphs.clone(), true)?;
+                    Some(inner.cache_plan(&query, graph.as_ref(), &include, parsed_bindings.as_ref()))
+                } else {
+                    None
+                };
+                let cats = inner.triplestore.global_cats.clone();
+                let started = std::time::Instant::now();
+                let res = query_mutex(
+                    &inner,
+                    query,
+                    mapped_parameters,
+                    graph,
+                    include_graphs,
+                    max_rows,
+                    debug,
+                    parsed_bindings,
+                )?;
+                let run_time = started.elapsed();
+                let prefixes = inner.prefixes.clone();
+                drop(inner);
+                match (key, plan) {
+                    (Some(key), Some(CachePlan::Cache { virtualized: true, .. }))
+                        if !query_cache.options().cache_virtualized =>
+                    {
+                        query_cache.note_uncacheable(key)
+                    }
+                    (Some(key), Some(CachePlan::Cache { reads, .. })) => {
+                        let bytes = result_bytes(&res.kind);
+                        if query_cache.worth_keeping(run_time, bytes) {
+                            let value = CachedQueryResult {
+                                kind: res.kind.clone(),
+                                cats: cats.clone(),
+                                prefixes: prefixes.clone(),
+                            };
+                            query_cache.insert(key, stamp, reads, Arc::new(value), bytes);
+                        }
+                    }
+                    (Some(key), Some(CachePlan::Bypass(_))) => query_cache.note_uncacheable(key),
+                    _ => {}
+                }
+                Ok((res, cats, prefixes))
+            })?
+        };
         print_debug_if_exists(res.debug.as_ref());
 
         query_to_result(
@@ -1572,6 +1669,36 @@ impl PyModel {
         })
     }
 
+    /// Sets the query result cache: QueryCacheOptions, True for the default options, or
+    /// False / None to disable it. Results are kept until a write changes the triples they read
+    /// (per named graph and predicate), they expire (ttl) or they are evicted.
+    #[pyo3(signature = (options=None))]
+    fn set_query_cache(&self, options: Option<Bound<'_, PyAny>>) -> PyResult<()> {
+        let options = match options {
+            Some(o) => options_from(&o)?,
+            None => Default::default(),
+        };
+        self.query_cache.set_options(options);
+        Ok(())
+    }
+
+    /// The options of the query result cache.
+    fn get_query_cache(&self) -> PyQueryCacheOptions {
+        PyQueryCacheOptions {
+            inner: self.query_cache.options(),
+        }
+    }
+
+    /// Counts of hits, misses and so on of the query result cache, and its size.
+    fn query_cache_stats<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
+        stats_dict(py, &self.query_cache.stats())
+    }
+
+    /// Removes all results from the query result cache.
+    fn clear_query_cache(&self) {
+        self.query_cache.clear();
+    }
+
     #[allow(clippy::too_many_arguments)]
     #[pyo3(signature = (
         host="127.0.0.1".to_string(),
@@ -1593,6 +1720,7 @@ impl PyModel {
         static_vars=None,
         query_log_size=1000,
         block=false,
+        query_cache=None,
     ))]
     fn serve(
         &self,
@@ -1616,7 +1744,21 @@ impl PyModel {
         static_vars: Option<HashMap<String, String>>,
         query_log_size: usize,
         block: bool,
+        query_cache: Option<Bound<'_, PyAny>>,
     ) -> PyResult<Py<PyServer>> {
+        // None keeps the model's setting, False makes the server not use the cache, True or
+        // QueryCacheOptions set the model's cache (shared with Model.query).
+        let mut server_cache = true;
+        if let Some(qc) = &query_cache {
+            if let Ok(false) = qc.extract::<bool>() {
+                server_cache = false;
+            } else {
+                let options = options_from(qc)?;
+                if !(qc.extract::<bool>().is_ok() && self.query_cache.enabled()) {
+                    self.query_cache.set_options(options);
+                }
+            }
+        }
         let mut options = ServerOptions {
             host,
             sparql_port: port,
@@ -1632,6 +1774,7 @@ impl PyModel {
             static_path,
             static_vars: static_vars.unwrap_or_default(),
             query_log_size,
+            query_cache: server_cache,
             ..ServerOptions::default()
         };
         if let Some(cors_origins) = cors_origins {

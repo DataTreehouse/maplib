@@ -2,6 +2,8 @@ use super::{
     maybe_create_fts_index_map, maybe_create_geo_index, prepare_storage, IndexingOptions,
     StorageOptions, Triplestore,
 };
+use crate::graph_map::GraphTriplesMap;
+use crate::query_cache::QueryCache;
 use crate::errors::TriplestoreError;
 use crate::storage::{Triples, DISK_ROW_GROUP_SIZE};
 use file_io::FileIOError;
@@ -157,7 +159,7 @@ impl Triplestore {
         let mut triples_uuid_map = HashMap::new();
         let mut heights = HashMap::new();
 
-        for (graph, map) in &self.graph_triples_map {
+        for (graph, map) in self.graph_triples_map.iter() {
             for (pred, triples_map) in map {
                 for ((subject_type, object_type), triples) in triples_map {
                     let value = (
@@ -395,8 +397,10 @@ impl Triplestore {
         let fts_index = maybe_create_fts_index_map(&triplestore_metadata.indexing)?;
         let geo_index =
             maybe_create_geo_index(&triplestore_metadata.indexing, storage_pathbuf.as_deref())?;
+        let query_cache = QueryCache::new();
         let mut triplestore = Triplestore {
-            graph_triples_map,
+            graph_triples_map: GraphTriplesMap::new(graph_triples_map, query_cache.clone()),
+            query_cache,
             storage_folder: storage_pathbuf,
             storage_mode: storage.mode,
             triples_folder,

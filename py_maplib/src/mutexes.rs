@@ -82,7 +82,7 @@ pub(crate) fn add_prefixes_mutex(
     inner: &mut InnerModel,
     prefixes: HashMap<String, NamedNode>,
 ) -> PyResult<()> {
-    inner.prefixes.extend(prefixes);
+    inner.add_prefixes(prefixes);
     Ok(())
 }
 

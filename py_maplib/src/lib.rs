@@ -3,6 +3,7 @@ mod error;
 mod mutexes;
 mod py_indexing_options;
 mod py_model;
+mod py_query_cache;
 mod py_server;
 mod py_stream;
 mod py_io;
@@ -198,6 +199,7 @@ fn _maplib(py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
     polars::error::abort::register_polars_abort_mechanism();
 
     m.add_class::<PyIndexingOptions>()?;
+    m.add_class::<py_query_cache::PyQueryCacheOptions>()?;
     m.add_class::<PyModel>()?;
     m.add_class::<py_server::PyServer>()?;
     m.add_class::<py_stream::PyModelStream>()?;

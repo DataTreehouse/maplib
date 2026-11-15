@@ -474,6 +474,42 @@ class IndexingOptions:
         """
 
 
+class QueryCacheOptions:
+    """
+    Options of a model's query result cache, see Model.set_query_cache.
+    """
+
+    enabled: bool
+    max_entries: int
+    max_bytes: int
+    max_entry_bytes: int
+    ttl: Optional[float]
+    min_run_time: float
+    cache_virtualized: bool
+
+    def __init__(
+            self,
+            enabled: bool = True,
+            max_entries: int = 1024,
+            max_bytes: int = 256 * 1024 * 1024,
+            max_entry_bytes: int = 16 * 1024 * 1024,
+            ttl: Optional[float] = None,
+            min_run_time: float = 0.0,
+            cache_virtualized: bool = False,
+    ):
+        """
+        :param enabled: Whether results are cached.
+        :param max_entries: The largest number of results kept. The least recently used are evicted first.
+        :param max_bytes: The largest total (estimated) size of the results kept, in bytes.
+        :param max_entry_bytes: Results larger than this (bytes) are returned but not kept.
+        :param ttl: Seconds after which a result is no longer served. None keeps it until a write changes
+                    what it read, or it is evicted.
+        :param min_run_time: Queries that ran faster than this (seconds) are not kept.
+        :param cache_virtualized: Also keep the results of queries that read virtualized databases. The cache does
+                                  not see changes in those databases, so set a ttl with this.
+        """
+
+
 ParametersType = Dict[str, "SolutionMappings"]
 
 
@@ -1368,6 +1404,7 @@ class Model:
             bindings: Dict[str, Union[str, IRI, Literal]] = None,
             endpoint: Optional[str] = None,
             endpoint_token: Optional[str] = None,
+            cache: bool = True,
     ) -> DataFrame | SolutionMappings | list[DataFrame | SolutionMappings] | bool | str | None:
         """
         Query the contained knowledge graph using SPARQL
@@ -1397,6 +1434,9 @@ class Model:
                          are sent as Arrow over plain HTTP, with maplib's own types, and zstd compressed when the
                          server is on another host. parameters and debug can not be used with an endpoint.
         :param endpoint_token: The auth_token of the server, if it has one.
+        :param cache: Use the model's query result cache, when it is enabled (see set_query_cache). Queries with
+                      parameters or debug, and queries calling NOW(), RAND(), UUID(), STRUUID(), BNODE() or user
+                      defined functions, are never cached.
         :return: DataFrame (Select), list of DataFrames (Construct) containing results or SolutionMappings when solution_mappings is set, or a bool (Ask).
 
         """
@@ -1845,6 +1885,45 @@ class Model:
         :param target_graph: The IRI of the graph in this Model to copy into. None means the default graph.
         """
 
+    def set_query_cache(self, options: Union["QueryCacheOptions", bool, None] = None) -> None:
+        """
+        Sets the query result cache of the model, used by Model.query and by the servers of Model.serve.
+        A result is kept until a write changes the triples it can read: writes are tracked per named graph and
+        predicate, so a write to another graph or another predicate keeps it. A query with a variable predicate
+        (?s ?p ?o), a negated property set or a zero-length path between variables reads every predicate of its
+        graphs, and GRAPH ?g reads the graph in every graph. Changes of the prefixes, the indexing options or
+        the virtualizations invalidate all results. Cached results are served without waiting for writes to
+        finish elsewhere in the model.
+
+        Usage:
+
+        >>> m.set_query_cache(QueryCacheOptions(max_entries=2048, ttl=None))
+        >>> m.query(q)  # runs the query
+        >>> m.query(q)  # from the cache
+        >>> m.query_cache_stats()["hits"]
+        1
+
+        :param options: QueryCacheOptions, True for the default options, False or None to turn the cache off
+                        (the default).
+        """
+
+    def get_query_cache(self) -> "QueryCacheOptions":
+        """
+        :return: The options of the query result cache.
+        """
+
+    def query_cache_stats(self) -> Dict[str, Union[int, bool]]:
+        """
+        Counts of the query result cache since the model was created: hits, misses, bypassed (queries that are
+        never cached), inserts, evictions (for the limits), invalidations (by writes), expirations (ttl), and its
+        size: entries and bytes. Also enabled, the current version stamp and how many version cells are kept.
+        """
+
+    def clear_query_cache(self) -> None:
+        """
+        Removes all results from the query result cache. The options stay.
+        """
+
     def serve(
             self,
             host: str = "127.0.0.1",
@@ -1866,6 +1945,7 @@ class Model:
             static_vars: Dict[str, str] = None,
             query_log_size: int = 1000,
             block: bool = False,
+            query_cache: Union["QueryCacheOptions", bool, None] = None,
     ) -> "Server":
         """
         Serve the Model over the SPARQL 1.1 Protocol and Arrow Flight (maplib Enterprise Edition).
@@ -1938,6 +2018,11 @@ class Model:
             rows, bytes and the time spent waiting, running and serializing, and summary statistics.
             DELETE /query-log empties it.
         :param block: Block until the server stops, Ctrl-C stops it.
+        :param query_cache: The query result cache. None (the default) uses the model's (see set_query_cache), which
+                            the server shares with Model.query. QueryCacheOptions set the model's cache. True turns it
+                            on with the default options if it is off. False makes the server not use it. A response
+                            says what the cache did in the X-Maplib-Cache header (hit, miss or bypass), and the
+                            query log and /status report its counts.
         :return: The running Server.
         """
 

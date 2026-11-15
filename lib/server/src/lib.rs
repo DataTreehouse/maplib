@@ -69,6 +69,9 @@ pub struct ServerOptions {
     pub static_vars: std::collections::HashMap<String, String>,
     /// How many queries and updates the query log (`/query-log`) keeps, 0 for no log.
     pub query_log_size: usize,
+    /// Answer queries from the model's query result cache (see `Model.set_query_cache`), when
+    /// it is enabled.
+    pub query_cache: bool,
 }
 
 /// Compression of Arrow record batch buffers, as defined by the Arrow IPC format.
@@ -124,6 +127,7 @@ impl Default for ServerOptions {
             static_path: "/ui".to_string(),
             static_vars: Default::default(),
             query_log_size: 1000,
+            query_cache: true,
             result_capacity: 64,
             arrow_compression: ArrowCompression::Auto,
         }

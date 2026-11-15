@@ -149,7 +149,7 @@ impl Triplestore {
             }
         }
         let mut graphs = HashSet::new();
-        for (g, predicates) in &self.graph_triples_map {
+        for (g, predicates) in self.graph_triples_map.iter() {
             if let NamedGraph::NamedGraph(nn) = g {
                 if predicates.values().any(|m| !m.is_empty()) {
                     graphs.insert(nn.clone());

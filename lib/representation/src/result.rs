@@ -30,7 +30,7 @@ pub struct QueryResult {
     pub pushdown_paths: Vec<Context>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum QueryResultKind {
     Select(EagerSolutionMappings),
     Construct(Vec<(EagerSolutionMappings, Option<NamedNode>)>),

@@ -95,12 +95,10 @@ impl Triplestore {
             self.add_graph_if_not_exists(&graph)?;
             let k = (subject_type.clone(), object_type.clone());
 
-            let use_map = self.graph_triples_map.get_mut(&graph).unwrap();
-            let triples = if let Some(m) = use_map.get_mut(&predicate) {
-                m.remove(&k)
-            } else {
-                None
-            };
+            let triples = self
+                .graph_triples_map
+                .predicate_mut(&graph, &predicate)
+                .and_then(|m| m.remove(&k));
 
             let (s, o) = k;
 
@@ -178,13 +176,9 @@ impl Triplestore {
 
         let out_new_triples: Vec<_> = out_new_triples.into_iter().flatten().collect();
         for ((graph, p, s, o), v) in to_add_map {
-            let use_map = self.graph_triples_map.get_mut(&graph).unwrap();
-            if !use_map.contains_key(&p) {
-                use_map.insert(p.clone(), HashMap::new());
-            }
-            let k = (s, o);
-            let m = use_map.get_mut(&p).unwrap();
-            m.insert(k, v);
+            self.graph_triples_map
+                .predicate_entry(&graph, &p)
+                .insert((s, o), v);
         }
         let fts_iris = self.indexing.fts_iris;
         for nt in &out_new_triples {

@@ -157,9 +157,8 @@ impl Triplestore {
     /// Removes the rdf:type triples from the transient graph, where `rdfs_class_inheritance`
     /// puts them.
     pub fn drop_rdfs_class_inheritance(&mut self) -> Result<(), TriplestoreError> {
-        if let Some(t) = self.graph_triples_map.get_mut(&NamedGraph::transient()) {
-            t.remove(&rdf::TYPE.into_owned());
-        }
+        self.graph_triples_map
+            .remove_predicate(&NamedGraph::transient(), &rdf::TYPE.into_owned());
         Ok(())
     }
 

@@ -24,6 +24,7 @@ __all__ = [
     "Triple",
     "SolutionMappings",
     "IndexingOptions",
+    "QueryCacheOptions",
     "ValidationReport",
     "Instance",
     "Template",

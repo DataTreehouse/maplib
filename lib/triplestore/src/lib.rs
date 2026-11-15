@@ -6,9 +6,11 @@ mod dblf;
 pub mod errors;
 mod fts_rebuild;
 mod geo_index;
+mod graph_map;
 mod map_df;
 mod map_json;
 mod map_xml;
+pub mod query_cache;
 pub mod query_solutions;
 pub mod rdfs_inferencing;
 pub mod serialization;
@@ -18,6 +20,8 @@ pub mod triples_read;
 pub mod triples_write;
 
 use crate::errors::TriplestoreError;
+use crate::graph_map::GraphTriplesMap;
+use crate::query_cache::{QueryCache, Touched};
 use crate::storage::codes_to_ranks;
 use crate::storage::Triples;
 use file_io::create_folder_if_not_exists;
@@ -65,17 +69,13 @@ use tracing::{debug, instrument};
 // adding triples deadlocks. This happens whether the loop runs on Rayon's global pool or on
 // Polars' own pool. Each collect is still parallel inside Polars.
 
-#[derive(Clone)]
 pub struct Triplestore {
     /// The maplib storage folder, set in hybrid and disk storage modes.
     pub storage_folder: Option<PathBuf>,
     pub storage_mode: StorageMode,
     /// Folder holding the triple tables as parquet files, set in disk storage mode only.
     pub(crate) triples_folder: Option<PathBuf>,
-    graph_triples_map: HashMap<
-        NamedGraph,
-        HashMap<NamedNode, HashMap<(BaseRDFNodeType, BaseRDFNodeType), Triples>>,
-    >,
+    graph_triples_map: GraphTriplesMap,
     parser_call: usize,
     indexing: IndexingOptions,
     fts_index: HashMap<NamedGraph, FtsIndex>,
@@ -87,6 +87,8 @@ pub struct Triplestore {
     pub udf_registry: Arc<UdfRegistry>,
     /// Search graphs of path searches.
     pub(crate) path_graph_cache: sparql::lazy_graph_patterns::path_search::PathGraphCache,
+    /// Results of queries, invalidated by the changes `graph_triples_map` records.
+    pub query_cache: Arc<QueryCache>,
 }
 
 impl Triplestore {
@@ -168,7 +170,9 @@ impl Triplestore {
         input_types: Option<Vec<BaseRDFNodeType>>,
     ) {
         let reg = Arc::get_mut(&mut self.udf_registry).expect("UDF registry is not borrowed");
-        reg.add_udf(iri, f, output_type, input_types)
+        reg.add_udf(iri, f, output_type, input_types);
+        // A query calling the function before it was registered may have been cached.
+        self.query_cache.versions.record(Touched::All);
     }
 
     pub fn maybe_garbage_collect(&mut self) -> Result<u32, TriplestoreError> {
@@ -337,17 +341,12 @@ impl Triplestore {
             .collect();
 
         for (graph, pred, subject_type, object_type, triples) in data_and_triples? {
-            let use_graph_map = &mut self.graph_triples_map;
-            if !use_graph_map.contains_key(&graph) {
-                use_graph_map.insert(graph.clone(), HashMap::new());
-            }
-            let pred_map = use_graph_map.get_mut(&graph).unwrap();
-            if !pred_map.contains_key(&pred) {
-                pred_map.insert(pred.clone(), HashMap::new());
-            }
-            let triples_map = pred_map.get_mut(&pred).unwrap();
-            triples_map.insert((subject_type, object_type), triples);
+            self.graph_triples_map
+                .predicate_entry(&graph, &pred)
+                .insert((subject_type, object_type), triples);
         }
+        // The cats are renumbered, and cached solutions refer to them.
+        self.query_cache.versions.record(Touched::All);
         // Compaction renumbers the cats that the full text search and geo indexes refer to.
         self.rebuild_fts_indexes()?;
         self.rebuild_geo_index()?;
@@ -500,7 +499,7 @@ impl Triplestore {
             let c = self.global_cats.read()?;
             let cats_image = c.image(&us, None);
 
-            let new_graph_triples = self.graph_triples_map.remove(graph).unwrap();
+            let new_graph_triples = self.graph_triples_map.remove_graph(graph).unwrap();
 
             let new_graph_name = if preserve_name {
                 graph.clone()
@@ -516,17 +515,19 @@ impl Triplestore {
 
             if matches!(graph, NamedGraph::DefaultGraph) {
                 self.graph_triples_map
-                    .insert(NamedGraph::default(), HashMap::new());
+                    .insert_graph(NamedGraph::default(), HashMap::new());
             }
 
+            let query_cache = QueryCache::new();
             let mut detached = Triplestore {
                 storage_folder: self.storage_folder.clone(),
                 storage_mode: self.storage_mode,
                 triples_folder: self.triples_folder.clone(),
-                graph_triples_map: HashMap::from_iter([(
-                    new_graph_name.clone(),
-                    new_graph_triples,
-                )]),
+                graph_triples_map: GraphTriplesMap::new(
+                    HashMap::from_iter([(new_graph_name.clone(), new_graph_triples)]),
+                    query_cache.clone(),
+                ),
+                query_cache,
                 parser_call: self.parser_call,
                 indexing: self.indexing.clone(),
                 fts_index: new_fts_index_map,
@@ -560,7 +561,7 @@ impl Triplestore {
         let existed = self.graph_triples_map.contains_key(graph);
         self.truncate(graph);
         if existed || graph == &NamedGraph::DefaultGraph {
-            self.graph_triples_map.insert(graph.clone(), HashMap::new());
+            self.graph_triples_map.insert_graph(graph.clone(), HashMap::new());
         }
         Ok(())
     }
@@ -569,7 +570,7 @@ impl Triplestore {
     /// `truncate`, this also works with a storage folder: the graph's files then stay in the
     /// folder until it is next reset.
     pub fn remove_temporary_graph(&mut self, graph: &NamedGraph) {
-        self.graph_triples_map.remove(graph);
+        self.graph_triples_map.remove_graph(graph);
         self.fts_index.remove(graph);
     }
 
@@ -577,7 +578,7 @@ impl Triplestore {
         if self.storage_folder.is_some() {
             todo!("Should drop this folder.. ")
         }
-        self.graph_triples_map.remove(graph);
+        self.graph_triples_map.remove_graph(graph);
         self.fts_index.remove(graph);
     }
 }
@@ -662,7 +663,7 @@ impl StorageOptions {
     }
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct IndexingOptions {
     pub object_sort_all: bool,
     pub object_sort_some: Option<HashSet<NamedNode>>,
@@ -868,8 +869,13 @@ impl Triplestore {
         let geo_index = maybe_create_geo_index(&indexing, pathbuf.as_deref())?;
 
         let locked_cats = LockedCats::new_empty(pathbuf.as_ref().map(|x| x.as_ref()));
+        let query_cache = QueryCache::new();
         Ok(Triplestore {
-            graph_triples_map: HashMap::from([(NamedGraph::DefaultGraph, Default::default())]),
+            graph_triples_map: GraphTriplesMap::new(
+                HashMap::from([(NamedGraph::DefaultGraph, Default::default())]),
+                query_cache.clone(),
+            ),
+            query_cache,
             storage_folder: pathbuf,
             storage_mode: storage.mode,
             triples_folder,
@@ -928,11 +934,14 @@ impl Triplestore {
             self.geo_index = maybe_create_geo_index(&indexing, self.storage_folder.as_deref())?;
             self.rebuild_geo_index()?;
         }
+        if self.indexing != indexing {
+            self.query_cache.versions.record(Touched::All);
+        }
         // Object indexes are otherwise only created when triples are added, so the triples
         // already stored are sorted by object (or their object sort dropped) here.
         let global_cats = self.global_cats.clone();
         let cats = global_cats.read()?;
-        for map in self.graph_triples_map.values_mut() {
+        for map in self.graph_triples_map.tables_for_indexing().values_mut() {
             for (predicate, map) in map.iter_mut() {
                 for ((_, object_type), triples) in map.iter_mut() {
                     let enabled = storage::can_and_should_index_object(
@@ -952,9 +961,7 @@ impl Triplestore {
     /// Adds an empty graph, with an empty full text search index if FTS indexing is enabled,
     /// so that triples added to a new named graph are indexed like the default graph.
     fn add_graph_if_not_exists(&mut self, graph: &NamedGraph) -> Result<(), TriplestoreError> {
-        if !self.graph_triples_map.contains_key(graph) {
-            self.graph_triples_map.insert(graph.clone(), HashMap::new());
-        }
+        self.graph_triples_map.ensure_graph(graph);
         if self.indexing.fts && !self.fts_index.contains_key(graph) {
             let index = FtsIndex::new(
                 self.indexing.fts_path.as_ref().map(|x| x.as_ref()),

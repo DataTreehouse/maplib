@@ -18,7 +18,7 @@ use pyo3::{Py, PyAny};
 use representation::solution_mapping::EagerSolutionMappings;
 use representation::{BaseRDFNodeType, RDFNodeState};
 use shacl::{validate, ValidationReport};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::io::Write;
 use std::path::Path;
@@ -43,6 +43,8 @@ use representation::result::{QueryResult, QueryResultKind};
 use spargebra::term::GroundTerm;
 use tracing::instrument;
 use triplestore::errors::TriplestoreError;
+use query_processing::bindings::maybe_replace_bindings;
+use triplestore::query_cache::{cache_plan, CachePlan, PlanContext, QueryCache, Touched};
 use triplestore::triples_read::ExtendedRdfFormat;
 use virtualization::insights_hub::{
     insights_hub_resource_template, InsightsHubAssetModel, INSIGHTS_HUB_NAMESPACE,
@@ -220,6 +222,8 @@ impl Model {
     ) -> Result<(), MaplibError> {
         let virtualized_database = Arc::new(VirtualizedDatabase::VirtualizedPythonDatabase(db));
         let virtualization = Virtualization { resources };
+        // Queries over the newly virtualized predicates now read the virtualized database.
+        self.triplestore.query_cache.versions.record(Touched::All);
         // Each call adds a virtualized database, and the virtualized databases are used together.
         // A resource that was given before is moved to the new virtualized database.
         self.chrontext_settings
@@ -286,6 +290,7 @@ impl Model {
             self.prefixes
                 .insert(k.to_string(), NamedNode::new_unchecked(v));
         }
+        self.triplestore.query_cache.versions.record(Touched::All);
         self.chrontext_settings
             .get_or_insert_with(ChrontextSettings::default)
             .add_virtualization(
@@ -320,13 +325,16 @@ impl Model {
             10_000_000,
             HashMap::new(),
         )?;
-        for (k, v) in [
-            ("insights_hub", INSIGHTS_HUB_NAMESPACE),
-            ("chrontext", "https://github.com/DataTreehouse/chrontext#"),
-        ] {
-            self.prefixes
-                .insert(k.to_string(), NamedNode::new_unchecked(v));
-        }
+        self.add_prefixes(HashMap::from([
+            (
+                "insights_hub".to_string(),
+                NamedNode::new_unchecked(INSIGHTS_HUB_NAMESPACE),
+            ),
+            (
+                "chrontext".to_string(),
+                NamedNode::new_unchecked("https://github.com/DataTreehouse/chrontext#"),
+            ),
+        ]));
         self.add_virtualization(
             asset_model.database,
             HashMap::from([(INSIGHTS_HUB_RESOURCE.to_string(), template)]),
@@ -733,6 +741,61 @@ SELECT ?loc ?crs ?seq ?x ?y ?z WHERE {{
                 )
                 .map_err(|x| x.into())
         }
+    }
+
+    /// The query result cache of this model, shared by everything that queries it.
+    pub fn query_cache(&self) -> Arc<QueryCache> {
+        self.triplestore.query_cache.clone()
+    }
+
+    /// Adds prefixes, recording a change for the query cache if any prefix is new or changed.
+    pub fn add_prefixes(&mut self, prefixes: HashMap<String, NamedNode>) {
+        let changed = prefixes
+            .iter()
+            .any(|(k, v)| self.prefixes.get(k) != Some(v));
+        if changed {
+            self.prefixes.extend(prefixes);
+            self.triplestore
+                .query_cache
+                .versions
+                .record(Touched::Prefixes);
+        }
+    }
+
+    /// What a query reads, so its result can be cached, or why it can not be. Errors parsing
+    /// the query give a bypass: the query itself reports them.
+    pub fn cache_plan(
+        &self,
+        query: &str,
+        graph: Option<&NamedGraph>,
+        include_graphs: &[NamedGraph],
+        bindings: Option<&HashMap<String, GroundTerm>>,
+    ) -> CachePlan {
+        let Ok(parsed) = spargebra::Query::parse(query, None, Some(&self.prefixes)) else {
+            return CachePlan::Bypass("error");
+        };
+        let Ok(parsed) = maybe_replace_bindings(parsed, bindings) else {
+            return CachePlan::Bypass("error");
+        };
+        let virtualized_iris = self.chrontext_settings.as_ref().map(|s| {
+            let mut nns = vec![];
+            for b in &s.backends {
+                for t in b.virtualization.resources.values() {
+                    t.find_named_nodes(&mut nns);
+                }
+            }
+            nns.into_iter().collect::<HashSet<_>>()
+        });
+        let udfs = self.triplestore.udf_registry.list_udfs();
+        cache_plan(
+            &parsed,
+            &PlanContext {
+                graph,
+                include_graphs,
+                virtualized_iris: virtualized_iris.as_ref(),
+                udfs: &udfs,
+            },
+        )
     }
 
     #[instrument(skip_all)]

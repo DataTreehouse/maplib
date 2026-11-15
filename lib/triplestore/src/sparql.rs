@@ -580,19 +580,24 @@ impl Triplestore {
             QueryGraph::NamedGraph(g) if g == target => {}
             _ => return None,
         }
-        let Some(tables) = self.graph_triples_map.get_mut(&target) else {
+        if !self.graph_triples_map.contains_key(&target) {
             return Some(0);
-        };
+        }
         let height = |m: &HashMap<_, crate::storage::Triples>| -> usize {
             m.values().map(|t| t.get_height()).sum()
         };
         let n = match &d.predicate {
             NamedNodePattern::Variable(_) => {
+                let tables = self.graph_triples_map.graph_mut(&target).unwrap();
                 let n = tables.values().map(height).sum();
                 tables.clear();
                 n
             }
-            NamedNodePattern::NamedNode(p) => tables.remove(p).map(|m| height(&m)).unwrap_or(0),
+            NamedNodePattern::NamedNode(p) => self
+                .graph_triples_map
+                .remove_predicate(&target, p)
+                .map(|m| height(&m))
+                .unwrap_or(0),
         };
         Some(n)
     }

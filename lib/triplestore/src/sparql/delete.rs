@@ -109,8 +109,7 @@ impl Triplestore {
         graph: &NamedGraph,
     ) -> Result<(), TriplestoreError> {
         self.check_graph_exists(graph)?;
-        let use_map = self.graph_triples_map.get_mut(graph).unwrap();
-        let map_empty = if let Some(m1) = use_map.get_mut(&gct.predicate) {
+        let map_empty = if let Some(m1) = self.graph_triples_map.predicate_mut(graph, &gct.predicate) {
             let k = (gct.subject_type.clone(), gct.object_type.clone());
             m1.remove(&k);
             m1.is_empty()
@@ -118,7 +117,7 @@ impl Triplestore {
             false
         };
         if map_empty {
-            use_map.remove(&gct.predicate);
+            self.graph_triples_map.remove_predicate(graph, &gct.predicate);
         }
         Ok(())
     }
