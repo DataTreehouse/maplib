@@ -13,7 +13,7 @@ use oxiri::{Iri, IriParseError};
 use oxrdf::vocab::{rdf, xsd};
 use oxrdf::{BlankNode, Literal, NamedNode, Variable};
 use peg::parser;
-use peg::str::LineCol;
+use spargebra::diagnostics::{render_peg_error, DiagnosticContext, PrefixSyntax};
 use std::char;
 use std::collections::{HashMap, HashSet};
 
@@ -21,16 +21,34 @@ pub fn parse_stottr(
     document: &str,
     prefixes: Option<&HashMap<String, NamedNode>>,
 ) -> Result<StottrDocument, TemplateError> {
+    parse_stottr_from_source(document, prefixes, None)
+}
+
+/// Parses an OTTR document; `source_name` (e.g. a file path) is included in error messages.
+pub fn parse_stottr_from_source(
+    document: &str,
+    prefixes: Option<&HashMap<String, NamedNode>>,
+    source_name: Option<String>,
+) -> Result<StottrDocument, TemplateError> {
     let mut state = ParserState::new(prefixes);
-    let doc = parser::StottrDocumentInit(document, &mut state)
-        .map_err(|e| TemplateError::ParsingError(ParseErrorKind::Syntax(e)))?;
-    Ok(doc)
+    parser::StottrDocumentInit(document, &mut state).map_err(|e| {
+        let ctx = DiagnosticContext {
+            language: "OTTR",
+            input_noun: "document",
+            source_name,
+            known_prefixes: state.namespaces.keys().cloned().collect(),
+            prefix_syntax: PrefixSyntax::Turtle,
+        };
+        TemplateError::ParsingError(ParseErrorKind::Syntax(render_peg_error(
+            document, &e, &ctx,
+        )))
+    })
 }
 
 #[derive(Debug, thiserror::Error)]
 pub enum ParseErrorKind {
-    #[error(transparent)]
-    Syntax(#[from] peg::error::ParseError<LineCol>),
+    #[error("{0}")]
+    Syntax(String),
 }
 
 pub struct ParserState {
@@ -336,7 +354,6 @@ parser! {
             ns:PNAME_NS() {? if let Some(iri) = state.namespaces.get(ns).cloned() {
                 Iri::parse(iri).map_err(|_| "IRI parsing failed")
             } else {
-                println!("Missing prefix: {}", ns);
                 Err("Prefix not found")
             } }
 
@@ -467,12 +484,13 @@ parser! {
         //comment
         rule comment() = quiet! { ['#'] (!['\r' | '\n'] [_])* }
 
-        rule i(literal: &'static str) = input: $([_]*<{literal.len()}>) {?
+        // Case-insensitive keyword, reporting failures at the keyword's start (see spargebra).
+        rule i(literal: &'static str) = quiet! { input: $([_]*<{literal.len()}>) {?
             if input.eq_ignore_ascii_case(literal) {
                 Ok(())
             } else {
                 Err(literal)
             }
-        }
+        } } / expected!(literal)
     }
 }

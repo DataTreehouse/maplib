@@ -36,7 +36,7 @@ impl Display for TemplateError {
                 write!(f, "Resolve template directory entry error {e}")
             }
             TemplateError::ParsingError(p) => {
-                write!(f, "Template parsing error: {p}")
+                write!(f, "{p}")
             }
             TemplateError::TemplateNotFound(container, inner) => {
                 write!(

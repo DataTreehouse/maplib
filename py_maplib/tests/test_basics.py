@@ -927,7 +927,41 @@ def test_bad_query():
             ?a b ?c .
         }
         """, solution_mappings=True)
-    assert "?a b ?c <<PARSER COMPLAINS HERE>>" in str(e)
+    message = str(e.value)
+    assert "SPARQL syntax error at line 3, column 16: `b` is not a valid term" in message
+    assert "?a b ?c ." in message
+    assert "write a variable as `?b`" in message
+
+
+def test_bad_query_messages():
+    m = Model()
+    cases = [
+        ("SELEC ?s WHERE { ?s ?p ?o }", "did you mean `SELECT`?"),
+        ("SELECT ?s WHERE { ?s ?p ?o ", "the `{` opened at line 1, column 17 is never closed"),
+        ("SELECT ?s WHERE { ?s foo:p ?o }", "undefined prefix `foo:` in `foo:p`"),
+        ("SELECT ?s WHERE { ?s ?p ?o } LIMT 10", "did you mean `LIMIT`?"),
+        ("SELECT ?s WHERE { ?s ?p \"abc }", "unterminated string literal"),
+        ("SELECT ?s WHERE { ?s ?p ?o . FILTER(?o = 1 }", "`}` does not match the `(` opened at line 1, column 36"),
+        ("SELECT ?s ?s WHERE { ?s ?p ?o }", "variable `?s` is selected more than once"),
+    ]
+    for query, expected in cases:
+        with pytest.raises(maplib.MaplibException) as e:
+            m.query(query)
+        assert expected in str(e.value), str(e.value)
+
+
+def test_bad_template_message():
+    m = Model()
+    with pytest.raises(maplib.MaplibException) as e:
+        m.add_template("""
+        @prefix ex: <http://example.net/ns#> .
+        ex:T [ ?a, ?b ] :: {
+          ottr:Triple(?a, ex:p, ?b
+        } .
+        """)
+    message = str(e.value)
+    assert "OTTR syntax error at line 5, column 9: unexpected `}`" in message, message
+    assert "`}` does not match the `(` opened at line 4, column 22" in message, message
 
 def test_truncate_graph():
     m = Model()

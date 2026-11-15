@@ -5,11 +5,13 @@
 // - Set prefixes when parsing
 // - Does not sort variables when generating sequence for * projections
 // - More permissive for having
+// - Human-readable syntax errors (see diagnostics.rs); keywords report failures at their start
 // Licensing in /licensing
 
 #![allow(clippy::ignored_unit_patterns)]
 
 use crate::algebra::*;
+use crate::diagnostics::{render_peg_error, DiagnosticContext, PrefixSyntax};
 use crate::query::*;
 use crate::term::*;
 use crate::update::*;
@@ -26,7 +28,7 @@ use std::mem::take;
 #[cfg(feature = "standard-unicode-escaping")]
 use std::str::Chars;
 use std::str::FromStr;
-use std::{char, cmp};
+use std::char;
 
 /// A SPARQL parser
 ///
@@ -135,12 +137,8 @@ impl SparqlParser {
         );
         #[cfg(feature = "standard-unicode-escaping")]
         let query = unescape_unicode_codepoints(query);
-        Ok(parser::QueryUnit(&query, &mut state).map_err(|x| {
-            SparqlSyntaxError {
-                kind: SparqlSyntaxErrorKind::Syntax(x),
-            }
-            .resolve(query)
-        })?)
+        parser::QueryUnit(&query, &mut state)
+            .map_err(|e| SparqlSyntaxError::from_peg(&query, &e, "query", &state))
     }
 
     /// Parse the given update string using the already set options.
@@ -165,12 +163,8 @@ impl SparqlParser {
         );
         #[cfg(feature = "standard-unicode-escaping")]
         let update = unescape_unicode_codepoints(update);
-        let operations = parser::UpdateInit(&update, &mut state).map_err(|x| {
-            SparqlSyntaxError {
-                kind: SparqlSyntaxErrorKind::Syntax(x),
-            }
-            .resolve(update)
-        })?;
+        let operations = parser::UpdateInit(&update, &mut state)
+            .map_err(|e| SparqlSyntaxError::from_peg(&update, &e, "update", &state))?;
         check_if_insert_data_are_sharing_blank_nodes(&operations)?;
         Ok(Update {
             operations,
@@ -186,12 +180,8 @@ pub fn parse_construct_ruleset(
     prefixes: HashMap<String, String>,
 ) -> Result<Vec<Query>, SparqlSyntaxError> {
     let mut state = ParserState::new(base_iri, prefixes, HashSet::new());
-    let queries = parser::ConstructRulesetUnit(constructs, &mut state).map_err(|e| {
-        SparqlSyntaxError {
-            kind: SparqlSyntaxErrorKind::from(e),
-        }
-        .resolve(constructs)
-    })?;
+    let queries = parser::ConstructRulesetUnit(constructs, &mut state)
+        .map_err(|e| SparqlSyntaxError::from_peg(constructs, &e, "ruleset", &state))?;
     Ok(queries)
 }
 
@@ -208,20 +198,20 @@ impl SparqlSyntaxError {
         SparqlSyntaxErrorKind::InvalidBaseIri(e).into()
     }
 
-    fn resolve(self, query: &str) -> Self {
-        let kind = match self.kind {
-            SparqlSyntaxErrorKind::Syntax(l) => {
-                let start = l.location.offset.saturating_sub(10);
-                let use_offset = cmp::min(query.len(), l.location.offset);
-                let start_part = &query[start..use_offset];
-                let end = cmp::min(query.len(), l.location.offset + 10);
-                let end_part = &query[use_offset..end];
-                let s = format!("{}<<PARSER COMPLAINS HERE>>{}", start_part, end_part);
-                SparqlSyntaxErrorKind::ResolvedSyntax(s, l.to_string())
-            }
-            k => k,
+    fn from_peg(
+        input: &str,
+        error: &peg::error::ParseError<LineCol>,
+        input_noun: &'static str,
+        state: &ParserState,
+    ) -> Self {
+        let ctx = DiagnosticContext {
+            language: "SPARQL",
+            input_noun,
+            source_name: None,
+            known_prefixes: state.prefixes.keys().cloned().collect(),
+            prefix_syntax: PrefixSyntax::Sparql,
         };
-        SparqlSyntaxError { kind }
+        SparqlSyntaxErrorKind::Syntax(render_peg_error(input, error, &ctx)).into()
     }
 }
 
@@ -229,10 +219,8 @@ impl SparqlSyntaxError {
 enum SparqlSyntaxErrorKind {
     #[error("Invalid SPARQL base IRI provided: {0}")]
     InvalidBaseIri(#[from] IriParseError),
-    #[error(transparent)]
-    Syntax(#[from] peg::error::ParseError<LineCol>),
-    #[error("SPARQL Syntax error for this part of the query:\n\n {0} \n\nmessage: {1}")]
-    ResolvedSyntax(String, String),
+    #[error("{0}")]
+    Syntax(String),
     #[error("The blank node {0} cannot be shared by multiple blocks")]
     SharedBlankNode(BlankNode),
 }
@@ -2732,12 +2720,15 @@ parser! {
         //comment
         rule comment() = quiet! { ['#'] (!['\r' | '\n'] [_])* }
 
-        rule i(literal: &'static str) = input: $([_]*<{literal.len()}>) {?
+        // Case-insensitive keyword. The match is quiet and the failure is reported at the
+        // keyword's start, so that a misspelled keyword is reported where it is written and
+        // not `literal.len()` characters further on.
+        rule i(literal: &'static str) = quiet! { input: $([_]*<{literal.len()}>) {?
             if input.eq_ignore_ascii_case(literal) {
                 Ok(())
             } else {
                 Err(literal)
             }
-        }
+        } } / expected!(literal)
     }
 }
