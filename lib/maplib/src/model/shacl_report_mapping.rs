@@ -47,6 +47,7 @@ maplib:ShaclResultTemplate [
     ?focus_node,
     ? ?value,
     ottr:IRI ?source_constraint_component,
+    ? ?source_constraint,
     ? ?message,
     ? ottr:IRI ?details,
     ?result_severity,
@@ -58,6 +59,7 @@ ottr:Triple(?result, a, sh:ValidationResult),
 ottr:Triple(?result, sh:sourceShape, ?source_shape),
 ottr:Triple(?result, sh:value, ?value),
 ottr:Triple(?result, sh:sourceConstraintComponent, ?source_constraint_component),
+ottr:Triple(?result, sh:sourceConstraint, ?source_constraint),
 ottr:Triple(?result, sh:focusNode, ?focus_node),
 ottr:Triple(?result, sh:resultSeverity, ?result_severity),
 ottr:Triple(?result, sh:resultPath, ?result_path),
@@ -281,6 +283,19 @@ fn create_results_input(
         );
         rdf_node_types.insert(
             "result_path".to_string(),
+            BaseRDFNodeType::IRI.into_default_input_rdf_node_state(),
+        );
+    }
+
+    // Only results of SPARQL-based constraints have a sh:sourceConstraint.
+    if !rdf_node_types.contains_key("source_constraint") {
+        mappings = mappings.with_column(
+            lit(LiteralValue::untyped_null())
+                .cast(DataType::String)
+                .alias("source_constraint"),
+        );
+        rdf_node_types.insert(
+            "source_constraint".to_string(),
             BaseRDFNodeType::IRI.into_default_input_rdf_node_state(),
         );
     }
