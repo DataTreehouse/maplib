@@ -1075,9 +1075,6 @@ SELECT ?path ?i ?node WHERE {
 } ORDER BY ?path ?i"""))
 ```
 
-[docs/length_constrained_paths.md](docs/length_constrained_paths.md) describes the semantics and
-how other engines compare.
-
 ### maplib:shortestPath
 
 `maplib:shortestPath` finds the shortest (or cheapest) paths from sources to targets. Its subject

@@ -17,7 +17,7 @@
 //!
 //! Further options: `maplib:pathMode "walk" | "acyclic" | "simple"` (default "walk"),
 //! `maplib:shortest true`, and the path outputs `maplib:pathIndex ?i`, `maplib:nodeIndex ?j`
-//! and `maplib:pathNode ?n`. See docs/length_constrained_paths.md for the semantics.
+//! and `maplib:pathNode ?n`.
 //!
 //! Evaluation works on the integer keys of the nodes of the step edges (as the property path
 //! evaluation in [super::path] does): a breadth-first search from each start node, level by
