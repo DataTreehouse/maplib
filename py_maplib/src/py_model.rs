@@ -48,7 +48,7 @@ use templates::python::PyTemplate;
 use tracing::instrument;
 use triplestore::sparql::InsertResult;
 use triplestore::{StorageMode, StorageOptions};
-use virtualization::osipi::{OSIPIAuth, OSIPISettings, OSIPI_NAMESPACE};
+use virtualization::osipi::{OSIPIAuth, OSIPISettings, PIPointSelection, OSIPI_NAMESPACE};
 use virtualization::insights_hub::{
     read_insights_hub, InsightsHubAuth, InsightsHubSettings, INSIGHTS_HUB_NAMESPACE,
 };
@@ -527,23 +527,8 @@ impl PyModel {
         max_concurrency: usize,
         timeout: Option<f64>,
     ) -> PyResult<()> {
-        let auth = match (username, password, token) {
-            (Some(username), Some(password), None) => OSIPIAuth::Basic { username, password },
-            (None, None, Some(token)) => OSIPIAuth::Bearer { token },
-            (None, None, None) => OSIPIAuth::None,
-            _ => {
-                return Err(PyMaplibError::FunctionArgumentError(
-                    "Provide either both username and password, or a token, not both".to_string(),
-                )
-                .into())
-            }
-        };
-        if page_size == 0 || max_concurrency == 0 {
-            return Err(PyMaplibError::FunctionArgumentError(
-                "page_size and max_concurrency must be positive".to_string(),
-            )
-            .into());
-        }
+        let auth = osipi_auth(username, password, token)?;
+        check_osipi_limits(page_size, max_concurrency)?;
         let settings = OSIPISettings {
             url,
             auth,
@@ -680,6 +665,80 @@ impl PyModel {
             let mut inner = self.inner.write().unwrap();
             inner
                 .add_insights_hub(asset_model, &graph)
+                .map_err(PyMaplibError::from)?;
+            Ok(())
+        })
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    #[pyo3(signature = (
+        url,
+        data_server=None,
+        name_filter="*".to_string(),
+        source_filter=None,
+        point_attributes=None,
+        username=None,
+        password=None,
+        token=None,
+        verify_ssl=true,
+        graph=None,
+        base_iri=None,
+        default_start_time=None,
+        default_end_time=None,
+        page_size=10_000,
+        max_concurrency=8,
+        timeout=None,
+    ))]
+    #[instrument(skip_all)]
+    fn map_pi_points(
+        &self,
+        py: Python<'_>,
+        url: String,
+        data_server: Option<String>,
+        name_filter: String,
+        source_filter: Option<String>,
+        point_attributes: Option<Vec<String>>,
+        username: Option<String>,
+        password: Option<String>,
+        token: Option<String>,
+        verify_ssl: bool,
+        graph: Option<String>,
+        base_iri: Option<String>,
+        default_start_time: Option<String>,
+        default_end_time: Option<String>,
+        page_size: usize,
+        max_concurrency: usize,
+        timeout: Option<f64>,
+    ) -> PyResult<()> {
+        let auth = osipi_auth(username, password, token)?;
+        check_osipi_limits(page_size, max_concurrency)?;
+        let settings = OSIPISettings {
+            url,
+            auth,
+            verify_ssl,
+            asset_server: None,
+            asset_database: None,
+            root_element: None,
+            base_iri: base_iri.unwrap_or_else(|| OSIPI_NAMESPACE.to_string()),
+            read_static_values: false,
+            default_start_time,
+            default_end_time,
+            page_size,
+            max_concurrency,
+            timeout_seconds: timeout,
+        };
+        let selection = PIPointSelection {
+            data_server,
+            name_filter,
+            source_filter,
+            point_attributes: point_attributes.unwrap_or_else(|| vec!["pointsource".to_string()]),
+        };
+        let graph = parse_optional_named_node(graph)?;
+        let graph = NamedGraph::from_maybe_named_node(graph.as_ref());
+        py.detach(|| {
+            let mut inner = self.inner.write().unwrap();
+            inner
+                .map_pi_points(settings, selection, &graph)
                 .map_err(PyMaplibError::from)?;
             Ok(())
         })
@@ -1690,4 +1749,30 @@ fn map_documents(
         })?,
     }
     Ok(None)
+}
+
+fn osipi_auth(
+    username: Option<String>,
+    password: Option<String>,
+    token: Option<String>,
+) -> PyResult<OSIPIAuth> {
+    match (username, password, token) {
+        (Some(username), Some(password), None) => Ok(OSIPIAuth::Basic { username, password }),
+        (None, None, Some(token)) => Ok(OSIPIAuth::Bearer { token }),
+        (None, None, None) => Ok(OSIPIAuth::None),
+        _ => Err(PyMaplibError::FunctionArgumentError(
+            "Provide either both username and password, or a token, not both".to_string(),
+        )
+        .into()),
+    }
+}
+
+fn check_osipi_limits(page_size: usize, max_concurrency: usize) -> PyResult<()> {
+    if page_size == 0 || max_concurrency == 0 {
+        return Err(PyMaplibError::FunctionArgumentError(
+            "page_size and max_concurrency must be positive".to_string(),
+        )
+        .into());
+    }
+    Ok(())
 }

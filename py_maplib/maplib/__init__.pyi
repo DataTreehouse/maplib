@@ -1234,6 +1234,90 @@ class Model:
         :return: None
         """
 
+    def map_pi_points(
+            self,
+            url: str,
+            data_server: Optional[str] = None,
+            name_filter: str = "*",
+            source_filter: Optional[str] = None,
+            point_attributes: Optional[List[str]] = None,
+            username: Optional[str] = None,
+            password: Optional[str] = None,
+            token: Optional[str] = None,
+            verify_ssl: bool = True,
+            graph: Optional[str] = None,
+            base_iri: Optional[str] = None,
+            default_start_time: Optional[str] = None,
+            default_end_time: Optional[str] = None,
+            page_size: int = 10000,
+            max_concurrency: int = 8,
+            timeout: Optional[float] = None,
+    ):
+        """
+        Read the PI Points (tags) of an OSIsoft PI (AVEVA PI) Data Archive, the PI historian,
+        through the data servers of the PI Web API, without the Asset Framework, and virtualize
+        their recorded values so that their data points can be queried in SPARQL.
+        Replaces any existing virtualization of the Model; time series added by map_osipi through
+        the same PI Web API remain queryable.
+
+        The model uses the prefix osipi: <urn:maplib_osipi:> and contains:
+
+        - each data server (osipi:DataServer) with osipi:serverVersion and osipi:isConnected,
+        - each PI Point (osipi:Point and osipi:Timeseries), with osipi:inDataServer (and osipi:hasPoint from the data server),
+          osipi:descriptor (also rdfs:comment), osipi:unit (the engineering units), osipi:pointType (e.g. Float32, Int32, Digital, String),
+          osipi:pointClass, osipi:digitalSetName, osipi:span, osipi:zero, osipi:displayDigits, osipi:isStep, osipi:isFuture
+          and osipi:pointSource,
+        - the point attributes that are read (point_attributes) as osipi:hasPointAttribute nodes (osipi:PointAttribute) with osipi:name and osipi:value,
+        - osipi:name (the tag name), rdfs:label, osipi:path, osipi:id and osipi:webId on data servers and points.
+
+        Each point is a time series with chrontext:hasResource "osipi" and chrontext:hasExternalId (the WebId of the point).
+        Its data points are read from the PI Web API when queried, as for map_osipi:
+        chrontext:hasDataPoint, then chrontext:hasTimestamp, chrontext:hasValue (xsd:double, unbound for non-numeric values),
+        osipi:hasState (digital state names and string values), osipi:isGood, osipi:isQuestionable, osipi:isSubstituted and osipi:isAnnotated.
+
+        Bounds on the timestamp in FILTERs limit the recorded values requested from PI.
+        A query without a lower bound on the timestamp fails unless default_start_time is set.
+        Aggregates are computed in the virtualization, and MIN, MAX, SUM, AVG and COUNT of the values grouped
+        by chrontext:FloorDateTimeToSecondsInterval(?t, seconds) are read as PI summaries when the time range
+        starts and ends on a multiple of the interval (counted from 1970-01-01T00:00:00Z) and is only filtered by time.
+        This applies to map_osipi as well.
+
+        Not available in the open source build.
+
+        Usage:
+        >>> m = Model()
+        >>> m.map_pi_points("https://myserver/piwebapi", data_server="MyPIServer", name_filter="FIC*",
+        ...                 username="me", password="...")
+        >>> df = m.query('''
+        ... PREFIX osipi: <urn:maplib_osipi:>
+        ... PREFIX chrontext: <https://github.com/DataTreehouse/chrontext#>
+        ... PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
+        ... SELECT ?tag ?bucket (AVG(?v) AS ?avg) WHERE {
+        ...     ?p a osipi:Point ; osipi:name ?tag ; chrontext:hasDataPoint ?dp .
+        ...     ?dp chrontext:hasTimestamp ?t ; chrontext:hasValue ?v .
+        ...     BIND(chrontext:FloorDateTimeToSecondsInterval(?t, 3600) AS ?bucket)
+        ...     FILTER(?t >= "2024-01-01T00:00:00Z"^^xsd:dateTime && ?t < "2024-01-02T00:00:00Z"^^xsd:dateTime)
+        ... } GROUP BY ?tag ?bucket''')
+
+        :param url: The root of the PI Web API, e.g. https://myserver/piwebapi
+        :param data_server: The name or path (\\\\server) of the data server (PI Data Archive) to read points from. All data servers if None.
+        :param name_filter: The name filter of the points, with the wildcards * and ?, e.g. "FIC*". All points by default.
+        :param source_filter: Only read points with this point source (with wildcards).
+        :param point_attributes: The point attributes to read for each point, e.g. ["pointsource", "location1", "exdesc"]. Each takes one request per point; [] reads none. Defaults to ["pointsource"].
+        :param username: The username for basic authentication.
+        :param password: The password for basic authentication.
+        :param token: A bearer token, instead of username and password.
+        :param verify_ssl: Verify the certificate of the PI Web API.
+        :param graph: The IRI of the graph to add the data servers and points to.
+        :param base_iri: The prefix of the IRIs of data servers and points. Defaults to urn:maplib_osipi:
+        :param default_start_time: The PI time (e.g. "*-7d" or "2024-01-01T00:00:00Z") to read from when a query has no lower bound on the timestamp.
+        :param default_end_time: The PI time to read to when a query has no upper bound on the timestamp. Defaults to now ("*").
+        :param page_size: The maxCount of each PI Web API request; larger results are paged.
+        :param max_concurrency: The maximum number of concurrent PI Web API requests.
+        :param timeout: The timeout of each PI Web API request in seconds.
+        :return: None
+        """
+
     def explore(
             self,
             host: str = "localhost",

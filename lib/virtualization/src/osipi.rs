@@ -40,6 +40,21 @@ pub struct OSIPIAssetModel {
     pub timeseries: usize,
 }
 
+#[derive(Debug, Clone)]
+pub struct PIPointSelection {
+    pub data_server: Option<String>,
+    pub name_filter: String,
+    pub source_filter: Option<String>,
+    pub point_attributes: Vec<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct OSIPIPointModel {
+    pub ntriples: String,
+    pub data_servers: usize,
+    pub points: usize,
+}
+
 #[derive(Debug, Error)]
 pub enum OSIPIError {
     #[error("OSIsoft PI virtualization is not available in the open source build. Contact Data Treehouse to try")]
@@ -47,6 +62,13 @@ pub enum OSIPIError {
 }
 
 pub fn read_asset_framework(_settings: &OSIPISettings) -> Result<OSIPIAssetModel, OSIPIError> {
+    Err(OSIPIError::NotAvailable)
+}
+
+pub fn read_pi_points(
+    _settings: &OSIPISettings,
+    _selection: &PIPointSelection,
+) -> Result<OSIPIPointModel, OSIPIError> {
     Err(OSIPIError::NotAvailable)
 }
 

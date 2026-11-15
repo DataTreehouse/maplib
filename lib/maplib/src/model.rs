@@ -50,8 +50,9 @@ use virtualization::insights_hub::{
 };
 use virtualization::python::VirtualizedPythonDatabase;
 use virtualization::osipi::{
-    osipi_resource_template, read_asset_framework, OSIPIAssetModel, OSIPIDatabase, OSIPISettings,
-    OSIPI_NAMESPACE, OSIPI_RESOURCE,
+    osipi_resource_template, read_asset_framework, read_pi_points, OSIPIAssetModel,
+    OSIPIDatabase, OSIPIPointModel, OSIPISettings, PIPointSelection, OSIPI_NAMESPACE,
+    OSIPI_RESOURCE,
 };
 use virtualization::{Virtualization, VirtualizedDatabase};
 
@@ -238,10 +239,36 @@ impl Model {
         graph: &NamedGraph,
     ) -> Result<OSIPIAssetModel, MaplibError> {
         let asset_model = read_asset_framework(&settings)?;
+        self.add_osipi_virtualization(settings, &asset_model.ntriples, graph)?;
+        Ok(asset_model)
+    }
+
+    /// Reads the PI Points (tags) of the PI Data Archive through the data servers of the PI Web
+    /// API into `graph`, without the Asset Framework, and virtualizes their recorded values, so
+    /// that their data points can be queried in SPARQL. The virtualization is added to any
+    /// existing ones; time series from map_osipi through the same PI Web API remain queryable.
+    #[instrument(skip_all)]
+    pub fn map_pi_points(
+        &mut self,
+        settings: OSIPISettings,
+        selection: PIPointSelection,
+        graph: &NamedGraph,
+    ) -> Result<OSIPIPointModel, MaplibError> {
+        let point_model = read_pi_points(&settings, &selection)?;
+        self.add_osipi_virtualization(settings, &point_model.ntriples, graph)?;
+        Ok(point_model)
+    }
+
+    fn add_osipi_virtualization(
+        &mut self,
+        settings: OSIPISettings,
+        ntriples: &str,
+        graph: &NamedGraph,
+    ) -> Result<(), MaplibError> {
         let template = osipi_resource_template()?;
         let db = OSIPIDatabase::new(settings)?;
         self.reads(
-            &asset_model.ntriples,
+            ntriples,
             ExtendedRdfFormat::Normal(RdfFormat::NTriples),
             None,
             None,
@@ -267,7 +294,7 @@ impl Model {
                     resources: HashMap::from([(OSIPI_RESOURCE.to_string(), template)]),
                 },
             );
-        Ok(asset_model)
+        Ok(())
     }
 
     /// Adds the asset model of Siemens Insights Hub, read with
