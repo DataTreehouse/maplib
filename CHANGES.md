@@ -95,7 +95,7 @@ After `Model.compact()`, subjects are marked as sorted, so DISTINCT and grouping
 
 ORDER BY on IRIs and strings no longer collects its input in memory for each sort column, and with memory storage it ranks the values batch by batch, so large sorts are several times faster and spill to disk under the memory limit. ORDER BY with LIMIT or OFFSET, and joins and aggregations, still keep their working state in memory.
 
-ORDER BY with LIMIT (with or without OFFSET) is collected with the in-memory engine, which sorts much faster than the streaming engine when only part of the result is kept. Such queries are several times faster, and many times faster for some sort keys. Their working state is kept in memory, so they do not spill to disk under the memory limit. `MAPLIB_POLARS_ENGINE=streaming` keeps the streaming engine for them.
+ORDER BY with a large LIMIT (with or without OFFSET; LIMIT plus OFFSET at least 10 000 and at least a thirty-second of the estimated solutions) is collected with the in-memory engine, which sorts much faster than the streaming engine when many rows are kept. Such queries are several times faster, and many times faster for some sort keys. Smaller LIMITs are left to the streaming engine, whose top-k is faster there. Their working state is kept in memory, so they do not spill to disk under the memory limit. `MAPLIB_POLARS_ENGINE=streaming` keeps the streaming engine for them.
 
 `GRAPH ?g` in the templates of `Model.update` partitions the solutions by the encoded graph IRIs in one pass, and decodes one IRI per graph, instead of decoding every row and filtering the solutions once per graph.
 

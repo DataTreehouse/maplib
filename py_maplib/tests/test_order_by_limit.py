@@ -1,5 +1,6 @@
-"""ORDER BY with LIMIT (and OFFSET) is collected as a sort followed by a slice with the
-in-memory engine. The results must be those of the full sort, sliced."""
+"""ORDER BY with LIMIT (and OFFSET): a large LIMIT is collected as a sort followed by a slice
+with the in-memory engine, a small one by the engine of the whole query. Either way the results
+must be those of the full sort, sliced."""
 
 import os
 import random
@@ -39,6 +40,16 @@ def test_int_desc_with_ties(model, offset):
         ORDER BY DESC(?v) ?s LIMIT 10 OFFSET {offset}"""
     )
     assert list(zip(df["s"].to_list(), df["v"].to_list())) == expected_desc(values, offset, 10)
+
+
+@pytest.mark.parametrize("limit,offset", [(15_000, 0), (12_000, 17), (5_000, 9_000), (20_000, N - 100)])
+def test_int_desc_large_limit(model, limit, offset):
+    m, values = model
+    df = m.query(
+        f"""SELECT ?s ?v WHERE {{ ?s <{EX}value> ?v }}
+        ORDER BY DESC(?v) ?s LIMIT {limit} OFFSET {offset}"""
+    )
+    assert list(zip(df["s"].to_list(), df["v"].to_list())) == expected_desc(values, offset, limit)
 
 
 def test_limit_through_distinct_and_projection(model):

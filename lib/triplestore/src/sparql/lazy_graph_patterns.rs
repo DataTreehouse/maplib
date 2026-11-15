@@ -336,11 +336,12 @@ impl Triplestore {
                     dataset,
                 )?;
                 if let Some(length) = length {
+                    let input_estimate = newsols.height_estimate;
                     newsols.mappings = newsols.mappings.slice(*start as i64, *length as u32);
-                    newsols.height_estimate = newsols.height_estimate.min(*length);
-                    if is_ordered(inner) {
-                        // ORDER BY with LIMIT: a partial sort, see
-                        // pl_interruptable_collect_sorted_slice.
+                    let ordered = is_ordered(inner);
+                    if ordered && sorted_slice_in_memory(*start, *length, input_estimate) {
+                        // ORDER BY with a large LIMIT (and OFFSET): collected with the
+                        // in-memory engine, see pl_interruptable_collect_sorted_slice.
                         let df = match pl_interruptable_collect_sorted_slice(newsols.mappings) {
                             Ok(df) => df,
                             Err(InterruptableCollectError::Interrupted) => {
@@ -352,7 +353,12 @@ impl Triplestore {
                         };
                         newsols.height_estimate = df.height();
                         newsols.mappings = df.lazy();
+                    } else if !ordered {
+                        newsols.height_estimate = newsols.height_estimate.min(*length);
                     }
+                    // A small ORDER BY ... LIMIT is left to the engine chosen for the whole
+                    // query: the streaming engine's top-k is faster than an in-memory sort
+                    // there, so its height estimate is not lowered either.
                 } else {
                     newsols.mappings = newsols.mappings.slice(*start as i64, u32::MAX);
                 }
@@ -416,6 +422,18 @@ impl Triplestore {
         sm
     }
 }
+
+/// Is an ORDER BY with this OFFSET and LIMIT collected with the in-memory engine? The streaming
+/// engine's top-k gets slower with the number of rows it keeps (OFFSET plus LIMIT), while the
+/// in-memory sort costs about the same for any LIMIT. Measured, streaming wins up to about 1% of
+/// 300k rows and 3% of 1M rows, so the in-memory engine is used from 1/32 of the estimated
+/// input, and never below 10 000 rows.
+fn sorted_slice_in_memory(start: usize, length: usize, input_estimate: usize) -> bool {
+    let kept = start.saturating_add(length);
+    kept >= SORTED_SLICE_IN_MEMORY_MIN_ROWS.max(input_estimate / 32)
+}
+
+const SORTED_SLICE_IN_MEMORY_MIN_ROWS: usize = 10_000;
 
 /// Is the pattern sorted at the top, below projections, DISTINCT and REDUCED?
 fn is_ordered(gp: &GraphPattern) -> bool {
