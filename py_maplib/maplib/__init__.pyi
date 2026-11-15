@@ -2158,6 +2158,7 @@ class VirtualizedDatabase:
         For advanced use, the resource_sql_map may be omitted, in which case the VirtualizedQuery will be provided to the query method.
         The user must then translate this VirtualizedQuery (built on SPARQL Algebra) to the target query language.
         For OPC UA History Access servers, see maplib.opcua.OPCUAHistoryDatabase.
+        For AspenTech InfoPlus.21 historians, see maplib.ip21.IP21Database and maplib.ip21.map_ip21.
 
         Not available in the open source build: raises NotImplementedError.
 
