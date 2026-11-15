@@ -1159,7 +1159,7 @@ class Model:
         Read the asset model of a Siemens Insights Hub (formerly MindSphere) tenant from Asset Management v3,
         and virtualize the time series of its variables so that their data points can be queried in SPARQL
         together with the model, from IoT Time Series v3 and IoT Time Series Aggregates v4.
-        Replaces any existing virtualization of the Model.
+        The virtualization is added to any existing virtualizations of the Model.
 
         The model uses the prefix insights_hub: <urn:maplib_insights_hub:> and contains:
 
@@ -1257,7 +1257,7 @@ class Model:
         Read the PI Points (tags) of an OSIsoft PI (AVEVA PI) Data Archive, the PI historian,
         through the data servers of the PI Web API, without the Asset Framework, and virtualize
         their recorded values so that their data points can be queried in SPARQL.
-        Replaces any existing virtualization of the Model; time series added by map_osipi through
+        The virtualization is added to any existing ones; time series added by map_osipi through
         the same PI Web API remain queryable.
 
         The model uses the prefix osipi: <urn:maplib_osipi:> and contains:

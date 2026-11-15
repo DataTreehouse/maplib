@@ -299,8 +299,8 @@ impl Model {
 
     /// Adds the asset model of Siemens Insights Hub, read with
     /// `virtualization::insights_hub::read_insights_hub`, to `graph`, and virtualizes the time
-    /// series of its variables, so that their data points can be queried in SPARQL. Replaces any
-    /// existing virtualization.
+    /// series of its variables, so that their data points can be queried in SPARQL. The
+    /// virtualization is added to any existing ones.
     #[instrument(skip_all)]
     pub fn add_insights_hub(
         &mut self,
