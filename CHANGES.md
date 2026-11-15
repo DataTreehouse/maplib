@@ -85,6 +85,8 @@ After `Model.compact()`, subjects are marked as sorted, so DISTINCT and grouping
 
 ORDER BY on IRIs and strings no longer collects its input in memory for each sort column, and with memory storage it ranks the values batch by batch, so large sorts are several times faster and spill to disk under the memory limit. ORDER BY with LIMIT or OFFSET, and joins and aggregations, still keep their working state in memory.
 
+ORDER BY with LIMIT (with or without OFFSET) is collected with the in-memory engine, which sorts much faster than the streaming engine when only part of the result is kept. Such queries are several times faster, and many times faster for some sort keys. Their working state is kept in memory, so they do not spill to disk under the memory limit. `MAPLIB_POLARS_ENGINE=streaming` keeps the streaming engine for them.
+
 Tantivy answered exact matches from its term dictionary, but scanned all strings for substring matches, which it ran whenever the exact matches did not fill the limit. DuckDB scans the strings once per query for both. Reading without full text search is unchanged.
 
 Serialization, compared with the build before these changes on CIM N-Triples (2.2 M triples, IRI-heavy) and a synthetic literal-heavy file (4.5 M triples, 3 M distinct literals), release-test profile, medians of 3 runs alternating between builds, each run in a fresh process. Parquet is the new default, `raw_db` writes DuckDB dictionaries as before:

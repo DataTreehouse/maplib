@@ -32,6 +32,7 @@ use representation::query_context::{Context, PathEntry};
 use representation::solution_mapping::{EagerSolutionMappings, SolutionMappings};
 use spargebra::algebra::GraphPattern;
 use std::collections::HashMap;
+use utils::polars::{pl_interruptable_collect_sorted_slice, InterruptableCollectError};
 
 impl Triplestore {
     #[instrument(skip_all)]
@@ -308,6 +309,22 @@ impl Triplestore {
                 )?;
                 if let Some(length) = length {
                     newsols.mappings = newsols.mappings.slice(*start as i64, *length as u32);
+                    newsols.height_estimate = newsols.height_estimate.min(*length);
+                    if is_ordered(inner) {
+                        // ORDER BY with LIMIT: a partial sort, see
+                        // pl_interruptable_collect_sorted_slice.
+                        let df = match pl_interruptable_collect_sorted_slice(newsols.mappings) {
+                            Ok(df) => df,
+                            Err(InterruptableCollectError::Interrupted) => {
+                                return Err(SparqlError::InterruptSignal)
+                            }
+                            Err(e) => {
+                                return Err(SparqlError::QueryExecutionError(e.to_string()))
+                            }
+                        };
+                        newsols.height_estimate = df.height();
+                        newsols.mappings = df.lazy();
+                    }
                 } else {
                     newsols.mappings = newsols.mappings.slice(*start as i64, u32::MAX);
                 }
@@ -359,5 +376,16 @@ impl Triplestore {
             context.as_str()
         );
         sm
+    }
+}
+
+/// Is the pattern sorted at the top, below projections, DISTINCT and REDUCED?
+fn is_ordered(gp: &GraphPattern) -> bool {
+    match gp {
+        GraphPattern::OrderBy { .. } => true,
+        GraphPattern::Project { inner, .. }
+        | GraphPattern::Distinct { inner }
+        | GraphPattern::Reduced { inner } => is_ordered(inner),
+        _ => false,
     }
 }

@@ -36,6 +36,19 @@ fn query_engine(height_estimate: Option<usize>) -> Engine {
     }
 }
 
+/// Collects a sort followed by a slice (ORDER BY with LIMIT) with the in-memory engine, many
+/// times cheaper than the streaming engine. The working state is in memory, so such sorts do
+/// not spill. `MAPLIB_POLARS_ENGINE=streaming` still selects the streaming engine.
+pub fn pl_interruptable_collect_sorted_slice(
+    lf: LazyFrame,
+) -> Result<DataFrame, InterruptableCollectError> {
+    let engine = match std::env::var("MAPLIB_POLARS_ENGINE").as_deref() {
+        Ok("streaming") => Engine::Streaming,
+        _ => Engine::InMemory,
+    };
+    collect_with_engine(lf, engine)
+}
+
 /// collect a Polars LazyFrame in a way that allows a KeyboardInterrupt to cancel the search.
 /// On the streaming engine this relies on Polars' abort mechanism, so the SIGINT hook must be
 /// installed with `polars::error::abort::register_polars_abort_mechanism` at startup.
