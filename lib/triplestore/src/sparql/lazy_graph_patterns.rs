@@ -13,6 +13,7 @@ pub mod path;
 pub mod path_search;
 mod project;
 mod pvalues;
+pub(crate) mod service;
 mod triple;
 pub mod triples_ordering;
 mod union;
@@ -354,9 +355,18 @@ impl Triplestore {
                 query_settings,
                 dataset,
             ),
-            GraphPattern::Service { .. } => {
-                return Err(SparqlError::ServiceNotSupported);
-            }
+            GraphPattern::Service {
+                name,
+                inner,
+                silent,
+            } => self.lazy_service(
+                name,
+                inner,
+                *silent,
+                solution_mappings,
+                context,
+                query_settings,
+            ),
             GraphPattern::PValues {
                 variables,
                 bindings_parameter,

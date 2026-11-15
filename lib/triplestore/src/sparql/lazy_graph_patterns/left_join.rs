@@ -1,3 +1,4 @@
+use super::service::{contains_service, in_scope_variables};
 use super::Triplestore;
 use crate::sparql::errors::SparqlError;
 use tracing::{instrument, trace};
@@ -59,9 +60,27 @@ impl Triplestore {
         } else {
             None
         };
+        // With a SERVICE in the optional part, the distinct values of the variables it shares
+        // with the left side are evaluated with it, so that they are sent to the endpoint (a bind
+        // join) instead of fetching all its solutions. The right side then only has solutions
+        // compatible with these values, extended with them, which gives the same left join.
+        let (left_solution_mappings, right_incoming) = if contains_service(right) {
+            let left_eager = left_solution_mappings.as_eager_interruptable().map_err(|e| {
+                match e {
+                    utils::polars::InterruptableCollectError::Interrupted => {
+                        SparqlError::InterruptSignal
+                    }
+                    e => SparqlError::QueryExecutionError(e.to_string()),
+                }
+            })?;
+            let keys = self.bind_keys(&left_eager, &in_scope_variables(right))?;
+            (left_eager.as_lazy(), keys.map(|k| k.as_lazy()))
+        } else {
+            (left_solution_mappings, None)
+        };
         let mut right_solution_mappings = self.lazy_graph_pattern(
             right,
-            None,
+            right_incoming,
             &right_context,
             parameters,
             pushdowns,

@@ -1,3 +1,4 @@
+use external_sparql::federation::FederationSettings;
 use super::{
     maybe_create_fts_index_map, maybe_create_geo_index, prepare_storage, IndexingOptions,
     StorageOptions, Triplestore,
@@ -412,6 +413,7 @@ impl Triplestore {
             n_triples_deleted: 0,
             path_graph_cache: Default::default(),
             udf_registry: Arc::new(UdfRegistry::new()),
+            federation: Arc::new(FederationSettings::default()),
         };
         // The geo index is not serialized, it is rebuilt from the triples.
         triplestore.rebuild_geo_index()?;

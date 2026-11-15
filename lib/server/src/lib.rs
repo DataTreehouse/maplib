@@ -72,6 +72,13 @@ pub struct ServerOptions {
     /// Answer queries from the model's query result cache (see `Model.set_query_cache`), when
     /// it is enabled.
     pub query_cache: bool,
+    /// Endpoints that SERVICE in queries to the server may reach (prefixes, as in
+    /// `FederationSettings`), "*" for any. Empty (the default) refuses SERVICE, so that clients
+    /// can not make the server send requests, e.g. to internal hosts. The other federation
+    /// settings (headers, timeouts, batching) are those of the model.
+    pub service_endpoints: Vec<String>,
+    /// Allow SPARQL Update LOAD (with allow_update) of the service endpoints' URLs.
+    pub allow_load: bool,
 }
 
 /// Compression of Arrow record batch buffers, as defined by the Arrow IPC format.
@@ -128,6 +135,8 @@ impl Default for ServerOptions {
             static_vars: Default::default(),
             query_log_size: 1000,
             query_cache: true,
+            service_endpoints: vec![],
+            allow_load: false,
             result_capacity: 64,
             arrow_compression: ArrowCompression::Auto,
         }

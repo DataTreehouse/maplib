@@ -193,6 +193,7 @@ pub fn csvw_to_rdf(
         include_graphs: vec![],
         max_rows: None,
         strict_project: true,
+        federation: None,
     };
     let res = triplestore.update(&update, None, &settings, None, None, false);
     if let Err(e) = res {

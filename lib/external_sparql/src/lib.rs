@@ -1,3 +1,4 @@
+pub mod federation;
 pub mod maplib_endpoint;
 
 use polars::frame::DataFrame;

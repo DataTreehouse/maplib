@@ -16,6 +16,7 @@ spargebra = { path = "../spargebra" }
 fts = { path = "../fts" }
 geo = { path = "../geo" }
 cimxml_import = { path = "../cimxml_import" }
+external_sparql = { path = "../external_sparql" }
 
 rayon.workspace = true
 sprs = { workspace = true, features = ["multi_thread"] }

@@ -16,8 +16,12 @@ pub enum SparqlError {
     ParseError(SparqlSyntaxError),
     #[error("Query type not supported")]
     QueryTypeNotSupported,
-    #[error("SERVICE is not supported, use query_external to query a remote endpoint")]
-    ServiceNotSupported,
+    #[error(transparent)]
+    ServiceError(#[from] external_sparql::federation::ServiceError),
+    #[error("SERVICE error: {0}")]
+    ServiceEvaluationError(String),
+    #[error("LOAD error: {0}")]
+    LoadError(String),
     #[error("Inconsistent datatypes for {}, {:?}, {:?} in context {}", .0, .1, .2, .3)]
     InconsistentDatatypes(String, RDFNodeState, RDFNodeState, String),
     #[error(transparent)]

@@ -1022,6 +1022,7 @@ impl Triplestore {
                     include_graphs: vec![],
                     max_rows: None,
                     strict_project: false,
+                    federation: None,
                 },
                 Some(graph),
                 false,

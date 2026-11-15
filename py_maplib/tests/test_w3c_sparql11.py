@@ -15,6 +15,12 @@ The manifests are read with maplib and a pytest case is generated for each of:
 * ``mf:PositiveSyntaxTest11`` / ``mf:PositiveUpdateSyntaxTest11`` - must not raise.
 * ``mf:NegativeSyntaxTest11`` / ``mf:NegativeUpdateSyntaxTest11`` - must raise.
 * ``mf:CSVResultFormatTest`` - run the query and compare with the expected CSV.
+* The federated query tests (``service``, ``mf:QueryEvaluationTest`` with ``qt:serviceData``):
+  each endpoint of the test is a local mock endpoint (``sparql_mock_endpoint.py``), a maplib
+  Model with the endpoint's data that answers with SPARQL JSON, XML or TSV results, and each
+  test runs once per format. The endpoint IRIs (and ``http://invalid.endpoint.org/sparql``, as
+  a closed local port) are replaced by the mock URLs in the query and the data, and back in the
+  results.
 
 Tests that maplib currently does not pass are listed in
 ``w3c_sparql11_known_failures.txt`` and are marked as strict xfails, so a test that
@@ -798,6 +804,98 @@ def check_syntax(g: Manifest, entry, update: bool, positive: bool):
     else:
         with pytest.raises(Exception):
             run()
+
+
+# ---------------------------------------------------------------------------
+# Federated query (SERVICE)
+# ---------------------------------------------------------------------------
+
+SERVICE_MANIFEST = "service/manifest.ttl"
+SERVICE_FORMATS = ["json", "xml", "tsv"]
+INVALID_ENDPOINT = "http://invalid.endpoint.org/sparql"
+
+
+def build_service_params():
+    known = load_known_failures()
+    params = []
+    if not (SUITE_DIR / SERVICE_MANIFEST).exists():
+        return params
+    g = Manifest(SERVICE_MANIFEST)
+    for entries in g.objects(g.iri, MF.entries):
+        for entry in g.collection(entries):
+            tid = make_test_id("service", entry)
+            for fmt in SERVICE_FORMATS:
+                marks = []
+                key = f"{tid}[{fmt}]" if f"{tid}[{fmt}]" in known else tid
+                if key in known:
+                    strict = "[flaky]" not in known[key]
+                    marks.append(pytest.mark.xfail(reason=known[key], strict=strict))
+                params.append(pytest.param(g, entry, fmt, id=f"{tid}[{fmt}]", marks=marks))
+    return params
+
+
+def replace_all(text: str, mapping: Dict[str, str]) -> str:
+    # Longest first, so that no IRI is replaced inside another.
+    for k in sorted(mapping, key=len, reverse=True):
+        text = text.replace(k, mapping[k])
+    return text
+
+
+@pytest.mark.parametrize("manifest,entry,fmt", build_service_params())
+def test_w3c_sparql11_service(manifest: Manifest, entry, fmt: str):
+    from sparql_mock_endpoint import MockEndpoints
+
+    action = manifest.value(entry, MF.action)
+    query_iri = manifest.value(action, QT.query)
+    with MockEndpoints() as mock:
+        mapping = {INVALID_ENDPOINT: "http://127.0.0.1:9/invalid/sparql"}
+        services = []
+        for sd in manifest.objects(action, QT.serviceData):
+            endpoint = manifest.value(sd, QT.endpoint)[1]
+            name = urlparse_host(endpoint)
+            mapping[endpoint] = f"{mock.base}/{name}/sparql"
+            services.append((name, manifest.value(sd, QT.data)))
+        for name, data in services:
+            em = Model()
+            path = iri_to_path(data)
+            em.reads(
+                replace_all(path.read_text(encoding="utf-8"), mapping),
+                format=rdf_format(path),
+                base_iri=data[1],
+            )
+            mock.add(name, em, fmt)
+        m = Model()
+        for data in manifest.objects(action, QT.data):
+            path = iri_to_path(data)
+            m.reads(
+                replace_all(path.read_text(encoding="utf-8"), mapping),
+                format=rdf_format(path),
+                base_iri=data[1],
+            )
+        query = with_base(replace_all(read_text(query_iri), mapping), query_iri)
+        actual = run_select(m, query)
+    reverse = {v: k for k, v in mapping.items()}
+    for row in actual["rows"]:
+        for k, t in list(row.items()):
+            if t is not None and t[0] == "uri" and t[1] in reverse:
+                row[k] = ("uri", reverse[t[1]])
+    expected = parse_expected_result(manifest.value(entry, MF.result))
+    exp_vars = expected["vars"]
+    assert set(exp_vars) == set(actual["vars"]), (
+        f"Variables differ: expected {exp_vars}, got {actual['vars']}"
+    )
+    exp_rows = result_rows(expected, exp_vars)
+    act_rows = result_rows(actual, exp_vars)
+    assert match_rows(exp_rows, act_rows, ordered=False), (
+        f"Results differ.\nExpected:\n{format_rows(exp_vars, exp_rows)}\n"
+        f"Actual:\n{format_rows(exp_vars, act_rows)}"
+    )
+
+
+def urlparse_host(iri: str) -> str:
+    from urllib.parse import urlparse
+
+    return urlparse(iri).netloc
 
 
 @pytest.mark.parametrize("manifest,entry", build_params())

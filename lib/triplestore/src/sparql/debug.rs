@@ -110,9 +110,8 @@ impl Triplestore {
             | GraphPattern::Reduced { inner, .. }
             | GraphPattern::Slice { inner, .. }
             | GraphPattern::Group { inner, .. } => self.debug_gp(inner, parameters, qs, qg),
-            GraphPattern::Service { .. } => {
-                todo!()
-            }
+            // The remote endpoint is not asked why it has no results.
+            GraphPattern::Service { .. } => Ok(PartialDebugOutput::PartialResults),
         }
     }
 

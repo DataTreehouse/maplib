@@ -1441,6 +1441,75 @@ class Model:
 
         """
 
+    def set_federation(
+            self,
+            allowed_endpoints: Optional[List[str]] = None,
+            headers: Optional[Dict[str, Dict[str, str]]] = None,
+            timeout: Optional[float] = 300.0,
+            max_rows: Optional[int] = None,
+            batch_size: int = 1000,
+            arrow_batch_size: int = 1_000_000,
+            concurrency: int = 4,
+            method: LiteralType["POST", "GET"] = "POST",
+            bind_join: bool = True,
+            allow_load: bool = False,
+            arrow: bool = True,
+    ) -> None:
+        """
+        Configure SPARQL 1.1 Federated Query (SERVICE) and SPARQL Update LOAD for the queries and
+        updates of this Model (query, update, insert, validate, ...). Replaces earlier settings.
+
+        SERVICE <endpoint> { ... } sends its pattern to the endpoint with the SPARQL 1.1 Protocol
+        and joins the results with the rest of the query. SERVICE is evaluated after the local
+        patterns of its group, and the distinct values they bind for the variables it shares are
+        sent with the pattern, as VALUES blocks of batch_size rows (a bind join), so that the
+        endpoint only returns matching solutions. Variables that are unbound in some local
+        solution, or bound to blank nodes, are joined locally instead. SERVICE SILENT gives no
+        error when the endpoint fails or can not be reached, and SERVICE ?endpoint queries the
+        endpoints that ?endpoint is bound to. Results can be SPARQL JSON, XML or TSV. When the
+        endpoint is a maplib server (Model.serve(), maplib Enterprise Edition), the results are
+        sent in maplib's own Arrow format, and after the first request the bindings too, in
+        batches of arrow_batch_size rows, which is much faster for large intermediate results.
+
+        LOAD <url> [INTO GRAPH <g>] reads an RDF file from an http(s) URL (the format is taken
+        from the media type of the response, else from the extension), object storage (s3://,
+        gs://, az://, as with Model.read) or a file:// URL (only when listed in
+        allowed_endpoints). It is refused unless allow_load is set.
+
+        Queries sent to a served model (Model.serve) only reach the endpoints given to
+        serve(service_endpoints=...), none by default.
+
+        Usage:
+
+        >>> m.set_federation(
+        ...     allowed_endpoints=["https://graphdb.example.org/repositories/grid", "http://localhost:7878"],
+        ...     headers={"https://graphdb.example.org": {"Authorization": "Bearer ..."}},
+        ... )
+        ... df = m.query('''
+        ... PREFIX cim: <http://iec.ch/TC57/CIM100#>
+        ... SELECT ?sub ?name WHERE {
+        ...     ?sub a cim:Substation .
+        ...     SERVICE <https://graphdb.example.org/repositories/grid> { ?sub cim:IdentifiedObject.name ?name }
+        ... }''')
+
+        :param allowed_endpoints: The endpoints and URLs that SERVICE and LOAD may reach: URLs that start with one of these,
+            matched by scheme, host and port and then whole path segments, e.g. "http://localhost:7878" allows any path on
+            that server. None (the default) allows any http(s) URL (and object storage for LOAD, but not file URLs),
+            [] allows none.
+        :param headers: Headers to send, by endpoint prefix (matched as allowed_endpoints), e.g. for authentication.
+        :param timeout: Seconds that each request may take, including reading the response. None for no timeout.
+        :param max_rows: The most rows that one SERVICE may receive, an error beyond (also with SILENT).
+        :param batch_size: Rows of bindings per VALUES block sent to an endpoint.
+        :param arrow_batch_size: Rows of bindings per request to a maplib endpoint, sent as Arrow.
+        :param concurrency: The most requests to an endpoint that run at the same time.
+        :param method: Send queries with HTTP POST (the default) or GET.
+        :param bind_join: Send the bindings of the local solutions with the pattern. Otherwise the pattern is sent alone
+            and all its solutions are joined locally.
+        :param allow_load: Allow SPARQL Update LOAD.
+        :param arrow: Use maplib's Arrow format with maplib endpoints. Set it to False to query them with SPARQL JSON
+            results, as other endpoints.
+        """
+
     def query_external(
             self,
             query: str,
@@ -1946,6 +2015,8 @@ class Model:
             query_log_size: int = 1000,
             block: bool = False,
             query_cache: Union["QueryCacheOptions", bool, None] = None,
+            service_endpoints: Optional[List[str]] = None,
+            allow_load: bool = False,
     ) -> "Server":
         """
         Serve the Model over the SPARQL 1.1 Protocol and Arrow Flight (maplib Enterprise Edition).
@@ -2023,6 +2094,11 @@ class Model:
                             on with the default options if it is off. False makes the server not use it. A response
                             says what the cache did in the X-Maplib-Cache header (hit, miss or bypass), and the
                             query log and /status report its counts.
+        :param service_endpoints: Endpoints that SERVICE in queries and updates sent to the server may reach, as the
+            allowed_endpoints of Model.set_federation (whose other settings apply), e.g. ["https://query.wikidata.org/sparql"],
+            or ["*"] for any http(s) URL. None (the default) refuses SERVICE, so that clients can not make the server send
+            requests, e.g. to hosts in its internal network.
+        :param allow_load: Allow SPARQL Update LOAD through the endpoints (with allow_update), of URLs in service_endpoints.
         :return: The running Server.
         """
 

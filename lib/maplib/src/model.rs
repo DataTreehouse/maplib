@@ -4,6 +4,7 @@ pub mod errors;
 pub mod expansion;
 pub mod shacl_report_mapping;
 
+use external_sparql::federation::FederationSettings;
 use crate::errors::MaplibError;
 use crate::model::errors::MappingError;
 use cimxml_export::export::{cim_xml_write, FullModelDetails};
@@ -710,10 +711,38 @@ SELECT ?loc ?crs ?seq ?x ?y ?z WHERE {{
         debug_no_results: bool,
         bindings: Option<&HashMap<String, GroundTerm>>,
     ) -> Result<QueryResult, MaplibError> {
+        self.query_with_federation(
+            query,
+            parameters,
+            graph,
+            include_graphs,
+            max_rows,
+            debug_no_results,
+            bindings,
+            None,
+        )
+    }
+
+    /// As `query`, with federation settings (SERVICE) that replace those of the triplestore,
+    /// e.g. for queries to a served model.
+    #[allow(clippy::too_many_arguments)]
+    #[instrument(skip_all)]
+    pub fn query_with_federation(
+        &self,
+        query: &str,
+        parameters: Option<&HashMap<String, EagerSolutionMappings>>,
+        graph: Option<&NamedGraph>,
+        include_graphs: Vec<NamedGraph>,
+        max_rows: Option<usize>,
+        debug_no_results: bool,
+        bindings: Option<&HashMap<String, GroundTerm>>,
+        federation: Option<Arc<FederationSettings>>,
+    ) -> Result<QueryResult, MaplibError> {
         let query_settings = QuerySettings {
             include_graphs,
             max_rows,
             strict_project: false,
+            federation,
         };
         if let Some(chrontext_settings) = &self.chrontext_settings {
             let engine = Engine::new(
@@ -827,6 +856,7 @@ SELECT ?loc ?crs ?seq ?x ?y ?z WHERE {{
             include_graphs,
             max_rows,
             strict_project: true,
+            federation: None,
         };
         self.triplestore
             .insert(
@@ -850,10 +880,35 @@ SELECT ?loc ?crs ?seq ?x ?y ?z WHERE {{
         max_rows: Option<usize>,
         debug_no_results: bool,
     ) -> Result<UpdateResult, MaplibError> {
+        self.update_with_federation(
+            update,
+            parameters,
+            graph,
+            include_graphs,
+            max_rows,
+            debug_no_results,
+            None,
+        )
+    }
+
+    /// As `update`, with federation settings (SERVICE and LOAD) that replace those of the
+    /// triplestore, e.g. for updates sent to a served model.
+    #[allow(clippy::too_many_arguments)]
+    pub fn update_with_federation(
+        &mut self,
+        update: &str,
+        parameters: Option<&HashMap<String, EagerSolutionMappings>>,
+        graph: Option<&NamedGraph>,
+        include_graphs: Vec<NamedGraph>,
+        max_rows: Option<usize>,
+        debug_no_results: bool,
+        federation: Option<Arc<FederationSettings>>,
+    ) -> Result<UpdateResult, MaplibError> {
         let query_settings = QuerySettings {
             include_graphs,
             max_rows,
             strict_project: true,
+            federation,
         };
         self.triplestore
             .update(

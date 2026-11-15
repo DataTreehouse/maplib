@@ -25,6 +25,7 @@ use server::{serve as serve_model, ArrowCompression, ServerOptions};
 
 use datalog::python::PyInferenceResult;
 use external_sparql::maplib_endpoint::{query_maplib_endpoint, MaplibEndpointQuery};
+use external_sparql::federation::{AllowedEndpoints, FederationSettings, ServiceMethod};
 use external_sparql::SparqlMethod;
 use maplib::model::Model as InnerModel;
 use cdf::map_cdf;
@@ -1620,6 +1621,84 @@ impl PyModel {
         Ok(())
     }
 
+    #[allow(clippy::too_many_arguments)]
+    #[pyo3(signature = (
+        allowed_endpoints=None,
+        headers=None,
+        timeout=Some(300.0),
+        max_rows=None,
+        batch_size=1000,
+        arrow_batch_size=1_000_000,
+        concurrency=4,
+        method="POST".to_string(),
+        bind_join=true,
+        allow_load=false,
+        arrow=true,
+    ))]
+    fn set_federation(
+        &self,
+        py: Python<'_>,
+        allowed_endpoints: Option<Vec<String>>,
+        headers: Option<HashMap<String, HashMap<String, String>>>,
+        timeout: Option<f64>,
+        max_rows: Option<usize>,
+        batch_size: usize,
+        arrow_batch_size: usize,
+        concurrency: usize,
+        method: String,
+        bind_join: bool,
+        allow_load: bool,
+        arrow: bool,
+    ) -> PyResult<()> {
+        let arg_error = |m: &str| -> PyErr {
+            PyMaplibError::FunctionArgumentError(m.to_string()).into()
+        };
+        if batch_size == 0 || arrow_batch_size == 0 {
+            return Err(arg_error("batch_size and arrow_batch_size must be at least 1"));
+        }
+        if concurrency == 0 {
+            return Err(arg_error("concurrency must be at least 1"));
+        }
+        let timeout = match timeout {
+            None => None,
+            Some(t) if t > 0.0 && t.is_finite() => Some(std::time::Duration::from_secs_f64(t)),
+            Some(_) => return Err(arg_error("timeout must be a positive number of seconds")),
+        };
+        let method = match method.to_ascii_uppercase().as_str() {
+            "GET" => ServiceMethod::Get,
+            "POST" => ServiceMethod::Post,
+            _ => return Err(arg_error("method must be \"GET\" or \"POST\"")),
+        };
+        let mut header_list: Vec<(String, Vec<(String, String)>)> = headers
+            .unwrap_or_default()
+            .into_iter()
+            .map(|(k, v)| (k, v.into_iter().collect()))
+            .collect();
+        header_list.sort();
+        let settings = FederationSettings {
+            allowed_endpoints: match allowed_endpoints {
+                None => AllowedEndpoints::Any,
+                Some(l) => AllowedEndpoints::Only(l),
+            },
+            allow_load,
+            headers: header_list,
+            timeout,
+            max_rows,
+            batch_size,
+            arrow_batch_size,
+            concurrency,
+            method,
+            bind_join,
+            arrow,
+            ..FederationSettings::default()
+        };
+        py.detach(|| {
+            let mut inner = self.inner.write().unwrap();
+            inner.triplestore.federation = Arc::new(settings);
+        });
+        Ok(())
+    }
+
     fn list_udfs(&self, py: Python<'_>) -> PyResult<Vec<String>> {
         let udfs = py.detach(|| -> PyResult<Vec<String>> {
             let inner = self.inner.read().unwrap_or_else(|e| e.into_inner());
@@ -1721,6 +1800,8 @@ impl PyModel {
         query_log_size=1000,
         block=false,
         query_cache=None,
+        service_endpoints=None,
+        allow_load=false,
     ))]
     fn serve(
         &self,
@@ -1745,6 +1826,8 @@ impl PyModel {
         query_log_size: usize,
         block: bool,
         query_cache: Option<Bound<'_, PyAny>>,
+        service_endpoints: Option<Vec<String>>,
+        allow_load: bool,
     ) -> PyResult<Py<PyServer>> {
         // None keeps the model's setting, False makes the server not use the cache, True or
         // QueryCacheOptions set the model's cache (shared with Model.query).
@@ -1775,6 +1858,8 @@ impl PyModel {
             static_vars: static_vars.unwrap_or_default(),
             query_log_size,
             query_cache: server_cache,
+            service_endpoints: service_endpoints.unwrap_or_default(),
+            allow_load,
             ..ServerOptions::default()
         };
         if let Some(cors_origins) = cors_origins {

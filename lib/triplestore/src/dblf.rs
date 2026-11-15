@@ -83,6 +83,7 @@ impl Triplestore {
             include_graphs: include_graphs.to_vec(),
             max_rows: None,
             strict_project: false,
+            federation: None,
         };
         let qg = self.query_graph(&None, Some(graph), &query_settings);
         let mut eager_sms = vec![];

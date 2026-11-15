@@ -102,13 +102,29 @@ impl Triplestore {
                     if bindings.iter().any(|row| row.iter().any(|x| x.is_none())))
             });
         ordered.extend(with_undef);
-        // Path searches take their sources and targets from the other patterns of the group,
-        // so they are joined last.
-        let (mut ordered, path_searches): (Vec<_>, Vec<_>) = ordered
+        // SERVICE is evaluated after the local patterns, so that the solutions bound by them can
+        // be sent with it (a bind join), and SERVICE ?var has ?var bound. Services with a
+        // variable endpoint come after those with a fixed endpoint, which may bind it.
+        // Path searches take their sources and targets from the other patterns of the group
+        // (services included), so they are joined last.
+        let (rest, path_searches): (Vec<_>, Vec<_>) = ordered
             .into_iter()
             .partition(|(gp, _)| !super::path_search::is_path_search_pattern(gp));
-        ordered.extend(path_searches);
-        ordered_flat_gps = ordered;
+        let (local, mut services): (Vec<_>, Vec<_>) = rest
+            .into_iter()
+            .partition(|(gp, _)| !matches!(gp, GraphPattern::Service { .. }));
+        services.sort_by_key(|(gp, _)| {
+            matches!(
+                gp,
+                GraphPattern::Service {
+                    name: NamedNodePattern::Variable(_),
+                    ..
+                }
+            )
+        });
+        ordered_flat_gps = local;
+        ordered_flat_gps.extend(services);
+        ordered_flat_gps.extend(path_searches);
         let mut output_solution_mappings = solution_mappings;
         for (gp, ctx) in ordered_flat_gps {
             output_solution_mappings = Some(self.lazy_graph_pattern(
@@ -485,8 +501,22 @@ fn bad_properties(
             }
             (bp, variables)
         }
-        GraphPattern::Service { .. } => {
-            todo!()
+        GraphPattern::Service { inner, .. } => {
+            // Ordered after the local patterns by lazy_join, so it never causes a cross join.
+            let mut variables: HashSet<String> = HashSet::new();
+            inner.on_in_scope_variable(|v| {
+                variables.insert(v.as_str().to_string());
+            });
+            if let Some(incoming_vars) = incoming_cols {
+                variables.extend(incoming_vars.iter().cloned());
+            }
+            (
+                BadGraphPatternProperties {
+                    n_cross_joins: 0,
+                    n_variable_predicates: 0,
+                },
+                variables,
+            )
         }
     };
     res

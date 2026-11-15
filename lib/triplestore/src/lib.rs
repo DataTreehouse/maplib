@@ -19,6 +19,7 @@ pub mod storage;
 pub mod triples_read;
 pub mod triples_write;
 
+use external_sparql::federation::FederationSettings;
 use crate::errors::TriplestoreError;
 use crate::graph_map::GraphTriplesMap;
 use crate::query_cache::{QueryCache, Touched};
@@ -91,6 +92,8 @@ pub struct Triplestore {
     pub(crate) path_graph_cache: sparql::lazy_graph_patterns::path_search::PathGraphCache,
     /// Results of queries, invalidated by the changes `graph_triples_map` records.
     pub query_cache: Arc<QueryCache>,
+    /// Which endpoints SERVICE may query and LOAD may fetch, and how.
+    pub federation: Arc<FederationSettings>,
 }
 
 impl Triplestore {
@@ -539,6 +542,7 @@ impl Triplestore {
                 n_triples_deleted: 0,
                 path_graph_cache: Default::default(),
                 udf_registry: Arc::new(UdfRegistry::new()),
+            federation: self.federation.clone(),
             };
             if detached.indexing.geo {
                 detached.geo_index =
@@ -889,6 +893,7 @@ impl Triplestore {
             n_triples_deleted: 0,
             path_graph_cache: Default::default(),
             udf_registry: Arc::new(UdfRegistry::new()),
+            federation: Arc::new(FederationSettings::default()),
         })
     }
 

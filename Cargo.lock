@@ -1282,6 +1282,7 @@ dependencies = [
 name = "external_sparql"
 version = "0.1.0"
 dependencies = [
+ "futures",
  "polars",
  "query_processing",
  "representation",
@@ -1291,6 +1292,7 @@ dependencies = [
  "spargebra",
  "thiserror",
  "tokio",
+ "url",
 ]
 
 [[package]]
@@ -5095,6 +5097,7 @@ version = "0.5.0"
 dependencies = [
  "aho-corasick",
  "cimxml_import",
+ "external_sparql",
  "file_io",
  "fts",
  "geo",

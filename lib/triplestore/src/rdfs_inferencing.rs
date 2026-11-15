@@ -140,6 +140,7 @@ impl Triplestore {
             include_graphs: vec![],
             max_rows: None,
             strict_project: false,
+            federation: None,
         };
         self.insert(
             RDFS_9_TRANSITIVE,
@@ -170,6 +171,7 @@ impl Triplestore {
             include_graphs: vec![NamedGraph::transient()],
             max_rows: None,
             strict_project: false,
+            federation: None,
         };
         // Reflexivity of subproperty
         let c6 = self.insert_once(&[RDFS_6], graph, &qs)?;

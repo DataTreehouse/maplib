@@ -6,6 +6,7 @@ pub(crate) mod lazy_aggregate;
 mod lazy_expressions;
 pub(crate) mod lazy_graph_patterns;
 mod lazy_order;
+mod load;
 mod rewrite;
 
 use tracing::{instrument, trace, warn};
@@ -38,7 +39,9 @@ use spargebra::term::{
     NamedNodePattern, QuadPattern, TermPattern,
 };
 use spargebra::{GraphUpdateOperation, Query, Update};
+use external_sparql::federation::FederationSettings;
 use std::collections::{HashMap, HashSet};
+use std::sync::Arc;
 
 pub struct InsertResult {
     pub new_triples: Vec<NewTriples>,
@@ -56,6 +59,9 @@ pub struct QuerySettings {
     pub include_graphs: Vec<NamedGraph>,
     pub max_rows: Option<usize>,
     pub strict_project: bool,
+    /// Overrides the federation settings of the triplestore (SERVICE and LOAD), e.g. for
+    /// queries to a served model.
+    pub federation: Option<Arc<FederationSettings>>,
 }
 
 impl Triplestore {
@@ -490,7 +496,19 @@ impl Triplestore {
                     }
                     self.maybe_garbage_collect()?;
                 }
-                GraphUpdateOperation::Load { .. } => {}
+                GraphUpdateOperation::Load {
+                    silent,
+                    source,
+                    destination,
+                } => {
+                    let target = match destination {
+                        GraphName::NamedNode(nn) => NamedGraph::from_maybe_named_node(Some(nn)),
+                        GraphName::DefaultGraph => {
+                            graph.cloned().unwrap_or(NamedGraph::DefaultGraph)
+                        }
+                    };
+                    self.load(source.as_str(), &target, *silent, query_settings)?;
+                }
                 GraphUpdateOperation::Clear { graph: target, .. }
                 | GraphUpdateOperation::Drop { graph: target, .. } => {
                     // Graphs are kept as empty graphs, so that they can still be referenced.
