@@ -1,5 +1,6 @@
 use crate::errors::QueryProcessingError;
 use crate::graph_patterns::cats::create_compatible_cats;
+use crate::graph_patterns::union;
 use polars::datatypes::PlSmallStr;
 use polars::prelude::{
     as_struct, by_name, col, concat, len, lit, Expr, JoinArgs, JoinType, LazyFrame, LiteralValue,
@@ -10,6 +11,7 @@ use representation::multitype::{
     all_multi_cols, all_multi_main_cols, force_convert_multicol_to_single_col, nest_multicolumns,
     unnest_multicols,
 };
+use representation::null::expr_is_null_workaround;
 use representation::solution_mapping::SolutionMappings;
 use representation::{BaseRDFNodeType, RDFNodeState};
 use std::cmp;
@@ -213,6 +215,15 @@ pub fn join_workaround(
     } else if on.is_empty() {
         // No shared variables: the cartesian product. A join on a constant key would put every
         // row in one hash bucket and run on one thread.
+        // A lazy diagonal concat drops the rows of an input without columns, such as the single
+        // empty solution of an empty group, so the left side gets a placeholder column then.
+        let placeholder = if join_type == JoinType::Left && left_datatypes.is_empty() {
+            let placeholder = uuid::Uuid::new_v4().to_string();
+            left_mappings = left_mappings.with_column(lit(true).alias(&placeholder));
+            Some(placeholder)
+        } else {
+            None
+        };
         let product = left_mappings
             .clone()
             .cross_join(right_mappings.clone(), None);
@@ -238,6 +249,9 @@ pub fn join_workaround(
             )
             .unwrap()
         };
+        if let Some(placeholder) = placeholder {
+            left_mappings = left_mappings.drop(by_name([placeholder], true, false));
+        }
     } else {
         let join_args = JoinArgs {
             how: join_type,
@@ -741,4 +755,109 @@ pub fn create_join_compatible_solution_mappings(
         right_mappings,
         right_datatypes,
     )
+}
+
+/// Joins solution mappings where some shared variables may be unbound (null) in some rows.
+/// An unbound variable is compatible with any value, while a plain join only matches nulls
+/// with nulls. Each side is split by which of its possibly unbound shared variables are bound,
+/// the unbound columns are dropped from each part, and the parts are joined pairwise on the
+/// variables that are bound in both. A left join only splits the left side, since splitting the
+/// right side would keep left rows that only fail to match one of its parts.
+pub fn join_with_unbound(
+    left_solution_mappings: SolutionMappings,
+    left_maybe_unbound: &HashSet<String>,
+    right_solution_mappings: SolutionMappings,
+    right_maybe_unbound: &HashSet<String>,
+    join_type: JoinType,
+    global_cats: LockedCats,
+    max_rows: Option<usize>,
+) -> Result<SolutionMappings, QueryProcessingError> {
+    let shared: HashSet<&String> = left_solution_mappings
+        .rdf_node_types
+        .keys()
+        .filter(|x| right_solution_mappings.rdf_node_types.contains_key(*x))
+        .collect();
+    let mut left_split: Vec<_> = left_maybe_unbound
+        .iter()
+        .filter(|x| shared.contains(x))
+        .cloned()
+        .collect();
+    let mut right_split: Vec<_> = if join_type == JoinType::Inner {
+        right_maybe_unbound
+            .iter()
+            .filter(|x| shared.contains(x))
+            .cloned()
+            .collect()
+    } else {
+        vec![]
+    };
+    if left_split.is_empty() && right_split.is_empty() {
+        return join(
+            left_solution_mappings,
+            right_solution_mappings,
+            join_type,
+            global_cats,
+            max_rows,
+        );
+    }
+    left_split.sort();
+    right_split.sort();
+    let left_parts = split_by_bound(left_solution_mappings, &left_split);
+    let right_parts = split_by_bound(right_solution_mappings, &right_split);
+    let mut sms = vec![];
+    for l in &left_parts {
+        for r in &right_parts {
+            sms.push(join(
+                l.clone(),
+                r.clone(),
+                join_type.clone(),
+                global_cats.clone(),
+                max_rows,
+            )?);
+        }
+    }
+    union(sms, false, global_cats)
+}
+
+/// One part per combination of bound and unbound variables in `vars`, without the columns of
+/// the unbound ones.
+fn split_by_bound(sm: SolutionMappings, vars: &[String]) -> Vec<SolutionMappings> {
+    if vars.is_empty() {
+        return vec![sm];
+    }
+    let mut is_null = vec![];
+    for v in vars {
+        is_null.push(expr_is_null_workaround(
+            col(v),
+            sm.rdf_node_types.get(v).unwrap(),
+        ));
+    }
+    let mut parts = vec![];
+    for mask in 0usize..(1 << vars.len()) {
+        let mut cond: Option<Expr> = None;
+        let mut types = sm.rdf_node_types.clone();
+        let mut to_drop = vec![];
+        for (i, v) in vars.iter().enumerate() {
+            let bound = mask & (1 << i) != 0;
+            let c = if bound {
+                is_null[i].clone().not()
+            } else {
+                types.remove(v);
+                to_drop.push(v.clone());
+                is_null[i].clone()
+            };
+            cond = Some(if let Some(cond) = cond {
+                cond.and(c)
+            } else {
+                c
+            });
+        }
+        let mappings = sm
+            .mappings
+            .clone()
+            .filter(cond.unwrap())
+            .drop(by_name(to_drop, true, false));
+        parts.push(SolutionMappings::new(mappings, types, sm.height_estimate));
+    }
+    parts
 }

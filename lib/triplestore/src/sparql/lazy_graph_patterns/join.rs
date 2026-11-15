@@ -5,6 +5,8 @@ use std::cmp::{Ordering, Reverse};
 use tracing::{instrument, trace};
 
 use crate::sparql::QuerySettings;
+use polars::prelude::JoinType;
+use query_processing::graph_patterns::join_with_unbound;
 use query_processing::pushdowns::Pushdowns;
 use representation::dataset::QueryGraph;
 use representation::query_context::{Context, PathEntry};
@@ -93,7 +95,7 @@ impl Triplestore {
         let mut flat_gps = Vec::new();
         flat_gps.extend(flatten_join_gps(left, left_context));
         flat_gps.extend(flatten_join_gps(right, right_context));
-        let mut ordered_flat_gps = order_graph_patterns(flat_gps, &solution_mappings);
+        let ordered_flat_gps = order_graph_patterns(flat_gps, &solution_mappings);
         // VALUES with UNDEF are joined last, as unbound values are compatible with anything.
         // Evaluating them first would constrain the other patterns with nulls.
         let (mut ordered, with_undef): (Vec<_>, Vec<_>) =
@@ -122,11 +124,74 @@ impl Triplestore {
                 }
             )
         });
-        ordered_flat_gps = local;
-        ordered_flat_gps.extend(services);
-        ordered_flat_gps.extend(path_searches);
+        let mut ordered = local;
+        ordered.extend(services);
+        // A pattern that may leave a variable unbound which other patterns of the group, or the
+        // incoming solution mappings, also use is evaluated on its own and joined afterwards, as
+        // the unbound variable is compatible with any value. Passing the other solutions into it
+        // would also join them into the inner side of an OPTIONAL or a UNION branch.
+        let mut used_vars: HashMap<String, usize> = HashMap::new();
+        if let Some(sm) = &solution_mappings {
+            for v in sm.rdf_node_types.keys() {
+                *used_vars.entry(v.clone()).or_default() += 1;
+            }
+        }
+        for (gp, _) in &ordered {
+            for v in in_scope_variable_names(gp) {
+                *used_vars.entry(v).or_default() += 1;
+            }
+        }
+        // VALUES handles its own UNDEF values when it is joined with the incoming solutions.
+        let (ordered, deferred): (Vec<_>, Vec<_>) = ordered.into_iter().partition(|(gp, _)| {
+            let own = in_scope_variable_names(gp);
+            matches!(gp, GraphPattern::Values { .. })
+                || !maybe_unbound_variables(gp)
+                    .iter()
+                    .any(|v| own.contains(v) && used_vars.get(v).copied().unwrap_or(0) > 1)
+        });
+        let mut output_maybe_unbound = HashSet::new();
+        for (gp, _) in &ordered {
+            output_maybe_unbound.extend(maybe_unbound_variables(gp));
+        }
         let mut output_solution_mappings = solution_mappings;
-        for (gp, ctx) in ordered_flat_gps {
+        for (gp, ctx) in ordered {
+            output_solution_mappings = Some(self.lazy_graph_pattern(
+                gp,
+                output_solution_mappings,
+                &ctx,
+                parameters,
+                pushdowns.clone(),
+                query_settings,
+                dataset,
+            )?);
+        }
+        for (gp, ctx) in deferred {
+            let sm = self.lazy_graph_pattern(
+                gp,
+                None,
+                &ctx,
+                parameters,
+                pushdowns.clone(),
+                query_settings,
+                dataset,
+            )?;
+            let maybe_unbound = maybe_unbound_variables(gp);
+            output_solution_mappings = Some(if let Some(output) = output_solution_mappings {
+                join_with_unbound(
+                    output,
+                    &output_maybe_unbound,
+                    sm,
+                    &maybe_unbound,
+                    JoinType::Inner,
+                    self.global_cats.clone(),
+                    query_settings.max_rows,
+                )?
+            } else {
+                sm
+            });
+            output_maybe_unbound.extend(maybe_unbound);
+        }
+        for (gp, ctx) in path_searches {
             output_solution_mappings = Some(self.lazy_graph_pattern(
                 gp,
                 output_solution_mappings,
@@ -163,6 +228,89 @@ fn flatten_join_gps_inner<'a>(
     } else {
         flat.push((gp, context));
     }
+}
+
+fn in_scope_variable_names(gp: &GraphPattern) -> HashSet<String> {
+    let mut vs = HashSet::new();
+    gp.on_in_scope_variable(|v| {
+        vs.insert(v.as_str().to_string());
+    });
+    vs
+}
+
+/// The in-scope variables of a pattern that may be unbound in some of its solutions.
+/// Variables bound by BIND are left out, although an expression error leaves them unbound.
+pub(crate) fn maybe_unbound_variables(gp: &GraphPattern) -> HashSet<String> {
+    match gp {
+        GraphPattern::Bgp { .. }
+        | GraphPattern::Path { .. }
+        | GraphPattern::PValues { .. }
+        | GraphPattern::Service { .. } => HashSet::new(),
+        GraphPattern::Join { left, right } => {
+            let mut certain = certainly_bound_variables(left);
+            certain.extend(certainly_bound_variables(right));
+            let mut maybe = maybe_unbound_variables(left);
+            maybe.extend(maybe_unbound_variables(right));
+            maybe.retain(|v| !certain.contains(v));
+            maybe
+        }
+        GraphPattern::LeftJoin { left, right, .. } => {
+            let certain = certainly_bound_variables(left);
+            let mut maybe = maybe_unbound_variables(left);
+            maybe.extend(
+                in_scope_variable_names(right)
+                    .into_iter()
+                    .filter(|v| !certain.contains(v)),
+            );
+            maybe
+        }
+        GraphPattern::Union { left, right } => {
+            let left_vars = in_scope_variable_names(left);
+            let right_vars = in_scope_variable_names(right);
+            let mut maybe = maybe_unbound_variables(left);
+            maybe.extend(maybe_unbound_variables(right));
+            maybe.extend(left_vars.symmetric_difference(&right_vars).cloned());
+            maybe
+        }
+        GraphPattern::Values {
+            variables,
+            bindings,
+        } => variables
+            .iter()
+            .enumerate()
+            .filter(|(i, _)| bindings.iter().any(|row| row[*i].is_none()))
+            .map(|(_, v)| v.as_str().to_string())
+            .collect(),
+        GraphPattern::Project { inner, variables } => {
+            let mut maybe = maybe_unbound_variables(inner);
+            maybe.retain(|v| variables.iter().any(|x| x.as_str() == v));
+            maybe
+        }
+        GraphPattern::Group {
+            inner, variables, ..
+        } => {
+            let mut maybe = maybe_unbound_variables(inner);
+            maybe.retain(|v| variables.iter().any(|x| x.as_str() == v));
+            maybe
+        }
+        GraphPattern::Minus { left: inner, .. }
+        | GraphPattern::Filter { inner, .. }
+        | GraphPattern::Graph { inner, .. }
+        | GraphPattern::Extend { inner, .. }
+        | GraphPattern::OrderBy { inner, .. }
+        | GraphPattern::Distinct { inner }
+        | GraphPattern::Reduced { inner }
+        | GraphPattern::Slice { inner, .. } => maybe_unbound_variables(inner),
+        #[allow(unreachable_patterns)]
+        _ => HashSet::new(),
+    }
+}
+
+fn certainly_bound_variables(gp: &GraphPattern) -> HashSet<String> {
+    let maybe = maybe_unbound_variables(gp);
+    let mut vs = in_scope_variable_names(gp);
+    vs.retain(|v| !maybe.contains(v));
+    vs
 }
 
 fn find_used_variables_and_blanks(tp: &TriplePattern) -> HashSet<String> {

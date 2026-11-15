@@ -3,12 +3,13 @@ use super::Triplestore;
 use crate::sparql::errors::SparqlError;
 use tracing::{instrument, trace};
 
+use super::join::maybe_unbound_variables;
 use crate::sparql::QuerySettings;
 use oxrdf::Variable;
 use polars::prelude::{col, JoinType};
 use query_processing::expressions::contains_graph_pattern;
 use query_processing::expressions::effective_boolean_value;
-use query_processing::graph_patterns::{extend, filter, join};
+use query_processing::graph_patterns::{extend, filter, join, join_with_unbound};
 use query_processing::pushdowns::Pushdowns;
 use representation::dataset::QueryGraph;
 use representation::query_context::{Context, PathEntry};
@@ -129,9 +130,13 @@ impl Triplestore {
                 dataset,
             )?;
         }
-        let left_solution_mappings = join(
+        // Rows of the left side that leave a shared variable unbound are compatible with every
+        // value of it on the right side.
+        let left_solution_mappings = join_with_unbound(
             left_solution_mappings,
+            &maybe_unbound_variables(left),
             right_solution_mappings,
+            &HashSet::new(),
             JoinType::Left,
             self.global_cats.clone(),
             query_settings.max_rows,
