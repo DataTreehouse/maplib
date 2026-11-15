@@ -44,6 +44,10 @@ use spargebra::term::GroundTerm;
 use tracing::instrument;
 use triplestore::errors::TriplestoreError;
 use triplestore::triples_read::ExtendedRdfFormat;
+use virtualization::insights_hub::{
+    insights_hub_resource_template, InsightsHubAssetModel, INSIGHTS_HUB_NAMESPACE,
+    INSIGHTS_HUB_RESOURCE,
+};
 use virtualization::python::VirtualizedPythonDatabase;
 use virtualization::osipi::{
     osipi_resource_template, read_asset_framework, OSIPIAssetModel, OSIPIDatabase, OSIPISettings,
@@ -264,6 +268,42 @@ impl Model {
                 },
             );
         Ok(asset_model)
+    }
+
+    /// Adds the asset model of Siemens Insights Hub, read with
+    /// `virtualization::insights_hub::read_insights_hub`, to `graph`, and virtualizes the time
+    /// series of its variables, so that their data points can be queried in SPARQL. Replaces any
+    /// existing virtualization.
+    #[instrument(skip_all)]
+    pub fn add_insights_hub(
+        &mut self,
+        asset_model: InsightsHubAssetModel,
+        graph: &NamedGraph,
+    ) -> Result<(), MaplibError> {
+        let template = insights_hub_resource_template()?;
+        self.reads(
+            &asset_model.ntriples,
+            ExtendedRdfFormat::Normal(RdfFormat::NTriples),
+            None,
+            None,
+            false,
+            false,
+            graph,
+            false,
+            10_000_000,
+            HashMap::new(),
+        )?;
+        for (k, v) in [
+            ("insights_hub", INSIGHTS_HUB_NAMESPACE),
+            ("chrontext", "https://github.com/DataTreehouse/chrontext#"),
+        ] {
+            self.prefixes
+                .insert(k.to_string(), NamedNode::new_unchecked(v));
+        }
+        self.add_virtualization(
+            asset_model.database,
+            HashMap::from([(INSIGHTS_HUB_RESOURCE.to_string(), template)]),
+        )
     }
 
     #[instrument(skip_all)]

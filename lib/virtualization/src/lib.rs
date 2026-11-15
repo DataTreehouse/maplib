@@ -4,6 +4,7 @@ use std::collections::HashMap;
 use templates::ast::Template;
 
 pub mod osipi;
+pub mod insights_hub;
 pub mod python;
 
 #[derive(Debug, Clone)]

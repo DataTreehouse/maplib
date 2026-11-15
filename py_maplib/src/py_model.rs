@@ -49,6 +49,9 @@ use tracing::instrument;
 use triplestore::sparql::InsertResult;
 use triplestore::{StorageMode, StorageOptions};
 use virtualization::osipi::{OSIPIAuth, OSIPISettings, OSIPI_NAMESPACE};
+use virtualization::insights_hub::{
+    read_insights_hub, InsightsHubAuth, InsightsHubSettings, INSIGHTS_HUB_NAMESPACE,
+};
 use virtualization::python::VirtualizedPythonDatabase;
 
 #[pyclass(name = "Model", frozen)]
@@ -562,6 +565,121 @@ impl PyModel {
             let mut inner = self.inner.write().unwrap();
             inner
                 .map_osipi(settings, &graph)
+                .map_err(PyMaplibError::from)?;
+            Ok(())
+        })
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    #[pyo3(signature = (
+        host,
+        tenant,
+        client_id=None,
+        client_secret=None,
+        token=None,
+        token_url=None,
+        app_name=None,
+        app_version=None,
+        user_tenant=None,
+        root_asset=None,
+        graph=None,
+        base_iri=None,
+        default_start_time=None,
+        default_end_time=None,
+        aggregate_pushdown=false,
+        page_size=2000,
+        max_concurrency=8,
+        timeout=None,
+        verify_ssl=true,
+    ))]
+    #[instrument(skip_all)]
+    fn map_insights_hub(
+        &self,
+        py: Python<'_>,
+        host: String,
+        tenant: String,
+        client_id: Option<String>,
+        client_secret: Option<String>,
+        token: Option<String>,
+        token_url: Option<String>,
+        app_name: Option<String>,
+        app_version: Option<String>,
+        user_tenant: Option<String>,
+        root_asset: Option<String>,
+        graph: Option<String>,
+        base_iri: Option<String>,
+        default_start_time: Option<String>,
+        default_end_time: Option<String>,
+        aggregate_pushdown: bool,
+        page_size: usize,
+        max_concurrency: usize,
+        timeout: Option<f64>,
+        verify_ssl: bool,
+    ) -> PyResult<()> {
+        let argument_error =
+            |s: &str| -> PyErr { PyMaplibError::FunctionArgumentError(s.to_string()).into() };
+        let auth = match (client_id, client_secret, token) {
+            (Some(client_id), Some(client_secret), None) => match (app_name, app_version) {
+                (Some(app_name), Some(app_version)) => InsightsHubAuth::AppCredentials {
+                    client_id,
+                    client_secret,
+                    app_name,
+                    app_version,
+                    user_tenant,
+                },
+                (None, None) => {
+                    if user_tenant.is_some() {
+                        return Err(argument_error(
+                            "user_tenant is only used with app credentials (app_name and app_version)",
+                        ));
+                    }
+                    InsightsHubAuth::ServiceCredentials {
+                        client_id,
+                        client_secret,
+                        token_url,
+                    }
+                }
+                _ => {
+                    return Err(argument_error(
+                        "Give both app_name and app_version for app credentials",
+                    ))
+                }
+            },
+            (None, None, Some(token)) => InsightsHubAuth::Token { token },
+            _ => {
+                return Err(argument_error(
+                    "Give either both client_id and client_secret, or a token, not both",
+                ))
+            }
+        };
+        if page_size == 0 || max_concurrency == 0 {
+            return Err(argument_error(
+                "page_size and max_concurrency must be positive",
+            ));
+        }
+        let settings = InsightsHubSettings {
+            host,
+            tenant,
+            auth,
+            root_asset,
+            base_iri: base_iri.unwrap_or_else(|| INSIGHTS_HUB_NAMESPACE.to_string()),
+            default_start_time,
+            default_end_time,
+            aggregate_pushdown,
+            page_size,
+            max_concurrency,
+            timeout_seconds: timeout,
+            verify_ssl,
+        };
+        let graph = parse_optional_named_node(graph)?;
+        let graph = NamedGraph::from_maybe_named_node(graph.as_ref());
+        // Read while holding the GIL, the reading is done in Python
+        let asset_model = read_insights_hub(&settings)
+            .map_err(|e| PyMaplibError::from(maplib::errors::MaplibError::from(e)))?;
+        py.detach(|| {
+            let mut inner = self.inner.write().unwrap();
+            inner
+                .add_insights_hub(asset_model, &graph)
                 .map_err(PyMaplibError::from)?;
             Ok(())
         })

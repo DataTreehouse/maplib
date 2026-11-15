@@ -1133,6 +1133,107 @@ class Model:
         :return: None
         """
 
+    def map_insights_hub(
+            self,
+            host: str,
+            tenant: str,
+            client_id: Optional[str] = None,
+            client_secret: Optional[str] = None,
+            token: Optional[str] = None,
+            token_url: Optional[str] = None,
+            app_name: Optional[str] = None,
+            app_version: Optional[str] = None,
+            user_tenant: Optional[str] = None,
+            root_asset: Optional[str] = None,
+            graph: Optional[str] = None,
+            base_iri: Optional[str] = None,
+            default_start_time: Optional[str] = None,
+            default_end_time: Optional[str] = None,
+            aggregate_pushdown: bool = False,
+            page_size: int = 2000,
+            max_concurrency: int = 8,
+            timeout: Optional[float] = None,
+            verify_ssl: bool = True,
+    ) -> None:
+        """
+        Read the asset model of a Siemens Insights Hub (formerly MindSphere) tenant from Asset Management v3,
+        and virtualize the time series of its variables so that their data points can be queried in SPARQL
+        together with the model, from IoT Time Series v3 and IoT Time Series Aggregates v4.
+        Replaces any existing virtualization of the Model.
+
+        The model uses the prefix insights_hub: <urn:maplib_insights_hub:> and contains:
+
+        - each asset (insights_hub:Asset, and rdf:type its asset type), with insights_hub:hasParent / insights_hub:hasChild,
+          insights_hub:assetType, insights_hub:assetId, insights_hub:typeId, insights_hub:externalId, insights_hub:twinType,
+          insights_hub:timezone, and insights_hub:parentId when the parent is not read,
+        - the asset types of the assets and their ancestors (insights_hub:AssetType, an rdfs:Class, rdfs:subClassOf its
+          parent type or insights_hub:Asset), with insights_hub:id, insights_hub:scope, insights_hub:instantiable and insights_hub:parentType,
+        - the location of an asset (insights_hub:hasLocation): insights_hub:country, region, locality, streetAddress,
+          postalCode, and latitude and longitude as xsd:double,
+        - the asset variables of the asset types (insights_hub:hasAssetVariable, insights_hub:AssetVariable), with their insights_hub:value,
+        - the aspects of each asset (insights_hub:hasAspect, insights_hub:Aspect), with insights_hub:category (static or dynamic)
+          and insights_hub:aspectType (insights_hub:AspectType),
+        - the variables of each aspect (insights_hub:hasVariable, insights_hub:Variable), with insights_hub:dataType, insights_hub:unit,
+          insights_hub:length, insights_hub:qualityCode, insights_hub:searchable and insights_hub:defaultValue,
+        - insights_hub:name, rdfs:label and insights_hub:description.
+
+        Each variable of a dynamic aspect has a time series (chrontext:hasTimeseries, an insights_hub:Timeseries with
+        chrontext:hasExternalId "assetId/aspectName/variableName") with data points that are read when queried:
+        chrontext:hasDataPoint, then chrontext:hasTimestamp, chrontext:hasValue (xsd:double, for INT, LONG, DOUBLE and
+        BOOLEAN variables, where true is 1.0), insights_hub:hasStringValue (for STRING, BIG_STRING and TIMESTAMP variables)
+        and insights_hub:hasQualityCode (the _qc of the variable).
+
+        Bounds on the timestamp in FILTERs limit the raw data requested from IoT Time Series.
+        A query without a lower bound on the timestamp fails unless default_start_time is set.
+        With aggregate_pushdown, MIN, MAX, SUM, COUNT and AVG of chrontext:hasValue grouped by
+        chrontext:FloorDateTimeToSecondsInterval(?t, seconds) are read from IoT Time Series Aggregates when the
+        buckets are whole minutes dividing an hour or whole hours dividing a day, and the bounds of the time range
+        are on the bucket grid. Insights Hub aggregates leave out values of bad quality, and count a value exactly
+        on a bucket boundary in the preceding bucket, so the results can then differ from aggregating the raw data.
+
+        Authenticate with service credentials (client_id and client_secret), app credentials (client_id,
+        client_secret, app_name and app_version), or a token.
+
+        Not available in the open source build.
+
+        Usage:
+        >>> m = Model()
+        >>> m.map_insights_hub("gateway.eu1.mindsphere.io", "mytenant", client_id="mytenant-svc", client_secret="...")
+        >>> df = m.query(\"\"\"
+        ... PREFIX insights_hub: <urn:maplib_insights_hub:>
+        ... PREFIX chrontext: <https://github.com/DataTreehouse/chrontext#>
+        ... PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
+        ... SELECT ?asset ?t ?v WHERE {
+        ...     ?a insights_hub:name ?asset ; insights_hub:hasAspect ?asp .
+        ...     ?asp insights_hub:name "process" ; insights_hub:hasVariable ?var .
+        ...     ?var insights_hub:name "flow" ; chrontext:hasTimeseries ?ts .
+        ...     ?ts chrontext:hasDataPoint ?dp .
+        ...     ?dp chrontext:hasTimestamp ?t ; chrontext:hasValue ?v .
+        ...     FILTER(?t >= "2024-01-01T00:00:00Z"^^xsd:dateTime && ?t < "2024-01-02T00:00:00Z"^^xsd:dateTime)
+        ... }\"\"\")
+
+        :param host: The gateway of the region, e.g. gateway.eu1.mindsphere.io (https:// is added when there is no scheme).
+        :param tenant: The tenant.
+        :param client_id: The client id of the service or app credentials.
+        :param client_secret: The client secret of the service or app credentials.
+        :param token: An access token, instead of client_id and client_secret.
+        :param token_url: The OAuth token endpoint for service credentials. Defaults to https://{tenant}.piam.{region}.{domain}/oauth/token, derived from the host.
+        :param app_name: The app name of app credentials, which are exchanged for a token with the Technical Token Manager.
+        :param app_version: The app version of app credentials.
+        :param user_tenant: The user tenant of app credentials. Defaults to the tenant.
+        :param root_asset: Only read this asset (an asset id) and its descendants.
+        :param graph: The IRI of the graph to add the asset model to.
+        :param base_iri: The prefix of the IRIs of assets, asset types, aspects and variables. Defaults to urn:maplib_insights_hub:
+        :param default_start_time: The ISO 8601 timestamp (e.g. "2024-01-01T00:00:00Z") or duration before now (e.g. "P7D") to read from when a query has no lower bound on the timestamp.
+        :param default_end_time: The ISO 8601 timestamp or duration before now to read to when a query has no upper bound on the timestamp. Defaults to now.
+        :param aggregate_pushdown: Read time bucketed aggregates from IoT Time Series Aggregates, see above.
+        :param page_size: The limit of each IoT Time Series request; larger results are paged by time.
+        :param max_concurrency: The maximum number of concurrent requests in a query.
+        :param timeout: The timeout of each request in seconds.
+        :param verify_ssl: Verify the certificates of Insights Hub.
+        :return: None
+        """
+
     def explore(
             self,
             host: str = "localhost",
