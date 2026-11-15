@@ -112,6 +112,58 @@ impl Triples {
         Ok(Some(new_df))
     }
 
+    /// Turns the object index (the triples sorted by object) of the stored triples on or off.
+    /// Turning it on sorts every segment by object, which takes about as long as adding the
+    /// triples did; turning it off drops the object sorts.
+    pub(crate) fn set_object_indexing(
+        &mut self,
+        enabled: bool,
+        global_cats: &Cats,
+    ) -> Result<(), TriplestoreError> {
+        if enabled == self.object_indexing_enabled {
+            return Ok(());
+        }
+        if !enabled {
+            for seg in self.segments.iter_mut() {
+                seg.object_sort = None;
+                seg.object_sparse_index = None;
+            }
+            self.object_indexing_enabled = false;
+            return Ok(());
+        }
+        let now = Instant::now();
+        let segments = std::mem::take(&mut self.segments);
+        let mut rebuilt = Vec::with_capacity(segments.len());
+        for (i, seg) in segments.into_iter().enumerate() {
+            let triples_folder = self
+                .segment_folder(i == 0, seg.height)
+                .map(|x| x.to_owned());
+            let df = seg
+                .get_subject_sort_lazy_frame()?
+                .collect()
+                .map_err(TriplestoreError::LazyLoadError)?;
+            // The old segment (and its files in disk storage mode) is dropped before the new one
+            // is written.
+            drop(seg);
+            rebuilt.push(compact_segments(
+                vec![df],
+                global_cats,
+                &self.subject_type,
+                &self.object_type,
+                true,
+                triples_folder.as_deref(),
+            )?);
+        }
+        self.segments = rebuilt;
+        self.object_indexing_enabled = true;
+        trace!(
+            "Creating the object index of {} triples took {}",
+            self.height,
+            now.elapsed().as_secs_f32()
+        );
+        Ok(())
+    }
+
     /// The folder to store a segment in: in disk storage mode the first segment and large
     /// segments are stored on disk, small trailing segments are kept in memory.
     fn segment_folder(&self, first_segment: bool, height: usize) -> Option<&Path> {

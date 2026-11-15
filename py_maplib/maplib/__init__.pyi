@@ -1246,31 +1246,28 @@ class Model:
             graph: str = None,
             page: str = None,
             frontend: Union[str, Path] = None,
-            flight_port: int = None,
-            cors_origins: List[str] = None,
     ) -> "ExploreServer":
-        """Explores the model in the Model portal, served by Model.serve.
+        """Explores the model in the Model portal (maplib Enterprise Edition, with the
+        validation_portal_core package installed).
 
-        Model.serve hosts both the SPARQL endpoint (/sparql) that every page of the portal queries
-        and the portal itself (/ui/).
+        The whole portal runs on the model in a background server: its pages, its backend (whose
+        SPARQL, at server.sparql_url, is answered by the model through Model.serve) and its query log.
         >>> server = m.explore()
         >>> server.url         # the portal, open it in a browser
-        >>> server.sparql_url  # the SPARQL endpoint, e.g. Model().query(..., endpoint=server.sparql_url)
+        >>> server.sparql_url  # its SPARQL endpoint, e.g. Model().query(..., endpoint=server.sparql_url)
         >>> server.stop()
 
-        :param host: The host name in the URLs (the server listens on bind).
+        :param host: The host name in the URL (the server listens on bind).
         :param port: The port of the server, 0 for any free port.
         :param bind: Bind to the following host / ip.
         :param popup: Pop up the browser window (deprecated, open server.url yourself instead).
         :param fts: Build the full text search index used by the search boxes.
         :param fts_path: Deprecated and ignored, the index needs no path.
         :param root_path: The path the server is reached under behind a proxy (JupyterHub is detected).
-        :param graph: The named graph to explore, defaults to the default graph.
+        :param graph: Deprecated and ignored, the portal shows the whole model.
         :param page: Deprecated and ignored, the portal replaces the old explorer pages.
         :param frontend: A folder with a portal build (its index.html). Defaults to the
-            MAPLIB_EXPLORE_FRONTEND environment variable, then the portal packaged with maplib.
-        :param flight_port: Also serve Arrow Flight on this port.
-        :param cors_origins: Browser origins allowed to query, e.g. a portal dev server.
+            MODEL_PORTAL_FRONTEND environment variable, then the frontend packaged with the portal.
         """
 
     def query(
@@ -1733,6 +1730,11 @@ class Model:
 
     def create_index(self, options: "IndexingOptions" = None) -> None:
         """
+        Sets the indexing options of the model and creates the indexes for the triples already in
+        it: full text search, GeoSPARQL and the object indexes of the chosen predicates. Object
+        indexes of predicates that are no longer chosen are dropped. Building indexes for a large
+        model can take some time.
+
         :param options: Indexing options
         """
 
@@ -1969,15 +1971,28 @@ class InferenceResult:
 
 class ExploreServer:
     """
-    A running graph explorer session, returned by Model.explore.
+    The Model portal running on a model, returned by Model.explore.
     """
 
     url: str
-    "The URL of the graph explorer."
+    "The URL of the portal."
+    api_url: str
+    "The URL of the portal's backend."
+    sparql_url: str
+    "The SPARQL endpoint of the portal, answered by the model."
+
+    @property
+    def running(self) -> bool:
+        """Whether the server is running."""
 
     def stop(self) -> None:
         """
-        Stop the graph explorer server.
+        Stop the server.
+        """
+
+    def wait(self, timeout: Optional[float] = None) -> bool:
+        """
+        Block until the server stops (or the timeout). True if it stopped.
         """
 
 

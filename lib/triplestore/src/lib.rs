@@ -873,6 +873,23 @@ impl Triplestore {
             self.geo_index = maybe_create_geo_index(&indexing, self.storage_folder.as_deref())?;
             self.rebuild_geo_index()?;
         }
+        // Object indexes are otherwise only created when triples are added, so the triples
+        // already stored are sorted by object (or their object sort dropped) here.
+        let global_cats = self.global_cats.clone();
+        let cats = global_cats.read()?;
+        for map in self.graph_triples_map.values_mut() {
+            for (predicate, map) in map.iter_mut() {
+                for ((_, object_type), triples) in map.iter_mut() {
+                    let enabled = storage::can_and_should_index_object(
+                        object_type,
+                        predicate,
+                        &indexing,
+                    );
+                    triples.set_object_indexing(enabled, &cats)?;
+                }
+            }
+        }
+        drop(cats);
         self.indexing = indexing;
         Ok(())
     }
