@@ -121,6 +121,9 @@ class OPCUAHistoryDatabase:
     async def _read(
         self, node_ids: List[str], start: Optional[datetime], end: Optional[datetime]
     ) -> Dict[str, list]:
+        from maplib.outbound import check_url
+
+        check_url(self.endpoint, 4840)
         from asyncua import Client
 
         starttime = start if start is not None else _MIN_TIME

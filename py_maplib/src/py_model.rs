@@ -785,6 +785,10 @@ impl PyModel {
         options.set_item("include_schema", include_schema)?;
         options.set_item("include_edges", include_edges)?;
         options.set_item("virtualize_time_series", virtualize_time_series)?;
+        // The hosts of the client (its base_url and token_url) with the outbound policy
+        slf.py()
+            .import("maplib.outbound")?
+            .call_method1("check_cognite_client", (client,))?;
         // The mapping adds triples through this Model, so the inner model must not be locked here.
         map_cdf(slf.as_any(), client, &options)
     }
@@ -859,6 +863,7 @@ impl PyModel {
     ) -> PyResult<()> {
         let auth = osipi_auth(username, password, token)?;
         check_osipi_limits(page_size, max_concurrency)?;
+        check_outbound_host(py, &url, "https", 443)?;
         let settings = OSIPISettings {
             url,
             auth,
@@ -933,6 +938,17 @@ impl PyModel {
     ) -> PyResult<()> {
         let argument_error =
             |s: &str| -> PyErr { PyMaplibError::FunctionArgumentError(s.to_string()).into() };
+        // The API host and the token endpoint with the outbound policy
+        {
+            let parameters = PyDict::new(py);
+            parameters.set_item("host", &host)?;
+            parameters.set_item("tenant", &tenant)?;
+            parameters.set_item("token_url", &token_url)?;
+            parameters.set_item("token", token.as_ref().map(|_| "1"))?;
+            parameters.set_item("app_name", &app_name)?;
+            py.import("maplib.outbound")?
+                .call_method1("check_connection", ("insights_hub", parameters))?;
+        }
         let auth = match (client_id, client_secret, token) {
             (Some(client_id), Some(client_secret), None) => match (app_name, app_version) {
                 (Some(app_name), Some(app_version)) => InsightsHubAuth::AppCredentials {
@@ -1042,6 +1058,7 @@ impl PyModel {
     ) -> PyResult<()> {
         let auth = osipi_auth(username, password, token)?;
         check_osipi_limits(page_size, max_concurrency)?;
+        check_outbound_host(py, &url, "https", 443)?;
         let settings = OSIPISettings {
             url,
             auth,
@@ -2507,5 +2524,13 @@ fn check_osipi_limits(page_size: usize, max_concurrency: usize) -> PyResult<()> 
         )
         .into());
     }
+    Ok(())
+}
+
+/// Checks a host (a URL, host:port or host name) with the outbound policy of maplib.outbound,
+/// raising its OutboundError.
+fn check_outbound_host(py: Python<'_>, host: &str, scheme: &str, port: u16) -> PyResult<()> {
+    py.import("maplib.outbound")?
+        .call_method1("check_host", (host, scheme, port))?;
     Ok(())
 }

@@ -135,6 +135,25 @@ fn memory_limit() -> u64 {
     utils::memory::memory_budget()
 }
 
+/// Sets the process-wide outbound policy (see maplib.outbound.set_outbound_policy).
+#[pyfunction]
+fn _set_outbound_policy(mode: &str, allow: Vec<String>) -> PyResult<()> {
+    let mode = outbound::Mode::parse(mode).map_err(pyo3::exceptions::PyValueError::new_err)?;
+    let policy =
+        outbound::Policy::new(mode, &allow).map_err(pyo3::exceptions::PyValueError::new_err)?;
+    outbound::set_policy(Some(policy));
+    Ok(())
+}
+
+/// Checks a connection with the outbound policy (see maplib.outbound.check_outbound): the
+/// addresses the host resolved to, or PermissionError.
+#[pyfunction]
+fn _check_outbound(py: Python<'_>, scheme: String, host: String, port: u16) -> PyResult<Vec<String>> {
+    py.detach(move || outbound::check(&scheme, &host, port))
+        .map(|a| a.into_iter().map(|a| a.to_string()).collect())
+        .map_err(|e| pyo3::exceptions::PyPermissionError::new_err(e.to_string()))
+}
+
 const DEFAULT_FTS: bool = false;
 const DEFAULT_DEBUG_NO_RESULTS: bool = false;
 const DEFAULT_TRIPLES_BATCH_SIZE: usize = 10_000_000;
@@ -248,6 +267,8 @@ fn _maplib(py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(memory_limit, m)?)?;
     m.add_function(wrap_pyfunction!(py_model::add_triples, m)?)?;
     py_storage::register(m)?;
+    m.add_function(wrap_pyfunction!(_set_outbound_policy, m)?)?;
+    m.add_function(wrap_pyfunction!(_check_outbound, m)?)?;
     m.add("MaplibException", py.get_type::<MaplibException>())?;
     m.add("QueryTimeoutError", py.get_type::<QueryTimeoutError>())?;
     m.add("TRANSIENT_GRAPH", TRANSIENT_GRAPH_IRI)?;

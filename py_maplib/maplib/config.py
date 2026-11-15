@@ -784,6 +784,10 @@ def _connection(config: VirtualizationConfig, environ: Mapping[str, str]) -> Dic
         if variable not in environ:
             raise KeyError(f"The environment variable {variable} (the {key} of {config.iri}) is not set")
         kwargs[key] = environ[variable]
+    # every host the database will connect to, with the outbound policy (maplib.set_outbound_policy)
+    from maplib.outbound import check_connection
+
+    check_connection(config.database, kwargs)
     return kwargs
 
 
@@ -935,7 +939,9 @@ def _pi_get(kwargs: Dict[str, str], path: str, query: Optional[Dict[str, str]] =
     context = None
     if str(kwargs.get("verify_ssl", "true")).lower() in ("false", "0", "no"):
         context = ssl._create_unverified_context()
-    with urllib.request.urlopen(req, timeout=float(kwargs.get("timeout") or 15), context=context) as r:
+    from maplib.outbound import urlopen
+
+    with urlopen(req, timeout=float(kwargs.get("timeout") or 15), context=context) as r:
         body = r.read()
         return r.status, (json.loads(body) if body else None)
 
@@ -999,7 +1005,9 @@ def _insights_hub_token(kwargs: Dict[str, str], timeout: float) -> str:
         req = urllib.request.Request(token_url, data=b"grant_type=client_credentials", method="POST",
                                      headers={"Authorization": "Basic " + basic,
                                               "Content-Type": "application/x-www-form-urlencoded"})
-    with urllib.request.urlopen(req, timeout=timeout) as r:
+    from maplib.outbound import urlopen
+
+    with urlopen(req, timeout=timeout) as r:
         return json.loads(r.read())["access_token"]
 
 
@@ -1210,8 +1218,11 @@ def probe(config: VirtualizationConfig, sql: Optional[str] = None, environ: Opti
         import socket
         from urllib.parse import urlparse
 
+        from maplib.outbound import check_url
+
         u = urlparse(kwargs["endpoint"])
         timeout = float(kwargs.get("timeout") or 5)
+        check_url(kwargs["endpoint"], 4840)
         with socket.create_connection((u.hostname, u.port or 4840), timeout=timeout):
             pass
         return {"message": f"The OPC UA server at {u.hostname}:{u.port or 4840} answers"}
@@ -1229,7 +1240,9 @@ def probe(config: VirtualizationConfig, sql: Optional[str] = None, environ: Opti
         context = None
         if str(kwargs.get("verify_ssl", "true")).lower() in ("false", "0", "no"):
             context = ssl._create_unverified_context()
-        with urllib.request.urlopen(req, timeout=timeout, context=context) as r:
+        from maplib.outbound import urlopen
+
+        with urlopen(req, timeout=timeout, context=context) as r:
             body = json.loads(r.read())
         assets = (body.get("_embedded") or {}).get("assets") or []
         total = (body.get("page") or {}).get("totalElements", len(assets))

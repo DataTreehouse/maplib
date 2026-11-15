@@ -1283,6 +1283,7 @@ name = "external_sparql"
 version = "0.1.0"
 dependencies = [
  "futures",
+ "outbound",
  "polars",
  "query_processing",
  "representation",
@@ -2638,6 +2639,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "outbound"
+version = "0.1.0"
+dependencies = [
+ "reqwest",
+ "thiserror",
+ "tokio",
+ "url",
+]
+
+[[package]]
 name = "oxilangtag"
 version = "0.1.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3617,6 +3628,7 @@ dependencies = [
  "maplib",
  "object_store",
  "opc_ua",
+ "outbound",
  "oxrdf",
  "oxrdfio",
  "polars",

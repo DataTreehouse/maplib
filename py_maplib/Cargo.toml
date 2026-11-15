@@ -26,6 +26,7 @@ cdf = { path = "../lib/cdf" }
 fabric = { path = "../lib/fabric" }
 spargebra = { path = "../lib/spargebra" }
 server = { path = "../lib/server" }
+outbound = { path = "../lib/outbound" }
 
 pyo3.workspace = true
 oxrdf.workspace = true

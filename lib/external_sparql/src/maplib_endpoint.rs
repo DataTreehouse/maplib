@@ -14,6 +14,8 @@ use tokio::runtime::Builder;
 pub enum MaplibEndpointError {
     #[error("Could not reach the maplib endpoint: {0}")]
     Request(reqwest::Error),
+    #[error(transparent)]
+    Outbound(outbound::OutboundError),
     #[error("The maplib endpoint answered {0}: {1}")]
     Status(u16, String),
     #[error("Invalid result from the maplib endpoint: {0}")]
@@ -55,6 +57,7 @@ pub fn query_maplib_endpoint(
     q: &MaplibEndpointQuery,
 ) -> Result<QueryResultKind, MaplibEndpointError> {
     let url = arrow_query_url(endpoint)?;
+    outbound::check_url(&url).map_err(MaplibEndpointError::Outbound)?;
     let mut command = serde_json::json!({
         "query": q.query,
         "solution_mappings": true,
@@ -89,7 +92,7 @@ pub fn query_maplib_endpoint(
         .build()
         .map_err(|e| MaplibEndpointError::InvalidResult(e.to_string()))?
         .block_on(async move {
-            let client = reqwest::Client::builder()
+            let client = outbound::guard_client(reqwest::Client::builder())
                 .connect_timeout(Duration::from_secs(30))
                 .build()
                 .map_err(MaplibEndpointError::Request)?;
@@ -105,7 +108,10 @@ pub fn query_maplib_endpoint(
             if let Some(t) = token {
                 req = req.header(AUTHORIZATION, format!("Bearer {t}"));
             }
-            let r = req.send().await.map_err(MaplibEndpointError::Request)?;
+            let r = req.send().await.map_err(|e| match outbound::refusal(&e) {
+                Some(o) => MaplibEndpointError::Outbound(o),
+                None => MaplibEndpointError::Request(e),
+            })?;
             let status = r.status();
             let bytes = r.bytes().await.map_err(MaplibEndpointError::Request)?;
             if !status.is_success() {

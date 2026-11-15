@@ -3035,6 +3035,46 @@ def memory_usage() -> int:
 def memory_limit() -> int:
     """The memory limit in bytes above which queries spill to disk. See set_memory_limit."""
 
+from maplib.outbound import OutboundError as OutboundError, OutboundPolicy
+
+def set_outbound_policy(
+        mode: Union[str, Callable[[str, str, int], None], "OutboundPolicy", None] = "any",
+        allow: Iterable[str] = (),
+        check: Optional[Callable[[str, str, int], None]] = None,
+) -> "OutboundPolicy":
+    """Sets the process-wide outbound policy: which hosts maplib may connect to (against
+    server-side request forgery, SSRF). maplib checks the final scheme, host and port of every
+    connection it makes before connecting: the databases of maplib.config (probe,
+    apply_virtualization, apply_config), the databases of maplib.virtualization, map_osipi,
+    map_pi_points, map_insights_hub, map_cdf, IP.21, OPC UA, and SPARQL SERVICE and LOAD
+    (Model.query and Model.serve). The host is resolved and every address is checked; the
+    redirects that maplib's own HTTP clients follow are checked too.
+
+    Cloud metadata services (169.254.169.254, fd00:ec2::254, 100.100.100.200,
+    metadata.google.internal, ...) are refused in every mode. Refusals raise OutboundError
+    (a PermissionError), or an error naming the outbound policy from SPARQL SERVICE and LOAD,
+    which SERVICE SILENT does not hide.
+
+    >>> import maplib
+    >>> maplib.set_outbound_policy("public", allow=["*.snowflakecomputing.com", "10.20.0.0/16"])
+
+    :param mode: "any" (the default: any host but cloud metadata services), "public" (no
+        loopback, private, link-local or other local addresses) or "allowlist" (only the hosts in
+        allow). Or a function check(scheme, host, port), the mode then being "any". None restores
+        the default.
+    :param allow: Host names, "*.domain" (the domain and the hosts under it), addresses and CIDR
+        ranges, allowed in every mode but never for metadata services. A range allows a host when
+        all its addresses are in listed ranges.
+    :param check: Called as check(scheme, host, port) for every connection made from Python,
+        after the checks of mode and allow; raise to refuse the connection. maplib's Rust HTTP
+        clients (SPARQL SERVICE and LOAD, the PI Web API and Insights Hub mappings) apply mode and
+        allow only.
+    :return: The policy set.
+    """
+
+def get_outbound_policy() -> "OutboundPolicy":
+    """The process-wide outbound policy, see set_outbound_policy."""
+
 
 def explore(
         m: "Model",

@@ -27,6 +27,8 @@ use tokio::runtime::Builder;
 pub enum SparqlEndpointQueryError {
     #[error(transparent)]
     RequestError(reqwest::Error),
+    #[error(transparent)]
+    Outbound(outbound::OutboundError),
     #[error("Bad status code `{0}`")]
     BadStatusCode(String),
     #[error("Results parse error `{0}`")]
@@ -144,7 +146,10 @@ impl SparqlEndpoint {
             }
             _ => todo!(),
         };
-        let client = reqwest::Client::new();
+        outbound::check_url(&self.endpoint).map_err(SparqlEndpointQueryError::Outbound)?;
+        let client = outbound::guard_client(reqwest::Client::builder())
+            .build()
+            .map_err(SparqlEndpointQueryError::RequestError)?;
 
         let response = match &self.method {
             SparqlMethod::GET => {
@@ -194,7 +199,12 @@ impl SparqlEndpoint {
                     parse_json_text(&proper_response.text().await.expect("Read text error"))?
                 }
             }
-            Err(error) => return Err(SparqlEndpointQueryError::RequestError(error)),
+            Err(error) => {
+                return Err(match outbound::refusal(&error) {
+                    Some(o) => SparqlEndpointQueryError::Outbound(o),
+                    None => SparqlEndpointQueryError::RequestError(error),
+                })
+            }
         };
         let sm = match use_query {
             Query::Select { pattern, .. } => {

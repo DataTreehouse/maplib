@@ -54,12 +54,16 @@ __all__ = [
     "set_memory_limit",
     "memory_usage",
     "memory_limit",
+    "set_outbound_policy",
+    "get_outbound_policy",
+    "OutboundError",
     "DEFAULT_GRAPH",
 ]
 
 import pathlib
 from importlib.metadata import version
 from .maplib import *
+from .outbound import set_outbound_policy, get_outbound_policy, OutboundError
 
 """
 http://www.w3.org/1999/02/22-rdf-syntax-ns#type

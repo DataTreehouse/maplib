@@ -28,6 +28,7 @@ members = [
     "lib/cdf",
     "lib/fabric",
     "lib/external_sparql",
+    "lib/outbound",
     "lib/server",
     "py_maplib",
 ]
