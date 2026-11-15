@@ -15,6 +15,7 @@ use polars::prelude::{
 use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
+use utils::polars::collect_sized;
 
 impl CatEncs {
     pub fn new_empty(path: Option<&Path>, bt: &BaseRDFNodeType) -> CatEncs {
@@ -74,6 +75,7 @@ impl Cats {
                 (c, t, enc, local)
             })
             .collect();
+        let height = mappings.height();
         let mut mappings = mappings.lazy();
 
         for (c, t, enc, local) in encoded {
@@ -107,7 +109,7 @@ impl Cats {
                 BaseCatState::CategoricalNative(local.map(|x| LockedCats::new(x))),
             );
         }
-        EagerSolutionMappings::new(mappings.collect().unwrap(), rdf_node_types)
+        EagerSolutionMappings::new(collect_sized(mappings, height).unwrap(), rdf_node_types)
     }
 
     pub fn encode_series(&self, series: &Series, t: &BaseRDFNodeType) -> (Series, Option<Cats>) {

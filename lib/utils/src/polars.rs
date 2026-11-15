@@ -7,7 +7,10 @@ use thiserror::Error;
 #[cfg(feature = "pyo3")]
 use pyo3::Python;
 #[cfg(feature = "pyo3")]
-use std::{thread::sleep, time::Duration};
+use std::{
+    thread::sleep,
+    time::{Duration, Instant},
+};
 
 #[derive(Error, Debug)]
 pub enum InterruptableCollectError {
@@ -46,6 +49,21 @@ fn query_engine(height_estimate: Option<usize>) -> Engine {
 pub fn collect_in_memory(lf: LazyFrame) -> Result<DataFrame, PolarsError> {
     lf.collect_with_engine(Engine::InMemory)
         .map(|r| r.unwrap_single())
+}
+
+/// Collects a lazy frame whose input has about `height` rows, outside of query evaluation (e.g.
+/// a CONSTRUCT template or encoding a solution before it is inserted). Small inputs (see
+/// [SMALL_COLLECT_HEIGHT]) use the in-memory engine, since the fixed cost of the streaming engine
+/// dominates when few rows are handled at a time, as in each step of rule inference. Larger ones
+/// are left to Polars. `MAPLIB_POLARS_ENGINE=streaming` or `in-memory` selects that engine.
+pub fn collect_sized(lf: LazyFrame, height: usize) -> Result<DataFrame, PolarsError> {
+    let engine = match std::env::var("MAPLIB_POLARS_ENGINE").as_deref() {
+        Ok("in-memory") | Ok("in_memory") => Engine::InMemory,
+        Ok("streaming") => Engine::Auto,
+        _ if height <= SMALL_COLLECT_HEIGHT => Engine::InMemory,
+        _ => Engine::Auto,
+    };
+    lf.collect_with_engine(engine).map(|r| r.unwrap_single())
 }
 
 /// Collects a sort followed by a slice (ORDER BY with LIMIT) with the in-memory engine, many
@@ -111,13 +129,23 @@ fn pl_interruptable_collect_in_memory(
             // TODO: https://github.com/pola-rs/polars/issues/22513
             //                     min  med  avg  95%   99%   99.9%
             // check_signals takes 20 - 30 - 85 - 261 - 691 - 908
-            // It's better to give it some time rather than waste it on checking signals
+            // Signals are checked at most every SIGNAL_CHECK_INTERVAL. The result is polled with a
+            // sleep that doubles up to MAX_POLL_SLEEP, so it is picked up at most that long after
+            // it is ready (with a cap of 50 ms, a query of a few milliseconds often waited as long
+            // again, which added up over the many small queries of rule inference).
+            const SIGNAL_CHECK_INTERVAL: Duration = Duration::from_millis(50);
+            const MAX_POLL_SLEEP: Duration = Duration::from_millis(1);
             let mut sleeptime = Duration::from_nanos(15);
+            let mut last_check = Instant::now();
             loop {
                 sleep(sleeptime);
                 match future.fetch() {
                     None => {
-                        if Python::attach(|py| py.check_signals()).is_err() {
+                        let check = last_check.elapsed() >= SIGNAL_CHECK_INTERVAL;
+                        if check {
+                            last_check = Instant::now();
+                        }
+                        if check && Python::attach(|py| py.check_signals()).is_err() {
                             // Polars has some kind of race condition and panics as it tries to tx on our dropped rx
                             // We've already decided to bail out, so waiting a few ms for rayon to clean up or whatever should be fine
                             // TODO: https://github.com/pola-rs/polars/issues/22515
@@ -125,8 +153,7 @@ fn pl_interruptable_collect_in_memory(
                             sleep(Duration::from_millis(50));
                             break Err(InterruptableCollectError::Interrupted);
                         }
-                        // Max delay is twice the time the query actually took
-                        sleeptime = std::cmp::min(sleeptime * 2, Duration::from_millis(50));
+                        sleeptime = std::cmp::min(sleeptime * 2, MAX_POLL_SLEEP);
                     }
                     Some(dfr) => break Ok(dfr?),
                 }

@@ -8,7 +8,7 @@ use utils::polars::InterruptableCollectError;
 
 use crate::errors::RepresentationError;
 use crate::solution_mappings_builder::SolutionMappingsBuilder;
-use utils::polars::pl_interruptable_collect;
+use utils::polars::{collect_sized, pl_interruptable_collect};
 
 #[derive(Clone, Debug)]
 pub enum BaseCatState {
@@ -87,10 +87,11 @@ impl SolutionMappings {
         }
     }
 
-    /// Collects the mappings. Polars picks the engine (the streaming engine for lazy plans).
+    /// Collects the mappings, with the in-memory engine when the height estimate is small (see
+    /// [collect_sized]).
     pub fn as_eager(self) -> EagerSolutionMappings {
         EagerSolutionMappings {
-            mappings: self.mappings.collect().unwrap(),
+            mappings: collect_sized(self.mappings, self.height_estimate).unwrap(),
             rdf_node_types: self.rdf_node_types,
         }
     }

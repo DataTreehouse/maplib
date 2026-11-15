@@ -85,7 +85,10 @@ impl Triplestore {
                 let graph = if let QueryGraph::NamedGraph(n) = dataset {
                     Some(n)
                 } else {
-                    warn!("FTS is only defined when named graphs are provided or for the default graph");
+                    // Only worth a warning when some graph has a full-text index to miss.
+                    if !self.fts_index.is_empty() {
+                        warn!("FTS is only defined when named graphs are provided or for the default graph");
+                    }
                     None
                 };
                 let patterns = if let Some(graph) = graph {

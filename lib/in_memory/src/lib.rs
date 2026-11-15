@@ -691,12 +691,21 @@ impl CatMapsInMemory {
     /// Ranks of `us` (sorted, distinct codes) in string order, dense from 0. Only the relative
     /// order is meaningful.
     pub fn sort_ranks(&self, us: &[u32]) -> RankMap {
-        let mut slots: Vec<u32> = us
-            .into_par_iter()
-            .filter_map(|u| self.codes.get(*u))
-            .collect();
         let strings = &self.strings;
-        slots.par_sort_unstable_by(|a, b| strings.cmp_slots(*a, *b));
+        // Few codes (e.g. the triples of one rule execution) are sorted on this thread, since
+        // waking the thread pool costs more than the sort.
+        let slots = if us.len() <= SEQUENTIAL_SORT_RANKS {
+            let mut slots: Vec<u32> = us.iter().filter_map(|u| self.codes.get(*u)).collect();
+            slots.sort_unstable_by(|a, b| strings.cmp_slots(*a, *b));
+            slots
+        } else {
+            let mut slots: Vec<u32> = us
+                .into_par_iter()
+                .filter_map(|u| self.codes.get(*u))
+                .collect();
+            slots.par_sort_unstable_by(|a, b| strings.cmp_slots(*a, *b));
+            slots
+        };
         RankMap::from_pairs(
             slots
                 .into_iter()
@@ -948,6 +957,9 @@ pub enum RankMap {
 }
 
 const NO_RANK: u32 = u32::MAX;
+
+/// [`CatMapsInMemory::sort_ranks`] sorts at most this many codes without the thread pool.
+const SEQUENTIAL_SORT_RANKS: usize = 4096;
 
 /// An array over a code range is used when it is at most this many times the number of codes
 /// (plus a constant), otherwise a sorted list.

@@ -23,6 +23,7 @@ use spargebra::term::{
     GraphNamePattern, GroundQuadPattern, NamedNodePattern, QuadPattern, TermPattern,
 };
 use std::collections::{HashMap, HashSet};
+use utils::polars::collect_sized;
 
 pub struct QueryResult {
     pub kind: QueryResultKind,
@@ -342,11 +343,12 @@ pub fn quad_patterns_to_solution_mappings(
         )
         .not(),
     );
+    let height = df.height();
     let mut lf = df.clone().lazy().select(select_expr).filter(filter_expr);
     if unique {
         lf = unique_workaround(lf, &triple_types, None, false, UniqueKeepStrategy::Any);
     }
-    let df = lf.collect().unwrap();
+    let df = collect_sized(lf, height).unwrap();
     if df.height() > 0 {
         Ok(Some((
             EagerSolutionMappings::new(df, triple_types),
