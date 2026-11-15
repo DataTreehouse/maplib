@@ -73,6 +73,8 @@
 - `Model.insert` returned only one of the tables of a predicate whose subjects or objects have several types (e.g. both IRIs and literals as objects); it now returns all of the inserted triples of the predicate in one DataFrame. In Rust, `triplestore::new_triples_by_predicate` merges new triples per predicate
 
 ### Performance
+Disk storage answers lookups of all properties of a subject (`SELECT ?p ?o WHERE { <e> ?p ?o }`) about 10× faster: at 20 M triples, 7 ms instead of 86 ms, against 2 ms with memory storage. Lookups with a known predicate are about 2× faster. Decoding a few results no longer joins them with the whole IRI and literal dictionary (maplib Enterprise Edition), a bound subject or object is encoded once per triple pattern instead of once per predicate table, and the few row groups a bound subject needs are read directly instead of through a lazy scan per range. Queries that return many rows, such as LIMIT 100000, are as slow as before with disk storage (about 90 ms at 20 M triples, 3 ms in memory).
+
 In disk mode the triple tables and their deduplication index are no longer held in memory. With few triples per distinct IRI or literal (as in the CIM data), memory use is dominated by the dictionary and reading, and disk storage saves little.
 
 Triple table segments are compacted much faster, which matters most for datalog, where every iteration adds a small batch of triples to tables that are often large:

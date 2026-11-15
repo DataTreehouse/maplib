@@ -3,7 +3,9 @@ use crate::errors::TriplestoreError;
 use crate::sparql::QuerySettings;
 use crate::storage::Triples;
 use oxrdf::{NamedNode, NamedOrBlankNode, Term};
-use polars::prelude::{as_struct, by_name, col, concat, lit, IntoLazy, LazyFrame, UnionArgs};
+use polars::prelude::{
+    as_struct, by_name, col, concat, lit, Expr, IntoLazy, LazyFrame, UnionArgs,
+};
 use polars_core::prelude::{Column, DataFrame};
 use query_processing::expressions::{blank_node_enc, literal_enc, named_node_enc};
 use query_processing::graph_patterns::{distinct, union};
@@ -114,6 +116,7 @@ impl Triplestore {
         subject_datatype_ctr: &Option<PossibleTypes>,
         object_datatype_ctr: &Option<PossibleTypes>,
         graph: &NamedGraph,
+        encodings: &mut TermEncodings,
     ) -> Result<Option<Vec<HalfBakedSolutionMappings>>, TriplestoreError> {
         if !self.graph_triples_map.contains_key(graph) {
             return Ok(None);
@@ -137,6 +140,7 @@ impl Triplestore {
                         keep_subject,
                         keep_object,
                         &cats,
+                        encodings,
                     )? {
                         all_sms.extend(sms);
                     }
@@ -203,6 +207,10 @@ impl Triplestore {
         };
         let predicate_uris = predicate_uris.unwrap_or(self.all_predicates(named_graph));
         let cats = self.global_cats.read()?;
+        let mut encodings = TermEncodings::default();
+        if predicate_keep_rename.is_some() {
+            encodings.encode_iris(&predicate_uris, &cats);
+        }
 
         let mut sms = vec![];
         if !(objects.is_some() && objects.as_ref().unwrap().is_empty())
@@ -219,6 +227,7 @@ impl Triplestore {
                     subject_datatype_ctr,
                     object_datatype_ctr,
                     named_graph,
+                    &mut encodings,
                 )? {
                     sms.extend(sm);
                 }
@@ -274,13 +283,7 @@ impl Triplestore {
                     }
                     if let Some(p) = &predicate_keep_rename {
                         if s == p {
-                            let expr = named_node_enc(
-                                predicate.as_ref().unwrap(),
-                                &self
-                                    .global_cats
-                                    .read()
-                                    .expect("Cats should not be in write"),
-                            );
+                            let expr = encodings.encode_iri(predicate.as_ref().unwrap(), &cats);
                             //Safety for unwrap: All predicates stored in triplestore are also in catmap
                             let expr = expr.unwrap();
                             mappings = mappings.filter(col(SUBJECT_COL_NAME).eq(expr));
@@ -290,13 +293,7 @@ impl Triplestore {
                 if let Some(o) = &object_keep_rename {
                     if let Some(p) = &predicate_keep_rename {
                         if o == p {
-                            let expr = named_node_enc(
-                                predicate.as_ref().unwrap(),
-                                &self
-                                    .global_cats
-                                    .read()
-                                    .expect("Cats should not be in write"),
-                            );
+                            let expr = encodings.encode_iri(predicate.as_ref().unwrap(), &cats);
                             //Safety for unwrap: All predicates stored in triplestore are also in catmap
                             let expr = expr.unwrap();
                             mappings = mappings.filter(col(OBJECT_COL_NAME).eq(expr));
@@ -311,7 +308,9 @@ impl Triplestore {
                     subject_types.insert(subject_type.clone(), subject_state.unwrap().clone());
                 }
                 if predicate_keep_rename.is_some() {
-                    let enc = named_node_enc(predicate.as_ref().unwrap(), &cats).unwrap();
+                    let enc = encodings
+                        .encode_iri(predicate.as_ref().unwrap(), &cats)
+                        .unwrap();
                     mappings = mappings.with_column(enc.alias(PREDICATE_COL_NAME));
                 }
 
@@ -553,6 +552,7 @@ fn single_triples_to_lf(
     subjects: &Option<Vec<&NamedOrBlankNode>>,
     objects: &Option<Vec<&Term>>,
     global_cats: &Cats,
+    encodings: &mut TermEncodings,
 ) -> Result<Option<(LazyFrame, usize)>, TriplestoreError> {
     let lfs_and_heights = triples.get_lazy_frames(subjects, objects)?;
     if lfs_and_heights.is_empty() {
@@ -585,10 +585,7 @@ fn single_triples_to_lf(
         // Handles case where singular subject from triple pattern.
         if subject_terms.len() == 1 {
             let subj = *subject_terms.first().unwrap();
-            let enc = match subj {
-                NamedOrBlankNode::NamedNode(nn) => named_node_enc(nn, global_cats),
-                NamedOrBlankNode::BlankNode(bl) => blank_node_enc(bl, global_cats),
-            };
+            let enc = encodings.encode(&Term::from(subj.clone()), global_cats)?;
             if let Some(enc) = enc {
                 lf = lf.filter(col(SUBJECT_COL_NAME).eq(enc));
             } else {
@@ -600,15 +597,7 @@ fn single_triples_to_lf(
         // Handles case where singular object from triple pattern.
         if object_terms.len() == 1 {
             let obj = *object_terms.first().unwrap();
-            let enc = match obj {
-                Term::NamedNode(nn) => named_node_enc(nn, global_cats),
-                Term::BlankNode(bl) => blank_node_enc(bl, global_cats),
-                Term::Literal(l) => {
-                    let (e, _, _) = literal_enc(l, global_cats)
-                        .map_err(|x| TriplestoreError::SparqlQueryError(x.to_string()))?;
-                    Some(e)
-                }
-            };
+            let enc = encodings.encode(obj, global_cats)?;
             if let Some(enc) = enc {
                 lf = lf.filter(col(OBJECT_COL_NAME).eq(enc));
             } else {
@@ -617,6 +606,55 @@ fn single_triples_to_lf(
         }
     }
     Ok(Some((lf, new_height)))
+}
+
+/// The encodings of the constant terms of a triple pattern. Each encoding looks the term up in
+/// the dictionaries, which on disk is a database query, so a term is encoded once per pattern
+/// rather than once per predicate and type of table.
+#[derive(Default)]
+struct TermEncodings {
+    encodings: HashMap<Term, Option<Expr>>,
+}
+
+impl TermEncodings {
+    fn encode(&mut self, term: &Term, global_cats: &Cats) -> Result<Option<Expr>, TriplestoreError> {
+        if let Some(enc) = self.encodings.get(term) {
+            return Ok(enc.clone());
+        }
+        let enc = match term {
+            Term::NamedNode(nn) => named_node_enc(nn, global_cats),
+            Term::BlankNode(bl) => blank_node_enc(bl, global_cats),
+            Term::Literal(l) => {
+                let (e, _, _) = literal_enc(l, global_cats)
+                    .map_err(|x| TriplestoreError::SparqlQueryError(x.to_string()))?;
+                Some(e)
+            }
+        };
+        self.encodings.insert(term.clone(), enc.clone());
+        Ok(enc)
+    }
+
+    fn encode_iri(&mut self, nn: &NamedNode, global_cats: &Cats) -> Option<Expr> {
+        let term = Term::NamedNode(nn.clone());
+        if let Some(enc) = self.encodings.get(&term) {
+            return enc.clone();
+        }
+        let enc = named_node_enc(nn, global_cats);
+        self.encodings.insert(term, enc.clone());
+        enc
+    }
+
+    /// Encodes the IRIs with a single dictionary lookup.
+    fn encode_iris(&mut self, nns: &[NamedNode], global_cats: &Cats) {
+        let strs: Vec<_> = nns.iter().map(|nn| Some(nn.as_str())).collect();
+        let encs = global_cats.maybe_encode_iri_slice(&strs);
+        for (nn, enc) in nns.iter().zip(encs) {
+            self.encodings.insert(
+                Term::NamedNode(nn.clone()),
+                enc.map(|enc| lit(enc).cast(polars_core::prelude::DataType::UInt32)),
+            );
+        }
+    }
 }
 
 struct HalfBakedSolutionMappings {
@@ -637,6 +675,7 @@ fn multiple_tt_to_lf(
     keep_subject: bool,
     keep_object: bool,
     global_cats: &Cats,
+    encodings: &mut TermEncodings,
 ) -> Result<Option<Vec<HalfBakedSolutionMappings>>, TriplestoreError> {
     let mut filtered = vec![];
     for ((subj_type, obj_type), tt) in triples.iter() {
@@ -666,7 +705,13 @@ fn multiple_tt_to_lf(
         };
 
         if let Some((lf, height)) =
-            single_triples_to_lf(tt, &filtered_subjects, &filtered_objects, global_cats)?
+            single_triples_to_lf(
+                tt,
+                &filtered_subjects,
+                &filtered_objects,
+                global_cats,
+                encodings,
+            )?
         {
             if height > 0 {
                 let mut select = vec![];

@@ -12,7 +12,10 @@ use oxrdf::{NamedNode, NamedOrBlankNode, Term};
 use polars::prelude::{
     as_struct, col, concat, lit, IdxCa, IdxSize, IntoLazy, LazyFrame, PlSmallStr, UnionArgs,
 };
-use polars::prelude::{ParquetCompression, ParquetWriter};
+use polars::io::parquet::metadata::FileMetadataRef;
+use polars::prelude::{
+    ParallelStrategy, ParquetCompression, ParquetReader, ParquetWriter, SerReader,
+};
 use polars_core::frame::DataFrame;
 use polars_core::prelude::DataType;
 use polars_core::prelude::{
@@ -36,7 +39,7 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fs::File;
 use std::ops::Deref;
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 use std::time::Instant;
 use tracing::{debug, instrument, trace, warn};
 use uuid::Uuid;
@@ -1103,17 +1106,17 @@ impl StoredTriples {
             };
             return Ok(vec![(out.lazy(), rows)]);
         }
-        let (lf, _) = self.get_lazy_frame_and_height()?;
-        Ok(offsets
-            .into_iter()
-            .map(|(offset, len)| {
-                let lf = lf
-                    .clone()
-                    .select([col(SUBJECT_COL_NAME), col(OBJECT_COL_NAME)])
-                    .slice(offset as i64, len as IdxSize);
-                (lf, len)
-            })
-            .collect())
+        let StoredTriples::TriplesOnDisk(disk) = self else {
+            unreachable!()
+        };
+        if offsets.is_empty() {
+            return Ok(vec![]);
+        }
+        // Read the ranges eagerly: a lazy scan per range plans and opens the file and parses
+        // its footer every time, which costs more than reading the few row groups needed.
+        let df = disk.read_ranges(&offsets)?;
+        let rows = df.height();
+        Ok(vec![(df.lazy(), rows)])
     }
 }
 
@@ -1140,6 +1143,8 @@ pub struct TriplesOnDisk {
     path: PathBuf,
     height: usize,
     remote: Option<Arc<remote_segments::RemoteSegment>>,
+    /// The parquet metadata of the file, read on the first lookup.
+    metadata: OnceLock<FileMetadataRef>,
 }
 
 impl TriplesOnDisk {
@@ -1162,6 +1167,7 @@ impl TriplesOnDisk {
             path,
             height,
             remote: None,
+            metadata: OnceLock::new(),
         })
     }
 
@@ -1171,6 +1177,7 @@ impl TriplesOnDisk {
             remote: Some(remote_segments::RemoteSegment::new(location, path.clone())),
             path,
             height,
+            metadata: OnceLock::new(),
         }
     }
 
@@ -1191,6 +1198,7 @@ impl TriplesOnDisk {
             path,
             height: 0,
             remote: None,
+            metadata: OnceLock::new(),
         };
         let height_df = on_disk
             .scan()?
@@ -1208,13 +1216,60 @@ impl TriplesOnDisk {
         Ok(on_disk)
     }
 
-    fn scan(&self) -> Result<LazyFrame, TriplestoreError> {
+    /// The path of the local file, downloading it first if the table is in object storage.
+    fn local_path(&self) -> Result<&Path, TriplestoreError> {
         if let Some(remote) = &self.remote {
             remote
                 .ensure_local()
                 .map_err(|e| TriplestoreError::FileIOError(FileIOError::FileCreateIOError(e)))?;
         }
-        scan_parquet(&self.path).map_err(TriplestoreError::FileIOError)
+        Ok(&self.path)
+    }
+
+    fn scan(&self) -> Result<LazyFrame, TriplestoreError> {
+        scan_parquet(self.local_path()?).map_err(TriplestoreError::FileIOError)
+    }
+
+    fn open(path: &Path) -> Result<File, TriplestoreError> {
+        File::open(path)
+            .map_err(|e| TriplestoreError::FileIOError(FileIOError::FileCreateIOError(e)))
+    }
+
+    /// Reads the subject and object columns of the rows in `ranges` (`(offset, len)`, sorted and
+    /// not overlapping). Only the row groups that overlap the ranges are read, and the file
+    /// metadata is parsed once per table.
+    fn read_ranges(&self, ranges: &[(usize, usize)]) -> Result<DataFrame, TriplestoreError> {
+        let path = self.local_path()?;
+        let metadata = if let Some(metadata) = self.metadata.get() {
+            metadata.clone()
+        } else {
+            let mut reader = ParquetReader::new(Self::open(path)?);
+            let metadata = reader
+                .get_metadata()
+                .map_err(TriplestoreError::LazyLoadError)?
+                .clone();
+            self.metadata.get_or_init(|| metadata).clone()
+        };
+        let columns = Some(vec![
+            SUBJECT_COL_NAME.to_string(),
+            OBJECT_COL_NAME.to_string(),
+        ]);
+        let mut out: Option<DataFrame> = None;
+        for &(offset, len) in ranges {
+            let mut reader = ParquetReader::new(Self::open(path)?)
+                .with_columns(columns.clone())
+                .with_slice(Some((offset, len)))
+                .read_parallel(ParallelStrategy::None);
+            reader.set_metadata(metadata.clone());
+            let df = reader.finish().map_err(TriplestoreError::LazyLoadError)?;
+            if let Some(out) = &mut out {
+                out.vstack_mut_owned(df)
+                    .map_err(TriplestoreError::LazyLoadError)?;
+            } else {
+                out = Some(df);
+            }
+        }
+        Ok(out.expect("Lookups read at least one range"))
     }
 
     pub(crate) fn get_lazy_frame(&self) -> Result<(LazyFrame, usize), TriplestoreError> {
