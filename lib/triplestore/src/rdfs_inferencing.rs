@@ -94,6 +94,21 @@ WHERE {
 }
 "#;
 
+// rdfs9 over the transitive closure of rdfs:subClassOf (rdfs11), in one step: an instance of a
+// class is an instance of all its superclasses, also those more than one subClassOf away.
+const RDFS_9_TRANSITIVE: &str = r#"
+PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+
+CONSTRUCT {
+    ?z rdf:type ?y .
+}
+WHERE {
+    ?z rdf:type ?x .
+    ?x rdfs:subClassOf+ ?y .
+}
+"#;
+
 const RDFS_10: &str = r#"
 PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
 PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
@@ -127,7 +142,7 @@ impl Triplestore {
             strict_project: false,
         };
         self.insert(
-            RDFS_9,
+            RDFS_9_TRANSITIVE,
             None,
             &qs,
             graph,
