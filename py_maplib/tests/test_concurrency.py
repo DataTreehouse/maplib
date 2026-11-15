@@ -52,8 +52,9 @@ class Gate:
     def __call__(self, df: pl.DataFrame) -> pl.DataFrame:
         if df.height > 0:
             self.entered.set()
-            if not self.opened.wait(TIMEOUT):
-                raise TimeoutError("The gate was never opened")
+            # No timeout: the tests open the gate in a finally block, and Runner.get guards against
+            # hangs. A wall-clock timeout here fails when the process is paused or starved.
+            self.opened.wait()
         return df.with_columns(pl.col("0").alias("out"))
 
     def open(self):
