@@ -35,32 +35,6 @@ impl Triplestore {
         let left_context = context.extension_with(PathEntry::LeftJoinLeftSide);
         let right_context = context.extension_with(PathEntry::LeftJoinRightSide);
         let expression_context = context.extension_with(PathEntry::LeftJoinExpression);
-        // Incoming solutions that bind a variable which only the optional side binds are renamed
-        // before they are passed to the left side, and made compatible after the left join:
-        // otherwise a left row whose optional match differs on that variable would be kept
-        // with the incoming value instead of dropped.
-        let mut left_scope = vec![];
-        left.on_in_scope_variable(|v| left_scope.push(v.as_str().to_string()));
-        let mut outer_only = vec![];
-        let solution_mappings = solution_mappings.map(|mut sm| {
-            right.on_in_scope_variable(|v| {
-                let v = v.as_str();
-                if !left_scope.iter().any(|l| l == v)
-                    && !outer_only
-                        .iter()
-                        .any(|(o, _): &(Variable, Variable)| o.as_str() == v)
-                {
-                    if let Some(state) = sm.rdf_node_types.remove(v) {
-                        let renamed = format!("__maplib_outer_{v}");
-                        sm.mappings = sm.mappings.clone().rename([v], [renamed.as_str()], true);
-                        sm.rdf_node_types.insert(renamed.clone(), state);
-                        outer_only
-                            .push((Variable::new_unchecked(v), Variable::new_unchecked(renamed)));
-                    }
-                }
-            });
-            sm
-        });
         let left_solution_mappings = self.lazy_graph_pattern(
             left,
             solution_mappings,
@@ -151,13 +125,10 @@ impl Triplestore {
             self.global_cats.clone(),
             query_settings.max_rows,
         )?;
-        let mut sm = left_solution_mappings;
-        for (i, (v, outer)) in outer_only.iter().enumerate() {
-            sm = self.merge_outer_binding(sm, v, outer, i, context, query_settings, dataset)?;
-        }
-        Ok(sm)
+        Ok(left_solution_mappings)
     }
 
+    /// Used by joins that treat unbound values as compatible (SERVICE results).
     /// Keeps the rows where `v` and `outer` are compatible (one is unbound, or they are the same
     /// term) and binds `v` to whichever is bound.
     #[allow(clippy::too_many_arguments)]
