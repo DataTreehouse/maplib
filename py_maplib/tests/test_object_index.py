@@ -15,14 +15,16 @@ RDF_TYPE = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type"
 def model(storage, tmp_path) -> Model:
     if storage == "memory":
         return Model()
-    m = Model(storage=storage, storage_folder=str(tmp_path / "storage"))
+    # Probe on a model of its own: a probe triple in the tested model would add a predicate
+    # (and an object index) to the counts below.
+    probe = Model(storage=storage, storage_folder=str(tmp_path / "probe"))
     try:
-        m.reads("<urn:a> <urn:b> <urn:c> .", format="ntriples")
+        probe.reads("<urn:a> <urn:b> <urn:c> .", format="ntriples")
     except BaseException as e:  # The open source build panics: hybrid and disk storage are EE.
         if "Contact Data Treehouse" in str(e):
             pytest.skip(f"{storage} storage needs maplib Enterprise Edition")
         raise
-    return m
+    return Model(storage=storage, storage_folder=str(tmp_path / "storage"))
 
 
 def add(m: Model, start: int, n: int):
