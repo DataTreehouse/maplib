@@ -280,7 +280,8 @@ def build_params():
             strict = "[flaky]" not in known[tid]
             marks.append(pytest.mark.xfail(reason=known[tid], strict=strict))
         params.append(pytest.param(g, entry, id=tid, marks=marks))
-    unknown = sorted(set(known) - {p.id for p in params})
+    # The federated query tests (service/...) are collected by build_service_params.
+    unknown = sorted(k for k in set(known) - {p.id for p in params} if not k.startswith("service/"))
     assert not unknown, f"Known failures that are not tests: {unknown}"
     return params
 
