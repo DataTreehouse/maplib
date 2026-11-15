@@ -5,5 +5,3 @@ test014 # metadata linked with an HTTP Link header, maplib does not fetch docume
 test016 # metadata linked with an HTTP Link header, maplib does not fetch documents over HTTP
 test120 # metadata linked with an HTTP Link header, maplib does not fetch documents over HTTP
 test122 # metadata linked with an HTTP Link header, maplib does not fetch documents over HTTP
-test187 # maplib can not store xsd:date values with time zones, they are output as strings
-test188 # maplib can not store xsd:date values with time zones, they are output as strings
