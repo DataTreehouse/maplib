@@ -19,6 +19,7 @@ use representation::bundle::{
 use representation::cats::serialization::{CatSerializationError, CATS_FOLDER};
 use representation::cats::{Cats, LockedCats};
 use representation::dataset::NamedGraph;
+use representation::constants::normalize_legacy_chrontext_named_node;
 use representation::BaseRDFNodeType;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -382,8 +383,25 @@ impl Triplestore {
             },
         );
         let cats = cats?;
-        let mut graph_triples_map = HashMap::new();
+        let mut graph_triples_map: HashMap<
+            NamedGraph,
+            HashMap<NamedNode, HashMap<(BaseRDFNodeType, BaseRDFNodeType), Triples>>,
+        > = HashMap::new();
         for (graph, pred, subject_type, object_type, triples) in triples_vec? {
+            // Stored predicates in the former chrontext namespace are read as the predicates of
+            // the maplib vocabulary, unless a stored table already has that predicate.
+            let pred = {
+                let new_pred = normalize_legacy_chrontext_named_node(pred.clone());
+                let taken = graph_triples_map
+                    .get(&graph)
+                    .and_then(|m| m.get(&new_pred))
+                    .is_some_and(|m| m.contains_key(&(subject_type.clone(), object_type.clone())));
+                if taken {
+                    pred
+                } else {
+                    new_pred
+                }
+            };
             if !graph_triples_map.contains_key(&graph) {
                 graph_triples_map.insert(graph.clone(), HashMap::new());
             }

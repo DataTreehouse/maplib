@@ -36,7 +36,19 @@ CONFIG = "https://datatreehouse.github.io/maplib/config#"
 CONFIG_GRAPH = CONFIG + "ConfigGraph"
 """The named graph that holds the configuration of a model."""
 
-CHRONTEXT = "https://github.com/DataTreehouse/chrontext#"
+MAPLIB = "https://datatreehouse.github.io/maplib/vocab#"
+"""The maplib vocabulary, which holds the time series virtualization vocabulary (maplib:hasTimeseries,
+maplib:hasDataPoint, maplib:hasTimestamp, maplib:hasValue, maplib:hasResource, maplib:hasExternalId,
+maplib:FloorDateTimeToSecondsInterval, maplib:dateBin, ...)."""
+
+CHRONTEXT = MAPLIB
+"""Deprecated alias of MAPLIB: the time series virtualization vocabulary moved from the chrontext
+namespace (LEGACY_CHRONTEXT) to the maplib vocabulary."""
+
+LEGACY_CHRONTEXT = "https://github.com/DataTreehouse/chrontext#"
+"""The former namespace of the time series virtualization vocabulary. Deprecated: its IRIs are still
+accepted in queries, in the predicates of data and in virtualization templates, and are read as the
+IRI with the same local name in MAPLIB."""
 
 RDF_TYPE = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type"
 RDFS_LABEL = "http://www.w3.org/2000/01/rdf-schema#label"
@@ -176,7 +188,7 @@ class VirtualizationResource:
     """A resource of a virtualized database: its rows (SQL) and the template they instantiate."""
 
     name: str
-    """The resource name, the value of ct:hasResource on what it virtualizes."""
+    """The resource name, the value of maplib:hasResource on what it virtualizes."""
     template: str
     """The template, as a stOTTR document, or the IRI of a template already in the model."""
     sql: Optional[str] = None
@@ -186,7 +198,7 @@ class VirtualizationResource:
     properties: Dict[str, str] = field(default_factory=dict)
     """Static properties of the objects it virtualizes: predicate IRI to object IRI, e.g. the unit of
     a measurement (cim:Measurement.unitSymbol to cim:UnitSymbol.W). Applying the virtualization
-    writes them as ordinary triples on each object with ct:hasResource the resource name (in the
+    writes them as ordinary triples on each object with maplib:hasResource the resource name (in the
     default graph), replacing the values those objects had for the predicate. Constant triples in a
     virtualized template are not supported by chrontext, so this is where such facts go."""
 
@@ -1040,7 +1052,7 @@ def apply_virtualization(m: "Model", config: VirtualizationConfig, environ: Opti
 def apply_properties(m: "Model", config: VirtualizationConfig):
     """
     Writes the static properties of the resources (VirtualizationResource.properties) on the
-    objects they virtualize, those with ct:hasResource the resource name, in the default graph.
+    objects they virtualize, those with maplib:hasResource the resource name, in the default graph.
     A property replaces the values the objects had for its predicate, so changing a unit and
     applying again leaves only the new one.
     """
@@ -1050,9 +1062,9 @@ def apply_properties(m: "Model", config: VirtualizationConfig):
         name = _literal(r.name)
         for predicate, obj in sorted(r.properties.items()):
             m.update(
-                f"""DELETE {{ ?s {_iri(predicate)} ?o }} WHERE {{ ?s <{CHRONTEXT}hasResource> {name} . ?s {_iri(predicate)} ?o }}"""
+                f"""DELETE {{ ?s {_iri(predicate)} ?o }} WHERE {{ ?s <{MAPLIB}hasResource> {name} . ?s {_iri(predicate)} ?o }}"""
             )
-            m.update(f"""INSERT {{ ?s {_iri(predicate)} {_iri(obj)} }} WHERE {{ ?s <{CHRONTEXT}hasResource> {name} }}""")
+            m.update(f"""INSERT {{ ?s {_iri(predicate)} {_iri(obj)} }} WHERE {{ ?s <{MAPLIB}hasResource> {name} }}""")
 
 
 def apply_config(m: "Model", environ: Optional[Mapping[str, str]] = None) -> List[str]:

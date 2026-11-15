@@ -1215,8 +1215,8 @@ class Model:
         - Nodes and edges become resources typed with the views they have data in.
           Direct relations are IRIs, and an edge adds a triple from its start node to its end node
           with the edge type as the predicate.
-        - Each time series node gets chrontext:hasResource and chrontext:hasExternalId, so it can be queried with
-          ?ts chrontext:hasDataPoint ?dp . ?dp chrontext:hasTimestamp ?t . ?dp chrontext:hasValue ?v .
+        - Each time series node gets maplib:hasResource and maplib:hasExternalId, so it can be queried with
+          ?ts maplib:hasDataPoint ?dp . ?dp maplib:hasTimestamp ?t . ?dp maplib:hasValue ?v .
 
         IRIs are <base_iri>node/<space>/<externalId>, <base_iri>edge/<space>/<externalId>,
         <base_iri>view/<space>/<externalId>, <base_iri>datamodel/<space>/<externalId> and
@@ -1306,8 +1306,8 @@ class Model:
         - The data bindings and relationship contextualizations become a standard R2RML mapping, which is
           run with map_r2rml against the lakehouse, and returned so it can be inspected or used elsewhere.
         - Time series bindings are virtualized: each entity gets an IRI per time series property, queried as
-          ?entity <property> ?ts . ?ts chrontext:hasDataPoint ?dp . ?dp chrontext:hasTimestamp ?t ;
-          chrontext:hasValue ?v . Lakehouse tables are queried in SQL in the lakehouse, Eventhouse (Kusto)
+          ?entity <property> ?ts . ?ts maplib:hasDataPoint ?dp . ?dp maplib:hasTimestamp ?t ;
+          maplib:hasValue ?v . Lakehouse tables are queried in SQL in the lakehouse, Eventhouse (Kusto)
           tables in KQL in the eventhouse.
 
         Reads the old experience (JSON) ontology definition. Not available in the open source build:
@@ -1368,8 +1368,8 @@ class Model:
         - osipi:name, rdfs:label, osipi:description, osipi:path, osipi:id, osipi:webId and osipi:category on all of these.
 
         Each attribute with a data reference (e.g. a PI Point) has a time series
-        (chrontext:hasTimeseries) with data points that are read from the PI Web API when queried:
-        chrontext:hasDataPoint, then chrontext:hasTimestamp, chrontext:hasValue (xsd:double, unbound for non-numeric values),
+        (maplib:hasTimeseries) with data points that are read from the PI Web API when queried:
+        maplib:hasDataPoint, then maplib:hasTimestamp, maplib:hasValue (xsd:double, unbound for non-numeric values),
         osipi:hasState (digital state names and string values), osipi:isGood, osipi:isQuestionable, osipi:isSubstituted and osipi:isAnnotated.
 
         Bounds on the timestamp in FILTERs limit the recorded values requested from PI.
@@ -1383,13 +1383,13 @@ class Model:
         ...             username="me", password="...")
         >>> df = m.query('''
         ... PREFIX osipi: <urn:maplib_osipi:>
-        ... PREFIX chrontext: <https://github.com/DataTreehouse/chrontext#>
+        ... PREFIX maplib: <https://datatreehouse.github.io/maplib/vocab#>
         ... PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
         ... SELECT ?pump ?t ?v WHERE {
         ...     ?pump osipi:templateName "Pump" ; osipi:hasAttribute ?a .
-        ...     ?a osipi:name "Flow" ; chrontext:hasTimeseries ?ts .
-        ...     ?ts chrontext:hasDataPoint ?dp .
-        ...     ?dp chrontext:hasTimestamp ?t ; chrontext:hasValue ?v .
+        ...     ?a osipi:name "Flow" ; maplib:hasTimeseries ?ts .
+        ...     ?ts maplib:hasDataPoint ?dp .
+        ...     ?dp maplib:hasTimestamp ?t ; maplib:hasValue ?v .
         ...     FILTER(?t >= "2024-01-01T00:00:00Z"^^xsd:dateTime && ?t < "2024-01-02T00:00:00Z"^^xsd:dateTime)
         ... }''')
 
@@ -1456,16 +1456,16 @@ class Model:
           insights_hub:length, insights_hub:qualityCode, insights_hub:searchable and insights_hub:defaultValue,
         - insights_hub:name, rdfs:label and insights_hub:description.
 
-        Each variable of a dynamic aspect has a time series (chrontext:hasTimeseries, an insights_hub:Timeseries with
-        chrontext:hasExternalId "assetId/aspectName/variableName") with data points that are read when queried:
-        chrontext:hasDataPoint, then chrontext:hasTimestamp, chrontext:hasValue (xsd:double, for INT, LONG, DOUBLE and
+        Each variable of a dynamic aspect has a time series (maplib:hasTimeseries, an insights_hub:Timeseries with
+        maplib:hasExternalId "assetId/aspectName/variableName") with data points that are read when queried:
+        maplib:hasDataPoint, then maplib:hasTimestamp, maplib:hasValue (xsd:double, for INT, LONG, DOUBLE and
         BOOLEAN variables, where true is 1.0), insights_hub:hasStringValue (for STRING, BIG_STRING and TIMESTAMP variables)
         and insights_hub:hasQualityCode (the _qc of the variable).
 
         Bounds on the timestamp in FILTERs limit the raw data requested from IoT Time Series.
         A query without a lower bound on the timestamp fails unless default_start_time is set.
-        With aggregate_pushdown, MIN, MAX, SUM, COUNT and AVG of chrontext:hasValue grouped by
-        chrontext:FloorDateTimeToSecondsInterval(?t, seconds) are read from IoT Time Series Aggregates when the
+        With aggregate_pushdown, MIN, MAX, SUM, COUNT and AVG of maplib:hasValue grouped by
+        maplib:FloorDateTimeToSecondsInterval(?t, seconds) are read from IoT Time Series Aggregates when the
         buckets are whole minutes dividing an hour or whole hours dividing a day, and the bounds of the time range
         are on the bucket grid. Insights Hub aggregates leave out values of bad quality, and count a value exactly
         on a bucket boundary in the preceding bucket, so the results can then differ from aggregating the raw data.
@@ -1480,14 +1480,14 @@ class Model:
         >>> m.map_insights_hub("gateway.eu1.mindsphere.io", "mytenant", client_id="mytenant-svc", client_secret="...")
         >>> df = m.query(\"\"\"
         ... PREFIX insights_hub: <urn:maplib_insights_hub:>
-        ... PREFIX chrontext: <https://github.com/DataTreehouse/chrontext#>
+        ... PREFIX maplib: <https://datatreehouse.github.io/maplib/vocab#>
         ... PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
         ... SELECT ?asset ?t ?v WHERE {
         ...     ?a insights_hub:name ?asset ; insights_hub:hasAspect ?asp .
         ...     ?asp insights_hub:name "process" ; insights_hub:hasVariable ?var .
-        ...     ?var insights_hub:name "flow" ; chrontext:hasTimeseries ?ts .
-        ...     ?ts chrontext:hasDataPoint ?dp .
-        ...     ?dp chrontext:hasTimestamp ?t ; chrontext:hasValue ?v .
+        ...     ?var insights_hub:name "flow" ; maplib:hasTimeseries ?ts .
+        ...     ?ts maplib:hasDataPoint ?dp .
+        ...     ?dp maplib:hasTimestamp ?t ; maplib:hasValue ?v .
         ...     FILTER(?t >= "2024-01-01T00:00:00Z"^^xsd:dateTime && ?t < "2024-01-02T00:00:00Z"^^xsd:dateTime)
         ... }\"\"\")
 
@@ -1549,15 +1549,15 @@ class Model:
         - the point attributes that are read (point_attributes) as osipi:hasPointAttribute nodes (osipi:PointAttribute) with osipi:name and osipi:value,
         - osipi:name (the tag name), rdfs:label, osipi:path, osipi:id and osipi:webId on data servers and points.
 
-        Each point is a time series with chrontext:hasResource "osipi" and chrontext:hasExternalId (the WebId of the point).
+        Each point is a time series with maplib:hasResource "osipi" and maplib:hasExternalId (the WebId of the point).
         Its data points are read from the PI Web API when queried, as for map_osipi:
-        chrontext:hasDataPoint, then chrontext:hasTimestamp, chrontext:hasValue (xsd:double, unbound for non-numeric values),
+        maplib:hasDataPoint, then maplib:hasTimestamp, maplib:hasValue (xsd:double, unbound for non-numeric values),
         osipi:hasState (digital state names and string values), osipi:isGood, osipi:isQuestionable, osipi:isSubstituted and osipi:isAnnotated.
 
         Bounds on the timestamp in FILTERs limit the recorded values requested from PI.
         A query without a lower bound on the timestamp fails unless default_start_time is set.
         Aggregates are computed in the virtualization, and MIN, MAX, SUM, AVG and COUNT of the values grouped
-        by chrontext:FloorDateTimeToSecondsInterval(?t, seconds) are read as PI summaries when the time range
+        by maplib:FloorDateTimeToSecondsInterval(?t, seconds) are read as PI summaries when the time range
         starts and ends on a multiple of the interval (counted from 1970-01-01T00:00:00Z) and is only filtered by time.
         This applies to map_osipi as well.
 
@@ -1569,12 +1569,12 @@ class Model:
         ...                 username="me", password="...")
         >>> df = m.query('''
         ... PREFIX osipi: <urn:maplib_osipi:>
-        ... PREFIX chrontext: <https://github.com/DataTreehouse/chrontext#>
+        ... PREFIX maplib: <https://datatreehouse.github.io/maplib/vocab#>
         ... PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
         ... SELECT ?tag ?bucket (AVG(?v) AS ?avg) WHERE {
-        ...     ?p a osipi:Point ; osipi:name ?tag ; chrontext:hasDataPoint ?dp .
-        ...     ?dp chrontext:hasTimestamp ?t ; chrontext:hasValue ?v .
-        ...     BIND(chrontext:FloorDateTimeToSecondsInterval(?t, 3600) AS ?bucket)
+        ...     ?p a osipi:Point ; osipi:name ?tag ; maplib:hasDataPoint ?dp .
+        ...     ?dp maplib:hasTimestamp ?t ; maplib:hasValue ?v .
+        ...     BIND(maplib:FloorDateTimeToSecondsInterval(?t, 3600) AS ?bucket)
         ...     FILTER(?t >= "2024-01-01T00:00:00Z"^^xsd:dateTime && ?t < "2024-01-02T00:00:00Z"^^xsd:dateTime)
         ... } GROUP BY ?tag ?bucket''')
 
@@ -3191,7 +3191,7 @@ class VirtualizedDatabase:
         A virtualized database backed by time series in Cognite Data Fusion, queried with a cognite-sdk client.
         The id of each time series in the knowledge graph is its external id (or its id or instance id, see below).
         Time ranges in filters are sent to CDF as start and end, and grouping by
-        chrontext:FloorDateTimeToSecondsInterval with MIN, MAX, SUM, COUNT or AVG of the value uses CDF aggregates.
+        maplib:FloorDateTimeToSecondsInterval with MIN, MAX, SUM, COUNT or AVG of the value uses CDF aggregates.
         The rest of the query is evaluated on the retrieved datapoints.
 
         Not available in the open source build: raises NotImplementedError.

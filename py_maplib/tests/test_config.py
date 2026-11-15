@@ -24,11 +24,11 @@ from maplib.config import (
 )
 from maplib.config import probe
 
-TEMPLATE = """@prefix ct: <https://github.com/DataTreehouse/chrontext#> .
+TEMPLATE = """@prefix tpl: <http://example.org/templates#> .
 @prefix ex: <http://example.org/> .
 @prefix ottr: <http://ns.ottr.xyz/0.4/> .
 @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
-ct:readings [ xsd:string ?id, xsd:dateTime ?timestamp, xsd:double ?value ] :: {
+tpl:readings [ xsd:string ?id, xsd:dateTime ?timestamp, xsd:double ?value ] :: {
   ottr:Triple(?id, ex:hasValue, ?v) , ottr:Triple(?v, ex:timestamp, ?timestamp) , ottr:Triple(?v, ex:value, ?value)
 } ."""
 
@@ -227,9 +227,9 @@ def test_resource_properties_must_be_iris():
 def test_applying_properties_writes_them_on_the_resource_objects():
     m = Model()
     m.reads(
-        """<urn:m1> <https://github.com/DataTreehouse/chrontext#hasResource> "readings" .
-<urn:m2> <https://github.com/DataTreehouse/chrontext#hasResource> "readings" .
-<urn:other> <https://github.com/DataTreehouse/chrontext#hasResource> "other" .""",
+        """<urn:m1> <https://datatreehouse.github.io/maplib/vocab#hasResource> "readings" .
+<urn:m2> <https://datatreehouse.github.io/maplib/vocab#hasResource> "readings" .
+<urn:other> <https://datatreehouse.github.io/maplib/vocab#hasResource> "other" .""",
         format="ntriples",
     )
     apply_properties(m, duckdb_config())
@@ -275,11 +275,11 @@ def test_units_and_measurement_kinds_with_duckdb(tmp_path, kind, cast, datatype,
     )
     con.close()
     values = {"Analog": "AnalogValue", "Discrete": "DiscreteValue", "StringMeasurement": "StringMeasurementValue"}[kind]
-    template = f"""@prefix ct: <https://github.com/DataTreehouse/chrontext#> .
+    template = f"""@prefix tpl: <http://example.org/templates#> .
 @prefix ottr: <http://ns.ottr.xyz/0.4/> .
 @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
 @prefix cim: <{CIM}> .
-ct:readings [ xsd:string ?id, xsd:dateTime ?timestamp, xsd:{datatype} ?value ] :: {{
+tpl:readings [ xsd:string ?id, xsd:dateTime ?timestamp, xsd:{datatype} ?value ] :: {{
   ottr:Triple(?id, cim:{kind}.{kind}Values, ?point) ,
   ottr:Triple(?point, cim:MeasurementValue.timeStamp, ?timestamp) ,
   ottr:Triple(?point, cim:{values}.value, ?value)
@@ -299,8 +299,8 @@ ct:readings [ xsd:string ?id, xsd:dateTime ?timestamp, xsd:{datatype} ?value ] :
     )
     m = Model()
     m.reads(
-        """<urn:m1> <https://github.com/DataTreehouse/chrontext#hasResource> "readings" .
-<urn:m1> <https://github.com/DataTreehouse/chrontext#hasExternalId> "M-1" .""",
+        """<urn:m1> <https://datatreehouse.github.io/maplib/vocab#hasResource> "readings" .
+<urn:m1> <https://datatreehouse.github.io/maplib/vocab#hasExternalId> "M-1" .""",
         format="ntriples",
     )
     write_virtualization(m, config)

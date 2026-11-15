@@ -8,6 +8,7 @@ use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use representation::cats::CatTriples;
 use polars::prelude::{col, IntoLazy};
 use representation::rdf_to_polars::normalized_datetime_dtype;
+use representation::constants::normalize_legacy_chrontext_named_node;
 use representation::{BaseRDFNodeType, OBJECT_COL_NAME, SUBJECT_COL_NAME};
 use std::collections::HashMap;
 use std::time::Instant;
@@ -95,6 +96,9 @@ impl Triplestore {
             local_cats: _,
         } in global_cat_triples
         {
+            // Deprecated predicates in the former chrontext namespace are stored as the
+            // predicates of the maplib vocabulary that replaced them.
+            let predicate = normalize_legacy_chrontext_named_node(predicate);
             self.add_graph_if_not_exists(&graph)?;
             let k = (subject_type.clone(), object_type.clone());
 

@@ -27,7 +27,7 @@ from maplib import (
 
 PREFIXES = """
 PREFIX xsd:<http://www.w3.org/2001/XMLSchema#>
-PREFIX chrontext:<https://github.com/DataTreehouse/chrontext#>
+PREFIX maplib:<https://datatreehouse.github.io/maplib/vocab#>
 PREFIX types:<http://example.org/types#>
 """
 
@@ -37,18 +37,18 @@ PREFIX types:<http://example.org/types#>
 GRAPH = """
 PREFIX case: <http://example.org/case#>
 PREFIX types: <http://example.org/types#>
-PREFIX chrontext: <https://github.com/DataTreehouse/chrontext#>
+PREFIX maplib: <https://datatreehouse.github.io/maplib/vocab#>
 
 case:myWidget1 a types:BigWidget .
 case:myWidget2 a types:SmallWidget .
 case:myWidget1 types:hasSensor case:mySensor1 .
 case:myWidget2 types:hasSensor case:mySensor2 .
-case:mySensor1 chrontext:hasTimeseries case:myTimeseries1 .
-case:mySensor2 chrontext:hasTimeseries case:myTimeseries2 .
-case:myTimeseries1 chrontext:hasResource "resource_a" .
-case:myTimeseries2 chrontext:hasResource "resource_b" .
-case:myTimeseries1 chrontext:hasExternalId "ts" .
-case:myTimeseries2 chrontext:hasExternalId "ts" .
+case:mySensor1 maplib:hasTimeseries case:myTimeseries1 .
+case:mySensor2 maplib:hasTimeseries case:myTimeseries2 .
+case:myTimeseries1 maplib:hasResource "resource_a" .
+case:myTimeseries2 maplib:hasResource "resource_b" .
+case:myTimeseries1 maplib:hasExternalId "ts" .
+case:myTimeseries2 maplib:hasExternalId "ts" .
 """
 
 
@@ -96,14 +96,19 @@ def resource_sql(table: str, resource: str):
     )
 
 
-def template(name: str) -> Template:
-    ct = Prefix("https://github.com/DataTreehouse/chrontext#")
+MAPLIB = "https://datatreehouse.github.io/maplib/vocab#"
+LEGACY_CHRONTEXT = "https://github.com/DataTreehouse/chrontext#"
+
+
+def template(name: str, namespace: str = MAPLIB) -> Template:
+    ct = Prefix(namespace)
+    tpl = Prefix("http://example.org/templates#")
     id = Variable("id")
     timestamp = Variable("timestamp")
     value = Variable("value")
     dp = Variable("dp")
     return Template(
-        iri=ct.suf(name),
+        iri=tpl.suf(name),
         parameters=[
             Parameter(id, rdf_type=RDFType.Literal(xsd.string)),
             Parameter(timestamp, rdf_type=RDFType.Literal(xsd.dateTime)),
@@ -163,10 +168,10 @@ def test_query_over_two_virtualizations(dbs):
         + """
     SELECT ?w ?t ?v WHERE {
         ?w types:hasSensor ?s .
-        ?s chrontext:hasTimeseries ?ts .
-        ?ts chrontext:hasDataPoint ?dp .
-        ?dp chrontext:hasTimestamp ?t .
-        ?dp chrontext:hasValue ?v .
+        ?s maplib:hasTimeseries ?ts .
+        ?ts maplib:hasDataPoint ?dp .
+        ?dp maplib:hasTimestamp ?t .
+        ?dp maplib:hasValue ?v .
     }
     """
     )
@@ -189,10 +194,10 @@ def test_only_the_matching_virtualization_is_queried(dbs):
     SELECT ?w ?t ?v WHERE {
         ?w a types:BigWidget .
         ?w types:hasSensor ?s .
-        ?s chrontext:hasTimeseries ?ts .
-        ?ts chrontext:hasDataPoint ?dp .
-        ?dp chrontext:hasTimestamp ?t .
-        ?dp chrontext:hasValue ?v .
+        ?s maplib:hasTimeseries ?ts .
+        ?ts maplib:hasDataPoint ?dp .
+        ?dp maplib:hasTimestamp ?t .
+        ?dp maplib:hasValue ?v .
         FILTER(?v > 50)
     }
     """
@@ -210,10 +215,10 @@ def test_group_by_over_two_virtualizations(dbs):
         + """
     SELECT ?w (SUM(?v) as ?sum_v) WHERE {
         ?w types:hasSensor ?s .
-        ?s chrontext:hasTimeseries ?ts .
-        ?ts chrontext:hasDataPoint ?dp .
-        ?dp chrontext:hasTimestamp ?t .
-        ?dp chrontext:hasValue ?v .
+        ?s maplib:hasTimeseries ?ts .
+        ?ts maplib:hasDataPoint ?dp .
+        ?dp maplib:hasTimestamp ?t .
+        ?dp maplib:hasValue ?v .
         FILTER(?t > "2022-06-01T08:46:53Z"^^xsd:dateTime) .
     } GROUP BY ?w
     """
@@ -237,9 +242,9 @@ def test_aggregate_across_virtualizations(dbs):
         + """
     SELECT (COUNT(?v) as ?n) (MAX(?v) as ?max_v) WHERE {
         ?w types:hasSensor ?s .
-        ?s chrontext:hasTimeseries ?ts .
-        ?ts chrontext:hasDataPoint ?dp .
-        ?dp chrontext:hasValue ?v .
+        ?s maplib:hasTimeseries ?ts .
+        ?ts maplib:hasDataPoint ?dp .
+        ?dp maplib:hasValue ?v .
     }
     """
     )
@@ -260,14 +265,14 @@ def test_join_time_series_of_two_virtualizations(dbs):
         ?w2 a types:SmallWidget .
         ?w1 types:hasSensor ?s1 .
         ?w2 types:hasSensor ?s2 .
-        ?s1 chrontext:hasTimeseries ?ts1 .
-        ?s2 chrontext:hasTimeseries ?ts2 .
-        ?ts1 chrontext:hasDataPoint ?dp1 .
-        ?ts2 chrontext:hasDataPoint ?dp2 .
-        ?dp1 chrontext:hasTimestamp ?t .
-        ?dp2 chrontext:hasTimestamp ?t .
-        ?dp1 chrontext:hasValue ?v1 .
-        ?dp2 chrontext:hasValue ?v2 .
+        ?s1 maplib:hasTimeseries ?ts1 .
+        ?s2 maplib:hasTimeseries ?ts2 .
+        ?ts1 maplib:hasDataPoint ?dp1 .
+        ?ts2 maplib:hasDataPoint ?dp2 .
+        ?dp1 maplib:hasTimestamp ?t .
+        ?dp2 maplib:hasTimestamp ?t .
+        ?dp1 maplib:hasValue ?v1 .
+        ?dp2 maplib:hasValue ?v2 .
         FILTER(?v1 > ?v2) .
     }
     """
@@ -293,10 +298,10 @@ def test_union_over_two_virtualizations(dbs):
     SELECT ?w ?v WHERE {
         { ?w a types:BigWidget . } UNION { ?w a types:SmallWidget . }
         ?w types:hasSensor ?s .
-        ?s chrontext:hasTimeseries ?ts .
-        ?ts chrontext:hasDataPoint ?dp .
-        ?dp chrontext:hasTimestamp ?t .
-        ?dp chrontext:hasValue ?v .
+        ?s maplib:hasTimeseries ?ts .
+        ?ts maplib:hasDataPoint ?dp .
+        ?dp maplib:hasTimestamp ?t .
+        ?dp maplib:hasValue ?v .
         FILTER(?t = "2022-06-01T08:46:55Z"^^xsd:dateTime)
     }
     """
@@ -320,10 +325,10 @@ def test_adding_a_resource_again_moves_it_to_the_new_virtualization(dbs):
         + """
     SELECT ?w ?t ?v WHERE {
         ?w types:hasSensor ?s .
-        ?s chrontext:hasTimeseries ?ts .
-        ?ts chrontext:hasDataPoint ?dp .
-        ?dp chrontext:hasTimestamp ?t .
-        ?dp chrontext:hasValue ?v .
+        ?s maplib:hasTimeseries ?ts .
+        ?ts maplib:hasDataPoint ?dp .
+        ?dp maplib:hasTimestamp ?t .
+        ?dp maplib:hasValue ?v .
     }
     """
     )
@@ -363,14 +368,14 @@ def test_same_database_added_twice_is_one_virtualization():
         ?w2 a types:SmallWidget .
         ?w1 types:hasSensor ?s1 .
         ?w2 types:hasSensor ?s2 .
-        ?s1 chrontext:hasTimeseries ?ts1 .
-        ?s2 chrontext:hasTimeseries ?ts2 .
-        ?ts1 chrontext:hasDataPoint ?dp1 .
-        ?ts2 chrontext:hasDataPoint ?dp2 .
-        ?dp1 chrontext:hasTimestamp ?t .
-        ?dp2 chrontext:hasTimestamp ?t .
-        ?dp1 chrontext:hasValue ?v1 .
-        ?dp2 chrontext:hasValue ?v2 .
+        ?s1 maplib:hasTimeseries ?ts1 .
+        ?s2 maplib:hasTimeseries ?ts2 .
+        ?ts1 maplib:hasDataPoint ?dp1 .
+        ?ts2 maplib:hasDataPoint ?dp2 .
+        ?dp1 maplib:hasTimestamp ?t .
+        ?dp2 maplib:hasTimestamp ?t .
+        ?dp1 maplib:hasValue ?v1 .
+        ?dp2 maplib:hasValue ?v2 .
     }
     """
     )
@@ -386,3 +391,43 @@ def test_same_database_added_twice_is_one_virtualization():
     )
     df = m.query(q).sort("t")
     assert df.height == expected.height
+
+
+def test_legacy_chrontext_iris_in_data_templates_and_queries():
+    """The vocabulary moved from the chrontext namespace to the maplib vocabulary. The deprecated
+    chrontext IRIs are still read as the maplib ones: in the data, in the templates of the
+    virtualizations and in queries."""
+    db_a = RecordingDuckDB("table_a", TS_A)
+    db_b = RecordingDuckDB("table_b", TS_B)
+    m = Model()
+    m.reads(GRAPH.replace(MAPLIB, LEGACY_CHRONTEXT), format="turtle")
+    m.add_virtualization(
+        virtualized_database(db_a, "table_a", "resource_a"),
+        resources={"resource_a": template("resource_a", LEGACY_CHRONTEXT)},
+    )
+    m.add_virtualization(
+        virtualized_database(db_b, "table_b", "resource_b"),
+        resources={"resource_b": template("resource_b", LEGACY_CHRONTEXT)},
+    )
+    body = """
+    SELECT ?w ?t ?v WHERE {
+        ?w types:hasSensor ?s .
+        ?s ct:hasTimeseries ?ts .
+        ?ts ct:hasDataPoint ?dp .
+        ?dp ct:hasTimestamp ?t .
+        ?dp ct:hasValue ?v .
+    }
+    """
+    for namespace in [LEGACY_CHRONTEXT, MAPLIB]:
+        q = PREFIXES + f"PREFIX ct:<{namespace}>\n" + body
+        df = m.query(q)
+        assert df.height == TS_A.height + TS_B.height, namespace
+        for i, expected in [(1, TS_A), (2, TS_B)]:
+            actual = df.filter(pl.col("w") == widget(i)).sort("t")
+            assert actual.get_column("v").cast(pl.Int64).to_list() == expected.get_column(
+                "value"
+            ).to_list()
+    # The data is stored with the maplib predicates.
+    assert m.query(
+        f"SELECT ?ts WHERE {{ ?ts <{MAPLIB}hasResource> ?r }}"
+    ).height == 2

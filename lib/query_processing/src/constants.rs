@@ -1,19 +1,19 @@
-pub const DATETIME_AS_MICROS: &str = "https://github.com/DataTreehouse/chrontext#DateTimeAsMicros";
-pub const MICROS_AS_DATETIME: &str = "https://github.com/DataTreehouse/chrontext#MicrosAsDateTime";
+pub const DATETIME_AS_MICROS: &str = "https://datatreehouse.github.io/maplib/vocab#DateTimeAsMicros";
+pub const MICROS_AS_DATETIME: &str = "https://datatreehouse.github.io/maplib/vocab#MicrosAsDateTime";
 pub const DATETIME_AS_SECONDS: &str =
-    "https://github.com/DataTreehouse/chrontext#DateTimeAsSeconds";
+    "https://datatreehouse.github.io/maplib/vocab#DateTimeAsSeconds";
 pub const SECONDS_AS_DATETIME: &str =
-    "https://github.com/DataTreehouse/chrontext#SecondsAsDateTime";
+    "https://datatreehouse.github.io/maplib/vocab#SecondsAsDateTime";
 
 pub const FLOOR_DATETIME_TO_SECONDS_INTERVAL: &str =
-    "https://github.com/DataTreehouse/chrontext#FloorDateTimeToSecondsInterval";
-pub const MODULUS: &str = "https://github.com/DataTreehouse/chrontext#modulus";
+    "https://datatreehouse.github.io/maplib/vocab#FloorDateTimeToSecondsInterval";
+pub const MODULUS: &str = "https://datatreehouse.github.io/maplib/vocab#modulus";
 
-pub const TIME_BUCKET: &str = "https://github.com/DataTreehouse/chrontext#time_bucket";
+pub const TIME_BUCKET: &str = "https://datatreehouse.github.io/maplib/vocab#time_bucket";
 
 pub const LIST_AGGREGATION: &str = "https://datatreehouse.github.io/maplib/vocab#ListAggregation";
-/// The chrontext name of the list aggregation.
-pub const NEST_AGGREGATION: &str = "https://github.com/DataTreehouse/chrontext#nestAggregation";
+/// The former chrontext name of the list aggregation.
+pub const NEST_AGGREGATION: &str = "https://datatreehouse.github.io/maplib/vocab#nestAggregation";
 
 pub const DECODE: &str = "https://datatreehouse.github.io/maplib/vocab#decodeString";
 

@@ -234,10 +234,10 @@ def test_custom_micros_as_datetime_compares_with_literal():
     df = m.query(
         PREFIXES
         + """
-PREFIX ct: <https://github.com/DataTreehouse/chrontext#>
+PREFIX maplib: <https://datatreehouse.github.io/maplib/vocab#>
 SELECT ?o WHERE {
     BIND(1000000 AS ?m)
-    BIND(ct:MicrosAsDateTime(?m) AS ?o)
+    BIND(maplib:MicrosAsDateTime(?m) AS ?o)
     FILTER(?o = "1970-01-01T00:00:01"^^xsd:dateTime)
 }"""
     )

@@ -38,7 +38,9 @@ use chrontext::engine::{ChrontextSettings, Engine};
 use datalog::ast::DatalogRuleset;
 use external_sparql::{SparqlEndpoint, SparqlMethod};
 use query_processing::bindings::maybe_replace_bindings;
-use representation::constants::OTTR_TRIPLE;
+use representation::constants::{
+    LEGACY_CHRONTEXT_PREFIX_IRI, MAPLIB_PREFIX, MAPLIB_PREFIX_IRI, OTTR_TRIPLE,
+};
 use representation::dataset::NamedGraph;
 use representation::polars_to_rdf::{df_as_result, QuerySolutions};
 use representation::prefixes::get_default_prefixes;
@@ -318,7 +320,9 @@ impl Model {
         )?;
         for (k, v) in [
             ("osipi", OSIPI_NAMESPACE),
-            ("chrontext", "https://github.com/DataTreehouse/chrontext#"),
+            (MAPLIB_PREFIX, MAPLIB_PREFIX_IRI),
+            // Deprecated: the former namespace, kept so that existing queries still parse.
+            ("chrontext", LEGACY_CHRONTEXT_PREFIX_IRI),
         ] {
             self.prefixes
                 .insert(k.to_string(), NamedNode::new_unchecked(v));
@@ -364,8 +368,13 @@ impl Model {
                 NamedNode::new_unchecked(INSIGHTS_HUB_NAMESPACE),
             ),
             (
+                MAPLIB_PREFIX.to_string(),
+                NamedNode::new_unchecked(MAPLIB_PREFIX_IRI),
+            ),
+            // Deprecated: the former namespace, kept so that existing queries still parse.
+            (
                 "chrontext".to_string(),
-                NamedNode::new_unchecked("https://github.com/DataTreehouse/chrontext#"),
+                NamedNode::new_unchecked(LEGACY_CHRONTEXT_PREFIX_IRI),
             ),
         ]));
         self.add_virtualization(

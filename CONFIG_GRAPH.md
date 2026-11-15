@@ -55,7 +55,7 @@ by querying the database, so the data is not copied into the model.
 <urn:maplib:config:virtualization:readings/resource/readings> a mcfg:Resource ;
     mcfg:resourceName "readings" ;
     mcfg:sql "SELECT meter_id AS id, ts AS timestamp, value FROM readings" ;
-    mcfg:templateDocument """@prefix ct: <https://github.com/DataTreehouse/chrontext#> . ...""" ;
+    mcfg:templateDocument """@prefix maplib: <https://datatreehouse.github.io/maplib/vocab#> . ...""" ;
     mcfg:property <urn:maplib:config:virtualization:readings/resource/readings/property/0> .
 
 <urn:maplib:config:virtualization:readings/resource/readings/property/0>
@@ -103,7 +103,7 @@ Enterprise Edition (and need their client libraries, e.g. `snowflake-connector-p
 | `mcfg:parameter` | `mcfg:Virtualization` | a connection parameter (`mcfg:key`, `mcfg:value`) |
 | `mcfg:secret` | `mcfg:Virtualization` | a secret parameter (`mcfg:key`, `mcfg:environmentVariable`) |
 | `mcfg:resource` | `mcfg:Virtualization` | a `mcfg:Resource` |
-| `mcfg:resourceName` | `mcfg:Resource` | the value of `ct:hasResource` on the objects it virtualizes |
+| `mcfg:resourceName` | `mcfg:Resource` | the value of `maplib:hasResource` on the objects it virtualizes |
 | `mcfg:sql` | `mcfg:Resource` of an SQL database | the query giving its rows, with columns named as the template's parameters (an `id` column for the identifiers): SQL, or for `mcfg:KustoDatabase` a KQL tabular expression such as `Telemetry \| project id=DeviceId, timestamp=Timestamp, value=Value` (`maplib.config.QUERY_LANGUAGES`) |
 | `mcfg:templateDocument` | `mcfg:Resource` | the template, as a stOTTR document |
 | `mcfg:template` | `mcfg:Resource` | the IRI of a template already in the model (instead of `mcfg:templateDocument`) |
@@ -153,7 +153,7 @@ Facts that are the same for every row of a resource, such as the unit of a measu
 triples of its template: chrontext does not support constant triples in a virtualized template (a
 query for them finds nothing). They are resource properties instead
 (`VirtualizationResource.properties`, predicate IRI to object IRI). Applying the virtualization
-writes each as an ordinary triple, in the default graph, on every object with `ct:hasResource` the
+writes each as an ordinary triple, in the default graph, on every object with `maplib:hasResource` the
 resource name, replacing the values those objects had for the predicate:
 
 ```python

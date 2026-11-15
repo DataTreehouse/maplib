@@ -1195,6 +1195,20 @@ fn window_frame(
     Ok(WindowFrame { start, end })
 }
 
+/// The former namespace of the time series virtualization vocabulary, which moved to the maplib
+/// vocabulary (maplib addition, kept in sync with `representation::constants`).
+const LEGACY_CHRONTEXT_PREFIX_IRI: &str = "https://github.com/DataTreehouse/chrontext#";
+const MAPLIB_PREFIX_IRI: &str = "https://datatreehouse.github.io/maplib/vocab#";
+
+/// Deprecated IRIs in the former chrontext namespace are read as the IRI with the same local
+/// name in the maplib vocabulary, so that existing queries keep working (maplib addition).
+fn normalize_legacy_chrontext_iri(iri: Iri<String>) -> NamedNode {
+    match iri.as_str().strip_prefix(LEGACY_CHRONTEXT_PREFIX_IRI) {
+        Some(local) => NamedNode::new_unchecked(format!("{MAPLIB_PREFIX_IRI}{local}")),
+        None => NamedNode::from(iri),
+    }
+}
+
 fn unescape_iriref(mut input: &str) -> Result<String, &'static str> {
     let mut output = String::with_capacity(input.len());
     while let Some((before, after)) = input.split_once('\\') {
@@ -2868,7 +2882,7 @@ parser! {
         rule String() -> String = STRING_LITERAL_LONG1() / STRING_LITERAL_LONG2() / STRING_LITERAL1() / STRING_LITERAL2()
 
         rule iri() -> NamedNode = i:(IRIREF() / PrefixedName()) {
-            NamedNode::from(i)
+            normalize_legacy_chrontext_iri(i)
         }
 
         rule PrefixedName() -> Iri<String> = PNAME_LN() /

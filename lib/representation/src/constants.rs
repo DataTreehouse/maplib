@@ -43,6 +43,31 @@ pub const FOAF_PREFIX_IRI: &str = "http://xmlns.com/foaf/0.1/";
 pub const MAPLIB_PREFIX: &str = "maplib";
 pub const MAPLIB_PREFIX_IRI: &str = "https://datatreehouse.github.io/maplib/vocab#";
 
+/// The former namespace of the time series virtualization vocabulary (`hasTimeseries`,
+/// `hasDataPoint`, `hasResource`, `FloorDateTimeToSecondsInterval`, ...), which is now in
+/// [MAPLIB_PREFIX_IRI].
+///
+/// Deprecated: IRIs in it are still accepted in SPARQL, in the predicates of data and in the
+/// templates of virtualizations, and are read as the IRI with the same local name in the
+/// maplib vocabulary, see [from_legacy_chrontext_iri].
+pub const LEGACY_CHRONTEXT_PREFIX_IRI: &str = "https://github.com/DataTreehouse/chrontext#";
+
+/// The IRI in the maplib vocabulary for an IRI in the former chrontext namespace
+/// ([LEGACY_CHRONTEXT_PREFIX_IRI]), or `None` for any other IRI.
+pub fn from_legacy_chrontext_iri(iri: &str) -> Option<String> {
+    iri.strip_prefix(LEGACY_CHRONTEXT_PREFIX_IRI)
+        .map(|local| format!("{MAPLIB_PREFIX_IRI}{local}"))
+}
+
+/// [from_legacy_chrontext_iri] for a named node, which is returned unchanged when it is not in
+/// the former chrontext namespace.
+pub fn normalize_legacy_chrontext_named_node(nn: oxrdf::NamedNode) -> oxrdf::NamedNode {
+    match from_legacy_chrontext_iri(nn.as_str()) {
+        Some(iri) => oxrdf::NamedNode::new_unchecked(iri),
+        None => nn,
+    }
+}
+
 pub const SKOS_PREFIX: &str = "skos";
 pub const SKOS_PREFIX_IRI: &str = "http://www.w3.org/2004/02/skos/core#";
 
