@@ -10,7 +10,7 @@ use crate::expressions::comparisons::{
 };
 use crate::expressions::operations::typed_numerical_operation;
 use oxrdf::vocab::xsd;
-use oxrdf::{BlankNode, Literal, NamedNode, Variable};
+use oxrdf::{BlankNode, Literal, NamedNode, NamedNodeRef, Variable};
 use polars::frame::UniqueKeepStrategy;
 use polars::prelude::{
     as_struct, by_name, coalesce, col, lit, when, DataType, Expr, JoinArgs, JoinType, LazyFrame,
@@ -914,6 +914,81 @@ pub fn in_iris_expression(
         left.clone()
             .is_not_null()
             .and(left.is_in(lit(codes).implode(false), false))
+    };
+    solution_mappings.mappings = solution_mappings
+        .mappings
+        .with_column(expr.alias(outer_context.as_str()));
+    solution_mappings.rdf_node_types.insert(
+        outer_context.as_str().to_string(),
+        BaseRDFNodeType::Literal(xsd::BOOLEAN.into_owned(), None)
+            .into_default_input_rdf_node_state(),
+    );
+    drop_inner_contexts(solution_mappings, &vec![left_context])
+}
+
+/// Integer datatypes whose values all fit in an i64.
+fn is_i64_integer_datatype(nn: NamedNodeRef) -> bool {
+    matches!(
+        nn,
+        xsd::INTEGER
+            | xsd::LONG
+            | xsd::INT
+            | xsd::SHORT
+            | xsd::BYTE
+            | xsd::UNSIGNED_INT
+            | xsd::UNSIGNED_SHORT
+            | xsd::UNSIGNED_BYTE
+    )
+}
+
+/// The values of `left IN (literal, ...)` as i64s, when `in_integers_expression` can evaluate
+/// it: the left side holds only literals of one integer datatype, and every literal on the
+/// right is a well-formed integer of an integer datatype. Integers of different integer
+/// datatypes are equal when their values are, so the values can be looked up with is_in.
+pub fn in_integers_values(
+    solution_mappings: &SolutionMappings,
+    left_context: &Context,
+    literals: &[&Literal],
+) -> Option<Vec<i64>> {
+    let state = solution_mappings
+        .rdf_node_types
+        .get(left_context.as_str())?;
+    if state.is_multi() {
+        return None;
+    }
+    match state.get_base_type()? {
+        BaseRDFNodeType::Literal(dt, _) if is_i64_integer_datatype(dt.as_ref()) => {}
+        _ => return None,
+    }
+    literals
+        .iter()
+        .map(|l| {
+            if is_i64_integer_datatype(l.datatype()) {
+                l.value().parse::<i64>().ok()
+            } else {
+                None
+            }
+        })
+        .collect()
+}
+
+/// `left IN (integer, ...)` as an is_in lookup, for the values `in_integers_values` returns.
+/// This gives the same result as comparing with each integer in turn.
+pub fn in_integers_expression(
+    mut solution_mappings: SolutionMappings,
+    left_context: &Context,
+    values: Vec<i64>,
+    outer_context: &Context,
+) -> SolutionMappings {
+    let left = col(left_context.as_str());
+    let expr = if values.is_empty() {
+        lit(false)
+    } else {
+        let values = Series::new("".into(), values);
+        // An unbound left side gives false, as comparing it with each integer does.
+        left.cast(DataType::Int64)
+            .is_in(lit(values).implode(false), false)
+            .fill_null(lit(false))
     };
     solution_mappings.mappings = solution_mappings
         .mappings

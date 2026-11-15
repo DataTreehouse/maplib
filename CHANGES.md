@@ -84,7 +84,7 @@ Triple table segments are compacted much faster, which matters most for datalog,
 
 Query results are collected with the Polars streaming engine, which the rest of maplib already used; until now the final step of a query ran on the in-memory engine. Whole-table scans and counts, large result sets and DISTINCT are faster, while small queries are about as fast as before. `MAPLIB_POLARS_ENGINE=in-memory` switches back to the in-memory engine.
 
-`IN` with a list of IRIs looks the values up in a hash set instead of comparing with each IRI in turn, so long lists no longer slow a query down. Property paths with `*`, `+` and `?` map the computed paths back to IRIs and literals by position instead of with joins. Patterns without shared variables (also inside `OPTIONAL`) are combined with a parallel cross join instead of a join on a constant key, which ran on one thread.
+`IN` with a list of IRIs looks the values up in a hash set instead of comparing with each IRI in turn, so long lists no longer slow a query down. The same holds for `IN` with a list of integers (of any integer datatype) when the left side holds integers of one integer datatype. Property paths with `*`, `+` and `?` map the computed paths back to IRIs and literals by position instead of with joins. Patterns without shared variables (also inside `OPTIONAL`) are combined with a parallel cross join instead of a join on a constant key, which ran on one thread.
 
 After `Model.compact()`, subjects are marked as sorted, so DISTINCT and grouping on subjects are faster.
 

@@ -3,13 +3,13 @@ use std::collections::HashMap;
 
 use crate::sparql::errors::SparqlError;
 use oxrdf::vocab::xsd;
-use oxrdf::NamedNode;
+use oxrdf::{Literal, NamedNode};
 use polars::prelude::IntoLazy;
 use query_processing::expressions::functions::func_expression::func_expression;
 use query_processing::expressions::{
     binary_expression, bound, can_use_in_iris, coalesce_contexts, effective_boolean_value, exists,
-    if_expression, in_expression, in_iris_expression, literal, named_node, not_expression,
-    unary_minus, unary_plus, variable,
+    if_expression, in_expression, in_integers_expression, in_integers_values, in_iris_expression,
+    literal, named_node, not_expression, unary_minus, unary_plus, variable,
 };
 use query_processing::pushdowns::Pushdowns;
 use representation::dataset::QueryGraph;
@@ -306,6 +306,23 @@ impl Triplestore {
                             &cats,
                         ));
                     }
+                }
+                let literals: Option<Vec<&Literal>> = right
+                    .iter()
+                    .map(|e| match e {
+                        Expression::Literal(l) => Some(l),
+                        _ => None,
+                    })
+                    .collect();
+                if let Some(values) = literals.and_then(|literals| {
+                    in_integers_values(&output_solution_mappings, &left_context, &literals)
+                }) {
+                    return Ok(in_integers_expression(
+                        output_solution_mappings,
+                        &left_context,
+                        values,
+                        context,
+                    ));
                 }
                 for i in 0..right.len() {
                     let expr = right.get(i).unwrap();
