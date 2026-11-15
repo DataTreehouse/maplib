@@ -635,7 +635,7 @@ impl Triplestore {
         predicates.sort();
         predicates.dedup();
         let mut versions = vec![];
-        for (g, map) in &self.graph_triples_map {
+        for (g, map) in self.graph_triples_map.iter() {
             for p in &predicates {
                 if let Some(tables) = map.get(p) {
                     for ((st, ot), t) in tables {
