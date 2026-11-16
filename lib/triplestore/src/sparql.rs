@@ -15,6 +15,7 @@ use tracing::{instrument, trace, warn};
 use utils::polars::{pl_interruptable_collect_estimated, InterruptableCollectError};
 
 use super::{NewTriples, Triplestore};
+use crate::changes::{tables_as_new_triples, Changes, Deleted};
 use crate::sparql::debug::DebugOutputs;
 use crate::sparql::errors::SparqlError;
 use crate::sparql::rewrite::rewrite;
@@ -52,6 +53,8 @@ pub struct InsertResult {
 
 pub struct UpdateResult {
     pub debug: Option<DebugOutputs>,
+    /// The triples really inserted and deleted, per graph.
+    pub changes: Changes,
 }
 
 #[derive(Debug, Clone)]
@@ -319,10 +322,39 @@ impl Triplestore {
         prefixes: Option<&HashMap<String, NamedNode>>,
         debug_no_results: bool,
     ) -> Result<UpdateResult, SparqlError> {
+        self.update_keep_triples(
+            update,
+            parameters,
+            query_settings,
+            graph,
+            prefixes,
+            debug_no_results,
+            false,
+        )
+    }
+
+    /// As `update`, and with `keep_triples` the changes also hold the triples that were
+    /// inserted and deleted, not only their counts.
+    #[allow(clippy::too_many_arguments)]
+    pub fn update_keep_triples(
+        &mut self,
+        update: &str,
+        parameters: Option<&HashMap<String, EagerSolutionMappings>>,
+        query_settings: &QuerySettings,
+        graph: Option<&NamedGraph>,
+        prefixes: Option<&HashMap<String, NamedNode>>,
+        debug_no_results: bool,
+        keep_triples: bool,
+    ) -> Result<UpdateResult, SparqlError> {
         let update = Update::parse(update, None, prefixes).map_err(SparqlError::ParseError)?;
-        let res =
-            self.update_parsed(&update, parameters, query_settings, graph, debug_no_results)?;
-        Ok(res)
+        self.update_parsed_keep_triples(
+            &update,
+            parameters,
+            query_settings,
+            graph,
+            debug_no_results,
+            keep_triples,
+        )
     }
 
     pub fn update_parsed(
@@ -332,6 +364,27 @@ impl Triplestore {
         query_settings: &QuerySettings,
         graph: Option<&NamedGraph>,
         debug_no_results: bool,
+    ) -> Result<UpdateResult, SparqlError> {
+        self.update_parsed_keep_triples(
+            update,
+            parameters,
+            query_settings,
+            graph,
+            debug_no_results,
+            false,
+        )
+    }
+
+    /// As `update_parsed`, and with `keep_triples` the changes also hold the triples that were
+    /// inserted and deleted, not only their counts.
+    pub fn update_parsed_keep_triples(
+        &mut self,
+        update: &Update,
+        parameters: Option<&HashMap<String, EagerSolutionMappings>>,
+        query_settings: &QuerySettings,
+        graph: Option<&NamedGraph>,
+        debug_no_results: bool,
+        keep_triples: bool,
     ) -> Result<UpdateResult, SparqlError> {
         // The token of the update stops the evaluation of WHERE clauses, and is checked before
         // each operation, but writes run without it so that an operation is never left half
@@ -345,6 +398,7 @@ impl Triplestore {
                 graph,
                 debug_no_results,
                 token,
+                keep_triples,
             )
         })
     }
@@ -357,8 +411,10 @@ impl Triplestore {
         graph: Option<&NamedGraph>,
         debug_no_results: bool,
         token: Option<utils::cancel::CancelToken>,
+        keep_triples: bool,
     ) -> Result<UpdateResult, SparqlError> {
         let mut debug_output = if debug_no_results { Some(vec![]) } else { None };
+        let mut changes = Changes::new(keep_triples);
         for u in &update.operations {
             if let Some(t) = &token {
                 t.check()?;
@@ -378,8 +434,11 @@ impl Triplestore {
                         ));
                     }
                     for (g, triples) in triples_by_graph {
-                        self.add_triples(triples, &g)
+                        changes.touch(&g);
+                        let new_triples = self
+                            .add_triples(triples, &g)
                             .map_err(SparqlError::TriplestoreError)?;
+                        changes.add_inserted(new_triples);
                     }
                     self.maybe_garbage_collect()?;
                 }
@@ -396,6 +455,7 @@ impl Triplestore {
                             ));
                     }
                     for (g, triples) in triples_by_graph {
+                        changes.touch(&g);
                         if !self.does_graph_exist(&g) {
                             continue;
                         }
@@ -427,7 +487,8 @@ impl Triplestore {
                                 )
                             })
                             .collect();
-                        self.delete_construct_result(sms, &g)?;
+                        let deleted = self.delete_construct_result(sms, &g, keep_triples)?;
+                        changes.add_deleted(&g, deleted);
                     }
                     self.maybe_garbage_collect()?;
                 }
@@ -438,10 +499,15 @@ impl Triplestore {
                     pattern,
                 } => {
                     if !debug_no_results && insert.is_empty() && using.is_none() {
-                        if let Some(n) =
-                            self.delete_whole_tables(delete, pattern, query_settings, graph)
-                        {
-                            self.n_triples_deleted += n;
+                        if let Some(deleted) = self.delete_whole_tables(
+                            delete,
+                            pattern,
+                            query_settings,
+                            graph,
+                            keep_triples,
+                        )? {
+                            self.n_triples_deleted += deleted.count;
+                            changes.add_deleted(&NamedGraph::DefaultGraph, deleted);
                             self.maybe_garbage_collect()?;
                             continue;
                         }
@@ -495,7 +561,13 @@ impl Triplestore {
                     };
                     let QueryResult { kind, debug, .. } =
                         utils::cancel::with_token(token.clone(), || {
-                            self.query_parsed(&q, parameters, query_settings, graph, debug_no_results)
+                            self.query_parsed(
+                                &q,
+                                parameters,
+                                query_settings,
+                                graph,
+                                debug_no_results,
+                            )
                         })?;
                     // Nothing is written by an operation whose WHERE clause took too long.
                     if let Some(t) = &token {
@@ -543,7 +615,9 @@ impl Triplestore {
                         }
                     }
                     for (g, delete_solutions) in delete_solutions {
-                        self.delete_construct_result(delete_solutions, &g)?;
+                        let deleted =
+                            self.delete_construct_result(delete_solutions, &g, keep_triples)?;
+                        changes.add_deleted(&g, deleted);
                     }
                     let insert_solutions = template_to_solution_mappings(
                         mappings,
@@ -552,7 +626,12 @@ impl Triplestore {
                         self.global_cats.clone(),
                     )
                     .map_err(|x| SparqlError::QuadPatternsError(x.to_string()))?;
-                    self.insert_constructed_triples(insert_solutions, &NamedGraph::DefaultGraph)?;
+                    for (_, _, g) in &insert_solutions {
+                        changes.touch(g);
+                    }
+                    let new_triples = self
+                        .insert_constructed_triples(insert_solutions, &NamedGraph::DefaultGraph)?;
+                    changes.add_inserted(new_triples);
                     self.maybe_garbage_collect()?;
                 }
                 GraphUpdateOperation::Load {
@@ -589,7 +668,9 @@ impl Triplestore {
                         }
                     };
                     for g in to_clear {
+                        let deleted = self.graph_deleted_by_clear(&g, keep_triples)?;
                         self.clear_graph(&g)?;
+                        changes.add_deleted(&g, deleted);
                     }
                 }
                 GraphUpdateOperation::Create { .. } => {}
@@ -602,7 +683,7 @@ impl Triplestore {
         } else {
             None
         };
-        let res = UpdateResult { debug };
+        let res = UpdateResult { debug, changes };
         Ok(res)
     }
 }
@@ -612,26 +693,28 @@ impl Triplestore {
     /// `DELETE WHERE { ?s ?p ?o }` and `DELETE WHERE { ?s <p> ?o }` (or the same as
     /// `DELETE { .. } WHERE { .. }` without INSERT or USING). When the pattern is matched in the
     /// graph that the triples are deleted from, every triple of the matching tables is deleted,
-    /// so the tables are dropped without evaluating the pattern. Returns the number of deleted
-    /// triples, or None if the fast path does not apply.
+    /// so the tables are dropped without evaluating the pattern. Returns what was deleted, or None
+    /// if the fast path does not apply.
     fn delete_whole_tables(
         &mut self,
         delete: &[GroundQuadPattern],
         pattern: &GraphPattern,
         query_settings: &QuerySettings,
         graph: Option<&NamedGraph>,
-    ) -> Option<usize> {
+        keep_triples: bool,
+    ) -> Result<Option<Deleted>, SparqlError> {
+        let none = Ok(None);
         let [d] = delete else {
-            return None;
+            return none;
         };
         let GraphPattern::Bgp { patterns } = pattern else {
-            return None;
+            return none;
         };
         let [tp] = patterns.as_slice() else {
-            return None;
+            return none;
         };
         if !matches!(d.graph_name, GraphNamePattern::DefaultGraph) || d.predicate != tp.predicate {
-            return None;
+            return none;
         }
         let (
             GroundTermPattern::Variable(s),
@@ -640,14 +723,14 @@ impl Triplestore {
             TermPattern::Variable(to),
         ) = (&d.subject, &d.object, &tp.subject, &tp.object)
         else {
-            return None;
+            return none;
         };
         if s != ts || o != to || s == o {
-            return None;
+            return none;
         }
         if let NamedNodePattern::Variable(p) = &d.predicate {
             if p == s || p == o {
-                return None;
+                return none;
             }
         }
         // The triples are deleted from the default graph of the update, so the pattern must be
@@ -655,28 +738,62 @@ impl Triplestore {
         let target = NamedGraph::DefaultGraph;
         match self.query_graph(&None, graph, query_settings) {
             QueryGraph::NamedGraph(g) if g == target => {}
-            _ => return None,
+            _ => return none,
         }
         if !self.graph_triples_map.contains_key(&target) {
-            return Some(0);
+            return Ok(Some(Deleted::default()));
         }
         let height = |m: &HashMap<_, crate::storage::Triples>| -> usize {
             m.values().map(|t| t.get_height()).sum()
         };
-        let n = match &d.predicate {
-            NamedNodePattern::Variable(_) => {
-                let tables = self.graph_triples_map.graph_mut(&target).unwrap();
-                let n = tables.values().map(height).sum();
-                tables.clear();
-                n
-            }
+        // The removed tables are kept until their triples have been collected.
+        let removed: Vec<_> = match &d.predicate {
+            NamedNodePattern::Variable(_) => self
+                .graph_triples_map
+                .graph_mut(&target)
+                .unwrap()
+                .drain()
+                .collect(),
             NamedNodePattern::NamedNode(p) => self
                 .graph_triples_map
                 .remove_predicate(&target, p)
-                .map(|m| height(&m))
-                .unwrap_or(0),
+                .map(|m| (p.clone(), m))
+                .into_iter()
+                .collect(),
         };
-        Some(n)
+        let mut deleted = Deleted::default();
+        for (p, m) in &removed {
+            deleted.count += height(m);
+            if keep_triples {
+                deleted.triples.extend(
+                    tables_as_new_triples(m, &target, p).map_err(SparqlError::TriplestoreError)?,
+                );
+            }
+        }
+        Ok(Some(deleted))
+    }
+
+    /// What clearing the graph deletes.
+    fn graph_deleted_by_clear(
+        &self,
+        graph: &NamedGraph,
+        keep_triples: bool,
+    ) -> Result<Deleted, SparqlError> {
+        let mut deleted = Deleted {
+            count: self.graph_size(graph),
+            triples: vec![],
+        };
+        if keep_triples {
+            if let Some(tables) = self.graph_triples_map.get(graph) {
+                for (p, m) in tables {
+                    deleted.triples.extend(
+                        tables_as_new_triples(m, graph, p)
+                            .map_err(SparqlError::TriplestoreError)?,
+                    );
+                }
+            }
+        }
+        Ok(deleted)
     }
 }
 

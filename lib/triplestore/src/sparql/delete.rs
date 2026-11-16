@@ -1,9 +1,12 @@
 use crate::errors::TriplestoreError;
 use crate::sparql::errors::SparqlError;
 use crate::storage::Triples;
-use crate::{add_rank_sort_triples, Triplestore};
+use crate::changes::{concat_lfs, Deleted};
+use crate::{add_rank_sort_triples, NewTriples, Triplestore};
 use oxrdf::NamedNode;
-use polars::prelude::{col, concat, IntoLazy, JoinArgs, JoinType, MaintainOrderJoin, UnionArgs};
+use polars::prelude::{
+    col, concat, DataFrame, IntoLazy, JoinArgs, JoinType, MaintainOrderJoin, UnionArgs,
+};
 use polars_core::datatypes::AnyValue;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use representation::cats::{cat_encode_triples, CatTriples, EncodedTriples, LockedCats};
@@ -21,14 +24,17 @@ use tracing::trace;
 use utils::polars::collect_in_memory;
 
 impl Triplestore {
+    /// Deletes the triples from the graph. Returns the number of triples that were really
+    /// deleted, i.e. that existed, and with `keep_triples` also those triples.
     pub fn delete_construct_result(
         &mut self,
         sms: Vec<(EagerSolutionMappings, Option<NamedNode>)>,
         graph: &NamedGraph,
-    ) -> Result<(), SparqlError> {
+        keep_triples: bool,
+    ) -> Result<Deleted, SparqlError> {
         // Nothing can be deleted from a graph that does not exist.
         if !self.does_graph_exist(graph) {
-            return Ok(());
+            return Ok(Deleted::default());
         }
         let sms: Vec<_> = sms
             .into_par_iter()
@@ -38,36 +44,40 @@ impl Triplestore {
         let global_cat_triples =
             triples_solution_mappings_to_global_cat_triples(sms, self.global_cats.clone(), graph)?;
         if !global_cat_triples.is_empty() {
-            self.delete_triples_vec(global_cat_triples, graph)
-                .map_err(SparqlError::TriplestoreError)?;
-        };
-        Ok(())
+            self.delete_triples_vec(global_cat_triples, graph, keep_triples)
+                .map_err(SparqlError::TriplestoreError)
+        } else {
+            Ok(Deleted::default())
+        }
     }
 
     pub fn delete_triples_vec(
         &mut self,
         ts: Vec<CatTriples>,
         graph: &NamedGraph,
-    ) -> Result<(), TriplestoreError> {
+        keep_triples: bool,
+    ) -> Result<Deleted, TriplestoreError> {
         let add_triples_now = Instant::now();
-        let n = self.delete_global_cat_triples(ts, graph)?;
-        self.n_triples_deleted += n;
+        let deleted = self.delete_global_cat_triples(ts, graph, keep_triples)?;
+        self.n_triples_deleted += deleted.count;
         trace!(
             "Deleting triples df took {} seconds",
             add_triples_now.elapsed().as_secs_f32()
         );
-        Ok(())
+        Ok(deleted)
     }
 
-    /// Deletes the triples, and returns the number of triples that existed and were deleted.
-    /// Tables that contain none of the triples are left as they are.
+    /// Deletes the triples, and returns the number of triples that existed and were deleted, and
+    /// with `keep_triples` those triples. Tables that contain none of the triples are left as
+    /// they are.
     fn delete_global_cat_triples(
         &mut self,
         gcts: Vec<CatTriples>,
         graph: &NamedGraph,
-    ) -> Result<usize, TriplestoreError> {
+        keep_triples: bool,
+    ) -> Result<Deleted, TriplestoreError> {
         self.check_graph_exists(graph)?;
-        let mut n_deleted = 0;
+        let mut deleted = Deleted::default();
         for gct in gcts {
             let Some(map) = self.graph_triples_map.get(graph) else {
                 continue;
@@ -89,7 +99,19 @@ impl Triplestore {
                 // None of the triples existed, so the table is left as it is.
                 continue;
             }
-            n_deleted += n;
+            deleted.count += n;
+            if keep_triples {
+                // The table exists, since triples were deleted from it.
+                let types = (gct.subject_type.clone(), gct.object_type.clone());
+                let existing = &map[&gct.predicate][&types];
+                deleted.triples.push(NewTriples {
+                    df: Some(deleted_triples_df(&gct, existing)?),
+                    graph: graph.clone(),
+                    predicate: gct.predicate.clone(),
+                    subject_type: gct.subject_type.clone(),
+                    object_type: gct.object_type.clone(),
+                });
+            }
             self.delete_if_exists(&gct, graph)?;
             if let Some(mut gct) = remaining_gct {
                 gct.encoded_triples = add_rank_sort_triples(
@@ -101,7 +123,7 @@ impl Triplestore {
                 self.add_global_cat_triples(vec![gct])?;
             }
         }
-        Ok(n_deleted)
+        Ok(deleted)
     }
 
     fn delete_if_exists(
@@ -313,4 +335,36 @@ fn get_triples_after_deletion(
         }
     }
     Ok(None)
+}
+
+/// The triples of the table that are deleted (subject and object), for reporting what an update
+/// deleted.
+fn deleted_triples_df(gct: &CatTriples, triples: &Triples) -> Result<DataFrame, TriplestoreError> {
+    let lfs: Vec<_> = triples
+        .get_lazy_frames(&None, &None)?
+        .into_iter()
+        .map(|(lf, _)| lf)
+        .collect();
+    let on = [col(SUBJECT_COL_NAME), col(OBJECT_COL_NAME)];
+    let df = concat_lfs(lfs)
+        .join(
+            gct.encoded_triples.df.clone().lazy(),
+            on.clone(),
+            on.clone(),
+            JoinArgs {
+                how: JoinType::Semi,
+                validation: Default::default(),
+                suffix: None,
+                slice: None,
+                nulls_equal: false,
+                coalesce: Default::default(),
+                maintain_order: MaintainOrderJoin::None,
+                build_side: None,
+            },
+        )
+        .unwrap()
+        .select(on)
+        .collect()
+        .unwrap();
+    Ok(df)
 }

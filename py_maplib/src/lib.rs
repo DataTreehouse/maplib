@@ -3,13 +3,13 @@ mod error;
 mod mutexes;
 mod py_graph_snapshots;
 mod py_indexing_options;
+mod py_io;
 mod py_model;
 mod py_query_cache;
 mod py_server;
 mod py_storage;
 mod py_stream;
 mod py_template_generator;
-mod py_io;
 mod shacl;
 
 use crate::error::*;
@@ -85,6 +85,7 @@ use templates::python::{
     py_triple, PyArgument, PyFunctionCall, PyInstance, PyParameter, PyTemplate,
 };
 use templates::MappingColumnType;
+use triplestore::changes::Changes;
 use triplestore::triples_read::ExtendedRdfFormat;
 use triplestore::{new_triples_by_predicate, NewTriples, StorageOptions, Triplestore};
 
@@ -575,12 +576,61 @@ fn new_triples_to_dict(
         },
     ) in by_predicate
     {
-        let (df, types) =
-            fix_cats_and_multicolumns(mappings, rdf_node_types, solution_mappings, global_cats.clone());
+        let (df, types) = fix_cats_and_multicolumns(
+            mappings,
+            rdf_node_types,
+            solution_mappings,
+            global_cats.clone(),
+        );
         let py_sm = df_to_py_df(df, types, None, None, solution_mappings, py)?;
         map.insert(predicate.as_str().to_string(), py_sm);
     }
     Ok(map)
+}
+
+/// The changes of an update as a dict from graph IRI (DEFAULT_GRAPH for the default graph) to a
+/// dict with the numbers of "inserted" and "deleted" triples, and with `keep_triples` also
+/// "inserted_triples" and "deleted_triples" as dicts from predicate IRI to DataFrame.
+fn changes_to_dict(
+    changes: Changes,
+    solution_mappings: bool,
+    global_cats: LockedCats,
+    py: Python<'_>,
+) -> PyResult<HashMap<String, Py<PyAny>>> {
+    let keep_triples = changes.keep_triples;
+    let mut out = HashMap::new();
+    for (graph, gc) in changes.graphs {
+        let key = match &graph {
+            NamedGraph::DefaultGraph => DEFAULT_GRAPH_IRI.to_string(),
+            NamedGraph::NamedGraph(nn) => nn.as_str().to_string(),
+            NamedGraph::BlankNode(bn) => bn.to_string(),
+        };
+        let d = pyo3::types::PyDict::new(py);
+        d.set_item("inserted", gc.inserted)?;
+        d.set_item("deleted", gc.deleted)?;
+        if keep_triples {
+            d.set_item(
+                "inserted_triples",
+                new_triples_to_dict(
+                    gc.inserted_triples,
+                    solution_mappings,
+                    global_cats.clone(),
+                    py,
+                )?,
+            )?;
+            d.set_item(
+                "deleted_triples",
+                new_triples_to_dict(
+                    gc.deleted_triples,
+                    solution_mappings,
+                    global_cats.clone(),
+                    py,
+                )?,
+            )?;
+        }
+        out.insert(key, d.into_any().unbind());
+    }
+    Ok(out)
 }
 
 fn print_debug_if_exists(debug_outputs: Option<&DebugOutputs>) {

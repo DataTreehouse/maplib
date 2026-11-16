@@ -946,6 +946,57 @@ SELECT ?loc ?crs ?seq ?x ?y ?z WHERE {{
         debug_no_results: bool,
         federation: Option<Arc<FederationSettings>>,
     ) -> Result<UpdateResult, MaplibError> {
+        self.update_with_federation_keep_triples(
+            update,
+            parameters,
+            graph,
+            include_graphs,
+            max_rows,
+            debug_no_results,
+            federation,
+            false,
+        )
+    }
+
+    /// As `update`, and with `keep_triples` the changes of the result also hold the triples that
+    /// were inserted and deleted, not only their counts.
+    #[allow(clippy::too_many_arguments)]
+    pub fn update_keep_triples(
+        &mut self,
+        update: &str,
+        parameters: Option<&HashMap<String, EagerSolutionMappings>>,
+        graph: Option<&NamedGraph>,
+        include_graphs: Vec<NamedGraph>,
+        max_rows: Option<usize>,
+        debug_no_results: bool,
+        keep_triples: bool,
+    ) -> Result<UpdateResult, MaplibError> {
+        self.update_with_federation_keep_triples(
+            update,
+            parameters,
+            graph,
+            include_graphs,
+            max_rows,
+            debug_no_results,
+            None,
+            keep_triples,
+        )
+    }
+
+    /// As `update_with_federation`, and with `keep_triples` the changes of the result also hold
+    /// the triples that were inserted and deleted.
+    #[allow(clippy::too_many_arguments)]
+    pub fn update_with_federation_keep_triples(
+        &mut self,
+        update: &str,
+        parameters: Option<&HashMap<String, EagerSolutionMappings>>,
+        graph: Option<&NamedGraph>,
+        include_graphs: Vec<NamedGraph>,
+        max_rows: Option<usize>,
+        debug_no_results: bool,
+        federation: Option<Arc<FederationSettings>>,
+        keep_triples: bool,
+    ) -> Result<UpdateResult, MaplibError> {
         let query_settings = QuerySettings {
             include_graphs,
             max_rows,
@@ -955,13 +1006,14 @@ SELECT ?loc ?crs ?seq ?x ?y ?z WHERE {{
         };
         on_big_stack(|| {
             self.triplestore
-                .update(
+                .update_keep_triples(
                     update,
                     parameters,
                     &query_settings,
                     graph,
                     Some(&self.prefixes),
                     debug_no_results,
+                    keep_triples,
                 )
                 .map_err(|x| x.into())
         })

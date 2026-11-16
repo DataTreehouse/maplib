@@ -1774,9 +1774,13 @@ class Model:
             max_rows: Optional[int] = None,
             debug: bool = False,
             timeout: Optional[float] = None,
-    ) -> None:
+            return_triples: bool = False,
+            solution_mappings: bool = False,
+    ) -> Dict[str, Dict[str, Any]]:
         """
         Execute a SPARQL Update (e.g. INSERT/DELETE ... WHERE) against the graph.
+        Returns what the update actually changed, per graph: triples that were already present
+        are not counted as inserted, and triples that were absent are not counted as deleted.
         Usage:
 
         >>> m = Model()
@@ -1784,7 +1788,8 @@ class Model:
         ... # Omitted
         ... update_pizzas = '''
         ... ...'''
-        ... m.update(update_pizzas)
+        ... changes = m.update(update_pizzas)
+        ... changes[DEFAULT_GRAPH]["inserted"]
 
         :param update: The SPARQL Update string
         :param parameters: PVALUES Parameters, for each parameter, the SolutionMappings containing corresponding mappings and types.
@@ -1797,7 +1802,15 @@ class Model:
                         model to itself. When they have passed, QueryTimeoutError is raised. Each operation is
                         checked before it starts and while its WHERE clause is evaluated, and writes are never
                         stopped halfway: operations of the request that were done before the timeout stay done.
-        :return: None
+        :param return_triples: Also return the inserted and deleted triples, not only how many.
+            Costs an extra pass over the affected tables for deletions.
+        :param solution_mappings: Return the triples as SolutionMappings with maplib-native formatting and with RDF typing.
+        :return: A dict from graph IRI (DEFAULT_GRAPH for the default graph) to a dict with the number of
+            "inserted" and "deleted" triples. With return_triples, it also has "inserted_triples" and
+            "deleted_triples": dicts from predicate IRI to DataFrame (or SolutionMappings) with the triples.
+            A graph where nothing changed may be left out.
+            The changes of the operations of the update are summed, so a triple that one operation inserts
+            and a later one deletes counts as both inserted and deleted.
         """
 
     def insert(

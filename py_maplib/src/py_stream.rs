@@ -649,6 +649,7 @@ fn run_steps(
                     include_graphs.clone(),
                     *max_rows,
                     *debug,
+                    false,
                 )?;
                 print_debug_if_exists(res.debug.as_ref());
             }

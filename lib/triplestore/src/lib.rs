@@ -1,6 +1,7 @@
 extern crate core;
 
 mod add_triples;
+pub mod changes;
 mod copy_triples;
 pub mod cats;
 mod dblf;

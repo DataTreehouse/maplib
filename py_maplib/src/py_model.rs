@@ -18,7 +18,8 @@ use crate::shacl::PyValidationReport;
 use crate::{
     classify_document_data, classify_mapping_data, create_prefix_map, data_to_mappings_types,
     document_uuid_namespace, for_each_document, for_each_mapping_batch, map_parameters,
-    maybe_parse_bindings, new_triples_to_dict, parse_include_graphs, parse_named_node,
+    changes_to_dict, maybe_parse_bindings, new_triples_to_dict, parse_include_graphs,
+    parse_named_node,
     parse_optional_named_node, print_debug_if_exists, query_to_result, resolve_rdf_node_type,
     DocumentData, MappingData, ParametersType, PyIndexingOptions,
 };
@@ -1185,6 +1186,8 @@ impl PyModel {
             max_rows=None,
             debug=None,
             timeout=None,
+            return_triples=None,
+            solution_mappings=None,
     ))]
     #[instrument(skip_all)]
     fn update(
@@ -1197,14 +1200,17 @@ impl PyModel {
         max_rows: Option<usize>,
         debug: Option<bool>,
         timeout: Option<f64>,
-    ) -> PyResult<()> {
+        return_triples: Option<bool>,
+        solution_mappings: Option<bool>,
+    ) -> PyResult<HashMap<String, Py<PyAny>>> {
         let mapped_parameters = map_parameters(parameters, py)?;
         let timeout = parse_timeout(timeout)?;
-        let res = py.detach(|| {
+        let (res, cats) = py.detach(|| -> PyResult<_> {
             let mut inner = self.inner.write().unwrap_or_else(|e| e.into_inner());
+            let cats = inner.triplestore.global_cats.clone();
             // The timeout counts from when the model is locked for the update.
             let token = timeout.map(|t| CancelToken::new(Some(t)));
-            with_token(token.clone(), || {
+            let res = with_token(token.clone(), || {
                 update_mutex(
                     &mut inner,
                     update,
@@ -1213,12 +1219,14 @@ impl PyModel {
                     include_graphs,
                     max_rows,
                     debug,
+                    return_triples.unwrap_or(false),
                 )
             })
-            .map_err(|e| timeout_error(e, token.as_ref()))
+            .map_err(|e| timeout_error(e, token.as_ref()))?;
+            Ok((res, cats))
         })?;
         print_debug_if_exists(res.debug.as_ref());
-        Ok(())
+        changes_to_dict(res.changes, solution_mappings.unwrap_or(false), cats, py)
     }
 
     #[pyo3(signature = (options=None))]

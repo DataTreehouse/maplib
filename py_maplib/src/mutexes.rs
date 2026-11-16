@@ -402,18 +402,20 @@ pub(crate) fn update_mutex(
     include_graphs: Option<Vec<String>>,
     max_rows: Option<usize>,
     debug: Option<bool>,
+    keep_triples: bool,
 ) -> PyResult<UpdateResult> {
     let graph = parse_optional_named_node(graph)?;
     let named_graph = graph.map(|graph| NamedGraph::from_maybe_named_node(Some(&graph)));
 
     let res = inner
-        .update(
+        .update_keep_triples(
             &update,
             mapped_parameters.as_ref(),
             named_graph.as_ref(),
             parse_include_graphs(include_graphs, true)?,
             max_rows,
             debug.unwrap_or(DEFAULT_DEBUG_NO_RESULTS),
+            keep_triples,
         )
         .map_err(PyMaplibError::from)?;
     Ok(res)
