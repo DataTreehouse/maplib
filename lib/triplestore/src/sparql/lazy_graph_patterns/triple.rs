@@ -7,7 +7,7 @@ use crate::errors::TriplestoreError;
 use crate::sparql::QuerySettings;
 use oxrdf::{NamedNode, NamedOrBlankNode, Term};
 use polars::prelude::{by_name, IntoLazy};
-use polars::prelude::{lit, AnyValue, JoinType};
+use polars::prelude::{col, lit, AnyValue, JoinType, UniqueKeepStrategy};
 use query_processing::graph_patterns::join;
 use query_processing::pushdowns::Pushdowns;
 use query_processing::type_constraints::{ConstraintBaseRDFNodeType, PossibleTypes};
@@ -224,6 +224,97 @@ impl Triplestore {
             })
         }
         Ok(solution_mappings.unwrap())
+    }
+
+    /// Joins a group of triple patterns into the solution mappings on all the bound variables
+    /// they share at once, as in [`super::triples_ordering::group_triple_patterns`].
+    ///
+    /// Each pattern is first restricted to the values its bound variables have so far, so that the
+    /// joins within the group, on its new variables, stay near the size of the solution.
+    pub(crate) fn lazy_triple_pattern_group(
+        &self,
+        solution_mappings: SolutionMappings,
+        group: &[TriplePattern],
+        context: &Context,
+        pushdowns: &mut Pushdowns,
+        query_settings: &QuerySettings,
+        dataset: &QueryGraph,
+    ) -> Result<SolutionMappings, SparqlError> {
+        let bound = |tp: &TriplePattern| -> Vec<String> {
+            let mut names = vec![];
+            for t in [&tp.subject, &tp.object] {
+                if let Some(name) = get_keep_rename_term_pattern(t) {
+                    names.push(name);
+                }
+            }
+            if let Some(name) = get_keep_rename_named_node_pattern(&tp.predicate) {
+                names.push(name);
+            }
+            names.retain(|x| solution_mappings.rdf_node_types.contains_key(x));
+            names.sort();
+            names.dedup();
+            names
+        };
+        let mut shared: Vec<String> = group.iter().flat_map(bound).collect();
+        shared.sort();
+        shared.dedup();
+        let keys_of: Vec<Vec<String>> = group.iter().map(bound).collect();
+        let focus: Vec<_> = shared.iter().map(|x| x.as_str()).collect();
+        let solution_mappings = pushdowns.add_from_solution_mappings(
+            solution_mappings,
+            self.global_cats.clone(),
+            &focus,
+            None,
+        );
+        let mut group_solution_mappings: Option<SolutionMappings> = None;
+        for (tp, keys) in group.iter().zip(keys_of) {
+            let mut sm =
+                self.lazy_triple_pattern(None, tp, context, pushdowns, query_settings, dataset)?;
+            if !keys.is_empty() {
+                // An inner join with the distinct bound values keeps the matching rows only.
+                let values = SolutionMappings {
+                    mappings: solution_mappings
+                        .mappings
+                        .clone()
+                        .select(keys.iter().map(|k| col(k.as_str())).collect::<Vec<_>>())
+                        .unique(None, UniqueKeepStrategy::Any),
+                    rdf_node_types: keys
+                        .iter()
+                        .map(|k| {
+                            (
+                                k.clone(),
+                                solution_mappings.rdf_node_types.get(k).unwrap().clone(),
+                            )
+                        })
+                        .collect(),
+                    height_estimate: solution_mappings.height_estimate,
+                };
+                sm = join(
+                    sm,
+                    values,
+                    JoinType::Inner,
+                    self.global_cats.clone(),
+                    query_settings.max_rows,
+                )?;
+            }
+            group_solution_mappings = Some(match group_solution_mappings {
+                None => sm,
+                Some(g) => join(
+                    g,
+                    sm,
+                    JoinType::Inner,
+                    self.global_cats.clone(),
+                    query_settings.max_rows,
+                )?,
+            });
+        }
+        Ok(join(
+            solution_mappings,
+            group_solution_mappings.unwrap(),
+            JoinType::Inner,
+            self.global_cats.clone(),
+            query_settings.max_rows,
+        )?)
     }
 }
 

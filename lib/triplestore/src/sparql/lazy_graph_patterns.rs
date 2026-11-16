@@ -27,7 +27,9 @@ use crate::sparql::errors::SparqlError;
 use crate::sparql::evaluation_hook::HookDecision;
 use tracing::{instrument, trace, warn};
 
-use crate::sparql::lazy_graph_patterns::triples_ordering::order_triple_patterns;
+use crate::sparql::lazy_graph_patterns::triples_ordering::{
+    group_triple_patterns, order_triple_patterns,
+};
 use polars::prelude::{col, int_range, len, lit, DataType, IntoLazy, JoinType};
 use polars_core::frame::DataFrame;
 use query_processing::graph_patterns::join;
@@ -204,15 +206,34 @@ impl Triplestore {
                 let bgp_context = context.extension_with(PathEntry::BGP);
                 let ordered_patterns =
                     order_triple_patterns(&patterns, &updated_solution_mappings, &pushdowns);
-                for tp in &ordered_patterns {
-                    updated_solution_mappings = Some(self.lazy_triple_pattern(
-                        updated_solution_mappings,
-                        tp,
-                        &bgp_context,
-                        &mut pushdowns,
-                        query_settings,
-                        dataset,
-                    )?);
+                let groups = group_triple_patterns(ordered_patterns, &updated_solution_mappings);
+                for group in &groups {
+                    match updated_solution_mappings {
+                        // The group shares more bound variables than its first pattern does.
+                        Some(sm) if group.len() > 1 && sm.height_estimate > 0 => {
+                            updated_solution_mappings = Some(self.lazy_triple_pattern_group(
+                                sm,
+                                group,
+                                &bgp_context,
+                                &mut pushdowns,
+                                query_settings,
+                                dataset,
+                            )?);
+                        }
+                        sm => {
+                            updated_solution_mappings = sm;
+                            for tp in group {
+                                updated_solution_mappings = Some(self.lazy_triple_pattern(
+                                    updated_solution_mappings,
+                                    tp,
+                                    &bgp_context,
+                                    &mut pushdowns,
+                                    query_settings,
+                                    dataset,
+                                )?);
+                            }
+                        }
+                    }
                 }
                 for lp in &length_paths {
                     updated_solution_mappings = Some(self.lazy_length_path(

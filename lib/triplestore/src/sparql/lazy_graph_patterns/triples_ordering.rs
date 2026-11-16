@@ -122,3 +122,75 @@ fn blank_nodes(tp: &TriplePattern) -> Vec<&BlankNode> {
     }
     bs
 }
+
+/// Splits ordered triple patterns into groups that are joined into the solution one at a time.
+///
+/// A pattern that introduces new variables is grouped with the later patterns that bind no other
+/// new variables, when those patterns share more of the already bound variables. The group is then
+/// joined on all those variables at once. For example, with ?k and ?r bound,
+/// `?t ex:kind ?k . ?t ex:region ?r` is joined on (?k, ?r): joining `?t ex:kind ?k` first would
+/// join on ?k alone, and the intermediate result could be quadratic in size.
+pub fn group_triple_patterns(
+    ordered: Vec<TriplePattern>,
+    sm: &Option<SolutionMappings>,
+) -> Vec<Vec<TriplePattern>> {
+    let mut visited: HashSet<String> = if let Some(sm) = sm {
+        sm.rdf_node_types.keys().cloned().collect()
+    } else {
+        HashSet::new()
+    };
+    let mut remaining: Vec<Option<TriplePattern>> = ordered.into_iter().map(Some).collect();
+    let mut groups = vec![];
+    for i in 0..remaining.len() {
+        let Some(tp) = remaining[i].take() else {
+            continue;
+        };
+        let tp_names = names(&tp);
+        let new: HashSet<_> = tp_names
+            .iter()
+            .filter(|x| !visited.contains(*x))
+            .cloned()
+            .collect();
+        let mut group = vec![tp];
+        if !new.is_empty() && tp_names.iter().any(|x| visited.contains(x)) {
+            let mut keys: HashSet<_> = tp_names.iter().filter(|x| visited.contains(*x)).collect();
+            let keys_before = keys.len();
+            let mut members = vec![];
+            for (j, other) in remaining.iter().enumerate().skip(i + 1) {
+                let Some(other) = other else { continue };
+                let other_names = names(other);
+                let binds_only_new = other_names
+                    .iter()
+                    .all(|x| visited.contains(x) || new.contains(x));
+                if binds_only_new && other_names.iter().any(|x| new.contains(x)) {
+                    members.push(j);
+                    for x in &other_names {
+                        if visited.contains(x) {
+                            keys.insert(visited.get(x).unwrap());
+                        }
+                    }
+                }
+            }
+            if keys.len() > keys_before {
+                for j in members {
+                    group.push(remaining[j].take().unwrap());
+                }
+            }
+        }
+        for tp in &group {
+            visited.extend(names(tp));
+        }
+        groups.push(group);
+    }
+    groups
+}
+
+/// The column names of the variables and blank nodes of a triple pattern.
+fn names(tp: &TriplePattern) -> Vec<String> {
+    let mut ns: Vec<String> = variables(tp)
+        .into_iter()
+        .map(|v| v.as_str().to_string())
+        .collect();
+    ns.extend(blank_nodes(tp).into_iter().map(|b| b.to_string()));
+    ns
+}
