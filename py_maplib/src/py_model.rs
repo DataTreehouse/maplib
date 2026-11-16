@@ -18,11 +18,11 @@ use crate::py_stream::{parse_graphs, DocumentKind, PyModelStream, StreamSource};
 use crate::shacl::PyValidationReport;
 use crate::{
     classify_document_data, classify_mapping_data, create_prefix_map, data_to_mappings_types,
-    document_uuid_namespace, for_each_document, for_each_mapping_batch, map_parameters,
+    for_each_document, for_each_mapping_batch, map_parameters,
     changes_to_dict, maybe_parse_bindings, new_triples_to_dict, parse_include_graphs,
     parse_named_node,
     parse_optional_named_node, print_debug_if_exists, query_to_result, resolve_rdf_node_type,
-    DocumentData, MappingData, ParametersType, PyIndexingOptions,
+    DocumentData, MappingData, ParametersType, PyIndexingOptions, StringOrPathBuf,
 };
 use server::{serve as serve_model, ArrowCompression, ServerOptions, SnapshotFormat, SnapshotOptions};
 
@@ -2575,6 +2575,11 @@ fn stream_data(data: Option<&Bound<'_, PyAny>>) -> PyResult<Py<PyAny>> {
 
 /// map_json and map_xml: maps a document, an iterable of documents, or returns a stream over them.
 #[allow(clippy::too_many_arguments)]
+/// Documents mapped before their triples are added, when mapping many documents eagerly.
+const DOCUMENTS_PER_INSERT: usize = 1000;
+/// The most bytes of documents mapped before their triples are added.
+const BYTES_PER_INSERT: usize = 64 * 1024 * 1024;
+
 fn map_documents(
     slf: &Bound<'_, PyModel>,
     py: Python<'_>,
@@ -2616,17 +2621,35 @@ fn map_documents(
             let mut inner = this.write_inner();
             kind.map_mutex(&mut inner, doc, graph, uuid_namespace)
         })?,
-        DocumentData::Many(docs) => for_each_document(&docs, kind.name(), &mut |py, i, doc| {
-            py.detach(|| {
-                let mut inner = this.write_inner();
-                kind.map_mutex(
-                    &mut inner,
-                    doc,
-                    graph.clone(),
-                    document_uuid_namespace(&uuid_namespace, i),
-                )
-            })
-        })?,
+        DocumentData::Many(docs) => {
+            // Documents are mapped in chunks, and the triples of each chunk added at once, since
+            // adding triples has a fixed cost per call that dominates for small documents.
+            let mut pending: Vec<(usize, StringOrPathBuf)> = Vec::new();
+            let mut pending_bytes = 0usize;
+            let flush = |py: Python<'_>, pending: Vec<(usize, StringOrPathBuf)>| {
+                py.detach(|| {
+                    let mut inner = this.write_inner();
+                    kind.map_many_mutex(&mut inner, pending, graph.clone(), &uuid_namespace)
+                })
+            };
+            for_each_document(&docs, kind.name(), &mut |py, i, doc| {
+                pending_bytes += match &doc {
+                    StringOrPathBuf::String(s) => s.len(),
+                    StringOrPathBuf::PathBuf(p) => {
+                        std::fs::metadata(p).map(|m| m.len() as usize).unwrap_or(0)
+                    }
+                };
+                pending.push((i, doc));
+                if pending.len() >= DOCUMENTS_PER_INSERT || pending_bytes >= BYTES_PER_INSERT {
+                    pending_bytes = 0;
+                    flush(py, std::mem::take(&mut pending))?;
+                }
+                Ok(())
+            })?;
+            if !pending.is_empty() {
+                flush(py, pending)?;
+            }
+        }
     }
     Ok(None)
 }

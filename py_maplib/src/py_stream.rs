@@ -40,7 +40,9 @@ use std::sync::Arc;
 use templates::ast::Template;
 use tracing::instrument;
 use triplestore::triples_read::ExtendedRdfFormat;
-use triplestore::{StorageOptions, Triplestore};
+use maplib::errors::MaplibError;
+use triplestore::errors::TriplestoreError;
+use triplestore::{DocumentFormat, StorageOptions, Triplestore};
 
 /// How each batch of the input is mapped.
 pub(crate) enum StreamSource {
@@ -93,6 +95,68 @@ impl DocumentKind {
         match self {
             DocumentKind::Json => map_json_mutex(inner, doc, graph, uuid_namespace),
             DocumentKind::Xml => map_xml_mutex(inner, doc, graph, uuid_namespace),
+        }
+    }
+
+    /// Maps several documents (with their index in the input) and adds their triples at once.
+    /// Strings and paths are told apart, and uuid namespaces chosen, as map_mutex does for each
+    /// document. When a document can not be read, the documents before it are still mapped.
+    pub(crate) fn map_many_mutex(
+        &self,
+        inner: &mut InnerModel,
+        docs: Vec<(usize, StringOrPathBuf)>,
+        graph: Option<String>,
+        uuid_namespace: &Option<String>,
+    ) -> PyResult<()> {
+        let graph = parse_optional_named_node(graph)?;
+        let named_graph = NamedGraph::from_maybe_named_node(graph.as_ref());
+        let format = match self {
+            DocumentKind::Json => DocumentFormat::Json,
+            DocumentKind::Xml => DocumentFormat::Xml,
+        };
+        let mut documents = Vec::with_capacity(docs.len());
+        let mut read_error = None;
+        for (i, doc) in docs {
+            let ns = document_uuid_namespace(uuid_namespace, i);
+            let path = match doc {
+                StringOrPathBuf::String(string) if self.is_document_string(&string) => {
+                    documents.push((string.into_bytes(), ns));
+                    continue;
+                }
+                StringOrPathBuf::String(string) => std::path::PathBuf::from(string),
+                StringOrPathBuf::PathBuf(path) => path,
+            };
+            match std::fs::read(&path) {
+                Ok(bytes) => {
+                    let ns = ns.or_else(|| Some(path.to_string_lossy().to_string()));
+                    documents.push((bytes, ns));
+                }
+                Err(e) => {
+                    read_error = Some(match self {
+                        DocumentKind::Json => TriplestoreError::ReadJSONFileError(e.to_string()),
+                        DocumentKind::Xml => TriplestoreError::XMLError(e.to_string()),
+                    });
+                    break;
+                }
+            }
+        }
+        if !documents.is_empty() {
+            inner
+                .map_documents(format, documents, &named_graph)
+                .map_err(PyMaplibError::from)?;
+        }
+        if let Some(e) = read_error {
+            return Err(PyMaplibError::from(MaplibError::TriplestoreError(e)).into());
+        }
+        Ok(())
+    }
+
+    /// Whether a string is the document itself rather than a path, as map_json_mutex and
+    /// map_xml_mutex decide.
+    fn is_document_string(&self, string: &str) -> bool {
+        match self {
+            DocumentKind::Json => string.is_empty() || string.contains('{') || string.contains('['),
+            DocumentKind::Xml => string.trim_start().starts_with('<'),
         }
     }
 }
@@ -740,15 +804,7 @@ fn map_batch(
             else {
                 unreachable!("documents are only read by document streams")
             };
-            for (i, doc) in docs {
-                kind.map_mutex(
-                    inner,
-                    doc,
-                    graph.clone(),
-                    document_uuid_namespace(uuid_namespace, i),
-                )?;
-            }
-            return Ok(());
+            return kind.map_many_mutex(inner, docs, graph.clone(), uuid_namespace);
         }
     };
     match source {

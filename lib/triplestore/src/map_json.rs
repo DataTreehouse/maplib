@@ -14,6 +14,7 @@ use polars::prelude::PlSmallStr;
 use polars_core::prelude::{AnyValue, Column, DataFrame};
 use representation::constants::{FX_CHILD, FX_NULL, FX_ROOT, XYZ_PREFIX_IRI};
 use representation::dataset::NamedGraph;
+use representation::solution_mapping::BaseCatState;
 use representation::{BaseRDFNodeType, OBJECT_COL_NAME, SUBJECT_COL_NAME};
 use serde_json::Value;
 use std::collections::HashMap;
@@ -135,6 +136,20 @@ impl Triplestore {
         uuid_namespace: Option<String>,
         named_graph: &NamedGraph,
     ) -> Result<(), TriplestoreError> {
+        let triples = json_triples(u8s, uuid_namespace, named_graph)?;
+        self.add_triples_vec(triples)?;
+        Ok(())
+    }
+}
+
+/// The triples of a JSON document, as map_json adds them, without adding them. Used to add the
+/// triples of many documents at once (see Triplestore::map_documents).
+pub fn json_triples(
+    u8s: &mut [u8],
+    uuid_namespace: Option<String>,
+    named_graph: &NamedGraph,
+) -> Result<Vec<TriplesToAdd>, TriplestoreError> {
+    {
         let prefix = NamedNode::new_unchecked(XYZ_PREFIX_IRI);
         let v: Value = simd_json::serde::from_slice(u8s)
             .map_err(|e| TriplestoreError::ReadJSONFileError(e.to_string()))?;
@@ -198,8 +213,7 @@ impl Triplestore {
                 }
             }
         }
-        self.add_triples_vec(triples_to_add)?;
-        Ok(())
+        Ok(triples_to_add)
     }
 }
 
@@ -337,4 +351,100 @@ fn add_new_property(property: &NamedNode, map: &mut HashMap<NamedNode, TripleTab
     if !map.contains_key(property) {
         map.insert(property.clone(), TripleTableBuilder::new());
     }
+}
+
+/// The format of the documents given to Triplestore::map_documents.
+#[derive(Clone, Copy, Debug)]
+pub enum DocumentFormat {
+    Json,
+    Xml,
+}
+
+impl Triplestore {
+    /// Maps several JSON or XML documents, each with its own uuid namespace, as map_json and
+    /// map_xml do one by one, but adds the triples of all of them at once. Adding triples has a
+    /// fixed cost per call (encoding, partitioning, deduplication), which dominated mapping many
+    /// small documents one at a time.
+    /// When a document fails, the triples of the documents before it are added, as when mapping
+    /// them one by one, and the error is returned.
+    pub fn map_documents(
+        &mut self,
+        format: DocumentFormat,
+        documents: Vec<(Vec<u8>, Option<String>)>,
+        named_graph: &NamedGraph,
+    ) -> Result<(), TriplestoreError> {
+        let mut triples = Vec::new();
+        let mut error = None;
+        for (mut u8s, uuid_namespace) in documents {
+            let res = match format {
+                DocumentFormat::Json => json_triples(&mut u8s, uuid_namespace, named_graph),
+                DocumentFormat::Xml => {
+                    crate::map_xml::xml_triples(&u8s, named_graph, uuid_namespace)
+                }
+            };
+            match res {
+                Ok(t) => triples.extend(t),
+                Err(e) => {
+                    error = Some(e);
+                    break;
+                }
+            }
+        }
+        if !triples.is_empty() {
+            self.add_triples_vec(merge_triples_to_add(triples))?;
+        }
+        match error {
+            Some(e) => Err(e),
+            None => Ok(()),
+        }
+    }
+}
+
+/// Concatenates the tables of triples with the same predicate, graph and types, so that the
+/// triples of many documents are added as a few large tables. Tables with native categorical
+/// columns, or whose columns do not stack, are left as they are.
+fn merge_triples_to_add(triples: Vec<TriplesToAdd>) -> Vec<TriplesToAdd> {
+    let mut merged: Vec<TriplesToAdd> = Vec::new();
+    let mut index: HashMap<
+        (
+            Option<NamedNode>,
+            NamedGraph,
+            BaseRDFNodeType,
+            BaseRDFNodeType,
+        ),
+        usize,
+    > = HashMap::new();
+    for t in triples {
+        let plain = |s: &BaseCatState| !matches!(s, BaseCatState::CategoricalNative(_));
+        if !plain(&t.subject_cat_state)
+            || !plain(&t.object_cat_state)
+            || t.predicate_cat_state.is_some()
+        {
+            merged.push(t);
+            continue;
+        }
+        let key = (
+            t.predicate.clone(),
+            t.graph.clone(),
+            t.subject_type.clone(),
+            t.object_type.clone(),
+        );
+        if let Some(&i) = index.get(&key) {
+            let target = &mut merged[i];
+            if target.df.get_column_names() == t.df.get_column_names()
+                && target.df.dtypes() == t.df.dtypes()
+                && target.df.vstack_mut(&t.df).is_ok()
+            {
+                continue;
+            }
+            merged.push(t);
+        } else {
+            index.insert(key, merged.len());
+            merged.push(t);
+        }
+    }
+    for t in merged.iter_mut() {
+        t.df.rechunk_mut();
+    }
+    merged
 }

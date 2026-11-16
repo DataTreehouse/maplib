@@ -33,7 +33,9 @@ use templates::MappingColumnType;
 use triplestore::sparql::errors::SparqlError;
 use triplestore::sparql::paging::{PageCursor, QueryPage};
 use triplestore::sparql::{InsertResult, QuerySettings, UpdateResult};
-use triplestore::{IndexingOptions, NewTriples, StorageOptions, Triplestore};
+use triplestore::{
+    DocumentFormat, IndexingOptions, NewTriples, StorageOptions, Triplestore,
+};
 
 use chrontext::engine::{ChrontextSettings, Engine};
 use datalog::ast::DatalogRuleset;
@@ -400,6 +402,20 @@ impl Model {
         };
         self.triplestore
             .map_json(&mut u8s, Some(use_uuid_namespace), graph)
+            .map_err(MaplibError::TriplestoreError)
+    }
+
+    /// Maps several JSON or XML documents (their bytes and uuid namespaces) and adds their
+    /// triples at once, see Triplestore::map_documents.
+    #[instrument(skip_all)]
+    pub fn map_documents(
+        &mut self,
+        format: DocumentFormat,
+        documents: Vec<(Vec<u8>, Option<String>)>,
+        graph: &NamedGraph,
+    ) -> Result<(), MaplibError> {
+        self.triplestore
+            .map_documents(format, documents, graph)
             .map_err(MaplibError::TriplestoreError)
     }
 

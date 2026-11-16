@@ -33,7 +33,21 @@ impl Triplestore {
         named_graph: &NamedGraph,
         uuid_namespace: Option<String>,
     ) -> Result<(), TriplestoreError> {
-        let mut reader = Reader::from_reader(Cursor::new(u8s.as_slice()));
+        let triples = xml_triples(u8s, named_graph, uuid_namespace)?;
+        self.add_triples_vec(triples)?;
+        Ok(())
+    }
+}
+
+/// The triples of an XML document, as map_xml adds them, without adding them. Used to add the
+/// triples of many documents at once (see Triplestore::map_documents).
+pub fn xml_triples(
+    u8s: &[u8],
+    named_graph: &NamedGraph,
+    uuid_namespace: Option<String>,
+) -> Result<Vec<TriplesToAdd>, TriplestoreError> {
+    {
+        let mut reader = Reader::from_reader(Cursor::new(u8s));
         // Text is trimmed after adjacent text, CDATA and reference pieces are joined, not per
         // fragment, so whitespace around a reference (`Pump &amp; motor`) is kept.
         reader.config_mut().trim_text(false);
@@ -156,7 +170,7 @@ impl Triplestore {
             buf.clear();
         }
 
-        flush_pred_map(self, pred_map, named_graph)
+        Ok(flush_pred_map(pred_map, named_graph))
     }
 }
 
@@ -340,11 +354,7 @@ fn push_typed_text(
     }
 }
 
-fn flush_pred_map(
-    triples: &mut Triplestore,
-    pred_map: PredMap,
-    named_graph: &NamedGraph,
-) -> Result<(), TriplestoreError> {
+fn flush_pred_map(pred_map: PredMap, named_graph: &NamedGraph) -> Vec<TriplesToAdd> {
     let mut tta_vec = Vec::new();
     for (pred_iri, sub_map) in pred_map {
         let predicate = NamedNode::new_unchecked(pred_iri);
@@ -379,8 +389,7 @@ fn flush_pred_map(
             }
         }
     }
-    triples.add_triples_vec(tta_vec)?;
-    Ok(())
+    tta_vec
 }
 
 fn push_iri_object(pred_map: &mut PredMap, predicate: &str, subject: &str, object: &str) {
