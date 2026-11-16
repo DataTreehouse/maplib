@@ -48,7 +48,17 @@ impl Cats {
             let CatMaps::InMemory(m) = &mut enc.maps else {
                 panic!("Global encoding of strings requires in-memory dictionaries");
             };
-            let inputs: Vec<&Series> = idxs.iter().map(|i| &series[*i].1).collect();
+            let stored: Vec<Series>;
+            let inputs: Vec<&Series> = if m.is_vector() {
+                // Converted once, in parallel, rather than when looked up and when added.
+                stored = idxs
+                    .iter()
+                    .map(|i| crate::vectors::lexical_series_to_stored(&series[*i].1))
+                    .collect();
+                stored.iter().collect()
+            } else {
+                idxs.iter().map(|i| &series[*i].1).collect()
+            };
             let encoded = encode_with_map(m, &inputs, &mut counter);
             for (i, s) in idxs.into_iter().zip(encoded) {
                 out[i] = Some(s);

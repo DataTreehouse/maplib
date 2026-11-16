@@ -596,13 +596,21 @@ impl CatMapsInMemory {
             // Different lexical forms given here may be stored alike (a canonical form and its
             // packed form), so each is looked up after it is converted.
             self.strings.reserve(n);
-            for ((pre, suf), u) in items {
-                let joined: Cow<'_, str> = if pre.is_empty() {
-                    Cow::Borrowed(suf)
-                } else {
-                    Cow::Owned([pre, suf].concat())
-                };
-                let stored = vectors::lexical_to_stored(&joined);
+            let items: Vec<((&str, &str), u32)> = items.collect();
+            // Converted in parallel, as converting a lexical form parses and formats it.
+            let stored: Vec<(String, u32)> = items
+                .into_par_iter()
+                .with_min_len(64)
+                .map(|((pre, suf), u)| {
+                    let stored = if pre.is_empty() {
+                        vectors::lexical_to_stored(suf).into_owned()
+                    } else {
+                        vectors::lexical_to_stored(&[pre, suf].concat()).into_owned()
+                    };
+                    (stored, u)
+                })
+                .collect();
+            for (stored, u) in stored {
                 if self.find(0, &stored).is_some() {
                     continue;
                 }

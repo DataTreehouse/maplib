@@ -13,7 +13,7 @@
 use crate::{BaseRDFNodeType, RDFNodeState};
 use oxrdf::NamedNode;
 use polars::prelude::{
-    Column, DataFrame, DataType, IntoColumn, IntoSeries, StringChunked,
+    Column, DataFrame, DataType, IntoColumn, IntoSeries, Series, StringChunked,
     StringChunkedBuilder,
 };
 use rayon::prelude::*;
@@ -33,7 +33,8 @@ pub fn is_vector_literal_type(t: &BaseRDFNodeType) -> bool {
 }
 
 pub use in_memory::vectors::{
-    format_vector_into, is_packed, pack_vector, pack_vector_into, parse_vector_into,
+    format_vector_into, is_packed, lexical_to_stored, pack_vector, pack_vector_into,
+    parse_vector_into,
     stored_to_lexical, stored_to_vector_into, unpack_vector_into,
 };
 
@@ -134,6 +135,39 @@ fn vector_column_to_strings(c: &Column, packed: bool) -> Result<Column, String> 
         out.append_owned(c).map_err(|e| e.to_string())?;
     }
     Ok(out.into_series().into_column())
+}
+
+/// Converts a String series of lexical forms of vector literals into their stored forms (see
+/// [`in_memory::vectors`]), in parallel, so that the dictionary of vector literals takes them as
+/// they are instead of converting each string when it is looked up and again when it is added.
+pub fn lexical_series_to_stored(series: &Series) -> Series {
+    let name = series.name().clone();
+    let ca = series.str().expect("vector literals are strings").rechunk();
+    let n = ca.len();
+    const ROWS_PER_CHUNK: usize = 1024;
+    let chunks: Vec<StringChunked> = (0..n.div_ceil(ROWS_PER_CHUNK))
+        .into_par_iter()
+        .map(|k| {
+            let from = k * ROWS_PER_CHUNK;
+            let to = n.min(from + ROWS_PER_CHUNK);
+            let mut b = StringChunkedBuilder::new(name.clone(), to - from);
+            for v in ca.slice(from as i64, to - from).iter() {
+                match v {
+                    Some(v) => b.append_value(lexical_to_stored(v)),
+                    None => b.append_null(),
+                }
+            }
+            b.finish()
+        })
+        .collect();
+    let mut chunks = chunks.into_iter();
+    let mut out = chunks
+        .next()
+        .unwrap_or_else(|| StringChunkedBuilder::new(name.clone(), 0).finish());
+    for c in chunks {
+        out.append_owned(c).unwrap();
+    }
+    out.into_series()
 }
 
 /// Converts the vector columns of a DataFrame into vector literal columns. Returns the names of

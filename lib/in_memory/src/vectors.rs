@@ -149,20 +149,33 @@ pub fn stored_to_vector_into(s: &str, out: &mut Vec<f32>) -> Result<(), String> 
 /// The form a vector literal with the lexical form `s` is stored in: packed if `s` is canonical
 /// (or already packed), otherwise `s` itself.
 pub fn lexical_to_stored(s: &str) -> Cow<'_, str> {
-    if !s.starts_with('[') {
+    let Some(inner) = s.strip_prefix('[').and_then(|t| t.strip_suffix(']')) else {
         return Cow::Borrowed(s);
+    };
+    let mut v = Vec::with_capacity(inner.len() / 10 + 1);
+    if !inner.is_empty() {
+        // Each component must be the canonical form of its float, so it is formatted again
+        // and compared, stopping at the first that is not.
+        let mut buf = ryu::Buffer::new();
+        let mut other = String::new();
+        for part in inner.split(',') {
+            let Ok(x) = part.parse::<f32>() else {
+                return Cow::Borrowed(s);
+            };
+            let canonical = if x.is_finite() {
+                buf.format_finite(x)
+            } else {
+                other.clear();
+                write!(other, "{x}").unwrap();
+                other.as_str()
+            };
+            if canonical != part {
+                return Cow::Borrowed(s);
+            }
+            v.push(x);
+        }
     }
-    let mut v = Vec::new();
-    if parse_vector_into(s, &mut v).is_err() {
-        return Cow::Borrowed(s);
-    }
-    let mut canonical = String::new();
-    format_vector_into(&v, &mut canonical);
-    if canonical == s {
-        Cow::Owned(pack_vector(&v))
-    } else {
-        Cow::Borrowed(s)
-    }
+    Cow::Owned(pack_vector(&v))
 }
 
 /// Writes the lexical form of a stored vector literal.

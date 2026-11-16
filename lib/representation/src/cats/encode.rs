@@ -6,6 +6,7 @@ use crate::{
     BaseRDFNodeType, RDFNodeState, LANG_STRING_LANG_FIELD, LANG_STRING_VALUE_FIELD,
     OBJECT_COL_NAME, SUBJECT_COL_NAME,
 };
+use crate::vectors::{is_vector_literal_type, lexical_series_to_stored};
 use in_memory::CatMapsInMemory;
 use oxrdf::NamedNode;
 use polars::frame::DataFrame;
@@ -168,6 +169,11 @@ impl Cats {
                 .unwrap()
                 .as_materialized_series()
                 .clone()
+        } else if is_vector_literal_type(t) {
+            let stored = lexical_series_to_stored(series);
+            let mut ser = encode_single_string_series(&stored, &mut use_height, &mut new_enc, enc);
+            ser.rename(original_name);
+            ser
         } else {
             let mut ser = encode_single_string_series(series, &mut use_height, &mut new_enc, enc);
             ser.rename(original_name);
