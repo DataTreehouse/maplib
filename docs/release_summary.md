@@ -8,6 +8,7 @@ A short guide to v0.22.1, which adds features and fixes to v0.22.0. Features mar
 - **R2RML.** `m.map_r2rml(mapping, database=...)` maps relational data with W3C R2RML mappings, column by column in parallel.
 - **Microsoft Fabric.** `m.map_fabric(ontology, lakehouse=..., eventhouse=...)` **EE** maps a Fabric IQ ontology and its data, and virtualizes its time series.
 - **SPARQL extensions.** Window functions, ORDER BY inside aggregates, `LATERAL`, GRAPH blocks in CONSTRUCT, and `update` reports what it changed.
+- **Keyset pagination.** `m.query_pages(query, page_size=...)` iterates over large SELECT results page by page, and `serve` **EE** pages them with `page_size` and `page_token`.
 - **Vector search.** `maplib:vector` literals hold embeddings, and `maplib:vectorSearch` **EE** finds the nearest ones.
 - **Streams on a persistent model.** `stream=True, in_place=True` maps each batch into the model itself, so steps can join batches with the model's other graphs.
 - **Outbound connection policy.** `maplib.set_outbound_policy(mode="public" | "allowlist", allow=[...])` decides which hosts maplib may connect to, against SSRF; cloud metadata services are always refused.
@@ -26,6 +27,7 @@ A short guide to v0.22.1, which adds features and fixes to v0.22.0. Features mar
 - `GROUP_CONCAT(?x; SEPARATOR=", " ORDER BY ?y)` and `SAMPLE(?x ORDER BY ?y)`.
 - `LATERAL` correlated subqueries (SEP-0006), e.g. the top N per entity.
 - GRAPH blocks in CONSTRUCT templates, as in Apache Jena; `insert` writes each block to its graph in one pass.
+- Statistical aggregates from Apache Jena: `agg:stdev`, `agg:variance` and their sample and population variants, also as window functions.
 - `m.update(...)` returns the triples really inserted and deleted per graph, and with `return_triples=True` the triples themselves.
 
 **Vectors.** Polars array columns map to `maplib:vector` literals. With `IndexingOptions(vectors=True)` **EE**, `maplib:vectorSearch` finds the nearest vectors by cosine, dot product or Euclidean distance, exactly or with an approximate index.
@@ -34,13 +36,16 @@ A short guide to v0.22.1, which adds features and fixes to v0.22.0. Features mar
 
 **Outbound policy.** Every connection maplib makes for a configuration, a virtualized database, `query_external`, `map_osipi`, `map_insights_hub`, `map_cdf`, IP.21 **EE** or OPC UA is checked against the policy before connecting, including redirects and every address a host resolves to. Refusals raise `maplib.OutboundError`. `maplib.outbound` has the same checks for your own clients.
 
+**Keyset pagination.** `m.query_pages(query, page_size=10000)` and `m.query_page(query, page_token=...)` return pages of a SELECT query ordered by its ORDER BY, with a token for the next page, so deep pages cost the same as the first. Pages can be SPARQL JSON results. `serve` **EE** exposes them on its endpoints, and applies the `limit` and `offset` protocol parameters.
+
 ## Fixes
 
 - The FILTER of an OPTIONAL can use variables bound before the OPTIONAL, and variables left unbound by an OPTIONAL or UNION join correctly with the rest of their group.
 - Deeply nested `REGEX`, `SUBSTR` and `REPLACE` calls parse in linear time (they could hang `map_csvw`).
 - `FILTER (NOT) EXISTS` is correct next to variable predicate patterns.
 - `COUNT(DISTINCT ?x)` no longer counts unbound as a value; `SAMPLE` skips unbound values, and `AVG` of nothing is 0.
-- ORDER BY sorts numbers of different datatypes by value.
+- ORDER BY sorts numbers of different datatypes by value, and puts blank nodes before IRIs as SPARQL specifies.
+- Virtualized time series queries **EE** now match materialized results for subqueries in joins, GROUP BY on timestamps, empty aggregates and repeated data point patterns.
 - `GraphSnapshots` **EE** no longer duplicates graphs on restore or rewrites them all after it, and backs off when the store fails.
 - Vector functions and search agree with numpy and scipy on edge cases.
 - Streams hand their blank node counters back, so later streams don't reuse labels.
@@ -53,6 +58,7 @@ A short guide to v0.22.1, which adds features and fixes to v0.22.0. Features mar
 | `Model.update` returns the changes per graph instead of `None` | Ignore the result, or use it |
 | `IRI()`, `URI()` and `fn:castToIRI` give unbound for invalid or relative IRIs | Check queries that built IRIs from unvalidated strings |
 | The time series vocabulary moved from `chrontext:` to `maplib:` (`maplib:hasTimeseries`, `maplib:hasDataPoint`, ...) | Nothing for queries and data: the old IRIs are still read. Custom Python virtualized databases that compare function IRIs must compare with the `maplib:` ones |
+| `AVG` of integers is `xsd:decimal` (and of floats `xsd:float`) | Check code that read the AVG column as an integer or double type |
 | Rust: `UpdateResult` has `changes`, and `delete_construct_result`/`delete_triples_vec` take `keep_triples` | Pass `keep_triples=false` for the old behaviour |
 
 # What's new in v0.22.0 (since v0.20.32)
