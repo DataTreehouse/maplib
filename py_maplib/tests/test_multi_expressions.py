@@ -695,6 +695,55 @@ def test_generate_iri():
     assert_frame_equal(expected, sm.mappings)
 
 
+def test_generate_iri_invalid_strings_are_unbound():
+    m = Model()
+    df = m.query(
+        """
+    SELECT ?a ?iri WHERE {
+    VALUES (?a) { ("http://example.net/ok") ("http://example.net/a b") ("http://example.net/<x>") ("relative") }
+    BIND(IRI(?a) as ?iri)
+    } ORDER BY ?a
+    """
+    )
+    iris = dict(zip(df["a"].to_list(), df["iri"].to_list()))
+    assert iris == {
+        "http://example.net/ok": "<http://example.net/ok>",
+        "http://example.net/a b": None,
+        "http://example.net/<x>": None,
+        "relative": None,
+    }
+
+
+def test_generate_iri_invalid_strings_mixed_with_iris_are_unbound():
+    m = Model()
+    df = m.query(
+        """
+    SELECT ?a ?iri WHERE {
+    VALUES (?a) { (<http://example.net/ok>) ("http://example.net/a b") ("http://example.net/fine") }
+    BIND(IRI(?a) as ?iri)
+    }
+    """
+    )
+    assert sorted(x for x in df["iri"].to_list() if x is not None) == [
+        "<http://example.net/fine>",
+        "<http://example.net/ok>",
+    ]
+    assert df["iri"].null_count() == 1
+
+
+def test_insert_with_invalid_iri_does_not_write_invalid_iri():
+    m = Model()
+    m.update(
+        """
+    INSERT { ?x <http://example.net/p> <http://example.net/o> }
+    WHERE { VALUES ?v { "a b c" "abc" } BIND(IRI(CONCAT("http://example.net/", ?v)) AS ?x) }
+    """
+    )
+    assert m.writes(format="ntriples").strip() == (
+        "<http://example.net/abc> <http://example.net/p> <http://example.net/o> ."
+    )
+
+
 def test_generate_str_uuids():
     m = Model()
     sm = m.query(

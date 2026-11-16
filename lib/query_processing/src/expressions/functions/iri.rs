@@ -1,7 +1,8 @@
 use crate::errors::QueryProcessingError;
 use oxrdf::vocab::xsd;
 use polars::datatypes::DataType;
-use polars::prelude::{coalesce, col, lit, LiteralValue};
+use oxrdf::NamedNode;
+use polars::prelude::{coalesce, col, lit, Expr, IntoColumn, LiteralValue, StringChunked};
 use representation::cats::{maybe_decode_expr, LockedCats};
 use representation::multitype::MULTI_IRI_DT;
 use representation::query_context::Context;
@@ -37,7 +38,12 @@ pub fn iri(
             BaseRDFNodeType::Literal(l, _) => {
                 if l.as_ref() == xsd::STRING {
                     (
-                        maybe_decode_expr(col(first_context.as_str()), b, bs, global_cats),
+                        null_invalid_iris(maybe_decode_expr(
+                            col(first_context.as_str()),
+                            b,
+                            bs,
+                            global_cats,
+                        )),
                         BaseCatState::String,
                     )
                 } else {
@@ -106,11 +112,11 @@ pub fn iri(
         let e = if iri_col.is_some() && string_col.is_none() {
             iri_col.unwrap()
         } else if iri_col.is_none() && string_col.is_some() {
-            string_col.unwrap()
+            null_invalid_iris(string_col.unwrap())
         } else if iri_col.is_some() && string_col.is_some() {
             coalesce(&[
                 iri_col.unwrap().cast(DataType::String),
-                string_col.unwrap().cast(DataType::String),
+                null_invalid_iris(string_col.unwrap().cast(DataType::String)),
             ])
         } else {
             lit(LiteralValue::untyped_null()).cast(DataType::String)
@@ -125,4 +131,20 @@ pub fn iri(
         RDFNodeState::from_bases(BaseRDFNodeType::IRI, s),
     );
     Ok(solution_mappings)
+}
+
+/// IRI() must produce an absolute IRI, so strings that are not valid absolute IRIs
+/// give an error, which is an unbound value in the solution.
+fn null_invalid_iris(e: Expr) -> Expr {
+    e.map(
+        |x| {
+            let validated: StringChunked = x
+                .str()?
+                .iter()
+                .map(|s| s.filter(|s| NamedNode::new(*s).is_ok()))
+                .collect();
+            Ok(validated.with_name(x.name().clone()).into_column())
+        },
+        |_, f| Ok(f.clone()),
+    )
 }
