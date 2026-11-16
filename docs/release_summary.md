@@ -10,6 +10,7 @@ A short guide to v0.22.1, which adds features and fixes to v0.22.0. Features mar
 - **SPARQL extensions.** Window functions, ORDER BY inside aggregates, `LATERAL`, GRAPH blocks in CONSTRUCT, and `update` reports what it changed.
 - **Vector search.** `maplib:vector` literals hold embeddings, and `maplib:vectorSearch` **EE** finds the nearest ones.
 - **Streams on a persistent model.** `stream=True, in_place=True` maps each batch into the model itself, so steps can join batches with the model's other graphs.
+- **Outbound connection policy.** `maplib.set_outbound_policy(mode="public" | "allowlist", allow=[...])` decides which hosts maplib may connect to, against SSRF; cloud metadata services are always refused.
 - **Graph management with a storage folder.** `CLEAR`, `DROP`, `COPY`, `MOVE` and `truncate_graph` work in hybrid and disk storage **EE**.
 
 ## Major features
@@ -31,9 +32,12 @@ A short guide to v0.22.1, which adds features and fixes to v0.22.0. Features mar
 
 **In-place streams.** `m.map(..., stream=True, in_place=True)` runs every batch in the model under its write lock. `.drop_graphs([...])` removes per-batch graphs, and `compact_every=N` compacts the model as it goes. `m.drop_graphs(...)` and `with m.scratch_graphs(...):` do the same outside streams.
 
+**Outbound policy.** Every connection maplib makes for a configuration, a virtualized database, `query_external`, `map_osipi`, `map_insights_hub`, `map_cdf`, IP.21 **EE** or OPC UA is checked against the policy before connecting, including redirects and every address a host resolves to. Refusals raise `maplib.OutboundError`. `maplib.outbound` has the same checks for your own clients.
+
 ## Fixes
 
-- The FILTER of an OPTIONAL can use variables bound before the OPTIONAL.
+- The FILTER of an OPTIONAL can use variables bound before the OPTIONAL, and variables left unbound by an OPTIONAL or UNION join correctly with the rest of their group.
+- Deeply nested `REGEX`, `SUBSTR` and `REPLACE` calls parse in linear time (they could hang `map_csvw`).
 - `FILTER (NOT) EXISTS` is correct next to variable predicate patterns.
 - `COUNT(DISTINCT ?x)` no longer counts unbound as a value; `SAMPLE` skips unbound values, and `AVG` of nothing is 0.
 - ORDER BY sorts numbers of different datatypes by value.
@@ -48,6 +52,7 @@ A short guide to v0.22.1, which adds features and fixes to v0.22.0. Features mar
 |---|---|
 | `Model.update` returns the changes per graph instead of `None` | Ignore the result, or use it |
 | `IRI()`, `URI()` and `fn:castToIRI` give unbound for invalid or relative IRIs | Check queries that built IRIs from unvalidated strings |
+| The time series vocabulary moved from `chrontext:` to `maplib:` (`maplib:hasTimeseries`, `maplib:hasDataPoint`, ...) | Nothing for queries and data: the old IRIs are still read. Custom Python virtualized databases that compare function IRIs must compare with the `maplib:` ones |
 | Rust: `UpdateResult` has `changes`, and `delete_construct_result`/`delete_triples_vec` take `keep_triples` | Pass `keep_triples=false` for the old behaviour |
 
 # What's new in v0.22.0 (since v0.20.32)
