@@ -10,7 +10,7 @@ import pytest
 from polars.testing import assert_frame_equal
 
 from maplib import Model, MaplibException
-from sparql_mock_endpoint import MockEndpoints
+from .sparql_mock_endpoint import MockEndpoints
 
 EX = "http://example.org/"
 

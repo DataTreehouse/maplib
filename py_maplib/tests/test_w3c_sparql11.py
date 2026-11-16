@@ -892,7 +892,7 @@ def replace_all(text: str, mapping: Dict[str, str]) -> str:
 
 @pytest.mark.parametrize("manifest,entry,fmt", build_service_params())
 def test_w3c_sparql11_service(manifest: Manifest, entry, fmt: str):
-    from sparql_mock_endpoint import MockEndpoints
+    from .sparql_mock_endpoint import MockEndpoints
 
     action = manifest.value(entry, MF.action)
     query_iri = manifest.value(action, QT.query)
