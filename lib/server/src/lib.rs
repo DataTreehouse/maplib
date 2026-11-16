@@ -152,6 +152,11 @@ pub struct GraphSnapshotOptions {
     pub warn_after: Duration,
     /// How long a refresh waits for the write lock before it leaves the model to catch up later.
     pub lock_timeout: Duration,
+    /// When the store fails (a missing bucket or container, auth or network errors), the
+    /// background loop waits before its next try: `backoff_min`, doubling with each failure in a
+    /// row up to `backoff_max`, with up to half as much again of jitter. A success resets it.
+    pub backoff_min: Duration,
+    pub backoff_max: Duration,
     /// Seconds since the Unix epoch, for the times in the manifest and garbage collection.
     pub clock: Option<std::sync::Arc<dyn Fn() -> f64 + Send + Sync>>,
     /// Random numbers in [0, 1) for the jitter, for tests.
@@ -182,6 +187,8 @@ impl GraphSnapshotOptions {
             gc_interval: None,
             warn_after: Duration::from_secs(10),
             lock_timeout: Duration::from_millis(200),
+            backoff_min: Duration::from_secs(1),
+            backoff_max: Duration::from_secs(300),
             clock: None,
             random: None,
             on_event: None,

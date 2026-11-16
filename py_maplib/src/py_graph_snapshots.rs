@@ -65,14 +65,27 @@ fn write_lock(lock: Py<PyAny>) -> WriteLock {
     })
 }
 
-/// The default of on_event: slow snapshots and failures as warnings on the maplib.graph_snapshots
-/// logger (where the platform's log collection sees them), the rest at debug.
+/// The default of on_event: slow snapshots and the background loop's backoffs (one per failed step)
+/// as warnings on the maplib.graph_snapshots logger, where the platform's log collection sees them;
+/// a failed snapshot or refresh at info (a direct call raises), the rest at debug.
 fn log_event(py: Python<'_>, e: &serde_json::Value) -> PyResult<()> {
     let logger = py.import("logging")?.call_method1("getLogger", ("maplib.graph_snapshots",))?;
     let f = |k: &str| e.get(k).and_then(|v| v.as_f64()).unwrap_or(0.0);
     let kind = e.get("kind").and_then(|v| v.as_str()).unwrap_or("");
-    if let Some(err) = e.get("error").and_then(|v| v.as_str()) {
-        logger.call_method1("warning", (format!("A {kind} of the model's snapshot failed: {err}"),))?;
+    let err = e.get("error").and_then(|v| v.as_str());
+    if kind == "backoff" {
+        logger.call_method1(
+            "warning",
+            (format!(
+                "The model's snapshot in {} failed ({} in a row), retrying in {:.1} s: {}",
+                e.get("url").and_then(|v| v.as_str()).unwrap_or(""),
+                f("failures") as u64,
+                f("retry_in_s"),
+                err.unwrap_or("")
+            ),),
+        )?;
+    } else if let Some(err) = err {
+        logger.call_method1("info", (format!("A {kind} of the model's snapshot failed: {err}"),))?;
     } else if e.get("slow").and_then(|v| v.as_bool()).unwrap_or(false) {
         logger.call_method1(
             "warning",
@@ -118,7 +131,7 @@ pub struct PyGraphSnapshots {
 #[pymethods]
 impl PyGraphSnapshots {
     #[new]
-    #[pyo3(signature = (model, url, storage_options=None, writer=None, grace=3600.0, snapshot_interval=Some(300.0), refresh_interval=Some(10.0), debounce=2.0, gc_interval=None, warn_after=10.0, clock=None, max_delay=5.0, jitter=1.0, write_lock=None, random=None, lock_timeout=0.2, on_event=None))]
+    #[pyo3(signature = (model, url, storage_options=None, writer=None, grace=3600.0, snapshot_interval=Some(300.0), refresh_interval=Some(10.0), debounce=2.0, gc_interval=None, warn_after=10.0, clock=None, max_delay=5.0, jitter=1.0, write_lock=None, random=None, lock_timeout=0.2, on_event=None, backoff_min=1.0, backoff_max=300.0))]
     #[allow(clippy::too_many_arguments)]
     fn new(
         model: &PyModel,
@@ -138,6 +151,8 @@ impl PyGraphSnapshots {
         random: Option<Py<PyAny>>,
         lock_timeout: f64,
         on_event: Option<Py<PyAny>>,
+        backoff_min: f64,
+        backoff_max: f64,
     ) -> PyResult<PyGraphSnapshots> {
         let non_negative = |name: &str, t: f64| -> PyResult<Duration> {
             if t.is_finite() && t >= 0.0 {
@@ -157,6 +172,8 @@ impl PyGraphSnapshots {
         o.jitter = non_negative("jitter", jitter)?;
         o.lock_timeout = non_negative("lock_timeout", lock_timeout)?;
         o.warn_after = non_negative("warn_after", warn_after)?;
+        o.backoff_min = seconds("backoff_min", Some(backoff_min))?.unwrap_or_default();
+        o.backoff_max = seconds("backoff_max", Some(backoff_max))?.unwrap_or_default().max(o.backoff_min);
         o.gc_interval = seconds("gc_interval", gc_interval)?;
 
         o.clock = clock.map(float_fn);

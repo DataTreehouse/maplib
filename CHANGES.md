@@ -13,6 +13,7 @@
 - A SHACL SPARQL rule (maplib Enterprise Edition) whose `sh:construct` has GRAPH blocks in its template raises an error, as Datalog rules do. The graphs were ignored and the triples went to the inferences graph
 - `GraphSnapshots.restore()` (maplib Enterprise Edition, the writable Model portal) no longer adds the snapshot's copy of a graph to a graph of the same name that the model already has, e.g. shapes loaded by the entry point before restoring: the blank nodes of such graphs were duplicated on every start and every new replica. The model's own copy is kept, and when it differs from the snapshot's, the next snapshot publishes it
 - After `GraphSnapshots.restore()`, the first snapshot no longer writes every graph again: graphs that were restored, or loaded before restoring, count as published, and a write that leaves their content unchanged (building an index, as the Model portal does at start, marks every graph as written) is not published
+- The background loop of `GraphSnapshots` (and the writable Model portal) backs off when the store fails, e.g. a missing bucket or container, or auth or network errors: it waits `backoff_min` (1 s), doubling with each failure in a row up to `backoff_max` (300 s), with jitter, instead of trying about once a second, and logs one warning per try on the `maplib.graph_snapshots` logger. A success resets it, and `stop()` (the snapshot on SIGTERM) tries at once
 
 ## v0.22.0
 ### Breaking changes

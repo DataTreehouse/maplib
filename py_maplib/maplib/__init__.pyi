@@ -2651,8 +2651,13 @@ class GraphSnapshots:
     :param random: A function giving random numbers in [0, 1) for the jitter, for tests.
     :param lock_timeout: Seconds a refresh waits for the write lock, see set_write_lock.
     :param on_event: Called with each event (see events) after its snapshot or refresh, from the thread that ran it.
-                     By default slow snapshots (warn_after) and failures are logged as warnings, with where the time
-                     went, on the "maplib.graph_snapshots" logger, and other events at debug.
+                     By default slow snapshots (warn_after) and the background loop's backoffs are logged as warnings,
+                     with where the time went, on the "maplib.graph_snapshots" logger, and other events at debug.
+    :param backoff_min: When the store fails in the background loop (a missing bucket or container, auth or network
+                        errors), seconds before the next try, doubling with each failure in a row (with jitter) up to
+                        backoff_max. One warning is logged per try, an event with kind "backoff", and a success resets
+                        it. stop() and snapshot() try at once.
+    :param backoff_max: The longest wait between tries, see backoff_min.
     """
 
     url: str
@@ -2679,6 +2684,8 @@ class GraphSnapshots:
             random: Optional[Callable[[], float]] = None,
             lock_timeout: float = 0.2,
             on_event: Optional[Callable[[Dict[str, Any]], None]] = None,
+            backoff_min: float = 1,
+            backoff_max: float = 300,
     ): ...
 
     behind: bool
