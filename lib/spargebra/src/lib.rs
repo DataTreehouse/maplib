@@ -9,6 +9,7 @@ pub mod diagnostics;
 pub mod parser;
 mod query;
 pub mod srl;
+pub mod statistics;
 pub mod term;
 mod update;
 pub mod window;

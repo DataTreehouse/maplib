@@ -1033,6 +1033,53 @@ SELECT ?d WHERE {
 }"""))
 ```
 
+### Statistical aggregates
+
+maplib has the statistical aggregates of Apache Jena ARQ, with the same names, namespace and
+results, so queries run unchanged on both. They are in the Jena aggregate namespace
+`http://jena.apache.org/ARQ/function/aggregate#`, and, as in Jena, also in the ARQ function
+namespace `http://jena.apache.org/ARQ/function#` (`afn:stdev` and so on). Declare the prefix in the
+query or with `add_prefixes`; it is not predefined.
+
+| Aggregate | Computes | Fewest values |
+|---|---|---|
+| `agg:stdev`, `agg:stdev_samp` | sample standard deviation (divides by n - 1) | 2 |
+| `agg:stdev_pop` | population standard deviation (divides by n) | 1 |
+| `agg:variance`, `agg:var_samp` | sample variance | 2 |
+| `agg:var_pop` | population variance | 1 |
+
+```python
+m = Model()
+m.add_prefixes({"ex": EX, "agg": "http://jena.apache.org/ARQ/function/aggregate#"})
+m.reads(f"""
+@prefix ex: <{EX}> .
+ex:pump1 ex:reading 10, 12, 11, 15 .
+ex:pump2 ex:reading 7.5, 8.0 .
+""", format="turtle")
+print(m.query("""
+SELECT ?pump (AVG(?r) AS ?mean) (agg:stdev(?r) AS ?sd) (agg:var_pop(DISTINCT ?r) AS ?var)
+WHERE { ?pump ex:reading ?r } GROUP BY ?pump
+"""))
+```
+
+* They work as other aggregates: with `DISTINCT`, in `HAVING`, in expressions such as
+  `(MAX(?r) - AVG(?r)) / agg:stdev(?r)`, and as window functions, e.g.
+  `agg:stdev(?r) OVER (PARTITION BY ?pump ORDER BY ?t ROWS BETWEEN 9 PRECEDING AND CURRENT ROW)`
+  for a rolling standard deviation. Used outside an aggregation they are a syntax error.
+* The result is an `xsd:double`. Values of any numeric datatype are converted to doubles, and a
+  group may mix numeric datatypes. `DISTINCT` compares RDF terms, so `1` and `1.0` are both kept.
+* A group with a value that is not numeric (a string, a boolean, an IRI, a date, ...) gives an
+  error, so the result is unbound. So does a group with fewer values than the table says: no values
+  at all, or a single value for the sample statistics. The population statistics of one value are
+  `0.0`. Without GROUP BY over no solutions there is one solution with the result unbound.
+* Unbound values (from OPTIONAL, or from an expression error) are skipped, as maplib does for SUM
+  and AVG.
+
+They are checked against Jena's own tests for them (`TestStatisticsAggregates`, ported in
+`py_maplib/tests/test_statistical_aggregates.py`) and against Python's `statistics` module.
+Jena's ARQ syntax keywords (`STDEV(?x)`, `AGG agg:stdev(?x)`) and its `MEDIAN` and `MODE`, which Jena
+has only as keywords and not in the aggregate namespace, are not supported.
+
 The path examples below use this graph: a chain `a -> b -> c -> d` and a shortcut `a -> d` with
 cost on the nodes.
 

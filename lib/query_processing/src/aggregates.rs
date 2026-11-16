@@ -12,6 +12,7 @@ use representation::null::expr_is_null_workaround;
 use representation::query_context::Context;
 use representation::solution_mapping::SolutionMappings;
 use representation::{BaseRDFNodeType, RDFNodeState};
+use spargebra::statistics::StatisticalAggregate;
 use std::collections::{BTreeMap, HashMap};
 
 pub struct AggregateReturn {
@@ -130,21 +131,28 @@ pub fn avg(
     if let Some(unbound) = non_numeric_aggregate(expr_rdf_node_type) {
         return unbound;
     }
-    let out_rdf_node_type = if expr_rdf_node_type.is_bool() {
-        BaseRDFNodeType::Literal(xsd::UNSIGNED_LONG.into_owned(), None)
-            .into_default_input_rdf_node_state()
-    } else {
-        expr_rdf_node_type.clone()
-    };
-
-    let out_expr = if distinct {
+    let mean = if distinct {
         col(column_context.as_str()).unique().mean()
     } else {
         col(column_context.as_str()).mean()
     };
     // The average of no values is 0 (SPARQL 1.1, 18.5.1.4).
-    let out_expr = out_expr.fill_null(lit(0));
-    (out_expr, out_rdf_node_type)
+    let mean = mean.fill_null(lit(0));
+    if expr_rdf_node_type.is_bool() {
+        return (
+            mean,
+            BaseRDFNodeType::Literal(xsd::UNSIGNED_LONG.into_owned(), None)
+                .into_default_input_rdf_node_state(),
+        );
+    }
+    // The type of op:numeric-divide of the sum by the count: AVG over integers is xsd:decimal.
+    let level = expr_rdf_node_type
+        .get_base_type()
+        .and_then(numeric_level)
+        .unwrap();
+    let out_type = numeric_aggregate_type(level, NumericAggregate::Avg);
+    let out_expr = mean.cast(out_type.default_input_polars_data_type());
+    (out_expr, out_type.into_default_input_rdf_node_state())
 }
 
 pub fn min(solution_mappings: &SolutionMappings, column_context: &Context) -> (Expr, RDFNodeState) {
@@ -281,6 +289,78 @@ pub fn list_aggregation_sorted(
     let out_rdf_node_type = rdf_node_type_from_context(column_context, solution_mappings).clone();
     let out_expr = sorted(col(column_context.as_str()), order);
     (out_expr, out_rdf_node_type)
+}
+
+/// The statistical aggregates of Apache Jena (`agg:stdev`, `agg:var_pop`, ...), see
+/// `spargebra::statistics`. The values are converted to xsd:double and the result is an
+/// xsd:double, as in Jena. A group with a non-numeric value gives an error (unbound), and so does
+/// a group without values, or a sample of a single value. The variance of a population of a
+/// single value is 0. Unbound values are skipped, as in SUM and AVG.
+pub fn statistical_aggregate(
+    solution_mappings: &SolutionMappings,
+    column_context: &Context,
+    distinct: bool,
+    aggregate: StatisticalAggregate,
+) -> (Expr, RDFNodeState) {
+    let state = rdf_node_type_from_context(column_context, solution_mappings);
+    let out_type = BaseRDFNodeType::Literal(xsd::DOUBLE.into_owned(), None);
+    let column = if distinct {
+        col(column_context.as_str()).unique()
+    } else {
+        col(column_context.as_str())
+    };
+    let (values, has_error) = if state.is_multi() {
+        let mut numeric = vec![];
+        let mut non_numeric_present = vec![];
+        for t in state.get_sorted_types() {
+            if t.is_none() {
+                continue;
+            }
+            let f = multi_field(&column, t);
+            if numeric_level(t).is_some() {
+                numeric.push(f.cast(DataType::Float64));
+            } else {
+                non_numeric_present.push(f.is_not_null());
+            }
+        }
+        if numeric.is_empty() {
+            return (
+                null_expr(DataType::Float64),
+                out_type.into_default_input_rdf_node_state(),
+            );
+        }
+        let has_error = if non_numeric_present.is_empty() {
+            None
+        } else {
+            Some(any_horizontal(non_numeric_present).unwrap().any(true))
+        };
+        (coalesce(&numeric), has_error)
+    } else {
+        let numeric = state.get_base_type().and_then(numeric_level).is_some();
+        if !numeric {
+            // A null-only column has the type None, and gives an unbound result as well.
+            return (
+                null_expr(DataType::Float64),
+                out_type.into_default_input_rdf_node_state(),
+            );
+        }
+        (column.cast(DataType::Float64), None)
+    };
+    let ddof = aggregate.ddof();
+    let value = if aggregate.is_stdev() {
+        values.clone().std(ddof)
+    } else {
+        values.clone().var(ddof)
+    };
+    let enough_values = values.count().cast(DataType::Int64).gt(lit(ddof as i64));
+    let ok = match has_error {
+        None => enough_values,
+        Some(e) => enough_values.and(e.not()),
+    };
+    let out_expr = when(ok)
+        .then(value)
+        .otherwise(null_expr(DataType::Float64));
+    (out_expr, out_type.into_default_input_rdf_node_state())
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]

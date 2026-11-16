@@ -22,7 +22,9 @@
 //! [`rank_one`] keeps the rows with RANK or DENSE_RANK 1, the rows that are peers of the first
 //! row of their partition, without ranking them.
 
-use crate::aggregates::{avg, count_with_expression, group_concat, max, min, sample, sum};
+use crate::aggregates::{
+    avg, count_with_expression, group_concat, max, min, sample, statistical_aggregate, sum,
+};
 use crate::errors::QueryProcessingError;
 use crate::graph_patterns::{ordering_exprs, sort_options};
 use oxrdf::vocab::xsd;
@@ -36,6 +38,7 @@ use representation::query_context::Context;
 use representation::solution_mapping::SolutionMappings;
 use representation::{BaseRDFNodeType, RDFNodeState};
 use spargebra::algebra::AggregateFunction;
+use spargebra::statistics::StatisticalAggregate;
 use spargebra::window::{WindowFrame, WindowFunction};
 
 /// Frames are clamped to this many rows before and after the current row, and the rows of
@@ -442,11 +445,14 @@ fn aggregate(
             *distinct,
             global_cats.clone(),
         ),
-        AggregateFunction::Custom(nn) => {
-            return Err(QueryProcessingError::UnsupportedWindowFunction(format!(
-                "{nn} OVER (...)"
-            )))
-        }
+        AggregateFunction::Custom(nn) => match StatisticalAggregate::from_iri(nn.as_str()) {
+            Some(aggregate) => statistical_aggregate(solution_mappings, arg, *distinct, aggregate),
+            None => {
+                return Err(QueryProcessingError::UnsupportedWindowFunction(format!(
+                    "{nn} OVER (...)"
+                )))
+            }
+        },
     })
 }
 
@@ -490,7 +496,9 @@ fn cumulative(
     let filled_sum = c.clone().fill_null(lit(0).cast(dtype.clone())).cum_sum(false);
     Some(match name {
         AggregateFunction::Sum => filled_sum,
-        // As AVG in GROUP BY, which is Polars' mean.
+        // As AVG in GROUP BY, which is Polars' mean. AVG over integers and decimals is an
+        // xsd:decimal, which the rolling window computes.
+        AggregateFunction::Avg if !dtype.is_float() => return None,
         AggregateFunction::Avg => {
             let mean = filled_sum.cast(DataType::Float64) / count.clone().cast(DataType::Float64);
             let dtype_of_mean = if dtype == DataType::Float32 {

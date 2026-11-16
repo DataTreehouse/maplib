@@ -1,5 +1,11 @@
 # Change log
 
+## Unreleased
+### Features
+- Statistical aggregates from Apache Jena ARQ: `agg:stdev`, `agg:stdev_samp`, `agg:stdev_pop`, `agg:variance`, `agg:var_samp` and `agg:var_pop` in `http://jena.apache.org/ARQ/function/aggregate#`, also available in `http://jena.apache.org/ARQ/function#` as in Jena. They return an `xsd:double`, take `DISTINCT`, and can be used in HAVING and as window functions (`agg:stdev(?x) OVER (PARTITION BY ?g ORDER BY ?t ROWS BETWEEN 9 PRECEDING AND CURRENT ROW)`). A group with a non-numeric value, with no values, or with a single value for the sample statistics gives an unbound result, as in Jena. Jena's tests for them (TestStatisticsAggregates) are ported, and the results are checked against Python's `statistics` module. See "Statistical aggregates" in API_USAGE.md
+### Bug fixes
+- AVG over values of one integer type is an `xsd:decimal`, as SPARQL defines it, and AVG over `xsd:float` values is an `xsd:float`. It kept the type of its input, so the average was right but expressions using it were computed in integers: `MAX(?x) - AVG(?x)` over 1, 2, 3 and 3 gave 1 instead of 1.25
+
 ## v0.22.1
 ### Breaking changes
 - `Model.update` returns what the update changed instead of `None`, see Features. In Rust, `UpdateResult` has a `changes` field, and `Triplestore::delete_construct_result` and `delete_triples_vec` take `keep_triples` and return the deleted triples (`triplestore::changes::Deleted`) instead of nothing

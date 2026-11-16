@@ -9,7 +9,8 @@
 //
 // A window call is `<window function IRI>(args..., <partitionBy>(exprs...), <orderBy>(<asc>(e),
 // <desc>(e), ...), [<rows>(start, end)])`. An ordered aggregate wraps the aggregated expression:
-// `GROUP_CONCAT(<orderedAggregate>(expr, <asc>(e), ...); SEPARATOR=...)`.
+// `GROUP_CONCAT(<orderedAggregate>(expr, <asc>(e), ...); SEPARATOR=...)`. A custom aggregate
+// such as `agg:stdev` is `<windowCustom>(<aggregate IRI>, arg, <partitionBy>(...), ...)`.
 
 use crate::algebra::{AggregateFunction, Expression, Function, OrderExpression};
 use oxrdf::{Literal, NamedNode, NamedNodeRef};
@@ -28,6 +29,8 @@ const MIN: &str = "https://datatreehouse.github.io/maplib/vocab#windowMin";
 const MAX: &str = "https://datatreehouse.github.io/maplib/vocab#windowMax";
 const SAMPLE: &str = "https://datatreehouse.github.io/maplib/vocab#windowSample";
 const GROUP_CONCAT: &str = "https://datatreehouse.github.io/maplib/vocab#windowGroupConcat";
+/// A custom aggregate, such as the statistical aggregates. The aggregate IRI is the first argument.
+const CUSTOM: &str = "https://datatreehouse.github.io/maplib/vocab#windowCustom";
 const DISTINCT_SUFFIX: &str = "Distinct";
 
 const PARTITION_BY: &str = "https://datatreehouse.github.io/maplib/vocab#windowPartitionBy";
@@ -130,7 +133,7 @@ impl WindowFunction {
                     AggregateFunction::Max => MAX,
                     AggregateFunction::Sample => SAMPLE,
                     AggregateFunction::GroupConcat { .. } => GROUP_CONCAT,
-                    AggregateFunction::Custom(_) => unreachable!("Custom window aggregates"),
+                    AggregateFunction::Custom(_) => CUSTOM,
                 },
                 *distinct,
             ),
@@ -160,6 +163,8 @@ impl WindowFunction {
             MAX => agg(AggregateFunction::Max),
             SAMPLE => agg(AggregateFunction::Sample),
             GROUP_CONCAT => agg(AggregateFunction::GroupConcat { separator: None }),
+            // The name is replaced by the first argument in `WindowCall::from_expression`
+            CUSTOM => agg(AggregateFunction::Custom(NamedNode::new_unchecked(CUSTOM))),
             _ => None,
         };
         f
@@ -225,6 +230,13 @@ pub fn contains_window_function(e: &Expression) -> bool {
 impl WindowCall {
     pub fn into_expression(self) -> Expression {
         let mut args = vec![];
+        if let WindowFunction::Aggregate {
+            name: AggregateFunction::Custom(name),
+            ..
+        } = &self.function
+        {
+            args.push(Expression::NamedNode(name.clone()));
+        }
         if let Some(arg) = self.arg {
             args.push(arg);
         }
@@ -257,6 +269,17 @@ impl WindowCall {
         };
         let (mut function, has_arg) = WindowFunction::from_iri(nn.as_str())?;
         let mut rest = args.as_slice();
+        if let WindowFunction::Aggregate {
+            name: AggregateFunction::Custom(name),
+            ..
+        } = &mut function
+        {
+            let (Expression::NamedNode(n), r) = rest.split_first()? else {
+                return None;
+            };
+            *name = n.clone();
+            rest = r;
+        }
         let mut arg = None;
         if has_arg {
             let (first, r) = rest.split_first()?;

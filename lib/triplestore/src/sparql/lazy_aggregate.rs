@@ -5,7 +5,8 @@ use oxrdf::Variable;
 use polars::prelude::{col, Expr, SortMultipleOptions};
 use query_processing::aggregates::{
     avg, count_with_expression, count_without_expression, group_concat_sorted,
-    list_aggregation_sorted, max, min, sample_sorted, sum, AggregateOrder, AggregateReturn,
+    list_aggregation_sorted, max, min, sample_sorted, statistical_aggregate, sum, AggregateOrder,
+    AggregateReturn,
 };
 use query_processing::constants::{LIST_AGGREGATION, NEST_AGGREGATION};
 use query_processing::graph_patterns::{ordering_exprs, sort_options};
@@ -15,6 +16,7 @@ use representation::dataset::QueryGraph;
 use representation::query_context::{Context, PathEntry};
 use representation::solution_mapping::{EagerSolutionMappings, SolutionMappings};
 use spargebra::algebra::{AggregateExpression, AggregateFunction};
+use spargebra::statistics::StatisticalAggregate;
 use std::collections::HashMap;
 
 impl Triplestore {
@@ -123,8 +125,20 @@ impl Triplestore {
                                 column_context.as_ref().unwrap(),
                                 order,
                             );
+                        } else if let Some(aggregate) =
+                            StatisticalAggregate::from_iri(name.as_str())
+                        {
+                            // The order of the values does not change the statistics
+                            (out_expr, out_rdf_node_type) = statistical_aggregate(
+                                &output_solution_mappings,
+                                column_context.as_ref().unwrap(),
+                                *distinct,
+                                aggregate,
+                            );
                         } else {
-                            unimplemented!("Custom aggregation {}", name);
+                            return Err(SparqlError::NotSupportedYet(format!(
+                                "Custom aggregate function {name}"
+                            )));
                         }
                     }
                 }

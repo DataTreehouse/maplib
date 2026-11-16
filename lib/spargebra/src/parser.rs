@@ -51,9 +51,14 @@ pub struct SparqlParser {
 }
 
 impl SparqlParser {
+    /// A parser that knows the statistical aggregates of [`crate::statistics`].
     #[inline]
     pub fn new() -> Self {
-        Self::default()
+        let mut parser = Self::default();
+        parser
+            .custom_aggregate_functions
+            .extend(crate::statistics::statistical_aggregate_iris());
+        parser
     }
 
     /// Provides an IRI that could be used to resolve the operation relative IRIs.
@@ -2810,7 +2815,14 @@ parser! {
             i("MIN") { AggregateFunction::Min } /
             i("MAX") { AggregateFunction::Max } /
             i("SAMPLE") { AggregateFunction::Sample } /
-            i("GROUP_CONCAT") { AggregateFunction::GroupConcat { separator: None } }
+            i("GROUP_CONCAT") { AggregateFunction::GroupConcat { separator: None } } /
+            name:iri() {?
+                if state.custom_aggregate_functions.contains(&name) {
+                    Ok(AggregateFunction::Custom(name))
+                } else {
+                    Err("Only aggregate functions can be used as window functions")
+                }
+            }
         rule WindowPartitionBy() -> Vec<Expression> = i("PARTITION") _ i("BY") _ p:WindowPartitionBy_item()+ { p }
         rule WindowPartitionBy_item() -> Expression = e:WindowPartitionBy_expr() _ ("," _)? { e }
         rule WindowPartitionBy_expr() -> Expression =
@@ -2829,7 +2841,12 @@ parser! {
             n:$(INTEGER()) _ i("PRECEDING") {? i64::from_str(n).map(|n| (Some(-n), false)).map_err(|_| "Invalid window frame offset") } /
             n:$(INTEGER()) _ i("FOLLOWING") {? i64::from_str(n).map(|n| (Some(n), false)).map_err(|_| "Invalid window frame offset") }
 
-        rule iriOrFunction() -> Expression = i: iri() _ a: ArgList()? {?
+        // A call of a custom aggregate is left to Aggregate(), also when its argument list is not
+        // an ArgList, as in `agg:stdev(DISTINCT ?x)`.
+        rule CustomAggregateCall() = i:iri() _ "(" {?
+            if state.custom_aggregate_functions.contains(&i) { Ok(()) } else { Err("not a custom aggregate") }
+        }
+        rule iriOrFunction() -> Expression = !CustomAggregateCall() i: iri() _ a: ArgList()? {?
             if let Some(a) = a {
                 if state.custom_aggregate_functions.contains(&i) {
                     Err("This custom function is an aggregate function and not a regular function")
