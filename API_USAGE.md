@@ -843,6 +843,43 @@ m.write_cim_xml(
 )
 ```
 
+### Cutting a part of a CIM grid **EE**
+
+The `cim` package of maplib Enterprise Edition cuts the grid around interior equipment out of a
+model, stopping at border equipment, which is left out. The cut holds the equipment reached
+through terminals and connectivity nodes (by default the normal topology: normally open switches
+and equipment normally out of service are not passed), their terminals with connectivity nodes,
+those connectivity nodes, and the resources they refer to up to `context_hops` (10) steps away
+(containers, base voltages, locations, transformer ends, ...), but never other conducting
+equipment, terminals or connectivity nodes. Every step is SPARQL that maplib evaluates:
+`maplib:component` with `maplib:avoid` for the reachable topology, `maplib:shortestPath` for
+`max_distance`, and INSERTs for the rest.
+
+<!-- skip: EE -->
+```python
+from cim.scissors import cut_to_graph
+
+m = Model()
+m.read("EQ.xml", format="cim/xml", graph="urn:graph:eq")
+m.read("GL.xml", format="cim/xml", graph="urn:graph:gl")
+m.read("61970-600-2_Equipment-AP-Voc-RDFS2020_v3-0-0.rdf", format="rdf/xml", graph="urn:graph:rdfs")
+counts = cut_to_graph(
+    m,
+    ["urn:uuid:busbar-in-the-area"],           # interior equipment
+    ["urn:uuid:line-leaving-the-area"],        # border equipment, left out
+    target_graph="urn:graph:cut",              # without it, nothing is written
+    graphs=["urn:graph:eq", "urn:graph:gl", "urn:graph:rdfs"],   # None: the default graph
+)
+print(counts)   # members, equipment, terminals, connectivity_nodes, non_members, context,
+                # boundary_equipment, triples
+```
+
+The `graphs` are read as one dataset, so the instance data, the `rdf:type` triples, the profiles
+(EQ, SSH, TP, SV, GL) and the CIM vocabulary may each be in a graph of their own. The context
+follows the CIM properties whose range is not an XML Schema datatype in the vocabulary (any CIM
+predicate with IRI objects when there is none). `cim.cut(m, border_equipment_iris,
+interior_equipment_iri, ...)` returns the cut as a Model of its own.
+
 ## 7. Named graphs and the transient graph
 
 Most methods take `graph=` to work on a named graph instead of the default graph.
