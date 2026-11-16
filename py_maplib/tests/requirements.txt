@@ -4,3 +4,4 @@ python-dotenv
 rdflib-endpoint
 fastapi
 uvicorn
+numpy
