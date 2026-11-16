@@ -3,15 +3,14 @@ use polars::error::abort::catch_polars_abort;
 use polars::prelude::{Engine, InProcessQuery, OptFlags};
 use polars::{error::PolarsError, frame::DataFrame, prelude::LazyFrame};
 use std::panic::AssertUnwindSafe;
+use std::sync::mpsc::RecvTimeoutError;
 use thiserror::Error;
 
 #[cfg(feature = "pyo3")]
 use pyo3::Python;
+use std::time::Duration;
 #[cfg(feature = "pyo3")]
-use std::{
-    thread::sleep,
-    time::{Duration, Instant},
-};
+use std::{thread::sleep, time::Instant};
 
 #[derive(Error, Debug)]
 pub enum InterruptableCollectError {
@@ -154,16 +153,66 @@ fn collect_with_engine_unchecked(
 ) -> Result<DataFrame, InterruptableCollectError> {
     match engine {
         Engine::InMemory => pl_interruptable_collect_in_memory(lf),
-        engine => {
-            // A lazy frame without sinks always collects to a single DataFrame.
-            let result = catch_polars_abort(AssertUnwindSafe(|| {
-                lf.collect_with_engine(engine).map(|r| r.unwrap_single())
-            }));
-            match result {
-                Ok(Ok(df)) => Ok(df),
-                Ok(Err(e)) => Err(e.into()),
-                Err(_) => Err(InterruptableCollectError::Interrupted),
+        engine => match cancel::current() {
+            None => collect_streaming(lf, engine),
+            Some(token) => collect_streaming_cancellable(lf, engine, token),
+        },
+    }
+}
+
+fn collect_streaming(
+    lf: LazyFrame,
+    engine: Engine,
+) -> Result<DataFrame, InterruptableCollectError> {
+    // A lazy frame without sinks always collects to a single DataFrame.
+    let result = catch_polars_abort(AssertUnwindSafe(|| {
+        lf.collect_with_engine(engine).map(|r| r.unwrap_single())
+    }));
+    match result {
+        Ok(Ok(df)) => Ok(df),
+        Ok(Err(e)) => Err(e.into()),
+        Err(_) => Err(InterruptableCollectError::Interrupted),
+    }
+}
+
+/// How often a cancellable streaming collect checks its token while it waits.
+const STREAMING_CANCEL_POLL: Duration = Duration::from_millis(5);
+
+/// Collects with the streaming engine on a thread of its own, and stops waiting for it as soon as
+/// `token` stops. The cancellation checks in the plan (see [cancel::cancel_check_node]) fail the
+/// query within a batch, but the streaming engine then waits for every task to finish the batch
+/// it is working on, e.g. a filter of 100k rows from a cross join, which took 0.5 s to several
+/// seconds on a loaded machine. Meanwhile the query held the model, so a timed out or abandoned
+/// query blocked updates. The thread finishes those batches and drops the result.
+fn collect_streaming_cancellable(
+    lf: LazyFrame,
+    engine: Engine,
+    token: cancel::CancelToken,
+) -> Result<DataFrame, InterruptableCollectError> {
+    let (tx, rx) = std::sync::mpsc::sync_channel(1);
+    let thread_token = token.clone();
+    let thread = std::thread::Builder::new()
+        .name("maplib-collect".into())
+        .spawn(move || {
+            let r = cancel::with_token(Some(thread_token), || collect_streaming(lf, engine));
+            let _ = tx.send(r);
+        })
+        .map_err(|e| {
+            PolarsError::ComputeError(format!("Could not start a thread for the query: {e}").into())
+        })?;
+    loop {
+        match rx.recv_timeout(STREAMING_CANCEL_POLL) {
+            Ok(r) => return r,
+            Err(RecvTimeoutError::Timeout) => {
+                if let Some(c) = token.stopped() {
+                    return Err(c.into());
+                }
             }
+            // The thread panicked: so does the query, as it did when it collected on this thread.
+            Err(RecvTimeoutError::Disconnected) => match thread.join() {
+                Err(panic) => std::panic::resume_unwind(panic),
+                Ok(()) => unreachable!("the collect thread sends its result before it ends"),
+            },
         }
     }
 }
