@@ -1,5 +1,5 @@
 """Tests for streams that iterate on a persistent Model: in_place=True on the map calls, the
-drop_graphs step, Model.drop_graphs and Model.scratch_graphs. See docs/model_stream_iterations.md.
+drop_graphs step, Model.drop_graphs and Model.scratch_graphs.
 """
 
 import gc

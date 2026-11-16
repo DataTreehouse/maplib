@@ -11,8 +11,7 @@
 //!
 //! With `in_place=True` on the map call, each batch is instead mapped into the parent model and the
 //! steps run on it, one batch at a time under its write lock, which is released between batches.
-//! The per-batch graphs are then removed by `drop_graphs` steps, see
-//! `docs/model_stream_iterations.md`.
+//! The per-batch graphs are then removed by `drop_graphs` steps.
 
 use crate::error::PyMaplibError;
 use crate::mutexes::{
