@@ -95,7 +95,6 @@ v0.22.0 adds more on top of v0.21.0: reading N-Triples is up to 81% faster, RDF/
 | Transient triples are gone; the `transient=` parameter is removed | Pass `graph=maplib.TRANSIENT_GRAPH` (`target_graph=` for `insert`) |
 | `include_transient` is removed | Use `include_graphs=[...]`. For `query`, `update`, `insert` and `infer`, `None` includes the transient graph and `[]` includes nothing |
 | `infer_rdfs` and SHACL rules write inferences to the transient graph | Write them with `graph=TRANSIENT_GRAPH`; TriG/N-Quads writes of all graphs leave the transient graph out |
-| `Model.map_default` is removed | Call `m.generate_template(df, primary_key_column)`, which returns stOTTR, then `m.map(template, df)` |
 | The `streaming` parameter is removed (`query`, `update`, `insert`, `validate`, report methods) | Delete the argument; it had no effect |
 | `max_results` (`infer`) and `max_shape_constraint_results` (`validate`) are removed | Use `maplib.set_memory_limit` |
 | `serialize`/`deserialize` default to one file at `./model.maplib` (was the folder `./serialized_triples`) | Pass `single_file=False` and an explicit path to keep a folder |

@@ -30,6 +30,7 @@ use spargebra::term::GroundTerm;
 use std::collections::HashMap;
 use std::io::Write;
 use std::path::{Path, PathBuf};
+use templates::ast::Template;
 use tracing::warn;
 use triplestore::sparql::{InsertResult, UpdateResult};
 use triplestore::triples_read::ExtendedRdfFormat;
@@ -282,6 +283,59 @@ pub(crate) fn generate_template_mutex(
     let tmpl = generate_default_template(df, primary_key_column, &[], types.as_ref())
         .map_err(PyMaplibError::from)?;
     Ok(format!("{tmpl}"))
+}
+
+/// Generates a default template from the data, adds it to the model and maps the data with it.
+pub(crate) fn map_default_mutex(
+    inner: &mut InnerModel,
+    df: DataFrame,
+    primary_key_column: &str,
+    graph: Option<String>,
+    types: Option<HashMap<String, RDFNodeState>>,
+    validate_iris: Option<bool>,
+) -> PyResult<Template> {
+    let graph = parse_optional_named_node(graph)?;
+    let options = MapOptions::from_args(NamedGraph::from_maybe_named_node(graph.as_ref()), validate_iris);
+    let types = map_types(types);
+    inner
+        .expand_default(df, primary_key_column, &[], types, options)
+        .map_err(|x| PyMaplibError::from(x).into())
+}
+
+/// Maps the first batch of batched map_default input. The template, where all parameters are
+/// optional, is added to the model and returned for mapping the later batches.
+pub(crate) fn map_default_first_batch_mutex(
+    inner: &mut InnerModel,
+    df: DataFrame,
+    primary_key_column: &str,
+    graph: Option<String>,
+    types: Option<HashMap<String, RDFNodeState>>,
+    validate_iris: Option<bool>,
+) -> PyResult<Template> {
+    let graph = parse_optional_named_node(graph)?;
+    let options = MapOptions::from_args(NamedGraph::from_maybe_named_node(graph.as_ref()), validate_iris);
+    let types = map_types(types);
+    inner
+        .expand_default_first_batch(df, primary_key_column, &[], types, options)
+        .map_err(|x| PyMaplibError::from(x).into())
+}
+
+/// Maps a later batch of batched map_default input with the template of the first batch.
+pub(crate) fn map_default_batch_mutex(
+    inner: &mut InnerModel,
+    template: &Template,
+    df: DataFrame,
+    primary_key_column: &str,
+    graph: Option<String>,
+    types: Option<HashMap<String, RDFNodeState>>,
+    validate_iris: Option<bool>,
+) -> PyResult<()> {
+    let graph = parse_optional_named_node(graph)?;
+    let options = MapOptions::from_args(NamedGraph::from_maybe_named_node(graph.as_ref()), validate_iris);
+    let types = map_types(types);
+    inner
+        .expand_default_batch(template, df, primary_key_column, &[], types, options)
+        .map_err(|x| PyMaplibError::from(x).into())
 }
 
 pub fn map_df_mutex(

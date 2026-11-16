@@ -15,6 +15,20 @@ def _lang_df(lang_field: str) -> pl.DataFrame:
     )
 
 
+def test_map_default_lang_string_struct_value_language():
+    m = Model()
+    m.map_default(_lang_df("language"), "id")
+    df = m.query("SELECT ?a ?c WHERE { ?a ?b ?c } ORDER BY ?a")
+    assert df.get_column("c").to_list() == ['"abc"@en', '"def"@fr']
+
+
+def test_map_default_lang_string_struct_value_lang():
+    m = Model()
+    m.map_default(_lang_df("lang"), "id")
+    df = m.query("SELECT ?a ?c WHERE { ?a ?b ?c } ORDER BY ?a")
+    assert df.get_column("c").to_list() == ['"abc"@en', '"def"@fr']
+
+
 def test_generate_template_lang_string_struct_value_language():
     m = Model()
     df = _lang_df("language")

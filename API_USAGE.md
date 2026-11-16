@@ -437,14 +437,23 @@ print(m.writes(format="ntriples"))
 Strings in `subject` and `predicate` are IRIs. A string `object` column holds either only IRIs or
 only literals: mixing them raises an error. Use a template when the object type needs to be explicit.
 
-### generate_template
+### map_default and generate_template
 
-`generate_template(data, primary_key_column)` writes a default template for a DataFrame, without
-mapping anything: the key column is the subject of one `ottr:Triple` per other column, with
-predicates in the `urn:maplib_default:` namespace. Review or edit it, then map with it:
+`map_default(data, primary_key_column)` maps a DataFrame without writing a template: it makes a
+default template where the key column is the subject of one `ottr:Triple` per other column, with
+predicates in the `urn:maplib_default:` namespace, adds it to the model, maps the data with it and
+returns it. It takes `graph`, `validate_iris` and `stream` like `map`, and a LazyFrame or an
+iterable of batches, where the template comes from the first batch with all parameters optional.
 
 ```python
 df = pl.DataFrame({"id": [EX + "a", EX + "b"], "weight": [1.5, None], "label": ["A", "B"]})
+template = m.map_default(df, "id")
+```
+
+`generate_template(data, primary_key_column)` is its dry run: it returns the same template without
+mapping anything or adding it to the model. Review or edit it, then map with it:
+
+```python
 template = m.generate_template(df, "id")
 print(template)          # ? xsd:double ?weight is optional, as the column has nulls
 m.map(template, df)

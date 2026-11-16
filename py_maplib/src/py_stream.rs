@@ -1,4 +1,4 @@
-//! Streaming mapping: `m.map(template, data, stream=True)` (and `map_triples`)
+//! Streaming mapping: `m.map(template, data, stream=True)` (and `map_triples` / `map_default`)
 //! returns a `ModelStream`, a lazy pipeline of steps (`update`, `insert`, `infer`, `write`) that
 //! runs when `collect()` is called. Each batch of the mapping input is mapped into a fresh
 //! in-memory model that has the templates, prefixes and UDFs of the parent model. The steps run on
@@ -11,7 +11,7 @@
 
 use crate::error::PyMaplibError;
 use crate::mutexes::{
-    infer_mutex, insert_mutex, map_json_mutex, map_resolved_mutex, map_triples_mutex,
+    infer_mutex, insert_mutex, map_default_batch_mutex, map_default_first_batch_mutex, map_json_mutex, map_resolved_mutex, map_triples_mutex,
     map_xml_mutex, update_mutex,
 };
 use crate::py_io::WriteTarget;
@@ -33,6 +33,7 @@ use representation::RDFNodeState;
 use std::collections::HashMap;
 use std::io::{BufWriter, Write};
 use std::sync::Arc;
+use templates::ast::Template;
 use tracing::instrument;
 use triplestore::triples_read::ExtendedRdfFormat;
 use triplestore::{StorageOptions, Triplestore};
@@ -46,6 +47,12 @@ pub(crate) enum StreamSource {
     },
     MapTriples {
         predicate: Option<String>,
+        graph: Option<String>,
+        validate_iris: Option<bool>,
+    },
+    /// map_default: the template is made from the first batch, with all parameters optional.
+    MapDefault {
+        primary_key_column: String,
         graph: Option<String>,
         validate_iris: Option<bool>,
     },
@@ -333,7 +340,10 @@ impl PyModelStream {
             let mut inner = model.inner.write().unwrap_or_else(|e| e.into_inner());
             empty_model_like(&mut inner, false)
         })?;
-        let mut state = BatchState { carrier };
+        let mut state = BatchState {
+            carrier,
+            default_template: None,
+        };
         let mut writers = open_writers(&self.steps, &state.carrier.prefixes)?;
         let source = self.source.as_ref();
         let steps = &self.steps;
@@ -395,6 +405,14 @@ impl PyModelStream {
             }
         }
 
+        if let StreamSource::MapDefault { .. } = source {
+            if state.default_template.is_none() {
+                return Err(PyMaplibError::FunctionArgumentError(
+                    "map_default received no batches, so no template could be created".to_string(),
+                )
+                .into());
+            }
+        }
         for w in writers.iter_mut().flatten() {
             w.flush().map_err(|x| {
                 PyMaplibError::from(maplib::errors::MaplibError::FileCreateIOError(x))
@@ -408,6 +426,8 @@ impl PyModelStream {
 struct BatchState {
     /// An empty model with the templates, prefixes, UDFs and blank node counters for the next batch.
     carrier: InnerModel,
+    /// The template made by map_default from the first batch.
+    default_template: Option<Template>,
 }
 
 /// An empty in-memory model with the templates, prefixes, settings, UDFs and blank node counters of
@@ -488,7 +508,14 @@ fn run_batch(
     input: BatchInput,
 ) -> PyResult<()> {
     let mut inner = empty_model_like(&mut state.carrier, true)?;
-    let res = run_batch_steps(&mut inner, source, steps, writers, input);
+    let res = run_batch_steps(
+        &mut inner,
+        &mut state.default_template,
+        source,
+        steps,
+        writers,
+        input,
+    );
     // Hand the templates and blank node counters on to the next batch, also after an error.
     state.carrier = empty_model_like(&mut inner, true)?;
     res
@@ -496,17 +523,23 @@ fn run_batch(
 
 fn run_batch_steps(
     inner: &mut InnerModel,
+    default_template: &mut Option<Template>,
     source: &StreamSource,
     steps: &[StreamStep],
     writers: &mut [Option<StreamWriter>],
     input: BatchInput,
 ) -> PyResult<()> {
-    map_batch(inner, source, input)?;
+    map_batch(inner, default_template, source, input)?;
     run_steps(inner, steps, writers)
 }
 
 /// Maps the input of one batch into the batch model.
-fn map_batch(inner: &mut InnerModel, source: &StreamSource, input: BatchInput) -> PyResult<()> {
+fn map_batch(
+    inner: &mut InnerModel,
+    default_template: &mut Option<Template>,
+    source: &StreamSource,
+    input: BatchInput,
+) -> PyResult<()> {
     let (df, types) = match input {
         BatchInput::Frame(df, types) => (df, types),
         BatchInput::Documents(docs) => {
@@ -558,6 +591,32 @@ fn map_batch(inner: &mut InnerModel, source: &StreamSource, input: BatchInput) -
                 types,
                 *validate_iris,
             )?;
+        }
+        StreamSource::MapDefault {
+            primary_key_column,
+            graph,
+            validate_iris,
+        } => {
+            if let Some(template) = default_template.as_ref() {
+                map_default_batch_mutex(
+                    inner,
+                    template,
+                    df,
+                    primary_key_column,
+                    graph.clone(),
+                    types,
+                    *validate_iris,
+                )?;
+            } else {
+                *default_template = Some(map_default_first_batch_mutex(
+                    inner,
+                    df,
+                    primary_key_column,
+                    graph.clone(),
+                    types,
+                    *validate_iris,
+                )?);
+            }
         }
         StreamSource::Documents { .. } => {
             unreachable!("document streams only read documents")

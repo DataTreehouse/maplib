@@ -4,7 +4,8 @@ use crate::mutexes::{
     add_graph_mutex, add_prefixes_mutex, add_template_mutex, add_udf_mutex,
     add_virtualization_mutex, compact_mutex, create_index_mutex, detach_graph_mutex,
     generate_template_mutex, get_predicate_iris_mutex, get_predicate_mutex, infer_mutex,
-    infer_rdfs_mutex, insert_mutex, list_udfs_mutex, map_df_mutex, map_mutex, map_resolved_mutex,
+    infer_rdfs_mutex, insert_mutex, list_udfs_mutex, map_default_batch_mutex, map_default_first_batch_mutex, map_default_mutex,
+    map_df_mutex, map_mutex, map_resolved_mutex,
     map_triples_mutex, query_external_mutex, query_mutex, read_mutex, read_template_mutex,
     reads_mutex, resolve_template_mutex, serialize_triples_mutex, size_mutex, truncate_graph_mutex,
     update_mutex, validate_mutex, write_bytes_mutex, write_cim_xml_mutex, write_triples_mutex,
@@ -37,7 +38,7 @@ use opc_ua::mappings::map_opc_ua;
 use opc_ua::typing_shapes::{add_typing_shapes as add_opcua_typing_shapes, TypeNamespaces};
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
-use pyo3::types::{PyBytes, PyDict};
+use pyo3::types::{PyBytes, PyDict, PyString};
 use pyo3::{pyclass, pymethods, Bound, Py, PyAny, PyRef, PyResult, Python};
 use oxrdf::NamedNode;
 use representation::cats::LockedCats;
@@ -356,6 +357,85 @@ impl PyModel {
                 Ok(None)
             }
         }
+    }
+
+    /// Generates a default template from the data with the same code as generate_template, adds it
+    /// to the model and maps the data with it. Returns the template, or a ModelStream when stream
+    /// is set.
+    #[pyo3(signature = (data, primary_key_column, graph=None, validate_iris=None, stream=None))]
+    #[instrument(skip_all)]
+    fn map_default(
+        slf: &Bound<'_, Self>,
+        py: Python<'_>,
+        data: &Bound<'_, PyAny>,
+        primary_key_column: String,
+        graph: Option<String>,
+        validate_iris: Option<bool>,
+        stream: Option<bool>,
+    ) -> PyResult<Py<PyAny>> {
+        let this = slf.get();
+        parse_optional_named_node(graph.clone())?;
+        if stream.unwrap_or(false) {
+            let stream = PyModelStream::new(
+                slf.clone().unbind(),
+                data.clone().unbind(),
+                StreamSource::MapDefault {
+                    primary_key_column,
+                    graph,
+                    validate_iris,
+                },
+            );
+            return Ok(Py::new(py, stream)?.into_any());
+        }
+        let template = match classify_mapping_data(data, py)? {
+            MappingData::Eager(mappings, types) => py.detach(move || {
+                let mut inner = this.inner.write().unwrap_or_else(|e| e.into_inner());
+                map_default_mutex(
+                    &mut inner,
+                    mappings,
+                    &primary_key_column,
+                    graph,
+                    types,
+                    validate_iris,
+                )
+            })?,
+            MappingData::Batched(data) => {
+                let mut template = None;
+                for_each_mapping_batch(&data, py, &mut |py, mappings, types| {
+                    py.detach(|| -> PyResult<()> {
+                        let mut inner = this.inner.write().unwrap_or_else(|e| e.into_inner());
+                        if let Some(template) = &template {
+                            map_default_batch_mutex(
+                                &mut inner,
+                                template,
+                                mappings,
+                                &primary_key_column,
+                                graph.clone(),
+                                types,
+                                validate_iris,
+                            )
+                        } else {
+                            template = Some(map_default_first_batch_mutex(
+                                &mut inner,
+                                mappings,
+                                &primary_key_column,
+                                graph.clone(),
+                                types,
+                                validate_iris,
+                            )?);
+                            Ok(())
+                        }
+                    })
+                })?;
+                template.ok_or_else(|| {
+                    PyMaplibError::FunctionArgumentError(
+                        "map_default received no batches, so no template could be created"
+                            .to_string(),
+                    )
+                })?
+            }
+        };
+        Ok(PyString::new(py, &format!("{template}")).into_any().unbind())
     }
 
     /// Generates a default template from the data. This is always a dry run: nothing is mapped

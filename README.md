@@ -84,7 +84,8 @@ Features marked **EE** need [maplib Enterprise Edition](#open-source-and-enterpr
 |---|---|
 | `m.map(template, data)` | Instantiates an OTTR template once per row of a DataFrame, LazyFrame or iterable of batches, so data larger than memory can be mapped. With `stream=True` it returns a lazy `ModelStream` instead (see below). |
 | `m.map_triples(data, predicate=None)` | Adds triples straight from a DataFrame with `subject` and `object` columns (and optionally `predicate`). |
-| `m.generate_template(data, primary_key_column)` | Generates a default template from a DataFrame's columns and returns it as stOTTR text for you to review. It doesn't map anything. |
+| `m.map_default(data, primary_key_column)` | Generates a default template from the columns, with the key column as the subject of one triple per other column, adds it to the model and maps the data with it. |
+| `m.generate_template(data, primary_key_column)` | The dry run of `map_default`: returns the default template as stOTTR text for you to review, without mapping anything. |
 | `m.map_df(df)` / `m.map_json(...)` / `m.map_xml(...)` | Maps a DataFrame, JSON or XML document to triples with a generic Façade-X mapping that mirrors its structure. JSON and XML also accept an iterable of documents, such as the lines of a JSON Lines file. |
 | `m.map_csvw(source, metadata=None)` | Converts CSV and TSV files to RDF as specified by the W3C CSV on the Web recommendations, and returns the generated SPARQL Update so you can adapt it. |
 | `m.map_opc_ua(folder)` **EE** | Maps a folder of OPC UA NodeSet2 XML files to RDF. `m.opcua.add_typing_shapes()` then generates SHACL shapes from their type definitions. |
@@ -94,7 +95,7 @@ Features marked **EE** need [maplib Enterprise Edition](#open-source-and-enterpr
 | `maplib.generate_templates(m, graph)` | Generates one template per class of an ontology from its `rdfs:subClassOf`, `rdfs:domain` and `rdfs:range`. |
 | `m.add_prefixes({...})` | Registers prefixes for use in SPARQL, Datalog and OTTR. |
 
-**Streaming.** `m.map(..., stream=True)` (also `map_triples`, `map_json` and `map_xml`) returns a `ModelStream`: a lazy pipeline of `.update()`, `.insert()`, `.infer()` **EE** and `.write()` steps. `.collect()` then runs the pipeline batch by batch in a fresh model, so arbitrarily large inputs go to file with bounded memory.
+**Streaming.** `m.map(..., stream=True)` (also `map_triples`, `map_default`, `map_json` and `map_xml`) returns a `ModelStream`: a lazy pipeline of `.update()`, `.insert()`, `.infer()` **EE** and `.write()` steps. `.collect()` then runs the pipeline batch by batch in a fresh model, so arbitrarily large inputs go to file with bounded memory.
 
 ### Read and write RDF
 

@@ -335,7 +335,8 @@ def test_two_list_arguments():
     assert result.height == 9
 
 
-def test_default():
+@pytest.mark.parametrize("how", ["map_default", "generate_template"])
+def test_default(how):
     """Test default model without explicit template"""
     m = Model()
 
@@ -351,10 +352,13 @@ def test_default():
         }
     )
 
-    t = m.generate_template(df, "subject")
-    #Checks that the template can be added ok.
-    m.add_template(t)
-    m.map(t, df)
+    if how == "map_default":
+        t = m.map_default(df, "subject")
+    else:
+        t = m.generate_template(df, "subject")
+        #Checks that the template can be added ok.
+        m.add_template(t)
+        m.map(t, df)
     result = m.query(
         """
         PREFIX ex: <http://example.net/ns#>
@@ -371,7 +375,8 @@ def test_default():
     assert result.height == 5
 
 
-def test_default_list():
+@pytest.mark.parametrize("how", ["map_default", "generate_template"])
+def test_default_list(how):
     """Test default model with lists"""
     m = Model()
 
@@ -392,7 +397,10 @@ def test_default_list():
         [pl.col("myList1").drop_nulls(), pl.col("myList2")]
     )
 
-    m.map(m.generate_template(df, "subject"), df)
+    if how == "map_default":
+        m.map_default(df, "subject")
+    else:
+        m.map(m.generate_template(df, "subject"), df)
 
     result = m.query(
         """

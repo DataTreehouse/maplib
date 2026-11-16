@@ -1,3 +1,4 @@
+import re
 import polars as pl
 import pytest
 
@@ -82,6 +83,76 @@ def test_map_triples_lazyframe_and_iterable():
         iter([df.slice(0, 500), df.slice(500)]), predicate="http://example.net/ns#p"
     )
     assert _count(m) == N
+
+
+def test_map_default_lazyframe():
+    m = Model()
+    m.map_default(_df().lazy(), "s")
+    assert _count(m) == N
+
+
+def test_map_default_iterable_nulls_in_later_batch():
+    df = pl.DataFrame(
+        {
+            "s": [f"http://example.net/ns#s{i}" for i in range(4)],
+            "v": ["a", "b", None, "d"],
+        }
+    )
+    m = Model()
+    tmpl = m.map_default([df.slice(0, 2), df.slice(2)], "s")
+    assert "default_template" in tmpl
+    assert _count(m) == 3
+
+
+def test_map_default_empty_iterable():
+    m = Model()
+    with pytest.raises(Exception, match="(Iterable mapping input|no batches)"):
+        m.map_default([], "s")
+
+
+def test_map_default_adds_template_and_maps():
+    m = Model()
+    tmpl = m.map_default(_df(), "s")
+    assert _count(m) == N
+    name = re.search(r"default_template_\w+", tmpl).group(0)
+    assert [t.iri.iri for t in m.get_templates()] == [f"urn:maplib_default:{name}"]
+    # The same template as the dry run, apart from its random IRI.
+    dry = m.generate_template(_df(), "s")
+    unnamed = lambda t: re.sub(r"default_template_\w+", "default_template", t)
+    assert unnamed(tmpl) == unnamed(dry)
+
+
+def test_map_default_graph():
+    m = Model()
+    m.map_default(_df(), "s", graph="urn:graph:g")
+    assert m.size() == 0
+    assert m.size(graph="urn:graph:g") == N
+    assert (
+        m.query("SELECT ?s WHERE { GRAPH <urn:graph:g> { ?s ?p ?v } }").height == N
+    )
+
+
+def test_map_default_validate_iris():
+    df = pl.DataFrame({"s": ["not an iri"], "v": ["a"]})
+    with pytest.raises(Exception, match="invalid IRI"):
+        Model().map_default(df, "s")
+    m = Model()
+    m.map_default(df, "s", validate_iris=False)
+    assert m.size() == 1
+
+
+def test_map_default_casts_primary_key():
+    df = pl.DataFrame({"s": [1, 2], "v": ["a", "b"]})
+    m = Model()
+    m.map_default(df, "s", validate_iris=False)
+    assert m.size() == 2
+
+
+def test_map_default_missing_primary_key_column():
+    m = Model()
+    with pytest.raises(Exception, match="missing"):
+        m.map_default(_df(), "nope")
+    assert m.size() == 0
 
 
 def test_generate_template_is_dry_run():
@@ -268,6 +339,22 @@ def test_stream_map_triples(tmp_path):
         .collect()
     )
     assert _count_pred(_read(tmp_path / "out.nq", "nquads"), "p") == N
+
+
+def test_stream_map_default(tmp_path):
+    m = Model()
+    s = m.map_default(list(_batches()), "s", stream=True)
+    s.write(tmp_path / "out.ttl", format="turtle").collect()
+    out = _read(tmp_path / "out.ttl", "turtle")
+    assert out.query("SELECT ?s ?v WHERE { ?s ?p ?v FILTER(isLiteral(?v)) }").height == N
+    assert m.size() == 0
+
+
+def test_stream_map_default_empty_iterable(tmp_path):
+    m = Model()
+    s = m.map_default([], "s", stream=True)
+    with pytest.raises(Exception, match="(Iterable mapping input|no batches)"):
+        s.write(tmp_path / "out.nt").collect()
 
 
 def test_stream_generated_template(tmp_path):

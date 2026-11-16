@@ -1,4 +1,6 @@
+use super::Model;
 use crate::model::errors::MappingError;
+use crate::model::MapOptions;
 use representation::constants::{DEFAULT_PREFIX_IRI, OTTR_IRI, OTTR_TRIPLE};
 use std::collections::HashMap;
 use templates::ast::{
@@ -28,6 +30,130 @@ pub fn generate_default_template(
     let df = normalize_lang_string_structs(df);
     warn_non_string_keys(&df, pk_col, fk_cols);
     create_default_template(&df, pk_col, fk_cols, mapping_column_types)
+}
+
+impl Model {
+    /// Generates the default template of the data with [`generate_default_template`], adds it to
+    /// the model and maps the data with it. Key columns that are not String are cast to String.
+    pub fn expand_default(
+        &mut self,
+        df: DataFrame,
+        pk_col: &str,
+        fk_cols: &[String],
+        mapping_column_types: Option<HashMap<String, MappingColumnType>>,
+        options: MapOptions,
+    ) -> Result<Template, MaplibError> {
+        let df = prepare_default_df(df, pk_col, fk_cols, true)?;
+        let template =
+            generate_default_template(df.clone(), pk_col, fk_cols, mapping_column_types.as_ref())?;
+        self.add_template(template.clone())?;
+        self.expand(
+            template.signature.iri.as_str(),
+            Some(df),
+            mapping_column_types,
+            options,
+        )?;
+        Ok(template)
+    }
+
+    /// Like [`Model::expand_default`] for the first batch of a stream of batches with the same
+    /// schema. All parameters of the template are optional, since later batches may have nulls
+    /// where the first did not. Map the later batches with [`Model::expand_default_batch`].
+    pub fn expand_default_first_batch(
+        &mut self,
+        df: DataFrame,
+        pk_col: &str,
+        fk_cols: &[String],
+        mapping_column_types: Option<HashMap<String, MappingColumnType>>,
+        options: MapOptions,
+    ) -> Result<Template, MaplibError> {
+        let df = prepare_default_df(df, pk_col, fk_cols, true)?;
+        let mut template =
+            generate_default_template(df.clone(), pk_col, fk_cols, mapping_column_types.as_ref())?;
+        for p in &mut template.signature.parameter_list {
+            p.optional = true;
+        }
+        self.add_template(template.clone())?;
+        if df.height() > 0 {
+            self.expand(
+                template.signature.iri.as_str(),
+                Some(df),
+                mapping_column_types,
+                options,
+            )?;
+        }
+        Ok(template)
+    }
+
+    /// Maps a later batch with the template made by [`Model::expand_default_first_batch`].
+    pub fn expand_default_batch(
+        &mut self,
+        template: &Template,
+        df: DataFrame,
+        pk_col: &str,
+        fk_cols: &[String],
+        mapping_column_types: Option<HashMap<String, MappingColumnType>>,
+        options: MapOptions,
+    ) -> Result<(), MaplibError> {
+        if df.height() == 0 {
+            return Ok(());
+        }
+        let df = prepare_default_df(df, pk_col, fk_cols, false)?;
+        self.expand(
+            template.signature.iri.as_str(),
+            Some(df),
+            mapping_column_types,
+            options,
+        )
+    }
+}
+
+/// Normalizes language tagged string structs and casts key columns to String, as the default
+/// template types them as ottr:IRI.
+fn prepare_default_df(
+    df: DataFrame,
+    pk_col: &str,
+    fk_cols: &[String],
+    warn: bool,
+) -> Result<DataFrame, MaplibError> {
+    if !df.get_column_names().iter().any(|c| c.as_str() == pk_col) {
+        return Err(MappingError::MissingParameterColumn(pk_col.to_string()).into());
+    }
+    let mut df = normalize_lang_string_structs(df);
+    let keys: Vec<String> = df
+        .get_column_names()
+        .iter()
+        .map(|c| c.to_string())
+        .filter(|c| c == pk_col || fk_cols.contains(c))
+        .collect();
+    for c in keys {
+        let column = df.column(&c).unwrap();
+        let dt = column.dtype().clone();
+        if dt == DataType::String {
+            continue;
+        }
+        if dt.is_nested() {
+            return Err(MappingError::IncompatibleColumnDataType(
+                c,
+                dt,
+                PType::Basic(NamedNode::new_unchecked(OTTR_IRI)),
+            )
+            .into());
+        }
+        if warn {
+            let kind = if c == pk_col { "Primary" } else { "Foreign" };
+            warn!("{kind} key column {c} is not String but instead {dt}. Will be cast");
+        }
+        let cast = column.cast(&DataType::String).map_err(|_| {
+            MappingError::IncompatibleColumnDataType(
+                c.clone(),
+                dt.clone(),
+                PType::Basic(NamedNode::new_unchecked(OTTR_IRI)),
+            )
+        })?;
+        df.with_column(cast).unwrap();
+    }
+    Ok(df)
 }
 
 /// Key columns are typed as ottr:IRI in the template, so mapping it requires String key columns.

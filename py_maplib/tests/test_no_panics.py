@@ -67,6 +67,17 @@ def test_generate_template_nested_primary_key_does_not_panic(value):
     Model().generate_template(pl.DataFrame({"a": [value], "b": [1]}), "a")
 
 
+@pytest.mark.parametrize("value", [[1], {"x": 1}])
+def test_map_default_nested_primary_key_raises(value):
+    with pytest.raises(MaplibException, match="incompatible"):
+        Model().map_default(pl.DataFrame({"a": [value], "b": [1]}), "a")
+
+
+def test_map_default_missing_primary_key():
+    with pytest.raises(MaplibException, match="missing"):
+        Model().map_default(pl.DataFrame({"a": ["x"], "b": [1]}), "nope")
+
+
 def test_map_blank_node_default_with_nulls():
     m = Model()
     m.add_template("@prefix ex:<http://e/>. ex:T [?a, ?b = _:x] :: { ottr:Triple(?a, ex:p, ?b) } .")

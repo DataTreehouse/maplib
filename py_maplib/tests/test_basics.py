@@ -730,7 +730,8 @@ def test_map_triples_roundtrip():
     df = model2.query("""SELECT * WHERE {?subject ?predicate ?object}""")
     assert df.height == 3
 
-def test_generate_template_triples():
+@pytest.mark.parametrize("how", ["map_default", "generate_template"])
+def test_default_template_triples(how):
     df = pl.DataFrame(
         {
             "subject": [
@@ -746,10 +747,13 @@ def test_generate_template_triples():
         }
     )
     m = Model()
-    tpl = m.generate_template(df, primary_key_column="subject")
-    assert m.size() == 0
-    m.map(tpl, df)
-    # print(tpl)
+    if how == "map_default":
+        tpl = m.map_default(df, primary_key_column="subject")
+        assert "default_template" in tpl
+    else:
+        tpl = m.generate_template(df, primary_key_column="subject")
+        assert m.size() == 0
+        m.map(tpl, df)
     df = m.query(
         """
     SELECT ?a ?b ?c WHERE {?a ?b ?c} ORDER BY ?a ?b ?c
@@ -771,7 +775,8 @@ def test_generate_template_triples():
     assert_frame_equal(df, expected)
 
 
-def test_generate_template_triples_non_iri_object():
+@pytest.mark.parametrize("how", ["map_default", "generate_template"])
+def test_default_template_triples_non_iri_object(how):
     df = pl.DataFrame(
         {
             "subject": [
@@ -787,10 +792,13 @@ def test_generate_template_triples_non_iri_object():
         }
     )
     m = Model()
-    tpl = m.generate_template(df, primary_key_column="subject")
-    assert m.size() == 0
-    m.map(tpl, df)
-    # print(tpl)
+    if how == "map_default":
+        tpl = m.map_default(df, primary_key_column="subject")
+        assert "default_template" in tpl
+    else:
+        tpl = m.generate_template(df, primary_key_column="subject")
+        assert m.size() == 0
+        m.map(tpl, df)
     df = m.query(
         """
     SELECT ?a ?b ?c WHERE {?a ?b ?c} ORDER BY ?a ?b ?c
@@ -912,8 +920,12 @@ def test_lang_tagged():
             pl.col("lang").alias("l")]
         ).alias("my_lang_col")
     )
-    m = Model()
     df = df.select("id", "my_lang_col")
+    m = Model()
+    m.map_default(df, "id")
+    sm = m.query("SELECT * WHERE {?a ?b ?c}", solution_mappings=True)
+    assert sm.rdf_types["c"] == RDFType.Literal(rdf.langString)
+    m = Model()
     m.map(m.generate_template(df, "id"), df)
     sm = m.query("SELECT * WHERE {?a ?b ?c}", solution_mappings=True)
     assert sm.rdf_types["c"] == RDFType.Literal(rdf.langString)
