@@ -611,7 +611,7 @@ class QueryPages:
 
     def __iter__(self) -> "QueryPages": ...
 
-    def __next__(self) -> DataFrame | SolutionMappings: ...
+    def __next__(self) -> DataFrame | SolutionMappings | str: ...
 
 
 class ModelStream:
@@ -1870,6 +1870,7 @@ class Model:
             include_graphs: Optional[List[str]] = None,
             max_rows: int = None,
             bindings: Dict[str, Union[str, IRI, Literal]] = None,
+            return_format: LiteralType["dataframe", "json"] = "dataframe",
     ) -> QueryPages:
         """
         Pages through the solutions of a SELECT query with keyset pagination: each page starts
@@ -1905,6 +1906,7 @@ class Model:
         :param include_graphs: As for query().
         :param max_rows: As for query(), applies to each page.
         :param bindings: As for query().
+        :param return_format: "dataframe" (the default) or "json", which gives each page as a string of SPARQL 1.1 Query Results JSON.
         :return: An iterator over the pages.
         """
 
@@ -1919,6 +1921,7 @@ class Model:
             include_graphs: Optional[List[str]] = None,
             max_rows: int = None,
             bindings: Dict[str, Union[str, IRI, Literal]] = None,
+            return_format: LiteralType["dataframe", "json"] = "dataframe",
     ) -> Tuple[DataFrame | SolutionMappings, Optional[str]]:
         """
         One page of the solutions of a SELECT query, see query_pages(): the first page, or the

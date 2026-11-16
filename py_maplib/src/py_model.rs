@@ -1326,6 +1326,7 @@ impl PyModel {
         include_graphs=None,
         max_rows=None,
         bindings=None,
+        return_format=None,
     ))]
     #[instrument(skip_all)]
     fn query_page(
@@ -1340,6 +1341,7 @@ impl PyModel {
         include_graphs: Option<Vec<String>>,
         max_rows: Option<usize>,
         bindings: Option<HashMap<String, Py<PyAny>>>,
+        return_format: Option<String>,
     ) -> PyResult<(Py<PyAny>, Option<String>)> {
         let q = paged_query(
             query,
@@ -1350,10 +1352,11 @@ impl PyModel {
             include_graphs,
             max_rows,
             bindings,
+            return_format,
             py,
         )?;
         let after = parse_page_token(page_token.as_deref())?;
-        let (page, next) = run_page(self, &q, after.as_ref(), py)?;
+        let (page, next, _) = run_page(self, &q, after.as_ref(), py)?;
         Ok((page, next.map(|c| c.to_token())))
     }
 
@@ -1368,6 +1371,7 @@ impl PyModel {
         include_graphs=None,
         max_rows=None,
         bindings=None,
+        return_format=None,
     ))]
     #[instrument(skip_all)]
     fn query_pages(
@@ -1382,6 +1386,7 @@ impl PyModel {
         include_graphs: Option<Vec<String>>,
         max_rows: Option<usize>,
         bindings: Option<HashMap<String, Py<PyAny>>>,
+        return_format: Option<String>,
     ) -> PyResult<PyQueryPages> {
         let q = paged_query(
             query,
@@ -1392,6 +1397,7 @@ impl PyModel {
             include_graphs,
             max_rows,
             bindings,
+            return_format,
             py,
         )?;
         let after = parse_page_token(page_token.as_deref())?;
@@ -2633,6 +2639,7 @@ fn paged_query(
     include_graphs: Option<Vec<String>>,
     max_rows: Option<usize>,
     bindings: Option<HashMap<String, Py<PyAny>>>,
+    return_format: Option<String>,
     py: Python<'_>,
 ) -> PyResult<PagedQuery> {
     if page_size == 0 {
@@ -2651,5 +2658,6 @@ fn paged_query(
         bindings: maybe_parse_bindings(bindings, py)?,
         page_size,
         solution_mappings: solution_mappings.unwrap_or(false),
+        return_format,
     })
 }

@@ -23,6 +23,8 @@ pub(crate) struct PagedQuery {
     pub bindings: Option<HashMap<String, GroundTerm>>,
     pub page_size: usize,
     pub solution_mappings: bool,
+    /// "dataframe" (the default) or "json" (SPARQL 1.1 Query Results JSON).
+    pub return_format: Option<String>,
 }
 
 /// Runs one page, returning the page as a DataFrame (or SolutionMappings) and the next cursor.
@@ -31,7 +33,7 @@ pub(crate) fn run_page(
     q: &PagedQuery,
     after: Option<&PageCursor>,
     py: Python<'_>,
-) -> PyResult<(Py<PyAny>, Option<PageCursor>)> {
+) -> PyResult<(Py<PyAny>, Option<PageCursor>, usize)> {
     let (page, cats, prefixes) = py.detach(|| -> PyResult<_> {
         let inner = model.inner.read().unwrap();
         let page = inner
@@ -53,6 +55,7 @@ pub(crate) fn run_page(
             inner.prefixes.clone(),
         ))
     })?;
+    let rows = page.solutions.mappings.height();
     let res = QueryResult {
         kind: QueryResultKind::Select(page.solutions),
         debug: None,
@@ -63,12 +66,12 @@ pub(crate) fn run_page(
         q.solution_mappings,
         q.solution_mappings,
         false,
-        None,
+        q.return_format.clone(),
         cats,
         &prefixes,
         py,
     )?;
-    Ok((out, page.next))
+    Ok((out, page.next, rows))
 }
 
 pub(crate) fn parse_page_token(token: Option<&str>) -> PyResult<Option<PageCursor>> {
@@ -103,15 +106,10 @@ impl PyQueryPages {
             }
             (state.0.clone(), state.0.is_none())
         };
-        let (page, next) = run_page(self.model.get(), &self.query, after.as_ref(), py)?;
+        let (page, next, rows) = run_page(self.model.get(), &self.query, after.as_ref(), py)?;
         let mut state = self.state.lock().unwrap();
         state.1 = next.is_none();
-        let empty = page
-            .bind(py)
-            .getattr("height")
-            .and_then(|h| h.extract::<usize>())
-            .map(|h| h == 0)
-            .unwrap_or(false);
+        let empty = rows == 0;
         state.0 = next;
         // The first page is returned even when it is empty, so that the columns are known. A
         // later page is only empty when the model changed, and ends the iteration.
