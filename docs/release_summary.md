@@ -1,3 +1,55 @@
+# What's new in v0.22.1
+
+A short guide to v0.22.1, which adds features and fixes to v0.22.0. Features marked **EE** need [maplib Enterprise Edition](../README.md#open-source-and-enterprise-edition); everything else is in the open-source core. [CHANGES.md](../CHANGES.md) has the full details, and [API_USAGE.md](../API_USAGE.md) has worked examples.
+
+## Highlights
+
+- **Reasoning.** `m.reason(profile="owl-rl" | "rdfs-plus" | "rdfs")` **EE** materializes OWL 2 RL, RDFS-Plus or RDFS entailments and reports violations.
+- **R2RML.** `m.map_r2rml(mapping, database=...)` maps relational data with W3C R2RML mappings, column by column in parallel.
+- **Microsoft Fabric.** `m.map_fabric(ontology, lakehouse=..., eventhouse=...)` **EE** maps a Fabric IQ ontology and its data, and virtualizes its time series.
+- **SPARQL extensions.** Window functions, ORDER BY inside aggregates, `LATERAL`, GRAPH blocks in CONSTRUCT, and `update` reports what it changed.
+- **Vector search.** `maplib:vector` literals hold embeddings, and `maplib:vectorSearch` **EE** finds the nearest ones.
+- **Streams on a persistent model.** `stream=True, in_place=True` maps each batch into the model itself, so steps can join batches with the model's other graphs.
+- **Graph management with a storage folder.** `CLEAR`, `DROP`, `COPY`, `MOVE` and `truncate_graph` work in hybrid and disk storage **EE**.
+
+## Major features
+
+**Reasoning profiles (EE).** `m.reason(profile=..., graph=None, target_graph=None)` runs a built-in ruleset on the Datalog engine and returns a `ReasoningResult` with the number of inferred triples and the violations found. `"owl-rl"` implements the OWL 2 RL/RDF rules, `"rdfs-plus"` adds the common OWL property rules to RDFS, and `"rdfs"` is RDFS alone. The profiles are tested with the W3C OWL 2 RL, RDF 1.1 Semantics and SPARQL 1.1 entailment suites.
+
+**R2RML.** `m.map_r2rml(mapping, database=None, tables=None, base_iri=None, graph=None)` runs each logical table once, against a database in `maplib.virtualization`, a DuckDB connection or polars DataFrames, and evaluates the term maps column by column in parallel. It is tested with the W3C R2RML test cases.
+
+**Microsoft Fabric (EE).** `m.map_fabric(...)` turns a Fabric IQ ontology into OWL, maps the bound lakehouse data with a generated R2RML mapping (which it returns), and virtualizes time series in the lakehouse (SQL) or eventhouse (KQL).
+
+**SPARQL additions.**
+- Window functions: `ROW_NUMBER()`, `RANK()`, `DENSE_RANK()` and the aggregates with `OVER (PARTITION BY ... ORDER BY ... ROWS BETWEEN ...)`, in SELECT, BIND, FILTER and HAVING.
+- `GROUP_CONCAT(?x; SEPARATOR=", " ORDER BY ?y)` and `SAMPLE(?x ORDER BY ?y)`.
+- `LATERAL` correlated subqueries (SEP-0006), e.g. the top N per entity.
+- GRAPH blocks in CONSTRUCT templates, as in Apache Jena; `insert` writes each block to its graph in one pass.
+- `m.update(...)` returns the triples really inserted and deleted per graph, and with `return_triples=True` the triples themselves.
+
+**Vectors.** Polars array columns map to `maplib:vector` literals. With `IndexingOptions(vectors=True)` **EE**, `maplib:vectorSearch` finds the nearest vectors by cosine, dot product or Euclidean distance, exactly or with an approximate index.
+
+**In-place streams.** `m.map(..., stream=True, in_place=True)` runs every batch in the model under its write lock. `.drop_graphs([...])` removes per-batch graphs, and `compact_every=N` compacts the model as it goes. `m.drop_graphs(...)` and `with m.scratch_graphs(...):` do the same outside streams.
+
+## Fixes
+
+- The FILTER of an OPTIONAL can use variables bound before the OPTIONAL.
+- `FILTER (NOT) EXISTS` is correct next to variable predicate patterns.
+- `COUNT(DISTINCT ?x)` no longer counts unbound as a value; `SAMPLE` skips unbound values, and `AVG` of nothing is 0.
+- ORDER BY sorts numbers of different datatypes by value.
+- `GraphSnapshots` **EE** no longer duplicates graphs on restore or rewrites them all after it, and backs off when the store fails.
+- Vector functions and search agree with numpy and scipy on edge cases.
+- Streams hand their blank node counters back, so later streams don't reuse labels.
+- `maplib.storage` gives the same version token on every backend.
+
+## Breaking changes
+
+| Change | Migration |
+|---|---|
+| `Model.update` returns the changes per graph instead of `None` | Ignore the result, or use it |
+| `IRI()`, `URI()` and `fn:castToIRI` give unbound for invalid or relative IRIs | Check queries that built IRIs from unvalidated strings |
+| Rust: `UpdateResult` has `changes`, and `delete_construct_result`/`delete_triples_vec` take `keep_triples` | Pass `keep_triples=false` for the old behaviour |
+
 # What's new in v0.22.0 (since v0.20.32)
 
 A short guide for deciding whether to upgrade from v0.20.32 to v0.22.0. It covers v0.20.33, v0.21.0 and v0.22.0. Features marked **EE** need [maplib Enterprise Edition](../README.md#open-source-and-enterprise-edition); everything else is in the open-source core. [CHANGES.md](../CHANGES.md) has the full details, and [API_USAGE.md](../API_USAGE.md) has worked examples.
