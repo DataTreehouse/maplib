@@ -375,14 +375,21 @@ pub fn find_paths(
     max_rows: Option<usize>,
 ) -> Result<Vec<Found>, String> {
     let enumerate = spec.paths || spec.mode != PathMode::Walk;
+    // The workers check the token of the query, which is current on this thread only.
+    let token = utils::cancel::current();
     let per_start: Result<Vec<Vec<Found>>, String> = starts
         .par_iter()
         .map(|s| {
-            if enumerate {
-                enumerate_from(graph, *s, spec, max_rows)
-            } else {
-                Ok(walks_from(graph, *s, spec))
-            }
+            utils::cancel::with_token(token.clone(), || {
+                if let Some(c) = utils::cancel::stopped() {
+                    return Err(c.to_string());
+                }
+                if enumerate {
+                    enumerate_from(graph, *s, spec, max_rows)
+                } else {
+                    Ok(walks_from(graph, *s, spec))
+                }
+            })
         })
         .collect();
     let per_start = per_start?;
@@ -501,6 +508,9 @@ fn enumerate_from(
     let mut kept = 1usize;
     let mut depth = 0;
     loop {
+        if let Some(c) = utils::cancel::stopped() {
+            return Err(c.to_string());
+        }
         let level = &levels[depth];
         if depth >= spec.min {
             for (i, end) in level.nodes.iter().enumerate() {
@@ -683,8 +693,9 @@ impl Triplestore {
             }
         }
         let graph = StepGraph::from_edges(n, edges);
-        let mut found =
-            find_paths(&graph, &starts, &lp.spec, query_settings.max_rows).map_err(path_error)?;
+        let found = find_paths(&graph, &starts, &lp.spec, query_settings.max_rows);
+        utils::cancel::check()?;
+        let mut found = found.map_err(path_error)?;
         if reversed {
             for f in &mut found {
                 std::mem::swap(&mut f.start, &mut f.end);

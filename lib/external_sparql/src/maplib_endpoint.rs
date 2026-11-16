@@ -32,6 +32,8 @@ pub struct MaplibEndpointQuery {
     /// Variable names and the N-Triples syntax of the IRIs or literals they are bound to.
     pub bindings: Option<HashMap<String, String>>,
     pub auth_token: Option<String>,
+    /// Seconds the server may spend on the query before it stops it.
+    pub timeout: Option<f64>,
 }
 
 /// The URL of the Arrow query endpoint, from the server address or its SPARQL endpoint URL.
@@ -71,6 +73,15 @@ pub fn query_maplib_endpoint(
     if let Some(b) = &q.bindings {
         command["bindings"] = serde_json::json!(b);
     }
+    if let Some(t) = q.timeout {
+        command["timeout"] = serde_json::json!(t);
+    }
+    // The server answers when the query times out, the client gives it some more time to do so.
+    // Giving up disconnects, which cancels the query on the server.
+    let request_timeout = q
+        .timeout
+        .filter(|t| t.is_finite() && *t >= 0.0)
+        .map(|t| Duration::from_secs_f64(t) + Duration::from_secs(30));
     let body = command.to_string();
     let token = q.auth_token.clone();
     let bytes = Builder::new_current_thread()
@@ -82,8 +93,11 @@ pub fn query_maplib_endpoint(
                 .connect_timeout(Duration::from_secs(30))
                 .build()
                 .map_err(MaplibEndpointError::Request)?;
-            let mut req = client
-                .post(&url)
+            let mut req = client.post(&url);
+            if let Some(t) = request_timeout {
+                req = req.timeout(t);
+            }
+            let mut req = req
                 .header(CONTENT_TYPE, "application/json")
                 .header(ACCEPT, SOLUTION_MAPPINGS_MEDIA_TYPE)
                 .header(USER_AGENT, format!("maplib/{}", env!("CARGO_PKG_VERSION")))

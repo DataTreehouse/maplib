@@ -79,6 +79,15 @@ pub struct ServerOptions {
     pub service_endpoints: Vec<String>,
     /// Allow SPARQL Update LOAD (with allow_update) of the service endpoints' URLs.
     pub allow_load: bool,
+    /// How long a query or update may take, from when its request arrives. None for no limit.
+    /// Requests can ask for less (or, up to `max_query_timeout`, more). A query that times out
+    /// is stopped and answered with 503 Service Unavailable.
+    pub query_timeout: Option<Duration>,
+    /// The longest timeout a request can ask for. None uses `query_timeout`.
+    pub max_query_timeout: Option<Duration>,
+    /// How many operations on the model (queries, updates, graph reads and writes) run at the
+    /// same time. Others wait for their turn.
+    pub max_concurrent: usize,
 }
 
 /// Compression of Arrow record batch buffers, as defined by the Arrow IPC format.
@@ -139,6 +148,9 @@ impl Default for ServerOptions {
             allow_load: false,
             result_capacity: 64,
             arrow_compression: ArrowCompression::Auto,
+            query_timeout: None,
+            max_query_timeout: None,
+            max_concurrent: 64,
         }
     }
 }

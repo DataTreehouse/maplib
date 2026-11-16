@@ -131,6 +131,9 @@ impl Triplestore {
                         }
                         QueryResultKind::Select(EagerSolutionMappings::new(df, types))
                     }
+                    Err(InterruptableCollectError::Cancelled(c)) => {
+                        return Err(SparqlError::Cancelled(c))
+                    }
                     Err(InterruptableCollectError::Interrupted) => {
                         return Err(SparqlError::InterruptSignal)
                     }
@@ -185,6 +188,9 @@ impl Triplestore {
                             .unwrap_or(Vec::new());
                         QueryResultKind::Construct(solutions)
                     }
+                    Err(InterruptableCollectError::Cancelled(c)) => {
+                        return Err(SparqlError::Cancelled(c))
+                    }
                     Err(InterruptableCollectError::Interrupted) => {
                         return Err(SparqlError::InterruptSignal)
                     }
@@ -213,6 +219,9 @@ impl Triplestore {
                             no_results = true;
                         }
                         QueryResultKind::Ask(df.height() > 0)
+                    }
+                    Err(InterruptableCollectError::Cancelled(c)) => {
+                        return Err(SparqlError::Cancelled(c))
                     }
                     Err(InterruptableCollectError::Interrupted) => {
                         return Err(SparqlError::InterruptSignal)
@@ -322,8 +331,36 @@ impl Triplestore {
         graph: Option<&NamedGraph>,
         debug_no_results: bool,
     ) -> Result<UpdateResult, SparqlError> {
+        // The token of the update stops the evaluation of WHERE clauses, and is checked before
+        // each operation, but writes run without it so that an operation is never left half
+        // done. Operations that were done before a timeout stay done.
+        let token = utils::cancel::current();
+        utils::cancel::suspended(|| {
+            self.update_parsed_with_token(
+                update,
+                parameters,
+                query_settings,
+                graph,
+                debug_no_results,
+                token,
+            )
+        })
+    }
+
+    fn update_parsed_with_token(
+        &mut self,
+        update: &Update,
+        parameters: Option<&HashMap<String, EagerSolutionMappings>>,
+        query_settings: &QuerySettings,
+        graph: Option<&NamedGraph>,
+        debug_no_results: bool,
+        token: Option<utils::cancel::CancelToken>,
+    ) -> Result<UpdateResult, SparqlError> {
         let mut debug_output = if debug_no_results { Some(vec![]) } else { None };
         for u in &update.operations {
+            if let Some(t) = &token {
+                t.check()?;
+            }
             match u {
                 GraphUpdateOperation::InsertData { data } => {
                     // Blank nodes are scoped to this operation, as when parsing a document.
@@ -455,7 +492,13 @@ impl Triplestore {
                         base_iri: None,
                     };
                     let QueryResult { kind, debug, .. } =
-                        self.query_parsed(&q, parameters, query_settings, graph, debug_no_results)?;
+                        utils::cancel::with_token(token.clone(), || {
+                            self.query_parsed(&q, parameters, query_settings, graph, debug_no_results)
+                        })?;
+                    // Nothing is written by an operation whose WHERE clause took too long.
+                    if let Some(t) = &token {
+                        t.check()?;
+                    }
                     if debug_no_results {
                         if let Some(debug) = debug {
                             debug_output.as_mut().unwrap().extend(debug.debug_outputs);

@@ -520,6 +520,10 @@ fn bfs(
         if wanted.is_some_and(|w| found.len() + cycle.is_some() as usize >= w) {
             break;
         }
+        // The query timed out or was cancelled: the caller discards the result.
+        if utils::cancel::stopped().is_some() {
+            break;
+        }
         if params.max_length.is_some_and(|m| depth >= m) {
             break;
         }
@@ -647,7 +651,12 @@ fn dijkstra(
     scratch.depth[source as usize] = 0;
     scratch.parent[source as usize] = NONE;
     heap.push(HeapItem(0.0, source));
+    let mut pops = 0u32;
     while let Some(HeapItem(c, u)) = heap.pop() {
+        pops = pops.wrapping_add(1);
+        if pops % 4096 == 0 && utils::cancel::stopped().is_some() {
+            break;
+        }
         let ui = u as usize;
         if scratch.depth[ui] & SETTLED != 0 || c > scratch.cost[ui] {
             continue;
@@ -752,6 +761,9 @@ fn bidirectional(
     // label of the edge between them in path order).
     let mut best: Option<(u32, u32, u32, u32)> = None;
     while !ff.is_empty() && !fb.is_empty() && df + db < max {
+        if utils::cancel::stopped().is_some() {
+            break;
+        }
         let forward = ff.len() <= fb.len();
         if forward {
             for &u in &ff {
@@ -912,6 +924,9 @@ fn yen(
         return a;
     }
     while a.len() < params.k {
+        if utils::cancel::stopped().is_some() {
+            break;
+        }
         let prev = a.last().unwrap().clone();
         for i in 0..prev.nodes.len() - 1 {
             let spur = prev.nodes[i];
@@ -997,21 +1012,28 @@ pub fn search_many(
         .min(jobs.len())
         .max(1);
     let chunk = jobs.len().div_ceil(workers);
+    // The workers check the token of the query, which is current on this thread only.
+    let token = utils::cancel::current();
     let parts: Vec<Vec<FoundPath>> = jobs
         .par_chunks(chunk)
         .map(|chunk| {
-            let mut scratch = Scratch::new(graph.n);
-            let mut out = vec![];
-            for job in chunk {
-                out.extend(search(
-                    graph,
-                    job.source,
-                    &job.targets,
-                    params,
-                    &mut scratch,
-                ));
-            }
-            out
+            utils::cancel::with_token(token.clone(), || {
+                let mut scratch = Scratch::new(graph.n);
+                let mut out = vec![];
+                for job in chunk {
+                    if utils::cancel::stopped().is_some() {
+                        break;
+                    }
+                    out.extend(search(
+                        graph,
+                        job.source,
+                        &job.targets,
+                        params,
+                        &mut scratch,
+                    ));
+                }
+                out
+            })
         })
         .collect();
     parts.into_iter().flatten().collect()
@@ -1034,6 +1056,9 @@ pub fn exact_length_layers(
     let mut frontier = vec![source];
     let mut next = vec![];
     for d in 1..=max_depth {
+        if utils::cancel::stopped().is_some() {
+            return;
+        }
         scratch.next_epoch();
         let e = scratch.epoch;
         for &u in &frontier {

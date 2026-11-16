@@ -34,6 +34,8 @@ pub enum SparqlError {
     GeoError(#[from] GeoError),
     #[error("Query interrupted via signal")]
     InterruptSignal,
+    #[error("{0}")]
+    Cancelled(#[from] utils::cancel::Cancelled),
     #[error("A lock was open when a thread crashed, cannot guarantee data constitency")]
     PoisonedLockError,
     #[error("Tried grouping on a variable `{0}` that is not defined in the inner query: `{1}`")]

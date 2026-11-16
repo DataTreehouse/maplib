@@ -176,6 +176,7 @@ impl Triplestore {
             }
             (subject_vec, object_vec)
         };
+        utils::cancel::check()?;
         // Without any values (an empty dataset), the matrix is still 1x1 and a zero-length path
         // gives it an entry, which has no value to map to.
         let n_values = lookup_df.height() as u32;
@@ -786,7 +787,7 @@ fn zero_or_more(mut rel_mat: SparseMatrix) -> SparseMatrix {
     rel_mat = rel_mat.map(|x| (x > &0) as u32);
     let mut last_sum = sum_mat(&rel_mat);
     let mut fixed_point = false;
-    while !fixed_point {
+    while !fixed_point && utils::cancel::stopped().is_none() {
         rel_mat = (&rel_mat * &rel_mat).to_csr();
         rel_mat = rel_mat.map(|x| (x > &0) as u32);
         let new_sum = sum_mat(&rel_mat);
@@ -810,7 +811,7 @@ fn zero_or_one(mut rel_mat: SparseMatrix) -> SparseMatrix {
 fn one_or_more(mut rel_mat: SparseMatrix) -> SparseMatrix {
     let mut last_sum = sum_mat(&rel_mat);
     let mut fixed_point = false;
-    while !fixed_point {
+    while !fixed_point && utils::cancel::stopped().is_none() {
         let new_rels = (&rel_mat * &rel_mat).to_csr();
         rel_mat = (&new_rels + &rel_mat).to_csr();
         rel_mat = rel_mat.map(|x| (x > &0) as u32);
@@ -1549,6 +1550,10 @@ fn one_or_more_from(
     let mut all = follow(inner, reached, reversed, adjacencies);
     let mut frontier = all.clone();
     loop {
+        // The query timed out or was cancelled: the caller discards the result.
+        if utils::cancel::stopped().is_some() {
+            return all;
+        }
         let next = follow(inner, frontier, reversed, adjacencies);
         let new: Reached = next
             .into_par_iter()

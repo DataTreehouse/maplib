@@ -45,6 +45,7 @@ __all__ = [
     "add_triples",
     "generate_templates",
     "MaplibException",
+    "QueryTimeoutError",
     "TRANSIENT_GRAPH",
     "set_memory_limit",
     "memory_usage",

@@ -1,3 +1,4 @@
+use crate::cancel::{self, Cancelled, CANCELLED_POLARS_MESSAGE};
 use polars::error::abort::catch_polars_abort;
 use polars::prelude::Engine;
 use polars::{error::PolarsError, frame::DataFrame, prelude::LazyFrame};
@@ -17,6 +18,8 @@ pub enum InterruptableCollectError {
     #[error("interrupted via signal")]
     Interrupted,
     #[error(transparent)]
+    Cancelled(#[from] Cancelled),
+    #[error(transparent)]
     Polars(#[from] PolarsError),
 }
 
@@ -32,6 +35,8 @@ fn query_engine(height_estimate: Option<usize>) -> Engine {
     match std::env::var("MAPLIB_POLARS_ENGINE").as_deref() {
         Ok("in-memory") | Ok("in_memory") => Engine::InMemory,
         Ok("streaming") => Engine::Streaming,
+        // Only the streaming engine stops a running join when the query is cancelled.
+        _ if cancel::has_large_join() => Engine::Streaming,
         _ => match height_estimate {
             Some(h) if h <= SMALL_COLLECT_HEIGHT => Engine::InMemory,
             _ => Engine::Streaming,
@@ -74,6 +79,7 @@ pub fn pl_interruptable_collect_sorted_slice(
 ) -> Result<DataFrame, InterruptableCollectError> {
     let engine = match std::env::var("MAPLIB_POLARS_ENGINE").as_deref() {
         Ok("streaming") => Engine::Streaming,
+        _ if cancel::has_large_join() => Engine::Streaming,
         _ => Engine::InMemory,
     };
     collect_with_engine(lf, engine)
@@ -99,6 +105,26 @@ fn collect_with_engine(
     lf: LazyFrame,
     engine: Engine,
 ) -> Result<DataFrame, InterruptableCollectError> {
+    cancel::check()?;
+    let lf = cancel::cancel_check_node(lf);
+    let result = collect_with_engine_unchecked(lf, engine);
+    // A cancellation check in the plan fails the collect with a Polars error: report why.
+    match result {
+        Err(InterruptableCollectError::Polars(e)) => match cancel::stopped() {
+            Some(c) => Err(c.into()),
+            None if e.to_string().contains(CANCELLED_POLARS_MESSAGE) => {
+                Err(Cancelled::Cancelled.into())
+            }
+            None => Err(e.into()),
+        },
+        r => r,
+    }
+}
+
+fn collect_with_engine_unchecked(
+    lf: LazyFrame,
+    engine: Engine,
+) -> Result<DataFrame, InterruptableCollectError> {
     match engine {
         Engine::InMemory => pl_interruptable_collect_in_memory(lf),
         engine => {
@@ -119,6 +145,7 @@ fn pl_interruptable_collect_in_memory(
     lf: LazyFrame,
 ) -> Result<DataFrame, InterruptableCollectError> {
     let future = lf.collect_concurrently()?;
+    let token = cancel::current();
 
     #[cfg(feature = "pyo3")]
     {
@@ -141,6 +168,11 @@ fn pl_interruptable_collect_in_memory(
                 sleep(sleeptime);
                 match future.fetch() {
                     None => {
+                        if let Some(c) = token.as_ref().and_then(|t| t.stopped()) {
+                            future.cancel();
+                            sleep(Duration::from_millis(50));
+                            break Err(c.into());
+                        }
                         let check = last_check.elapsed() >= SIGNAL_CHECK_INTERVAL;
                         if check {
                             last_check = Instant::now();
@@ -162,5 +194,23 @@ fn pl_interruptable_collect_in_memory(
     }
 
     #[cfg(not(feature = "pyo3"))]
-    Ok(future.fetch_blocking()?)
+    {
+        let Some(token) = token else {
+            return Ok(future.fetch_blocking()?);
+        };
+        let mut sleeptime = std::time::Duration::from_micros(10);
+        loop {
+            match future.fetch() {
+                Some(dfr) => break Ok(dfr?),
+                None => {
+                    if let Some(c) = token.stopped() {
+                        future.cancel();
+                        break Err(c.into());
+                    }
+                    std::thread::sleep(sleeptime);
+                    sleeptime = std::cmp::min(sleeptime * 2, std::time::Duration::from_millis(20));
+                }
+            }
+        }
+    }
 }

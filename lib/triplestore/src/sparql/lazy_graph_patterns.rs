@@ -53,6 +53,7 @@ impl Triplestore {
             graph_pattern,
             context.as_str()
         );
+        utils::cancel::check()?;
         if let Some(hook) = &query_settings.evaluation_hook {
             let decision = {
                 let mut evaluate = |gp: &GraphPattern, sm: Option<SolutionMappings>, ctx: &Context| {
@@ -347,6 +348,9 @@ impl Triplestore {
                         // in-memory engine, see pl_interruptable_collect_sorted_slice.
                         let df = match pl_interruptable_collect_sorted_slice(newsols.mappings) {
                             Ok(df) => df,
+                            Err(InterruptableCollectError::Cancelled(c)) => {
+                                return Err(SparqlError::Cancelled(c))
+                            }
                             Err(InterruptableCollectError::Interrupted) => {
                                 return Err(SparqlError::InterruptSignal)
                             }

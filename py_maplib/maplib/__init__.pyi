@@ -1443,6 +1443,7 @@ class Model:
             endpoint: Optional[str] = None,
             endpoint_token: Optional[str] = None,
             cache: bool = True,
+            timeout: Optional[float] = None,
     ) -> DataFrame | SolutionMappings | list[DataFrame | SolutionMappings] | bool | str | None:
         """
         Query the contained knowledge graph using SPARQL
@@ -1475,6 +1476,11 @@ class Model:
         :param cache: Use the model's query result cache, when it is enabled (see set_query_cache). Queries with
                       parameters or debug, and queries calling NOW(), RAND(), UUID(), STRUUID(), BNODE() or user
                       defined functions, are never cached.
+        :param timeout: Seconds the query may run. When they have passed, the query stops and QueryTimeoutError
+                        is raised. The query is checked between its operators, while joins produce rows, and in path
+                        searches, so it usually stops well within a second of its timeout. None (the default) has
+                        no timeout. With endpoint, the server stops the query, and a timeout of the server itself
+                        (Model.serve(query_timeout=)) also applies.
         :return: DataFrame (Select), list of DataFrames (Construct) containing results or SolutionMappings when solution_mappings is set, or a bool (Ask).
 
         """
@@ -1592,6 +1598,7 @@ class Model:
             include_graphs: Optional[List[str]] = None,
             max_rows: int = None,
             debug: bool = False,
+            timeout: Optional[float] = None,
     ):
         """
         Execute a SPARQL Update (e.g. INSERT/DELETE ... WHERE) against the graph.
@@ -1611,6 +1618,10 @@ class Model:
             None includes the transient graph (TRANSIENT_GRAPH), use [] to query only the graph itself.
         :param max_rows: Maximum estimated rows in result, helps avoid out-of-memory errors.
         :param debug: Why does my query have no results?
+        :param timeout: Seconds the update may spend evaluating its WHERE clauses, counted from when it has the
+                        model to itself. When they have passed, QueryTimeoutError is raised. Each operation is
+                        checked before it starts and while its WHERE clause is evaluated, and writes are never
+                        stopped halfway: operations of the request that were done before the timeout stay done.
         :return: None
         """
 
@@ -2058,6 +2069,9 @@ class Model:
             query_cache: Union["QueryCacheOptions", bool, None] = None,
             service_endpoints: Optional[List[str]] = None,
             allow_load: bool = False,
+            query_timeout: Optional[float] = None,
+            max_query_timeout: Optional[float] = None,
+            max_concurrent: Optional[int] = None,
     ) -> "Server":
         """
         Serve the Model over the SPARQL 1.1 Protocol and Arrow Flight (maplib Enterprise Edition).
@@ -2140,6 +2154,16 @@ class Model:
             or ["*"] for any http(s) URL. None (the default) refuses SERVICE, so that clients can not make the server send
             requests, e.g. to hosts in its internal network.
         :param allow_load: Allow SPARQL Update LOAD through the endpoints (with allow_update), of URLs in service_endpoints.
+        :param query_timeout: Seconds a query or update may take, counted from when the request arrives, None (the
+                              default) for no limit. A request can ask for less with the timeout parameter (seconds,
+                              e.g. /sparql?query=...&timeout=5, "timeout" in Arrow API and Flight commands, or the
+                              X-Maplib-Timeout header). A query that times out is stopped and answered with HTTP 503
+                              (Flight: DEADLINE_EXCEEDED). Queries are also stopped when their client disconnects.
+        :param max_query_timeout: The largest timeout a request may ask for, by default query_timeout. With it, a
+                                  request may ask for more than query_timeout, up to this.
+        :param max_concurrent: How many queries, updates and other operations on the model run at the same time,
+                               64 by default. Requests beyond this wait for their turn (their timeout counts while
+                               they wait).
         :return: The running Server.
         """
 
@@ -2326,6 +2350,13 @@ class Server:
 
 
 class MaplibException(Exception): ...
+
+
+class QueryTimeoutError(MaplibException):
+    """
+    Raised when a query or update runs longer than its ``timeout``, and by
+    ``Model.query(endpoint=...)`` when the server stopped the query because of its timeout.
+    """
 
 
 class FunctionArgumentException(Exception):

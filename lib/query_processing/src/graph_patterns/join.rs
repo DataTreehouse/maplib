@@ -254,6 +254,12 @@ pub fn join_workaround(
             .unwrap();
     }
 
+    // Stops a long join soon after its query times out or is cancelled.
+    left_mappings = utils::cancel::cancel_check_node(left_mappings);
+    if height_upper_bound > utils::polars::SMALL_COLLECT_HEIGHT {
+        utils::cancel::note_large_join();
+    }
+
     let mut unified_exploded = HashMap::new();
     for (c, (mut left_inner_columns, mut left_prefixed_inner_columns)) in left_exploded {
         if let Some((right_inner_columns, right_prefixed_inner_columns)) = right_exploded.remove(&c)

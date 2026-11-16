@@ -556,6 +556,7 @@ impl Triplestore {
         }
 
         let found = search_many(&built.graph, &jobs, &params, SCRATCH_BUDGET);
+        utils::cancel::check()?;
         debug!(
             "Path search: {} sources, {} paths, graph of {} nodes and {} edges",
             jobs.len(),

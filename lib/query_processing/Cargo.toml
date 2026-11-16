@@ -7,6 +7,7 @@ rust-version.workspace = true
 [dependencies]
 representation = { path = "../representation" }
 spargebra = { path = "../spargebra" }
+utils = { path = "../utils" }
 
 oxrdf.workspace = true
 oxsdatatypes.workspace = true

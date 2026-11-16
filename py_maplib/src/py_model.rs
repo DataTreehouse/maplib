@@ -24,8 +24,12 @@ use crate::{
 use server::{serve as serve_model, ArrowCompression, ServerOptions};
 
 use datalog::python::PyInferenceResult;
-use external_sparql::maplib_endpoint::{query_maplib_endpoint, MaplibEndpointQuery};
 use external_sparql::federation::{AllowedEndpoints, FederationSettings, ServiceMethod};
+use crate::error::{parse_timeout, timeout_error, QueryTimeoutError};
+use external_sparql::maplib_endpoint::{
+    query_maplib_endpoint, MaplibEndpointError, MaplibEndpointQuery,
+};
+use utils::cancel::{with_token, CancelToken};
 use external_sparql::SparqlMethod;
 use maplib::model::Model as InnerModel;
 use cdf::map_cdf;
@@ -796,6 +800,7 @@ impl PyModel {
         endpoint=None,
         endpoint_token=None,
         cache=true,
+        timeout=None,
     ))]
     #[instrument(skip_all)]
     fn query(
@@ -814,7 +819,9 @@ impl PyModel {
         endpoint: Option<String>,
         endpoint_token: Option<String>,
         cache: bool,
+        timeout: Option<f64>,
     ) -> PyResult<Py<PyAny>> {
+        let timeout_duration = parse_timeout(timeout)?;
         if let Some(endpoint) = endpoint {
             if parameters.is_some() {
                 return Err(PyMaplibError::FunctionArgumentError(
@@ -831,10 +838,15 @@ impl PyModel {
                 bindings: parsed_bindings
                     .map(|b| b.into_iter().map(|(k, v)| (k, v.to_string())).collect()),
                 auth_token: endpoint_token,
+                timeout,
             };
             let (kind, cats, prefixes) = py.detach(|| -> PyResult<_> {
-                let kind = query_maplib_endpoint(&endpoint, &q)
-                    .map_err(|e| PyMaplibError::RuntimeError(e.to_string()))?;
+                let kind = query_maplib_endpoint(&endpoint, &q).map_err(|e| match &e {
+                    MaplibEndpointError::Status(503 | 504, msg) => {
+                        QueryTimeoutError::new_err(msg.clone())
+                    }
+                    _ => PyMaplibError::RuntimeError(e.to_string()).into(),
+                })?;
                 // The results have no dictionary encoded columns, the model's dictionaries
                 // are only used for formatting, and the model's prefixes for Turtle.
                 let inner = self.inner.read().unwrap_or_else(|e| e.into_inner());
@@ -860,6 +872,8 @@ impl PyModel {
                 py,
             );
         }
+        // The timeout counts from here, and covers formatting the result.
+        let token = timeout_duration.map(|t| CancelToken::new(Some(t)));
         let use_cache = cache
             && parameters.is_none()
             && !debug.unwrap_or(false)
@@ -905,6 +919,7 @@ impl PyModel {
             (res, hit.cats.clone(), hit.prefixes.clone())
         } else {
             let query_cache = self.query_cache.clone();
+            let token = token.clone();
             py.detach(|| -> PyResult<(_, LockedCats, _)> {
                 let inner = self.inner.read().unwrap_or_else(|e| e.into_inner());
                 // Read under the read lock: no write runs until it is released.
@@ -917,16 +932,19 @@ impl PyModel {
                 };
                 let cats = inner.triplestore.global_cats.clone();
                 let started = std::time::Instant::now();
-                let res = query_mutex(
-                    &inner,
-                    query,
-                    mapped_parameters,
-                    graph,
-                    include_graphs,
-                    max_rows,
-                    debug,
-                    parsed_bindings,
-                )?;
+                let res = with_token(token.clone(), || {
+                    query_mutex(
+                        &inner,
+                        query,
+                        mapped_parameters,
+                        graph,
+                        include_graphs,
+                        max_rows,
+                        debug,
+                        parsed_bindings,
+                    )
+                })
+                .map_err(|e| timeout_error(e, token.as_ref()))?;
                 let run_time = started.elapsed();
                 let prefixes = inner.prefixes.clone();
                 drop(inner);
@@ -955,16 +973,24 @@ impl PyModel {
         };
         print_debug_if_exists(res.debug.as_ref());
 
-        query_to_result(
-            res,
-            solution_mappings.unwrap_or(false),
-            solution_mappings.unwrap_or(false),
-            return_json.unwrap_or(false),
-            return_format,
-            cats,
-            &prefixes,
-            py,
-        )
+        let out = with_token(token.clone(), || {
+            query_to_result(
+                res,
+                solution_mappings.unwrap_or(false),
+                solution_mappings.unwrap_or(false),
+                return_json.unwrap_or(false),
+                return_format,
+                cats,
+                &prefixes,
+                py,
+            )
+        });
+        match token.as_ref().and_then(|t| t.stopped()) {
+            Some(c @ utils::cancel::Cancelled::Timeout(_)) => {
+                Err(QueryTimeoutError::new_err(c.to_string()))
+            }
+            _ => out,
+        }
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -1036,6 +1062,7 @@ impl PyModel {
             include_graphs=None,
             max_rows=None,
             debug=None,
+            timeout=None,
     ))]
     #[instrument(skip_all)]
     fn update(
@@ -1047,19 +1074,26 @@ impl PyModel {
         include_graphs: Option<Vec<String>>,
         max_rows: Option<usize>,
         debug: Option<bool>,
+        timeout: Option<f64>,
     ) -> PyResult<()> {
         let mapped_parameters = map_parameters(parameters, py)?;
+        let timeout = parse_timeout(timeout)?;
         let res = py.detach(|| {
             let mut inner = self.inner.write().unwrap_or_else(|e| e.into_inner());
-            update_mutex(
-                &mut inner,
-                update,
-                mapped_parameters,
-                graph,
-                include_graphs,
-                max_rows,
-                debug,
-            )
+            // The timeout counts from when the model is locked for the update.
+            let token = timeout.map(|t| CancelToken::new(Some(t)));
+            with_token(token.clone(), || {
+                update_mutex(
+                    &mut inner,
+                    update,
+                    mapped_parameters,
+                    graph,
+                    include_graphs,
+                    max_rows,
+                    debug,
+                )
+            })
+            .map_err(|e| timeout_error(e, token.as_ref()))
         })?;
         print_debug_if_exists(res.debug.as_ref());
         Ok(())
@@ -1802,6 +1836,9 @@ impl PyModel {
         query_cache=None,
         service_endpoints=None,
         allow_load=false,
+        query_timeout=None,
+        max_query_timeout=None,
+        max_concurrent=None,
     ))]
     fn serve(
         &self,
@@ -1828,7 +1865,18 @@ impl PyModel {
         query_cache: Option<Bound<'_, PyAny>>,
         service_endpoints: Option<Vec<String>>,
         allow_load: bool,
+        query_timeout: Option<f64>,
+        max_query_timeout: Option<f64>,
+        max_concurrent: Option<usize>,
     ) -> PyResult<Py<PyServer>> {
+        let query_timeout = parse_timeout(query_timeout)?;
+        let max_query_timeout = parse_timeout(max_query_timeout)?;
+        if max_concurrent == Some(0) {
+            return Err(PyMaplibError::FunctionArgumentError(
+                "max_concurrent must be at least 1".to_string(),
+            )
+            .into());
+        }
         // None keeps the model's setting, False makes the server not use the cache, True or
         // QueryCacheOptions set the model's cache (shared with Model.query).
         let mut server_cache = true;
@@ -1860,6 +1908,9 @@ impl PyModel {
             query_cache: server_cache,
             service_endpoints: service_endpoints.unwrap_or_default(),
             allow_load,
+            query_timeout,
+            max_query_timeout,
+            max_concurrent: max_concurrent.unwrap_or(ServerOptions::default().max_concurrent),
             ..ServerOptions::default()
         };
         if let Some(cors_origins) = cors_origins {

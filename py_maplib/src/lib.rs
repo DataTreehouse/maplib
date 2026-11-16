@@ -238,6 +238,7 @@ fn _maplib(py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(memory_limit, m)?)?;
     py_storage::register(m)?;
     m.add("MaplibException", py.get_type::<MaplibException>())?;
+    m.add("QueryTimeoutError", py.get_type::<QueryTimeoutError>())?;
     m.add("TRANSIENT_GRAPH", TRANSIENT_GRAPH_IRI)?;
     m.add("DEFAULT_GRAPH", DEFAULT_GRAPH_IRI)?;
     m.add(

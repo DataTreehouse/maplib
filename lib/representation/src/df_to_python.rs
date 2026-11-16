@@ -292,12 +292,25 @@ pub fn fix_cats_and_multicolumns(
         .collect();
     //Important that column compression happen before decisions are made based on column type.
     (df, dts) = compress_actual_multitypes(df, dts);
+    let height = df.height();
     let mut lf = df.lazy();
     if !native_dataframe {
         lf = format_columns(lf, &dts, global_cats)
     } else {
         lf = format_native_columns(lf, &mut dts, global_cats)
     }
-    df = lf.select(column_ordering).collect().unwrap();
+    let lf = lf.select(column_ordering);
+    df = if utils::cancel::current().is_some() {
+        // Formatting a large result can take long: it is stopped with its query (on the
+        // streaming engine, which checks every batch). The result of a stopped query is not
+        // used, the caller reports why it stopped.
+        match utils::polars::pl_interruptable_collect_estimated(lf, height) {
+            Ok(df) => df,
+            Err(_) if utils::cancel::stopped().is_some() => DataFrame::empty(),
+            Err(e) => panic!("{e}"),
+        }
+    } else {
+        lf.collect().unwrap()
+    };
     (df, dts)
 }

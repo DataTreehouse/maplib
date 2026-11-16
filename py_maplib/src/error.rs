@@ -56,3 +56,25 @@ create_exception!(exceptions, MaplibException, PyException);
 create_exception!(exceptions, MaplibRuntimeError, PyException);
 create_exception!(exceptions, FunctionArgumentException, PyException);
 create_exception!(exceptions, MaplibUDFError, PyException);
+// Raised when a query or update runs longer than its timeout. A MaplibException, so code that
+// catches those catches timeouts too.
+create_exception!(exceptions, QueryTimeoutError, MaplibException);
+
+/// The `timeout` argument of a query, in seconds.
+pub fn parse_timeout(timeout: Option<f64>) -> PyResult<Option<std::time::Duration>> {
+    match timeout {
+        None => Ok(None),
+        Some(t) if t.is_finite() && t >= 0.0 => Ok(Some(std::time::Duration::from_secs_f64(t))),
+        Some(t) => Err(FunctionArgumentException::new_err(format!(
+            "timeout must be a number of seconds, 0 or more, not {t}"
+        ))),
+    }
+}
+
+/// A QueryTimeoutError when the query stopped because its token timed out, otherwise `err`.
+pub fn timeout_error(err: PyErr, token: Option<&utils::cancel::CancelToken>) -> PyErr {
+    match token.and_then(|t| t.stopped()) {
+        Some(c @ utils::cancel::Cancelled::Timeout(_)) => QueryTimeoutError::new_err(c.to_string()),
+        _ => err,
+    }
+}
