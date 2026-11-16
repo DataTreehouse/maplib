@@ -524,11 +524,6 @@ impl Triplestore {
 impl Triplestore {
     /// Removes all triples from the graph, keeping it as an empty graph.
     pub fn clear_graph(&mut self, graph: &NamedGraph) -> Result<(), TriplestoreError> {
-        if self.storage_folder.is_some() {
-            return Err(TriplestoreError::SparqlQueryError(
-                "Clearing or dropping graphs is not supported with a storage folder".to_string(),
-            ));
-        }
         let existed = self.graph_triples_map.contains_key(graph);
         self.truncate(graph);
         if existed || graph == &NamedGraph::DefaultGraph {
@@ -545,19 +540,16 @@ impl Triplestore {
             .unwrap_or(0)
     }
 
-    /// Forgets a graph that was only needed temporarily (e.g. while writing a file). Unlike
-    /// `truncate`, this also works with a storage folder: the graph's files then stay in the
-    /// folder until it is next reset.
+    /// Forgets a graph that was only needed temporarily (e.g. while writing a file).
     pub fn remove_temporary_graph(&mut self, graph: &NamedGraph) {
-        self.graph_triples_map.remove_graph(graph);
-        self.fts_index.remove(graph);
-        self.vector_index.remove(graph);
+        self.truncate(graph);
     }
 
+    /// Removes the graph and its triples. With a storage folder, the categorical maps stay as
+    /// they are (other graphs may use the same terms), and in disk storage mode the parquet files
+    /// of the graph's tables are removed when the last reference to them is dropped (see
+    /// `TriplesOnDisk`), so a clone of the triplestore that still holds the tables keeps them.
     pub fn truncate(&mut self, graph: &NamedGraph) {
-        if self.storage_folder.is_some() {
-            todo!("Should drop this folder.. ")
-        }
         self.graph_triples_map.remove_graph(graph);
         self.fts_index.remove(graph);
         self.vector_index.remove(graph);
