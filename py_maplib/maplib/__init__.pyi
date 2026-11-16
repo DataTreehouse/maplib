@@ -1,6 +1,6 @@
 from datetime import datetime, date
 from pathlib import Path
-from typing import Any, Union, List, Dict, Optional, Callable, Iterable, Literal as LiteralType, Tuple, BinaryIO, TextIO
+from typing import Any, overload, Union, List, Dict, Optional, Callable, Iterable, Literal as LiteralType, Tuple, BinaryIO, TextIO
 
 import polars as pl
 from maplib.maplib import rdf
@@ -299,7 +299,7 @@ class Literal:
     "The datatype IRI (xsd:string for plain literals, rdf:langString for language-tagged literals)."
     language: Optional[str]
 
-    def __init__(self, value: str, data_type: "IRI" = None, language: str = None):
+    def __init__(self, value: str, data_type: Optional["IRI"] = None, language: Optional[str] = None):
         """
         Create a new RDF Literal
         :param value: The lexical representation of the value.
@@ -442,7 +442,7 @@ def Triple(
         predicate: Union["Argument", IRI, Variable, BlankNode],
         object: Union["Argument", IRI, Variable, Literal, BlankNode],
         list_expander: Optional[LiteralType["cross", "zipMin", "zipMax"]] = None,
-):
+) -> Instance:
     """
     An OTTR Triple Pattern used for creating templates.
     This is the basis pattern which all template instances are rewritten into.
@@ -468,16 +468,16 @@ class IndexingOptions:
 
     def __init__(
             self,
-            object_sort_all: bool = None,
-            object_sort_some: List["IRI"] = None,
-            fts: bool = None,
-            fts_path: str = None,
-            geo: bool = None,
-            fts_predicates: List["IRI"] = None,
-            fts_local_names: bool = None,
-            fts_iris: bool = None,
-            vectors: bool = None,
-            vector_ann: bool = None,
+            object_sort_all: Optional[bool] = None,
+            object_sort_some: Optional[List["IRI"]] = None,
+            fts: Optional[bool] = None,
+            fts_path: Optional[str] = None,
+            geo: Optional[bool] = None,
+            fts_predicates: Optional[List["IRI"]] = None,
+            fts_local_names: Optional[bool] = None,
+            fts_iris: Optional[bool] = None,
+            vectors: Optional[bool] = None,
+            vector_ann: Optional[bool] = None,
     ):
         """
         Defaults to indexing on subjects and objects for select types (e.g. rdf:type and rdfs:label)
@@ -632,10 +632,10 @@ class ModelStream:
     def update(
             self,
             update: str,
-            parameters: ParametersType = None,
-            graph: str = None,
+            parameters: Optional[ParametersType] = None,
+            graph: Optional[str] = None,
             include_graphs: Optional[List[str]] = None,
-            max_rows: int = None,
+            max_rows: Optional[int] = None,
             debug: bool = False,
     ) -> "ModelStream":
         """
@@ -645,11 +645,11 @@ class ModelStream:
     def insert(
             self,
             query: str,
-            parameters: ParametersType = None,
-            source_graph: str = None,
-            target_graph: str = None,
+            parameters: Optional[ParametersType] = None,
+            source_graph: Optional[str] = None,
+            target_graph: Optional[str] = None,
             include_graphs: Optional[List[str]] = None,
-            max_rows: int = None,
+            max_rows: Optional[int] = None,
             debug: bool = False,
     ) -> "ModelStream":
         """
@@ -659,7 +659,7 @@ class ModelStream:
     def infer(
             self,
             rulesets: Union[str, List[str]],
-            graph: str = None,
+            graph: Optional[str] = None,
             max_iterations: Optional[int] = 100_000,
             include_graphs: Optional[List[str]] = None,
             max_rows: Optional[int] = 100_000_000,
@@ -672,9 +672,9 @@ class ModelStream:
     def write(
             self,
             file_path: Union[str, Path, BinaryIO],
-            format: LiteralType["ntriples", "turtle", "nquads"] = None,
-            graph: str = None,
-            prefixes: Dict[str, str] = None,
+            format: Optional[LiteralType["ntriples", "turtle", "nquads"]] = None,
+            graph: Optional[str] = None,
+            prefixes: Optional[Dict[str, str]] = None,
     ) -> "ModelStream":
         """
         Add a step that appends the triples of each batch to a file or a binary file-like object. The file is created
@@ -743,13 +743,13 @@ class Model:
 
     def __init__(
             self,
-            indexing_options: "IndexingOptions" = None,
-            storage_folder: Union[Path, str] = None,
-            storage: LiteralType["memory", "hybrid", "disk"] = None,
+            indexing_options: Optional["IndexingOptions"] = None,
+            storage_folder: Optional[Union[Path, str]] = None,
+            storage: Optional[LiteralType["memory", "hybrid", "disk"]] = None,
     ) -> "Model": ...
 
     def serialize(self, path: Union[Path, str] = "./model.maplib", raw_db: bool = False,
-                  single_file: bool = True, storage_options: Dict[str, str] = None):
+                  single_file: bool = True, storage_options: Optional[Dict[str, str]] = None):
         """
         Serialization of named graphs in the Model object.
         The triple tables and the dictionaries of IRIs and literals are written as parquet files,
@@ -781,10 +781,10 @@ class Model:
 
     @staticmethod
     def deserialize(path: Union[Path, str] = "./model.maplib",
-                    storage_folder: Union[Path, str] = None,
-                    storage: LiteralType["memory", "hybrid", "disk"] = None,
-                    storage_options: Dict[str, str] = None,
-                    cache_size: int = None) -> "Model":
+                    storage_folder: Optional[Union[Path, str]] = None,
+                    storage: Optional[LiteralType["memory", "hybrid", "disk"]] = None,
+                    storage_options: Optional[Dict[str, str]] = None,
+                    cache_size: Optional[int] = None) -> "Model":
         """
         Deserialization of serialized graphs
 
@@ -833,7 +833,7 @@ class Model:
         :return: A list of Template objects.
         """
 
-    def templates_to_graph(self, graph: str = None) -> None:
+    def templates_to_graph(self, graph: Optional[str] = None) -> None:
         """
         Materialize the model's OTTR templates into a named graph as RDF, using the flattened
         maplib template vocabulary (prefix ``maplib``, base
@@ -853,7 +853,7 @@ class Model:
         :param graph: The IRI of the graph to add the template triples to. Defaults to the default graph.
         """
 
-    def add_prefixes(self, prefixes: Dict[str, str]):
+    def add_prefixes(self, prefixes: Dict[str, str]) -> None:
         """
         Add prefixes that will be used in parsing of SPARQL, Datalog and OTTR.
 
@@ -867,8 +867,8 @@ class Model:
     def map(
             self,
             template: Union[str, "Template", IRI],
-            data: Union[DataFrame, LazyFrame, "SolutionMappings", Iterable[Union[DataFrame, LazyFrame, "SolutionMappings"]]] = None,
-            graph: str = None,
+            data: Optional[Union[DataFrame, LazyFrame, "SolutionMappings", Iterable[Union[DataFrame, LazyFrame, "SolutionMappings"]]]] = None,
+            graph: Optional[str] = None,
             validate_iris: bool = True,
             stream: bool = False,
     ) -> Optional["ModelStream"]:
@@ -893,8 +893,8 @@ class Model:
     def map_json(
             self,
             path_or_string: Union[Path, str, Iterable[Union[Path, str]]],
-            graph: str = None,
-            uuid_namespace: str = None,
+            graph: Optional[str] = None,
+            uuid_namespace: Optional[str] = None,
             stream: bool = False,
             documents_per_batch: int = 1,
     ) -> Optional["ModelStream"]:
@@ -923,8 +923,8 @@ class Model:
     def map_xml(
             self,
             path_or_string: Union[Path, str, Iterable[Union[Path, str]]],
-            graph: str = None,
-            uuid_namespace: str = None,
+            graph: Optional[str] = None,
+            uuid_namespace: Optional[str] = None,
             stream: bool = False,
             documents_per_batch: int = 1,
     ) -> Optional["ModelStream"]:
@@ -953,8 +953,8 @@ class Model:
     def map_triples(
             self,
             data: Union[DataFrame, LazyFrame, "SolutionMappings", Iterable[Union[DataFrame, LazyFrame, "SolutionMappings"]]],
-            predicate: Union[str, IRI] = None,
-            graph: str = None,
+            predicate: Optional[Union[str, IRI]] = None,
+            graph: Optional[str] = None,
             validate_iris: bool = True,
             stream: bool = False,
     ) -> Optional["ModelStream"]:
@@ -979,7 +979,7 @@ class Model:
             self,
             data: Union[DataFrame, LazyFrame, "SolutionMappings", Iterable[Union[DataFrame, LazyFrame, "SolutionMappings"]]],
             primary_key_column: str,
-            graph: str = None,
+            graph: Optional[str] = None,
             validate_iris: bool = True,
             stream: bool = False,
     ) -> Union[str, "ModelStream"]:
@@ -1033,10 +1033,10 @@ class Model:
     def map_csvw(
             self,
             source: Union[str, Path],
-            metadata: Union[str, Path] = None,
-            graph: str = None,
+            metadata: Optional[Union[str, Path]] = None,
+            graph: Optional[str] = None,
             minimal: bool = False,
-            iri_mappings: Dict[str, Union[str, Path]] = None,
+            iri_mappings: Optional[Dict[str, Union[str, Path]]] = None,
     ) -> str:
         """
         Convert tabular data (CSV, TSV, ...) to RDF using CSV on the Web (CSVW) metadata, see
@@ -1076,8 +1076,8 @@ class Model:
     def map_df(
             self,
             df: DataFrame,
-            graph: str = None,
-            uuid_namespace: str = None,
+            graph: Optional[str] = None,
+            uuid_namespace: Optional[str] = None,
     ):
         """
         Create a default template and map it based on a dataframe.
@@ -1095,8 +1095,8 @@ class Model:
     def map_opc_ua(
             self,
             folder: Union[str, Path],
-            graph: str = None,
-    ):
+            graph: Optional[str] = None,
+    ) -> None:
         """
         Map a folder of OPC UA NodeSet2XMLs to RDF.
         This folder MUST contain the Namespace 0 XML to work properly.
@@ -1124,10 +1124,10 @@ class Model:
     def map_cdf(
             self,
             client: Any,
-            data_models: Any = None,
-            spaces: Union[str, List[str]] = None,
-            graph: str = None,
-            base_iri: str = None,
+            data_models: Optional[Any] = None,
+            spaces: Optional[Union[str, List[str]]] = None,
+            graph: Optional[str] = None,
+            base_iri: Optional[str] = None,
             include_schema: bool = True,
             include_edges: bool = True,
             virtualize_time_series: bool = True,
@@ -1441,11 +1441,11 @@ class Model:
             bind: str = "localhost",
             popup=False,
             fts=True,
-            fts_path: str = None,
+            fts_path: Optional[str] = None,
             root_path: str = "/",
-            graph: str = None,
-            page: str = None,
-            frontend: Union[str, Path] = None,
+            graph: Optional[str] = None,
+            page: Optional[str] = None,
+            frontend: Optional[Union[str, Path]] = None,
     ) -> "ExploreServer":
         """Explores the model in the Model portal (maplib Enterprise Edition, with the
         validation_portal_core package installed).
@@ -1470,23 +1470,99 @@ class Model:
             MODEL_PORTAL_FRONTEND environment variable, then the frontend packaged with the portal.
         """
 
+    @overload
     def query(
             self,
             query: str,
-            parameters: ParametersType = None,
-            solution_mappings: bool = False,
-            graph: str = None,
-            return_json: bool = False,
-            return_format: LiteralType["turtle", "trig", "json", "dataframe"] = "dataframe",
+            parameters: Optional[ParametersType] = None,
+            solution_mappings: LiteralType[False] = False,
+            graph: Optional[str] = None,
+            return_json: LiteralType[False] = False,
+            return_format: Optional[LiteralType["dataframe"]] = "dataframe",
             include_graphs: Optional[List[str]] = None,
-            max_rows: int = None,
+            max_rows: Optional[int] = None,
             debug: bool = False,
-            bindings: Dict[str, Union[str, IRI, Literal]] = None,
+            bindings: Optional[Dict[str, Union[str, IRI, Literal]]] = None,
             endpoint: Optional[str] = None,
             endpoint_token: Optional[str] = None,
             cache: bool = True,
             timeout: Optional[float] = None,
-    ) -> DataFrame | SolutionMappings | list[DataFrame | SolutionMappings] | bool | str | None:
+    ) -> DataFrame | list[DataFrame] | bool | None: ...
+    @overload
+    def query(
+            self,
+            query: str,
+            parameters: Optional[ParametersType] = None,
+            solution_mappings: bool = False,
+            graph: Optional[str] = None,
+            return_json: bool = False,
+            *,
+            return_format: LiteralType["turtle", "trig", "json"],
+            include_graphs: Optional[List[str]] = None,
+            max_rows: Optional[int] = None,
+            debug: bool = False,
+            bindings: Optional[Dict[str, Union[str, IRI, Literal]]] = None,
+            endpoint: Optional[str] = None,
+            endpoint_token: Optional[str] = None,
+            cache: bool = True,
+            timeout: Optional[float] = None,
+    ) -> str: ...
+    @overload
+    def query(
+            self,
+            query: str,
+            parameters: Optional[ParametersType] = None,
+            solution_mappings: bool = False,
+            graph: Optional[str] = None,
+            *,
+            return_json: LiteralType[True],
+            return_format: Optional[LiteralType["turtle", "trig", "json", "dataframe"]] = "dataframe",
+            include_graphs: Optional[List[str]] = None,
+            max_rows: Optional[int] = None,
+            debug: bool = False,
+            bindings: Optional[Dict[str, Union[str, IRI, Literal]]] = None,
+            endpoint: Optional[str] = None,
+            endpoint_token: Optional[str] = None,
+            cache: bool = True,
+            timeout: Optional[float] = None,
+    ) -> str: ...
+    @overload
+    def query(
+            self,
+            query: str,
+            parameters: Optional[ParametersType] = None,
+            *,
+            solution_mappings: LiteralType[True],
+            graph: Optional[str] = None,
+            return_json: LiteralType[False] = False,
+            return_format: Optional[LiteralType["dataframe"]] = "dataframe",
+            include_graphs: Optional[List[str]] = None,
+            max_rows: Optional[int] = None,
+            debug: bool = False,
+            bindings: Optional[Dict[str, Union[str, IRI, Literal]]] = None,
+            endpoint: Optional[str] = None,
+            endpoint_token: Optional[str] = None,
+            cache: bool = True,
+            timeout: Optional[float] = None,
+    ) -> SolutionMappings | list[SolutionMappings] | bool | None: ...
+    @overload
+    def query(
+            self,
+            query: str,
+            parameters: Optional[ParametersType] = None,
+            solution_mappings: bool = False,
+            graph: Optional[str] = None,
+            return_json: bool = False,
+            return_format: Optional[LiteralType["turtle", "trig", "json", "dataframe"]] = "dataframe",
+            include_graphs: Optional[List[str]] = None,
+            max_rows: Optional[int] = None,
+            debug: bool = False,
+            bindings: Optional[Dict[str, Union[str, IRI, Literal]]] = None,
+            endpoint: Optional[str] = None,
+            endpoint_token: Optional[str] = None,
+            cache: bool = True,
+            timeout: Optional[float] = None,
+    ) -> DataFrame | SolutionMappings | list[DataFrame] | list[SolutionMappings] | list[DataFrame | SolutionMappings] | bool | str | None:
         """
         Query the contained knowledge graph using SPARQL
         Currently, SELECT, CONSTRUCT and ASK are supported.
@@ -1601,6 +1677,19 @@ class Model:
             results, as other endpoints.
         """
 
+    @overload
+    def query_external(
+            self,
+            query: str,
+            endpoint: str,
+            method: LiteralType["GET", "POST"] = "GET",
+            solution_mappings: LiteralType[False] = False,
+            return_json: LiteralType[False] = False,
+            return_format: Optional[LiteralType["dataframe"]] = "dataframe",
+            bindings: Optional[Dict[str, Union[str, IRI, Literal]]] = None,
+            headers: Optional[List[Tuple[str, str]]] = None
+    ) -> DataFrame | list[DataFrame] | None: ...
+    @overload
     def query_external(
             self,
             query: str,
@@ -1608,10 +1697,49 @@ class Model:
             method: LiteralType["GET", "POST"] = "GET",
             solution_mappings: bool = False,
             return_json: bool = False,
-            return_format: LiteralType["turtle", "json", "dataframe"] = "dataframe",
-            bindings: Dict[str, Union[str, IRI, Literal]] = None,
-            headers: List[Tuple[str, str]] = None
-    ) -> DataFrame | SolutionMappings | list[DataFrame | SolutionMappings] | str | None:
+            *,
+            return_format: LiteralType["turtle", "json"],
+            bindings: Optional[Dict[str, Union[str, IRI, Literal]]] = None,
+            headers: Optional[List[Tuple[str, str]]] = None
+    ) -> str: ...
+    @overload
+    def query_external(
+            self,
+            query: str,
+            endpoint: str,
+            method: LiteralType["GET", "POST"] = "GET",
+            solution_mappings: bool = False,
+            *,
+            return_json: LiteralType[True],
+            return_format: Optional[LiteralType["turtle", "json", "dataframe"]] = "dataframe",
+            bindings: Optional[Dict[str, Union[str, IRI, Literal]]] = None,
+            headers: Optional[List[Tuple[str, str]]] = None
+    ) -> str: ...
+    @overload
+    def query_external(
+            self,
+            query: str,
+            endpoint: str,
+            method: LiteralType["GET", "POST"] = "GET",
+            *,
+            solution_mappings: LiteralType[True],
+            return_json: LiteralType[False] = False,
+            return_format: Optional[LiteralType["dataframe"]] = "dataframe",
+            bindings: Optional[Dict[str, Union[str, IRI, Literal]]] = None,
+            headers: Optional[List[Tuple[str, str]]] = None
+    ) -> SolutionMappings | list[SolutionMappings] | None: ...
+    @overload
+    def query_external(
+            self,
+            query: str,
+            endpoint: str,
+            method: LiteralType["GET", "POST"] = "GET",
+            solution_mappings: bool = False,
+            return_json: bool = False,
+            return_format: Optional[LiteralType["turtle", "json", "dataframe"]] = "dataframe",
+            bindings: Optional[Dict[str, Union[str, IRI, Literal]]] = None,
+            headers: Optional[List[Tuple[str, str]]] = None
+    ) -> DataFrame | SolutionMappings | list[DataFrame] | list[SolutionMappings] | list[DataFrame | SolutionMappings] | str | None:
         """
         Query an external endpoint using SPARQL
         Currently SELECT is supported. Uses GET unless method is set to POST.
@@ -1640,13 +1768,13 @@ class Model:
     def update(
             self,
             update: str,
-            parameters: ParametersType = None,
-            graph: str = None,
+            parameters: Optional[ParametersType] = None,
+            graph: Optional[str] = None,
             include_graphs: Optional[List[str]] = None,
-            max_rows: int = None,
+            max_rows: Optional[int] = None,
             debug: bool = False,
             timeout: Optional[float] = None,
-    ):
+    ) -> None:
         """
         Execute a SPARQL Update (e.g. INSERT/DELETE ... WHERE) against the graph.
         Usage:
@@ -1675,12 +1803,12 @@ class Model:
     def insert(
             self,
             query: str,
-            parameters: ParametersType = None,
+            parameters: Optional[ParametersType] = None,
             solution_mappings: bool = False,
-            source_graph: str = None,
-            target_graph: str = None,
+            source_graph: Optional[str] = None,
+            target_graph: Optional[str] = None,
             include_graphs: Optional[List[str]] = None,
-            max_rows: int = None,
+            max_rows: Optional[int] = None,
             debug: bool = False,
     ) -> Dict[str, Union[DataFrame, "SolutionMappings"]]:
         """
@@ -1718,16 +1846,16 @@ class Model:
 
     def validate(
             self,
-            shape_graph: str = None,
-            data_graph: str = None,
+            shape_graph: Optional[str] = None,
+            data_graph: Optional[str] = None,
             report_graph: Union[str, None] = "",
-            inferences_graph: str = None,
+            inferences_graph: Optional[str] = None,
             include_details: bool = False,
             include_conforms: bool = False,
-            only_shapes: List[str] = None,
-            deactivate_shapes: List[str] = None,
+            only_shapes: Optional[List[str]] = None,
+            deactivate_shapes: Optional[List[str]] = None,
             dry_run: bool = False,
-            max_rows: int = None,
+            max_rows: Optional[int] = None,
             serial: bool = False,
             max_iterations: Optional[int] = 100_000,
             debug_rules: bool = False,
@@ -1758,17 +1886,17 @@ class Model:
     def read(
             self,
             file_path: Union[str, Path, bytes, bytearray, memoryview, BinaryIO, TextIO],
-            format: LiteralType["ntriples", "turtle", "trig", "nquads", "rdf/xml", "cim/xml", "json-ld", "hdt"] = None,
-            base_iri: str = None,
-            parallel: bool = None,
+            format: Optional[LiteralType["ntriples", "turtle", "trig", "nquads", "rdf/xml", "cim/xml", "json-ld", "hdt"]] = None,
+            base_iri: Optional[str] = None,
+            parallel: Optional[bool] = None,
             checked: bool = True,
-            graph: str = None,
+            graph: Optional[str] = None,
             replace_graph: bool = False,
             triples_batch_size: int = 10_000_000,
-            known_contexts: Dict[str, str] = None,
+            known_contexts: Optional[Dict[str, str]] = None,
             geo: bool = False,
             strict: bool = False,
-            storage_options: Dict[str, str] = None,
+            storage_options: Optional[Dict[str, str]] = None,
     ) -> None:
         """
         Reads triples from a file path, a URL of object storage (see the Model class documentation),
@@ -1808,7 +1936,7 @@ class Model:
     def read_template(
             self,
             file_path: Union[str, Path],
-            storage_options: Dict[str, str] = None,
+            storage_options: Optional[Dict[str, str]] = None,
     ) -> None:
         """
         Reads template(s) from a file path, or a URL of object storage (see the Model class documentation).
@@ -1826,13 +1954,13 @@ class Model:
             self,
             s: str,
             format: LiteralType["ntriples", "turtle", "trig", "nquads", "rdf/xml", "cim/xml", "json-ld"],
-            base_iri: str = None,
-            parallel: bool = None,
+            base_iri: Optional[str] = None,
+            parallel: Optional[bool] = None,
             checked: bool = True,
-            graph: str = None,
+            graph: Optional[str] = None,
             replace_graph: bool = False,
             triples_batch_size: int = 10_000_000,
-            known_contexts: Dict[str, str] = None,
+            known_contexts: Optional[Dict[str, str]] = None,
             geo: bool = False,
             strict: bool = False,
     ) -> None:
@@ -1865,15 +1993,15 @@ class Model:
             self,
             file_path: Union[str, Path, BinaryIO],
             profile_graph: str,
-            model_iri: str = None,
-            version: str = None,
-            description: str = None,
-            created: str = None,
-            scenario_time: str = None,
-            modeling_authority_set: str = None,
-            prefixes: Dict[str, str] = None,
-            graph: str = None,
-            storage_options: Dict[str, str] = None,
+            model_iri: Optional[str] = None,
+            version: Optional[str] = None,
+            description: Optional[str] = None,
+            created: Optional[str] = None,
+            scenario_time: Optional[str] = None,
+            modeling_authority_set: Optional[str] = None,
+            prefixes: Optional[Dict[str, str]] = None,
+            graph: Optional[str] = None,
+            storage_options: Optional[Dict[str, str]] = None,
     ) -> None:
         """
         Write the legacy CIM XML format, to a file path or a URL of object storage (see the Model class documentation).
@@ -1910,10 +2038,10 @@ class Model:
     def write(
             self,
             file_path: Union[str, Path, BinaryIO],
-            format: LiteralType["ntriples", "turtle", "trig", "nquads", "rdf/xml", "json-ld", "hdt"] = None,
-            graph: Union[str, List[str]] = None,
-            prefixes: Dict[str, str] = None,
-            storage_options: Dict[str, str] = None,
+            format: Optional[LiteralType["ntriples", "turtle", "trig", "nquads", "rdf/xml", "json-ld", "hdt"]] = None,
+            graph: Optional[Union[str, List[str]]] = None,
+            prefixes: Optional[Dict[str, str]] = None,
+            storage_options: Optional[Dict[str, str]] = None,
     ) -> None:
         """
         Write the triples to the file path, URL of object storage (see the Model class documentation) or
@@ -1945,9 +2073,9 @@ class Model:
 
     def write_bytes(
             self,
-            format: LiteralType["ntriples", "turtle", "trig", "nquads", "rdf/xml", "json-ld", "hdt"] = None,
-            graph: Union[str, List[str]] = None,
-            prefixes: Dict[str, str] = None,
+            format: Optional[LiteralType["ntriples", "turtle", "trig", "nquads", "rdf/xml", "json-ld", "hdt"]] = None,
+            graph: Optional[Union[str, List[str]]] = None,
+            prefixes: Optional[Dict[str, str]] = None,
     ) -> bytes:
         """
         Write the triples to bytes in memory, in any format, including the binary HDT format.
@@ -1966,9 +2094,9 @@ class Model:
 
     def writes(
             self,
-            format: LiteralType["ntriples", "turtle", "trig", "nquads", "rdf/xml", "json-ld"] = None,
-            graph: Union[str, List[str]] = None,
-            prefixes: Dict[str, str] = None,
+            format: Optional[LiteralType["ntriples", "turtle", "trig", "nquads", "rdf/xml", "json-ld"]] = None,
+            graph: Optional[Union[str, List[str]]] = None,
+            prefixes: Optional[Dict[str, str]] = None,
     ) -> str:
         """
         Write the triples to a string in memory.
@@ -1985,7 +2113,7 @@ class Model:
         :return: Triples in model in the given format (potentially a large string)
         """
 
-    def truncate_graph(self, graph: str = None) -> None:
+    def truncate_graph(self, graph: Optional[str] = None) -> None:
         """
         Removes all triples associated with the given graph from the triplestore,
         including full-text search entries.
@@ -1993,7 +2121,7 @@ class Model:
         :param graph: The IRI of the graph to truncate.
         """
 
-    def detach_graph(self, graph: str = None, preserve_name: bool = False) -> "Model":
+    def detach_graph(self, graph: Optional[str] = None, preserve_name: bool = False) -> "Model":
         """
         Detaches and returns a named graph as their own Model object.
         The named graph is removed from the original Model.
@@ -2004,7 +2132,7 @@ class Model:
         """
 
     def get_predicate_iris(
-            self, graph: str = None, include_graphs: Optional[List[str]] = None
+            self, graph: Optional[str] = None, include_graphs: Optional[List[str]] = None
     ) -> List["IRI"]:
         """
         :param graph: The graph to get the predicate iris from.
@@ -2013,7 +2141,7 @@ class Model:
         """
 
     def get_predicate(
-            self, iri: "IRI", graph: str = None, include_graphs: Optional[List[str]] = None
+            self, iri: "IRI", graph: Optional[str] = None, include_graphs: Optional[List[str]] = None
     ) -> List["SolutionMappings"]:
         """
         :param iri: The predicate IRI
@@ -2022,7 +2150,7 @@ class Model:
         :return: A list of the underlying tables that store a given predicate.
         """
 
-    def create_index(self, options: "IndexingOptions" = None) -> None:
+    def create_index(self, options: Optional["IndexingOptions"] = None) -> None:
         """
         Sets the indexing options of the model and creates the indexes for the triples already in
         it: full text search, GeoSPARQL and the object indexes of the chosen predicates. Object
@@ -2041,8 +2169,8 @@ class Model:
     def add_graph(
             self,
             other: "Model",
-            source_graph: str = None,
-            target_graph: str = None,
+            source_graph: Optional[str] = None,
+            target_graph: Optional[str] = None,
     ) -> None:
         """
         Copy the triples of a graph in another Model into this Model.
@@ -2055,7 +2183,7 @@ class Model:
         :param target_graph: The IRI of the graph in this Model to copy into. None means the default graph.
         """
 
-    def set_query_cache(self, options: Union["QueryCacheOptions", bool, None] = None) -> None:
+    def set_query_cache(self, options: Optional[Union["QueryCacheOptions", bool, None]] = None) -> None:
         """
         Sets the query result cache of the model, used by Model.query and by the servers of Model.serve.
         A result is kept until a write changes the triples it can read: writes are tracked per named graph and
@@ -2110,12 +2238,12 @@ class Model:
             batch_rows: Optional[int] = None,
             result_ttl: Optional[float] = None,
             arrow_compression: LiteralType["auto", "zstd", "none"] = "auto",
-            static_dir: Union[str, Path] = None,
+            static_dir: Optional[Union[str, Path]] = None,
             static_path: str = "/ui",
-            static_vars: Dict[str, str] = None,
+            static_vars: Optional[Dict[str, str]] = None,
             query_log_size: int = 1000,
             block: bool = False,
-            query_cache: Union["QueryCacheOptions", bool, None] = None,
+            query_cache: Optional[Union["QueryCacheOptions", bool, None]] = None,
             service_endpoints: Optional[List[str]] = None,
             allow_load: bool = False,
             query_timeout: Optional[float] = None,
@@ -2241,7 +2369,7 @@ class Model:
     def infer(
             self,
             rulesets: Union[str, List[str]],
-            graph: str = None,
+            graph: Optional[str] = None,
             max_iterations: Optional[int] = 100_000,
             include_graphs: Optional[List[str]] = None,
             max_rows: Optional[int] = 100_000_000,
@@ -2262,7 +2390,7 @@ class Model:
 
     def infer_rdfs(
             self,
-            graph: str = None,
+            graph: Optional[str] = None,
     ) -> int:
         """
         RDFS Inference with rules: 2, 3, 5, 6, 8, 9, 10, 11.
@@ -2272,7 +2400,7 @@ class Model:
         :return number of inferred triples
         """
 
-    def size(self, graph: str = None) -> int:
+    def size(self, graph: Optional[str] = None) -> int:
         """
         Get the number of triples in a graph.
 
@@ -2309,7 +2437,7 @@ class Model:
             iri,
             func: Union[Callable[[pl.DataFrame], pl.Series], Callable[[pl.DataFrame], pl.DataFrame],],
             output_type: Union[RDFType, str, IRI],
-            input_types: list[Union[RDFType, str, IRI]] = None
+            input_types: Optional[list[Union[RDFType, str, IRI]]] = None
     ):
         """
         Add a user-defined function
@@ -2559,8 +2687,8 @@ class FunctionArgumentException(Exception):
 def add_triples(
         source: Model,
         target: Model,
-        source_graph: str = None,
-        target_graph: str = None,
+        source_graph: Optional[str] = None,
+        target_graph: Optional[str] = None,
 ) -> None:
     """(Zero) copy the triples from one Model into another.
 

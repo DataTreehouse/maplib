@@ -28,7 +28,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Dict, List, Mapping, Optional
 
 if TYPE_CHECKING:
-    from maplib import Model
+    from maplib import IndexingOptions, Model, QueryCacheOptions
 
 CONFIG = "https://datatreehouse.github.io/maplib/config#"
 """The namespace of maplib's configuration vocabulary."""
