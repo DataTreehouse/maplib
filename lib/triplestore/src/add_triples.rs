@@ -6,6 +6,7 @@ use crate::errors::TriplestoreError;
 use crate::storage::Triples;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use representation::cats::CatTriples;
+use representation::dataset::NamedGraph;
 use polars::prelude::{col, IntoLazy};
 use representation::rdf_to_polars::normalized_datetime_dtype;
 use representation::constants::normalize_legacy_chrontext_named_node;
@@ -20,6 +21,19 @@ impl Triplestore {
         &mut self,
         ts: Vec<TriplesToAdd>,
     ) -> Result<Vec<NewTriples>, TriplestoreError> {
+        self.add_triples_vec_excluding(ts, None)
+    }
+
+    /// Adds the triples, except those that the graph `exclude` already has (with the same
+    /// predicate, subject and object). The triples are compared in their encoded form, as when
+    /// they are deduplicated against the graph they are added to, so no query is needed. The
+    /// excluded graph is not changed.
+    #[instrument(skip_all)]
+    pub fn add_triples_vec_excluding(
+        &mut self,
+        ts: Vec<TriplesToAdd>,
+        exclude: Option<&NamedGraph>,
+    ) -> Result<Vec<NewTriples>, TriplestoreError> {
         let ts: Vec<TriplesToAdd> = ts.into_iter().map(normalize_datetime_objects).collect();
         let prepare_triples_now = Instant::now();
         let dfs_to_add = if can_encode_globally(&ts, &self.global_cats) {
@@ -32,7 +46,7 @@ impl Triplestore {
             prepare_triples_now.elapsed().as_secs_f32()
         );
         let add_triples_now = Instant::now();
-        let new_triples = self.add_local_cat_triples(dfs_to_add)?;
+        let new_triples = self.add_local_cat_triples_excluding(dfs_to_add, exclude)?;
         trace!(
             "Adding triples df took {} seconds",
             add_triples_now.elapsed().as_secs_f32()
@@ -44,6 +58,14 @@ impl Triplestore {
     pub(crate) fn add_local_cat_triples(
         &mut self,
         local_cat_triples: Vec<CatTriples>,
+    ) -> Result<Vec<NewTriples>, TriplestoreError> {
+        self.add_local_cat_triples_excluding(local_cat_triples, None)
+    }
+
+    pub(crate) fn add_local_cat_triples_excluding(
+        &mut self,
+        local_cat_triples: Vec<CatTriples>,
+        exclude: Option<&NamedGraph>,
     ) -> Result<Vec<NewTriples>, TriplestoreError> {
         let start_globalize = Instant::now();
         let cat_triples = self.globalize(local_cat_triples);
@@ -70,6 +92,11 @@ impl Triplestore {
             "Sorting and adding rank took {} seconds",
             start_sort_rank.elapsed().as_secs_f32()
         );
+        let cat_triples = if let Some(exclude) = exclude {
+            self.without_triples_in_graph(cat_triples, exclude)?
+        } else {
+            cat_triples
+        };
         let start_add_global = Instant::now();
         let res = self.add_global_cat_triples(cat_triples);
         trace!(
@@ -77,6 +104,40 @@ impl Triplestore {
             start_add_global.elapsed().as_secs_f32()
         );
         res
+    }
+
+    /// Removes the globally encoded triples that the graph already has.
+    fn without_triples_in_graph(
+        &mut self,
+        cat_triples: Vec<CatTriples>,
+        graph: &NamedGraph,
+    ) -> Result<Vec<CatTriples>, TriplestoreError> {
+        let start = Instant::now();
+        let cats = self.global_cats.clone();
+        let cats = cats.read()?;
+        let mut out = Vec::with_capacity(cat_triples.len());
+        for mut t in cat_triples {
+            let predicate = normalize_legacy_chrontext_named_node(t.predicate.clone());
+            let stored = self
+                .graph_triples_map
+                .tables_for_indexing()
+                .get_mut(graph)
+                .and_then(|m| m.get_mut(&predicate))
+                .and_then(|m| m.get_mut(&(t.subject_type.clone(), t.object_type.clone())));
+            if let Some(stored) = stored {
+                match stored.remove_overlapping_triples_from_dataframe(&t.encoded_triples.df, &cats)? {
+                    Some(df) => t.encoded_triples.df = df,
+                    None => continue,
+                }
+                stored.release_subject_object_index_if_on_disk();
+            }
+            out.push(t);
+        }
+        trace!(
+            "Removing the triples of graph {graph} took {} seconds",
+            start.elapsed().as_secs_f32()
+        );
+        Ok(out)
     }
 
     #[instrument(skip_all)]

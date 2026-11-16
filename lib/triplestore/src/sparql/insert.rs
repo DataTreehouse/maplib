@@ -26,6 +26,27 @@ impl Triplestore {
         )
     }
 
+    /// Inserts the triples of a CONSTRUCT result into the graph, except those that the graph
+    /// `exclude` already has, see Triplestore::add_triples_vec_excluding.
+    pub fn insert_construct_result_excluding(
+        &mut self,
+        sms: Vec<(EagerSolutionMappings, Option<NamedNode>)>,
+        graph: &NamedGraph,
+        exclude: &NamedGraph,
+    ) -> Result<Vec<NewTriples>, SparqlError> {
+        let all_triples_to_add = construct_result_as_triples_to_add(
+            sms.into_iter()
+                .map(|(sm, p)| (sm, p, NamedGraph::DefaultGraph))
+                .collect(),
+            graph,
+        );
+        if all_triples_to_add.is_empty() {
+            return Ok(vec![]);
+        }
+        self.add_triples_vec_excluding(all_triples_to_add, Some(exclude))
+            .map_err(SparqlError::TriplestoreError)
+    }
+
     /// Inserts the triples of a CONSTRUCT result, each into its graph. Triples of the default
     /// graph of the result are inserted into the given default graph. All graphs are added in one
     /// go, so the triples are deduplicated and indexed once per graph.
