@@ -16,6 +16,7 @@ use polars::prelude::{
     Column, DataFrame, DataType, IntoColumn, IntoSeries, Series, StringChunked,
     StringChunkedBuilder,
 };
+use polars_arrow::array::Array;
 use rayon::prelude::*;
 
 pub const VECTOR_DATATYPE: &str = "https://datatreehouse.github.io/maplib/vocab#vector";
@@ -142,7 +143,17 @@ fn vector_column_to_strings(c: &Column, packed: bool) -> Result<Column, String> 
 /// they are instead of converting each string when it is looked up and again when it is added.
 pub fn lexical_series_to_stored(series: &Series) -> Series {
     let name = series.name().clone();
-    let ca = series.str().expect("vector literals are strings").rechunk();
+    let ca = series.str().expect("vector literals are strings");
+    // Mapped vectors are packed already, and are not copied.
+    if ca.downcast_iter().all(|arr| {
+        (0..arr.len())
+            .into_par_iter()
+            .with_min_len(1024)
+            .all(|i| !arr.is_valid(i) || is_packed(arr.value(i)))
+    }) {
+        return series.clone();
+    }
+    let ca = ca.rechunk();
     let n = ca.len();
     const ROWS_PER_CHUNK: usize = 1024;
     let chunks: Vec<StringChunked> = (0..n.div_ceil(ROWS_PER_CHUNK))
