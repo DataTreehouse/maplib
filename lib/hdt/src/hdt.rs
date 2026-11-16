@@ -89,7 +89,7 @@ impl Hdt {
     /// The format is specified at <https://www.rdfhdt.org/hdt-binary-format/>, however there are some deviations.
     /// The initial HDT specification at <http://www.w3.org/Submission/2011/03/> is outdated and not supported.
     /// # Example
-    /// ```
+    /// ```no_run
     /// let file = std::fs::File::open("tests/resources/snikmeta.hdt").expect("error opening file");
     /// let hdt = hdt::Hdt::read(std::io::BufReader::new(file)).unwrap();
     /// ```

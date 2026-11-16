@@ -19,6 +19,7 @@ pub type Result<T> = core::result::Result<T, Error>;
 /// We could still use an off-the-shelf library for the data which may be even more optimized but they often don't allow you to write or read to the internal data which makes constructing and writing it less comfortable and performant.
 // Update: Now that we are evaluating switching from sucds to QWT, which does not seem to contain such a type, such helper functions could be useful.
 //#[derive(Clone)]
+#[cfg_attr(test, derive(PartialEq))]
 pub struct Sequence {
     /// Number of integers in the sequence.
     pub entries: usize,
