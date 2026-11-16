@@ -1483,7 +1483,7 @@ parser! {
                     base_iri: state.base_iri.clone()
                 })
             } /
-            i("CONSTRUCT") _ d:DatasetClauses() _ i("WHERE") _ "{" _ c:Quads() _ "}" _ g:GroupClause()? _ h:HavingClause()? _ o:OrderClause()? _ l:LimitOffsetClauses()? _ v:ValuesClause() _ p:PValuesClause() {?
+            i("CONSTRUCT") _ d:DatasetClauses() _ i("WHERE") _ "{" _ c:ConstructQuads() _ "}" _ g:GroupClause()? _ h:HavingClause()? _ o:OrderClause()? _ l:LimitOffsetClauses()? _ v:ValuesClause() _ p:PValuesClause() {?
                 let (template, graph_template) = split_construct_template(c);
                 let where_pattern = construct_where_pattern(&template, &graph_template);
                 Ok(Query::Construct {
@@ -2039,8 +2039,17 @@ parser! {
             NIL() { Vec::new() }
         rule ExpressionList_item() -> Expression = e:Expression() _ { e }
 
-        // Extended with GRAPH blocks, as in INSERT/DELETE templates (w3c/sparql-dev#31).
-        rule ConstructTemplate() -> Vec<QuadPattern> = "{" _ q:Quads() _ "}" { q }
+        // Extended with GRAPH blocks, as in INSERT/DELETE templates (w3c/sparql-dev#31), and with
+        // { ... } blocks of default graph triples, as in Apache Jena.
+        rule ConstructTemplate() -> Vec<QuadPattern> = "{" _ q:ConstructQuads() _ "}" { q }
+
+        rule ConstructQuads() -> Vec<QuadPattern> = q:(Quads_TriplesTemplate() / ConstructQuads_NotTriples()) ** (_) {
+            q.into_iter().flatten().collect()
+        }
+        rule ConstructQuads_NotTriples() -> Vec<QuadPattern> = q:(QuadsNotTriples() / ConstructDefaultGraphBlock()) _ "."? { q }
+        rule ConstructDefaultGraphBlock() -> Vec<QuadPattern> = "{" _ t:TriplesTemplate()? _ "}" {
+            t.unwrap_or_default().into_iter().map(|t| QuadPattern::new(t.subject, t.predicate, t.object, GraphNamePattern::DefaultGraph)).collect()
+        }
 
         rule TriplesSameSubject() -> Vec<TriplePattern> =
             ReifiedTripleBlock() /

@@ -225,8 +225,10 @@ def test_solution_mappings_have_graph(m):
 
 
 JENA_POSITIVE = [f"syntax-quad-construct-{i:02}.arq" for i in range(1, 13)]
-# Jena also allows bare { ... } blocks in templates, which are not supported.
-JENA_UNSUPPORTED = {"syntax-quad-construct-09.arq", "syntax-quad-construct-12.arq"}
+# These parse, but their templates have variables that the WHERE clause does not bind, which maplib
+# rejects when the query runs (as in INSERT templates, see dawg-delete-07 in
+# w3c_sparql11_known_failures.txt).
+JENA_UNBOUND_TEMPLATE_VARIABLES = {"syntax-quad-construct-09.arq"}
 
 
 @pytest.mark.parametrize("name", JENA_POSITIVE)
@@ -238,8 +240,8 @@ def test_jena_positive_syntax(name):
         format="ntriples",
         graph="http://example/g",
     )
-    if name in JENA_UNSUPPORTED:
-        with pytest.raises(Exception):
+    if name in JENA_UNBOUND_TEMPLATE_VARIABLES:
+        with pytest.raises(Exception, match="undefined variable"):
             m.query(q)
     else:
         res = m.query(q)
