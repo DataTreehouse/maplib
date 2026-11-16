@@ -2,6 +2,8 @@
 
 ## Unreleased
 ### Features
+- Streams can iterate on a persistent Model: with `in_place=True` on `Model.map`, `map_triples`, `map_default`, `map_json` or `map_xml` (with `stream=True`), every batch is mapped into the Model itself and the steps run on it, so updates, inserts and rules join the batch with the Model's other graphs and their results are kept. Batches run one at a time under the Model's write lock, released between batches. The new `ModelStream.drop_graphs(graphs)` step removes the per-batch graphs, and it still runs when an earlier step of the batch fails. When collected, an in-place stream checks that the graphs named in `drop_graphs` steps are empty and that write steps only write graphs that a later `drop_graphs` step drops (or the transient graph). `compact_every=N` compacts the Model and removes unused dictionary entries every N batches. See `docs/model_stream_iterations.md`
+- `Model.drop_graphs(graphs)` removes graphs with their full text and vector indexes, and in disk storage mode deletes the files of their triple tables. `with m.scratch_graphs(g1, g2):` drops the graphs when the block exits, also on an error. In Rust, `Triplestore::drop_graphs`
 - `LATERAL` (correlated subqueries, [SEP-0006](https://github.com/w3c/sparql-dev/blob/main/SEP/SEP-0006/sep-0006.md)): in `?s a :T LATERAL { SELECT ?s ?o WHERE { ?s :p ?o } ORDER BY DESC(?o) LIMIT 3 }` the group after `LATERAL` is evaluated for every solution of the pattern before it, with that solution's variables substituted, so it gives e.g. the top N per entity or an aggregate per entity. A sub-select substitutes only the variables it projects; the others are variables of the sub-select. A variable that is unbound in a left solution is not substituted for it. The right side may not bind a variable of the left side again. The right side is evaluated once for all left solutions together rather than once per solution: ORDER BY with LIMIT and OFFSET slices, GROUP BY groups, and DISTINCT deduplicates for each left solution separately. To aggregate per left solution over a correlated variable that is only used in a FILTER, project it and GROUP BY it, as SPARQL does not allow projecting an ungrouped variable next to an aggregate. The LATERAL tests of Apache Jena and Oxigraph are included in the tests
 ### Bug fixes
 - `Model.update` reports the triples that LOAD inserts, in the graphs they went to; they were left out of the changes
@@ -19,6 +21,7 @@
 - AVG of no values (a group where the expression is never bound) is 0, as SPARQL 1.1 defines it, instead of unbound; also for AVG over a window
 - ORDER BY orders numbers of different datatypes by value, as the `<` operator compares them, instead of grouping them by datatype first (`1` before `1.5` before `2` for an integer, a decimal and an integer). Numbers that a double cannot tell apart keep their exact order
 ### Fixes
+- `Model.truncate_graph` works on models with a storage folder; it panicked with `todo!()`
 - `ModelStream.collect()` hands its blank node counters back to the Model, also when it fails, so a later stream or mapping from the same Model no longer reuses blank node labels that an earlier stream wrote (two streams of a template with a blank node both wrote `_:b_l0_p0_r0`, which merged distinct nodes when the outputs were combined)
 
 ## v0.22.0

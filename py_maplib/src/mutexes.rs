@@ -89,8 +89,14 @@ pub(crate) fn add_prefixes_mutex(
 }
 
 pub(crate) fn truncate_graph_mutex(inner: &mut InnerModel, graph: &NamedGraph) -> PyResult<()> {
-    inner.triplestore.truncate(graph);
-    Ok(())
+    drop_graphs_mutex(inner, std::slice::from_ref(graph))
+}
+
+pub(crate) fn drop_graphs_mutex(inner: &mut InnerModel, graphs: &[NamedGraph]) -> PyResult<()> {
+    inner
+        .triplestore
+        .drop_graphs(graphs)
+        .map_err(|x| PyMaplibError::from(maplib::errors::MaplibError::TriplestoreError(x)).into())
 }
 
 pub(crate) fn detach_graph_mutex(

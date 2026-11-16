@@ -4,6 +4,8 @@
 # '''
 
 import os
+import contextlib
+from typing import Optional
 
 # use default memory pool to prevent segmentation fault
 os.environ['ARROW_DEFAULT_MEMORY_POOL'] = 'system'
@@ -73,6 +75,19 @@ def _opcua(self) -> "opcua.OPCUA":
 
 
 Model.opcua = property(_opcua)
+
+
+@contextlib.contextmanager
+def _scratch_graphs(self, *graphs: Optional[str]):
+    """Drops the graphs with Model.drop_graphs on exit, also when an error is raised.
+    See Model.scratch_graphs."""
+    try:
+        yield self
+    finally:
+        self.drop_graphs(list(graphs))
+
+
+Model.scratch_graphs = _scratch_graphs
 
 if (pathlib.Path(__file__).parent.resolve() / "graph_explorer").exists():
     from .graph_explorer import explore as _explore

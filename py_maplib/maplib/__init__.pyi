@@ -1,6 +1,6 @@
 from datetime import datetime, date
 from pathlib import Path
-from typing import Any, overload, Union, List, Dict, Optional, Callable, Iterable, Literal as LiteralType, Tuple, BinaryIO, TextIO
+from typing import Any, overload, Union, List, Dict, Optional, Callable, Iterable, Literal as LiteralType, Tuple, BinaryIO, TextIO, ContextManager
 
 import polars as pl
 from maplib.maplib import rdf
@@ -608,6 +608,18 @@ class ModelStream:
     Queries, updates and rules only see the triples of the current batch, so results that depend on
     triples in other batches (such as joins across batches) are not found.
 
+    With in_place=True on the map call, each batch is instead mapped into the Model itself, and the steps run
+    on the Model, so they see its other graphs (reference data, and what earlier batches added to them).
+    Batches run one at a time under the Model's write lock, which is released between batches, so queries
+    from other threads see the Model after each finished batch. The per-batch graphs are removed with
+    drop_graphs steps. When the stream is collected, and before anything runs, it checks that the graphs
+    named in drop_graphs steps are empty, and that each write step writes a graph that a later drop_graphs
+    step drops (or the transient graph), since a persistent graph would be written again every batch.
+    When a step fails, the batch's remaining drop_graphs steps still run before the error is raised;
+    triples inserted into persistent graphs by earlier steps of that batch are kept. Blank node labels stay
+    unique across batches and streams. With map_default, the template made from the first batch is added
+    to the Model.
+
     Usage:
 
     >>> m = Model()
@@ -618,6 +630,21 @@ class ModelStream:
     ...     .insert(construct_query)
     ...     .write("out.nt")
     ...     .write("out.ttl", format="turtle")
+    ...     .collect()
+    ... )
+
+    Iterating on a persistent Model: each batch is joined with the reference data in the default graph,
+    a summary is kept in the default graph, and the per-batch graphs are written and dropped:
+
+    >>> BATCH, SCRATCH = "urn:iter:batch", "urn:iter:scratch"
+    ... m.read("reference.ttl")
+    ... (
+    ...     m.map("ex:ExampleTemplate", pl.scan_parquet("events/*.parquet"), graph=BATCH, stream=True,
+    ...           in_place=True)
+    ...     .update(link_query, include_graphs=[BATCH])  # INSERT { GRAPH <urn:iter:scratch> { ... } } WHERE { ... }
+    ...     .insert(summary_construct, source_graph=SCRATCH)
+    ...     .write("links.nt", graph=SCRATCH)
+    ...     .drop_graphs([BATCH, SCRATCH])
     ...     .collect()
     ... )
 
@@ -686,6 +713,16 @@ class ModelStream:
         :param graph: The IRI of the graph to write. For "nquads", all graphs except the transient graph are written
             when this is None.
         :param prefixes: The prefixes that will be used in turtle serialization.
+        """
+
+    def drop_graphs(self, graphs: List[Optional[str]]) -> "ModelStream":
+        """
+        Add a step that drops graphs from the batch model, see Model.drop_graphs. With in_place, these are the
+        per-batch graphs, which are removed from the Model at this point of every batch. Without in_place, it
+        frees a large intermediate graph before the later steps of the same batch.
+
+        :param graphs: The IRIs of the graphs to drop. None is the default graph. TRANSIENT_GRAPH is only
+            dropped when listed.
         """
 
     def collect(self) -> None:
@@ -871,6 +908,8 @@ class Model:
             graph: Optional[str] = None,
             validate_iris: bool = True,
             stream: bool = False,
+            in_place: bool = False,
+            compact_every: Optional[int] = None,
     ) -> Optional["ModelStream"]:
         """
         Map a template using a DataFrame
@@ -886,7 +925,12 @@ class Model:
         :param graph: The IRI of the graph to add triples to.
         :param validate_iris: Validate any IRI-columns.
         :param stream: Return a ModelStream instead of mapping into this Model. Steps added to the stream
-            (update, insert, infer, write) run batch by batch when it is collected, see ModelStream.
+            (update, insert, infer, write, drop_graphs) run batch by batch when it is collected, see ModelStream.
+        :param in_place: With stream, run every batch on this Model instead of a fresh batch model, so that
+            steps see the Model's other graphs and their results are kept. Remove the per-batch graphs with
+            ModelStream.drop_graphs. Ignored without stream.
+        :param compact_every: With stream and in_place, compact the Model and remove unused dictionary
+            entries every N batches. None (the default) never does.
         :return: A ModelStream when stream is set, otherwise None.
         """
 
@@ -897,6 +941,8 @@ class Model:
             uuid_namespace: Optional[str] = None,
             stream: bool = False,
             documents_per_batch: int = 1,
+            in_place: bool = False,
+            compact_every: Optional[int] = None,
     ) -> Optional["ModelStream"]:
         """
         Map a JSON file or string to triples.
@@ -915,7 +961,12 @@ class Model:
             With several documents, document number i uses the namespace "<uuid_namespace>/<i>",
             so that the documents do not get the same IRIs.
         :param stream: Return a ModelStream instead of mapping into this Model. Steps added to the stream
-            (update, insert, infer, write) run batch by batch when it is collected, see ModelStream.
+            (update, insert, infer, write, drop_graphs) run batch by batch when it is collected, see ModelStream.
+        :param in_place: With stream, run every batch on this Model instead of a fresh batch model, so that
+            steps see the Model's other graphs and their results are kept. Remove the per-batch graphs with
+            ModelStream.drop_graphs. Ignored without stream.
+        :param compact_every: With stream and in_place, compact the Model and remove unused dictionary
+            entries every N batches. None (the default) never does.
         :param documents_per_batch: With stream, the number of documents mapped into each batch.
         :return: A ModelStream when stream is set, otherwise None.
         """
@@ -927,6 +978,8 @@ class Model:
             uuid_namespace: Optional[str] = None,
             stream: bool = False,
             documents_per_batch: int = 1,
+            in_place: bool = False,
+            compact_every: Optional[int] = None,
     ) -> Optional["ModelStream"]:
         """
         Map an XML file or string to triples.
@@ -945,7 +998,12 @@ class Model:
             With several documents, document number i uses the namespace "<uuid_namespace>/<i>",
             so that the documents do not get the same IRIs.
         :param stream: Return a ModelStream instead of mapping into this Model. Steps added to the stream
-            (update, insert, infer, write) run batch by batch when it is collected, see ModelStream.
+            (update, insert, infer, write, drop_graphs) run batch by batch when it is collected, see ModelStream.
+        :param in_place: With stream, run every batch on this Model instead of a fresh batch model, so that
+            steps see the Model's other graphs and their results are kept. Remove the per-batch graphs with
+            ModelStream.drop_graphs. Ignored without stream.
+        :param compact_every: With stream and in_place, compact the Model and remove unused dictionary
+            entries every N batches. None (the default) never does.
         :param documents_per_batch: With stream, the number of documents mapped into each batch.
         :return: A ModelStream when stream is set, otherwise None.
         """
@@ -957,6 +1015,8 @@ class Model:
             graph: Optional[str] = None,
             validate_iris: bool = True,
             stream: bool = False,
+            in_place: bool = False,
+            compact_every: Optional[int] = None,
     ) -> Optional["ModelStream"]:
         """
         Map a template using a DataFrame with columns subject, object and predicate
@@ -971,7 +1031,12 @@ class Model:
         :param graph: The IRI of the graph to add triples to.
         :param validate_iris: Validate any IRI-columns.
         :param stream: Return a ModelStream instead of mapping into this Model. Steps added to the stream
-            (update, insert, infer, write) run batch by batch when it is collected, see ModelStream.
+            (update, insert, infer, write, drop_graphs) run batch by batch when it is collected, see ModelStream.
+        :param in_place: With stream, run every batch on this Model instead of a fresh batch model, so that
+            steps see the Model's other graphs and their results are kept. Remove the per-batch graphs with
+            ModelStream.drop_graphs. Ignored without stream.
+        :param compact_every: With stream and in_place, compact the Model and remove unused dictionary
+            entries every N batches. None (the default) never does.
         :return: A ModelStream when stream is set, otherwise None.
         """
 
@@ -982,6 +1047,8 @@ class Model:
             graph: Optional[str] = None,
             validate_iris: bool = True,
             stream: bool = False,
+            in_place: bool = False,
+            compact_every: Optional[int] = None,
     ) -> Union[str, "ModelStream"]:
         """
         Create a default template from the data, add it to the Model and map the data with it.
@@ -1001,7 +1068,12 @@ class Model:
         :param graph: The IRI of the graph to add triples to.
         :param validate_iris: Validate any IRI-columns.
         :param stream: Return a ModelStream instead of mapping into this Model. Steps added to the stream
-            (update, insert, infer, write) run batch by batch when it is collected, see ModelStream.
+            (update, insert, infer, write, drop_graphs) run batch by batch when it is collected, see ModelStream.
+        :param in_place: With stream, run every batch on this Model instead of a fresh batch model, so that
+            steps see the Model's other graphs and their results are kept. Remove the per-batch graphs with
+            ModelStream.drop_graphs. Ignored without stream.
+        :param compact_every: With stream and in_place, compact the Model and remove unused dictionary
+            entries every N batches. None (the default) never does.
             The template is then created from the first batch when the stream is collected.
         :return: The generated template, or a ModelStream when stream is set.
         """
@@ -2220,9 +2292,38 @@ class Model:
     def truncate_graph(self, graph: Optional[str] = None) -> None:
         """
         Removes all triples associated with the given graph from the triplestore,
-        including full-text search entries.
+        including full-text search entries. The same as drop_graphs([graph]).
 
         :param graph: The IRI of the graph to truncate.
+        """
+
+    def drop_graphs(self, graphs: List[Optional[str]]) -> None:
+        """
+        Removes the graphs and their triples, full-text search and vector index entries. With a storage
+        folder in disk mode, the files of their triple tables are deleted. Graphs that do not exist are ignored.
+
+        Usage:
+
+        >>> m.drop_graphs(["urn:iter:batch", "urn:iter:scratch"])
+
+        :param graphs: The IRIs of the graphs to drop. None is the default graph.
+        """
+
+    def scratch_graphs(self, *graphs: Optional[str]) -> ContextManager["Model"]:
+        """
+        A context manager that drops the graphs with drop_graphs on exit, also when an error is raised.
+        For loops that map a batch into per-iteration graphs, join it with the rest of the Model, keep
+        some results and then discard the per-iteration graphs.
+
+        Usage:
+
+        >>> for df in batches:
+        ...     with m.scratch_graphs("urn:iter:batch", "urn:iter:scratch"):
+        ...         m.map(tpl, df, graph="urn:iter:batch")
+        ...         m.update(link_query, include_graphs=["urn:iter:batch"])
+        ...         m.insert(summary_construct, source_graph="urn:iter:scratch")
+
+        :param graphs: The IRIs of the graphs to drop. None is the default graph.
         """
 
     def detach_graph(self, graph: Optional[str] = None, preserve_name: bool = False) -> "Model":

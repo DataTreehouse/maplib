@@ -8,6 +8,11 @@
 //!
 //! `m.map_json(documents, stream=True)` and `m.map_xml(documents, stream=True)` work the same way,
 //! where a batch is `documents_per_batch` documents of an iterable of documents.
+//!
+//! With `in_place=True` on the map call, each batch is instead mapped into the parent model and the
+//! steps run on it, one batch at a time under its write lock, which is released between batches.
+//! The per-batch graphs are then removed by `drop_graphs` steps, see
+//! `docs/model_stream_iterations.md`.
 
 use crate::error::PyMaplibError;
 use crate::mutexes::{
@@ -135,6 +140,9 @@ enum StreamStep {
         graph: Option<NamedGraph>,
         prefixes: Option<HashMap<String, NamedNode>>,
     },
+    DropGraphs {
+        graphs: Vec<NamedGraph>,
+    },
 }
 
 #[pyclass(name = "ModelStream", frozen)]
@@ -143,16 +151,40 @@ pub struct PyModelStream {
     data: Py<PyAny>,
     source: Arc<StreamSource>,
     steps: Vec<StreamStep>,
+    /// Run each batch on the parent model instead of a fresh batch model.
+    in_place: bool,
+    /// With in_place, compact the model and collect unused dictionary entries every N batches.
+    compact_every: Option<usize>,
 }
 
 impl PyModelStream {
-    pub(crate) fn new(model: Py<PyModel>, data: Py<PyAny>, source: StreamSource) -> Self {
-        PyModelStream {
+    pub(crate) fn new(
+        model: Py<PyModel>,
+        data: Py<PyAny>,
+        source: StreamSource,
+        in_place: bool,
+        compact_every: Option<usize>,
+    ) -> PyResult<Self> {
+        if compact_every == Some(0) {
+            return Err(PyMaplibError::FunctionArgumentError(
+                "compact_every should be at least 1".to_string(),
+            )
+            .into());
+        }
+        if compact_every.is_some() && !in_place {
+            return Err(PyMaplibError::FunctionArgumentError(
+                "compact_every requires in_place=True".to_string(),
+            )
+            .into());
+        }
+        Ok(PyModelStream {
             model,
             data,
             source: Arc::new(source),
             steps: vec![],
-        }
+            in_place,
+            compact_every,
+        })
     }
 
     fn with_step(&self, py: Python<'_>, step: StreamStep) -> PyModelStream {
@@ -163,7 +195,61 @@ impl PyModelStream {
             data: self.data.clone_ref(py),
             source: self.source.clone(),
             steps,
+            in_place: self.in_place,
+            compact_every: self.compact_every,
         }
+    }
+
+    /// Checks the steps before anything runs: with in_place, the graphs that drop_graphs steps
+    /// drop must be empty at the start, and write steps may only write graphs that a later
+    /// drop_graphs step drops, or the transient graph.
+    fn validate(&self, inner: &InnerModel) -> PyResult<()> {
+        if !self.in_place {
+            return Ok(());
+        }
+        for step in &self.steps {
+            if let StreamStep::DropGraphs { graphs } = step {
+                for g in graphs {
+                    let n = inner.triplestore.graph_height(g);
+                    if n > 0 {
+                        return Err(PyMaplibError::FunctionArgumentError(format!(
+                            "The graph {} is dropped by a drop_graphs step of this in-place stream, \
+                             but already has {} triples. Drop it first with Model.drop_graphs if \
+                             these are leftovers of an earlier run.",
+                            g, n
+                        ))
+                        .into());
+                    }
+                }
+            }
+        }
+        let transient = NamedGraph::transient();
+        for (i, step) in self.steps.iter().enumerate() {
+            if let StreamStep::Write { graph, .. } = step {
+                let Some(graph) = graph else {
+                    return Err(PyMaplibError::FunctionArgumentError(
+                        "A write step of an in-place stream must name the graph to write, \
+                         since writing all graphs would write the persistent graphs every batch"
+                            .to_string(),
+                    )
+                    .into());
+                };
+                let dropped_later = self.steps[i + 1..].iter().any(|s| {
+                    matches!(s, StreamStep::DropGraphs { graphs } if graphs.contains(graph))
+                });
+                if graph != &transient && !dropped_later {
+                    return Err(PyMaplibError::FunctionArgumentError(format!(
+                        "A write step of an in-place stream writes the graph {}, which no later \
+                         drop_graphs step drops. It would be written again every batch. Write a \
+                         per-batch graph that a later drop_graphs step drops, or the transient \
+                         graph.",
+                        graph
+                    ))
+                    .into());
+                }
+            }
+        }
+        Ok(())
     }
 }
 
@@ -331,32 +417,54 @@ impl PyModelStream {
         ))
     }
 
-    /// Runs the stream: maps each batch of the input into a fresh model, runs the steps on it and
-    /// appends its triples to the files of the write steps.
+    /// Drops the graphs from the batch model (None is the default graph). With in_place, these are
+    /// the per-batch graphs, removed from the model at the end of every batch.
+    fn drop_graphs(
+        &self,
+        py: Python<'_>,
+        graphs: Vec<Option<String>>,
+    ) -> PyResult<PyModelStream> {
+        let graphs = parse_graphs(graphs)?;
+        Ok(self.with_step(py, StreamStep::DropGraphs { graphs }))
+    }
+
+    /// Runs the stream: maps each batch of the input into a fresh model (or, with in_place, into
+    /// the model itself), runs the steps on it and appends its triples to the files of the write
+    /// steps.
     #[instrument(skip_all)]
     fn collect(&self, py: Python<'_>) -> PyResult<()> {
         let model = self.model.bind(py).get();
-        let carrier = py.detach(|| {
+        let (carrier, prefixes) = py.detach(|| -> PyResult<_> {
             let mut inner = model.inner.write().unwrap_or_else(|e| e.into_inner());
-            empty_model_like(&mut inner, false)
+            self.validate(&inner)?;
+            let carrier = if self.in_place {
+                None
+            } else {
+                Some(empty_model_like(&mut inner, false)?)
+            };
+            Ok((carrier, inner.prefixes.clone()))
         })?;
         let mut state = BatchState {
             carrier,
             default_template: None,
+            batches: 0,
         };
-        let mut writers = open_writers(&self.steps, &state.carrier.prefixes)?;
+        let mut writers = open_writers(&self.steps, &prefixes)?;
         let res = self.run_batches(py, &mut state, &mut writers);
         // Hand the blank node counters back to the model, also after an error, so that later
-        // streams and mappings do not reuse blank node labels already written by this one.
-        py.detach(|| {
-            let mut inner = model.inner.write().unwrap_or_else(|e| e.into_inner());
-            inner.blank_node_counter = inner.blank_node_counter.max(state.carrier.blank_node_counter);
-            let scope = inner
-                .triplestore
-                .blank_node_scope()
-                .max(state.carrier.triplestore.blank_node_scope());
-            inner.triplestore.set_blank_node_scope(scope);
-        });
+        // streams and mappings do not reuse blank node labels already written by this one. With
+        // in_place, the counters already live on the model.
+        if let Some(carrier) = &state.carrier {
+            py.detach(|| {
+                let mut inner = model.inner.write().unwrap_or_else(|e| e.into_inner());
+                inner.blank_node_counter = inner.blank_node_counter.max(carrier.blank_node_counter);
+                let scope = inner
+                    .triplestore
+                    .blank_node_scope()
+                    .max(carrier.triplestore.blank_node_scope());
+                inner.triplestore.set_blank_node_scope(scope);
+            });
+        }
         res?;
         for w in writers.iter_mut().flatten() {
             w.flush().map_err(|x| {
@@ -375,7 +483,7 @@ impl PyModelStream {
         writers: &mut [Option<StreamWriter>],
     ) -> PyResult<()> {
         let source = self.source.as_ref();
-        let steps = &self.steps;
+        let model = self.model.bind(py).get();
 
         if let StreamSource::Documents {
             kind,
@@ -385,10 +493,9 @@ impl PyModelStream {
         {
             let mut run = |py: Python<'_>, docs: Vec<(usize, StringOrPathBuf)>| -> PyResult<()> {
                 py.detach(|| {
-                    run_batch(
+                    self.run_batch(
+                        model,
                         state,
-                        source,
-                        steps,
                         writers,
                         BatchInput::Documents(docs),
                     )
@@ -419,10 +526,9 @@ impl PyModelStream {
                     return Ok(());
                 }
                 py.detach(|| {
-                    run_batch(
+                    self.run_batch(
+                        model,
                         state,
-                        source,
-                        steps,
                         writers,
                         BatchInput::Frame(df, types),
                     )
@@ -444,14 +550,81 @@ impl PyModelStream {
         }
         Ok(())
     }
+
+    /// Runs one batch, on a fresh batch model, or with in_place on the model under its write lock.
+    fn run_batch(
+        &self,
+        model: &PyModel,
+        state: &mut BatchState,
+        writers: &mut [Option<StreamWriter>],
+        input: BatchInput,
+    ) -> PyResult<()> {
+        let source = self.source.as_ref();
+        let steps = &self.steps;
+        state.batches += 1;
+        let Some(carrier) = state.carrier.as_mut() else {
+            let mut inner = model.inner.write().unwrap_or_else(|e| e.into_inner());
+            run_batch_steps(
+                &mut inner,
+                &mut state.default_template,
+                source,
+                steps,
+                writers,
+                input,
+            )?;
+            if let Some(n) = self.compact_every {
+                if state.batches % n == 0 {
+                    compact_and_collect(&mut inner)?;
+                }
+            }
+            return Ok(());
+        };
+        let mut inner = empty_model_like(carrier, true)?;
+        let res = run_batch_steps(
+            &mut inner,
+            &mut state.default_template,
+            source,
+            steps,
+            writers,
+            input,
+        );
+        // Hand the templates and blank node counters on to the next batch, also after an error.
+        state.carrier = Some(empty_model_like(&mut inner, true)?);
+        res
+    }
 }
 
-/// What is carried from one batch model to the next.
+/// Compacts the model and removes the dictionary entries that no graph refers to.
+fn compact_and_collect(inner: &mut InnerModel) -> PyResult<()> {
+    inner.compact().map_err(PyMaplibError::from)?;
+    if inner.triplestore.storage_folder.is_none() {
+        inner.triplestore.garbage_collect().map_err(|x| {
+            PyMaplibError::from(maplib::errors::MaplibError::TriplestoreError(x))
+        })?;
+    }
+    Ok(())
+}
+
+/// Parses graph names, where None is the default graph.
+pub(crate) fn parse_graphs(graphs: Vec<Option<String>>) -> PyResult<Vec<NamedGraph>> {
+    graphs
+        .into_iter()
+        .map(|g| {
+            let g = parse_optional_named_node(g)?;
+            Ok(NamedGraph::from_maybe_named_node(g.as_ref()))
+        })
+        .collect()
+}
+
+/// What is carried from one batch to the next.
 struct BatchState {
-    /// An empty model with the templates, prefixes, UDFs and blank node counters for the next batch.
-    carrier: InnerModel,
+    /// Without in_place: an empty model with the templates, prefixes, UDFs and blank node counters
+    /// for the next batch.
+    carrier: Option<InnerModel>,
     /// The template made by map_default from the first batch.
     default_template: Option<Template>,
+    /// The number of batches started.
+    batches: usize,
 }
 
 /// An empty in-memory model with the templates, prefixes, settings, UDFs and blank node counters of
@@ -524,27 +697,6 @@ fn merge_prefixes(
     use_prefixes
 }
 
-fn run_batch(
-    state: &mut BatchState,
-    source: &StreamSource,
-    steps: &[StreamStep],
-    writers: &mut [Option<StreamWriter>],
-    input: BatchInput,
-) -> PyResult<()> {
-    let mut inner = empty_model_like(&mut state.carrier, true)?;
-    let res = run_batch_steps(
-        &mut inner,
-        &mut state.default_template,
-        source,
-        steps,
-        writers,
-        input,
-    );
-    // Hand the templates and blank node counters on to the next batch, also after an error.
-    state.carrier = empty_model_like(&mut inner, true)?;
-    res
-}
-
 fn run_batch_steps(
     inner: &mut InnerModel,
     default_template: &mut Option<Template>,
@@ -553,8 +705,21 @@ fn run_batch_steps(
     writers: &mut [Option<StreamWriter>],
     input: BatchInput,
 ) -> PyResult<()> {
-    map_batch(inner, default_template, source, input)?;
+    if let Err(e) = map_batch(inner, default_template, source, input) {
+        run_remaining_drops(inner, steps, 0);
+        return Err(e);
+    }
     run_steps(inner, steps, writers)
+}
+
+/// After a failed step, runs the drop_graphs steps from index `from` on, so that a failing batch
+/// leaves no per-batch graphs behind. Errors from these are ignored in favour of the first one.
+fn run_remaining_drops(inner: &mut InnerModel, steps: &[StreamStep], from: usize) {
+    for step in &steps[from..] {
+        if let StreamStep::DropGraphs { graphs } = step {
+            let _ = inner.triplestore.drop_graphs(graphs);
+        }
+    }
 }
 
 /// Maps the input of one batch into the batch model.
@@ -655,7 +820,21 @@ fn run_steps(
     steps: &[StreamStep],
     writers: &mut [Option<StreamWriter>],
 ) -> PyResult<()> {
-    for (step, writer) in steps.iter().zip(writers.iter_mut()) {
+    for (i, (step, writer)) in steps.iter().zip(writers.iter_mut()).enumerate() {
+        if let Err(e) = run_step(inner, step, writer) {
+            run_remaining_drops(inner, steps, i + 1);
+            return Err(e);
+        }
+    }
+    Ok(())
+}
+
+fn run_step(
+    inner: &mut InnerModel,
+    step: &StreamStep,
+    writer: &mut Option<StreamWriter>,
+) -> PyResult<()> {
+    {
         match step {
             StreamStep::Update {
                 update,
@@ -724,6 +903,11 @@ fn run_steps(
             } => {
                 let w = writer.as_mut().expect("write steps have writers");
                 write_batch(inner, w, *format, graph.as_ref(), prefixes.as_ref())?;
+            }
+            StreamStep::DropGraphs { graphs } => {
+                inner.triplestore.drop_graphs(graphs).map_err(|x| {
+                    PyMaplibError::from(maplib::errors::MaplibError::TriplestoreError(x))
+                })?;
             }
         }
     }

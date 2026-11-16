@@ -7,13 +7,13 @@ use crate::mutexes::{
     infer_rdfs_mutex, insert_mutex, reason_mutex, list_udfs_mutex, map_default_batch_mutex, map_default_first_batch_mutex, map_default_mutex,
     map_df_mutex, map_mutex, map_resolved_mutex,
     map_triples_mutex, query_external_mutex, query_mutex, read_mutex, read_template_mutex,
-    reads_mutex, resolve_template_mutex, serialize_triples_mutex, size_mutex, truncate_graph_mutex,
+    reads_mutex, resolve_template_mutex, serialize_triples_mutex, size_mutex, truncate_graph_mutex, drop_graphs_mutex,
     update_mutex, validate_mutex, write_bytes_mutex, write_cim_xml_mutex, write_triples_mutex,
     writes_mutex, GraphArg,
 };
 use crate::py_server::{server_error, PyServer};
 use crate::py_io::{ReadSource, WriteTarget};
-use crate::py_stream::{DocumentKind, PyModelStream, StreamSource};
+use crate::py_stream::{parse_graphs, DocumentKind, PyModelStream, StreamSource};
 use crate::shacl::PyValidationReport;
 use crate::{
     classify_document_data, classify_mapping_data, create_prefix_map, data_to_mappings_types,
@@ -148,6 +148,17 @@ impl PyModel {
         })
     }
 
+    /// Removes the graphs and their triples (None is the default graph). Graphs that do not exist
+    /// are ignored.
+    #[instrument(skip_all)]
+    fn drop_graphs(&self, py: Python<'_>, graphs: Vec<Option<String>>) -> PyResult<()> {
+        let graphs = parse_graphs(graphs)?;
+        py.detach(move || {
+            let mut inner = self.inner.write().unwrap_or_else(|e| e.into_inner());
+            drop_graphs_mutex(&mut inner, &graphs)
+        })
+    }
+
     #[pyo3(signature=(graph=None, preserve_name=None))]
     #[instrument(skip_all)]
     fn detach_graph(
@@ -164,7 +175,7 @@ impl PyModel {
         })
     }
 
-    #[pyo3(signature = (template, data=None, graph=None, validate_iris=None, stream=None))]
+    #[pyo3(signature = (template, data=None, graph=None, validate_iris=None, stream=None, in_place=false, compact_every=None))]
     #[instrument(skip_all)]
     fn map(
         slf: &Bound<'_, Self>,
@@ -174,6 +185,8 @@ impl PyModel {
         graph: Option<String>,
         validate_iris: Option<bool>,
         stream: Option<bool>,
+        in_place: bool,
+        compact_every: Option<usize>,
     ) -> PyResult<Option<Py<PyAny>>> {
         let this = slf.get();
         let template = template.try_into()?;
@@ -192,7 +205,9 @@ impl PyModel {
                     graph,
                     validate_iris,
                 },
-            );
+                in_place,
+                compact_every,
+            )?;
             return Ok(Some(Py::new(py, stream)?.into_any()));
         }
         let data = data.map(|x| classify_mapping_data(x, py)).transpose()?;
@@ -248,7 +263,7 @@ impl PyModel {
         })
     }
 
-    #[pyo3(signature = (path_or_string, graph=None, uuid_namespace=None, stream=None, documents_per_batch=None))]
+    #[pyo3(signature = (path_or_string, graph=None, uuid_namespace=None, stream=None, documents_per_batch=None, in_place=false, compact_every=None))]
     #[instrument(skip_all)]
     fn map_json(
         slf: &Bound<'_, Self>,
@@ -258,6 +273,8 @@ impl PyModel {
         uuid_namespace: Option<String>,
         stream: Option<bool>,
         documents_per_batch: Option<usize>,
+        in_place: bool,
+        compact_every: Option<usize>,
     ) -> PyResult<Option<Py<PyAny>>> {
         map_documents(
             slf,
@@ -268,10 +285,12 @@ impl PyModel {
             uuid_namespace,
             stream,
             documents_per_batch,
+            in_place,
+            compact_every,
         )
     }
 
-    #[pyo3(signature = (path_or_string, graph=None, uuid_namespace=None, stream=None, documents_per_batch=None))]
+    #[pyo3(signature = (path_or_string, graph=None, uuid_namespace=None, stream=None, documents_per_batch=None, in_place=false, compact_every=None))]
     #[instrument(skip_all)]
     fn map_xml(
         slf: &Bound<'_, Self>,
@@ -281,6 +300,8 @@ impl PyModel {
         uuid_namespace: Option<String>,
         stream: Option<bool>,
         documents_per_batch: Option<usize>,
+        in_place: bool,
+        compact_every: Option<usize>,
     ) -> PyResult<Option<Py<PyAny>>> {
         map_documents(
             slf,
@@ -291,10 +312,12 @@ impl PyModel {
             uuid_namespace,
             stream,
             documents_per_batch,
+            in_place,
+            compact_every,
         )
     }
 
-    #[pyo3(signature = (data, predicate=None, graph=None, validate_iris=None, stream=None))]
+    #[pyo3(signature = (data, predicate=None, graph=None, validate_iris=None, stream=None, in_place=false, compact_every=None))]
     #[instrument(skip_all)]
     fn map_triples(
         slf: &Bound<'_, Self>,
@@ -304,6 +327,8 @@ impl PyModel {
         graph: Option<String>,
         validate_iris: Option<bool>,
         stream: Option<bool>,
+        in_place: bool,
+        compact_every: Option<usize>,
     ) -> PyResult<Option<Py<PyAny>>> {
         let this = slf.get();
         let predicate = if let Some(predicate) = predicate {
@@ -330,7 +355,9 @@ impl PyModel {
                     graph,
                     validate_iris,
                 },
-            );
+                in_place,
+                compact_every,
+            )?;
             return Ok(Some(Py::new(py, stream)?.into_any()));
         }
         match classify_mapping_data(data, py)? {
@@ -364,7 +391,7 @@ impl PyModel {
     /// Generates a default template from the data with the same code as generate_template, adds it
     /// to the model and maps the data with it. Returns the template, or a ModelStream when stream
     /// is set.
-    #[pyo3(signature = (data, primary_key_column, graph=None, validate_iris=None, stream=None))]
+    #[pyo3(signature = (data, primary_key_column, graph=None, validate_iris=None, stream=None, in_place=false, compact_every=None))]
     #[instrument(skip_all)]
     fn map_default(
         slf: &Bound<'_, Self>,
@@ -374,6 +401,8 @@ impl PyModel {
         graph: Option<String>,
         validate_iris: Option<bool>,
         stream: Option<bool>,
+        in_place: bool,
+        compact_every: Option<usize>,
     ) -> PyResult<Py<PyAny>> {
         let this = slf.get();
         parse_optional_named_node(graph.clone())?;
@@ -386,7 +415,9 @@ impl PyModel {
                     graph,
                     validate_iris,
                 },
-            );
+                in_place,
+                compact_every,
+            )?;
             return Ok(Py::new(py, stream)?.into_any());
         }
         let template = match classify_mapping_data(data, py)? {
@@ -2395,6 +2426,8 @@ fn map_documents(
     uuid_namespace: Option<String>,
     stream: Option<bool>,
     documents_per_batch: Option<usize>,
+    in_place: bool,
+    compact_every: Option<usize>,
 ) -> PyResult<Option<Py<PyAny>>> {
     let this = slf.get();
     parse_optional_named_node(graph.clone())?;
@@ -2415,7 +2448,9 @@ fn map_documents(
                 uuid_namespace,
                 documents_per_batch: documents_per_batch.unwrap_or(1),
             },
-        );
+            in_place,
+            compact_every,
+        )?;
         return Ok(Some(Py::new(py, stream)?.into_any()));
     }
     match documents {

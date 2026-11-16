@@ -1,6 +1,6 @@
 # Design proposal: iterating a stream on a persistent Model with per-iteration graphs
 
-Status: proposal, not implemented.
+Status: implemented, except `write(..., delta=True)` and `atomic=True`.
 
 ## Problem
 

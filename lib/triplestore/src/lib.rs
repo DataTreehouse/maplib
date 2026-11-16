@@ -550,9 +550,39 @@ impl Triplestore {
     /// of the graph's tables are removed when the last reference to them is dropped (see
     /// `TriplesOnDisk`), so a clone of the triplestore that still holds the tables keeps them.
     pub fn truncate(&mut self, graph: &NamedGraph) {
-        self.graph_triples_map.remove_graph(graph);
+        if let Some(m) = self.graph_triples_map.remove_graph(graph) {
+            let removed: usize = m
+                .values()
+                .flat_map(|m| m.values())
+                .map(|t| t.get_height())
+                .sum();
+            self.n_triples_deleted = self.n_triples_deleted.saturating_add(removed);
+        }
         self.fts_index.remove(graph);
         self.vector_index.remove(graph);
+    }
+
+    /// Removes the graphs, their triples and their full text and vector indexes. Graphs that do
+    /// not exist are ignored. In disk storage mode the files of the graphs' triple tables are
+    /// deleted, see `truncate`.
+    pub fn drop_graphs(&mut self, graphs: &[NamedGraph]) -> Result<(), TriplestoreError> {
+        for graph in graphs {
+            self.truncate(graph);
+        }
+        Ok(())
+    }
+
+    /// The number of triples in the graph, 0 if it does not exist.
+    pub fn graph_height(&self, graph: &NamedGraph) -> usize {
+        self.graph_triples_map
+            .get(graph)
+            .map(|m| {
+                m.values()
+                    .flat_map(|m| m.values())
+                    .map(|t| t.get_height())
+                    .sum()
+            })
+            .unwrap_or(0)
     }
 }
 
