@@ -206,3 +206,112 @@ def test_storage_disk_files_removed_with_model(storage):
     del m
     gc.collect()
     assert len(parquet_files()) == 0
+
+
+GRAPH_MANAGEMENT_UPDATES = [
+    "CLEAR GRAPH <urn:maplib:g>",
+    "DROP GRAPH <urn:maplib:g>",
+    "CLEAR DEFAULT",
+    "DROP NAMED",
+    "CLEAR ALL",
+    "COPY <urn:maplib:g> TO <urn:maplib:h>",
+    "MOVE <urn:maplib:g> TO DEFAULT",
+    "ADD DEFAULT TO <urn:maplib:g>",
+]
+
+
+def graph_df(m: Model, graph) -> pl.DataFrame:
+    return m.query(
+        """
+        SELECT ?s ?p ?o WHERE {
+            ?s_ ?p ?o_ .
+            BIND(IF(isBLANK(?s_), "blank", STR(?s_)) AS ?s)
+            BIND(IF(isBLANK(?o_), "blank", STR(?o_)) AS ?o)
+        } ORDER BY ?s ?p ?o
+        """,
+        graph=graph,
+    )
+
+
+def three_graphs(m: Model):
+    m.reads(TURTLE, format="turtle")
+    m.reads(TURTLE, format="turtle", graph="urn:maplib:g")
+    m.update(
+        """
+        PREFIX ex: <http://example.net/ns#>
+        INSERT DATA { GRAPH <urn:maplib:h> { ex:h ex:value 7 . ex:a ex:value 1 . } }
+        """
+    )
+
+
+@pytest.mark.parametrize("update", GRAPH_MANAGEMENT_UPDATES)
+@pytest.mark.parametrize("storage", disk_params())
+def test_storage_graph_management(storage, update):
+    # CLEAR, DROP, COPY, MOVE and ADD give the same graphs and report the same changes in every
+    # storage mode, and the graphs can be written to and queried afterwards.
+    m = Model(**storage_kwargs(storage))
+    expected = Model()
+    for model in [m, expected]:
+        three_graphs(model)
+    changes = m.update(update)
+    assert changes == expected.update(update)
+    for model in [m, expected]:
+        model.update(
+            """
+            PREFIX ex: <http://example.net/ns#>
+            INSERT DATA { ex:new ex:value 11 . GRAPH <urn:maplib:g> { ex:new ex:value 12 } }
+            """
+        )
+    for graph in [None, "urn:maplib:g", "urn:maplib:h"]:
+        assert_frame_equal(graph_df(m, graph), graph_df(expected, graph))
+
+
+@pytest.mark.parametrize("storage", [s for s in disk_params() if s == "disk"])
+def test_storage_drop_removes_table_files(storage):
+    # Dropping a graph in disk storage removes the parquet files of its tables, and leaves those
+    # of the other graphs.
+    m = Model(**storage_kwargs(storage))
+    m.reads(TURTLE, format="turtle")
+    files_default = set(parquet_files())
+    m.reads(TURTLE, format="turtle", graph="urn:maplib:g")
+    assert set(parquet_files()) > files_default
+    m.update("DROP GRAPH <urn:maplib:g>")
+    gc.collect()
+    assert set(parquet_files()) == files_default
+    assert_frame_equal(triples_df(m), triples_df(memory_model()))
+    m.update("CLEAR DEFAULT")
+    gc.collect()
+    assert parquet_files() == []
+    assert triples_df(m).height == 0
+
+
+@pytest.mark.parametrize("storage", disk_params())
+def test_storage_clear_deserialized(storage, tmp_path):
+    # Clearing a deserialized model does not touch the files it was deserialized from.
+    serialized = str(tmp_path / "serialized")
+    memory_model().serialize(serialized, single_file=False)
+    files = sorted(p for p in pathlib.Path(serialized).rglob("*") if p.is_file())
+    assert files
+    m = Model.deserialize(serialized, **storage_kwargs(storage))
+    m.update("CLEAR ALL")
+    gc.collect()
+    assert triples_df(m).height == 0
+    assert sorted(p for p in pathlib.Path(serialized).rglob("*") if p.is_file()) == files
+    del m
+    gc.collect()
+    again = Model.deserialize(serialized, **storage_kwargs(storage))
+    assert_frame_equal(triples_df(again), triples_df(memory_model()))
+
+
+@pytest.mark.parametrize("storage", disk_params())
+def test_storage_truncate_graph(storage):
+    m = Model(**storage_kwargs(storage))
+    m.reads(TURTLE, format="turtle")
+    m.reads(TURTLE, format="turtle", graph="urn:maplib:g")
+    m.truncate_graph("urn:maplib:g")
+    assert graph_df(m, "urn:maplib:g").height == 0
+    assert_frame_equal(triples_df(m), triples_df(memory_model()))
+    m.truncate_graph()
+    assert triples_df(m).height == 0
+    m.reads(TURTLE, format="turtle")
+    assert_frame_equal(triples_df(m), triples_df(memory_model()))
