@@ -241,6 +241,7 @@ fn _maplib(py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(set_memory_limit, m)?)?;
     m.add_function(wrap_pyfunction!(memory_usage, m)?)?;
     m.add_function(wrap_pyfunction!(memory_limit, m)?)?;
+    m.add_function(wrap_pyfunction!(py_model::add_triples, m)?)?;
     py_storage::register(m)?;
     m.add("MaplibException", py.get_type::<MaplibException>())?;
     m.add("QueryTimeoutError", py.get_type::<QueryTimeoutError>())?;

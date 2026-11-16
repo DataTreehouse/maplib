@@ -88,6 +88,20 @@ impl Model {
             .add_graph(other_triplestore, source_graph, target_graph)
             .map_err(MaplibError::TriplestoreError)
     }
+
+    /// Copies the triples of `source_graph` of `source` (this model when None) into
+    /// `target_graph`. Blank nodes from another model get new labels, so that they stay
+    /// distinct from the blank nodes of this model.
+    pub fn add_triples(
+        &mut self,
+        source: Option<&Triplestore>,
+        source_graph: &NamedGraph,
+        target_graph: &NamedGraph,
+    ) -> Result<(), MaplibError> {
+        self.triplestore
+            .copy_triples(source, source_graph, target_graph, true)
+            .map_err(MaplibError::TriplestoreError)
+    }
 }
 
 #[derive(Clone, Default)]

@@ -19,6 +19,8 @@ from maplib import (
     xsd,
 )
 
+from .disk import disk_params
+
 EX = "http://example.net/ns#"
 G1 = "urn:graph:one"
 G2 = "urn:graph:two"
@@ -131,6 +133,152 @@ def test_add_triples_helper():
     add_triples(src, dst, source_graph=G1, target_graph=G2)
     assert dst.size(G2) == 5
     assert_frame_equal(_spo(src, graph=G1), _spo(dst, graph=G2))
+
+
+TYPED = f"""
+<{EX}a> <{EX}label> "Alice"@en .
+<{EX}a> <{EX}label> "Alicia"@es .
+<{EX}a> <{EX}label> "plain" .
+<{EX}a> <{EX}int> "7"^^<http://www.w3.org/2001/XMLSchema#int> .
+<{EX}a> <{EX}double> "2.5"^^<http://www.w3.org/2001/XMLSchema#double> .
+<{EX}a> <{EX}when> "2024-01-01T00:00:00Z"^^<http://www.w3.org/2001/XMLSchema#dateTime> .
+<{EX}a> <{EX}flag> "true"^^<http://www.w3.org/2001/XMLSchema#boolean> .
+<{EX}a> <{EX}mixed> <{EX}b> .
+<{EX}a> <{EX}mixed> "1"^^<http://www.w3.org/2001/XMLSchema#integer> .
+"""
+
+TYPED_QUERY = """
+SELECT ?p (STR(?o) AS ?v) (DATATYPE(?o) AS ?dt) (LANG(?o) AS ?l) WHERE {
+    ?s ?p ?o FILTER(isLITERAL(?o))
+} ORDER BY ?p ?v
+"""
+
+
+@pytest.mark.parametrize("target_graph", [None, G2])
+def test_add_triples_keeps_datatypes_and_language_tags(target_graph):
+    src = Model()
+    src.reads(TYPED, format="ntriples")
+    dst = Model()
+    add_triples(src, dst, target_graph=target_graph)
+    assert dst.size(target_graph) == 9
+    assert_frame_equal(_spo(src), _spo(dst, graph=target_graph))
+    assert_frame_equal(
+        src.query(TYPED_QUERY), dst.query(TYPED_QUERY, graph=target_graph)
+    )
+
+
+BLANKS = f"""
+_:x <{EX}knows> _:y .
+_:y <{EX}name> "y" .
+_:x <{EX}name> "x" .
+"""
+
+
+def test_add_triples_blank_nodes_stay_distinct():
+    a = Model()
+    a.reads(BLANKS, format="ntriples")
+    b = Model()
+    b.reads(BLANKS, format="ntriples")
+    # Both models labelled their blank nodes the same way.
+    assert_frame_equal(_spo(a), _spo(b))
+    add_triples(a, b)
+    assert b.size() == 6
+    n = b.query("SELECT (COUNT(DISTINCT ?s) AS ?n) WHERE { ?s ?p ?o }")
+    assert n["n"][0] == 4
+    # The structure of the copied blank nodes is kept.
+    pairs = b.query(
+        f"SELECT ?xn ?yn WHERE {{ ?x <{EX}knows> ?y . ?x <{EX}name> ?xn . ?y <{EX}name> ?yn }}"
+    )
+    assert pairs.height == 2
+    assert set(pairs["xn"]) == {"x"} and set(pairs["yn"]) == {"y"}
+    # The source is unchanged
+    assert a.size() == 3
+
+
+def test_add_triples_blank_nodes_into_named_graph_of_other_model():
+    a = Model()
+    a.reads(BLANKS, format="ntriples")
+    b = Model()
+    b.reads(BLANKS, format="ntriples")
+    add_triples(a, b, target_graph=G1)
+    n = b.query(
+        f"SELECT (COUNT(*) AS ?n) WHERE {{ ?s ?p ?o GRAPH <{G1}> {{ ?s ?p2 ?o2 }} }}"
+    )
+    assert n["n"][0] == 0
+
+
+def test_add_triples_same_model():
+    m = Model()
+    m.reads(BLANKS, format="ntriples")
+    m.reads(DATA, format="ntriples")
+    add_triples(m, m, target_graph=G1)
+    assert m.size() == 8
+    assert m.size(G1) == 8
+    assert_frame_equal(_spo(m), _spo(m, graph=G1))
+    # Within a model, the graphs share their blank nodes.
+    n = m.query(
+        f"SELECT (COUNT(*) AS ?n) WHERE {{ ?s <{EX}knows> ?o GRAPH <{G1}> {{ ?s <{EX}knows> ?o }} }}"
+    )
+    assert n["n"][0] == 1
+    # Copying a graph onto itself changes nothing
+    add_triples(m, m)
+    add_triples(m, m, source_graph=G1, target_graph=G1)
+    assert m.size() == 8
+    assert m.size(G1) == 8
+    # Back from the named graph into another named graph
+    add_triples(m, m, source_graph=G1, target_graph=G2)
+    assert_frame_equal(_spo(m), _spo(m, graph=G2))
+
+
+def test_add_triples_named_graph_to_default_and_missing_graph():
+    src = _model(graph=G1)
+    dst = _model()
+    add_triples(src, dst, source_graph=G1)
+    assert dst.size() == 5
+    add_triples(src, dst, source_graph="urn:graph:missing", target_graph=G2)
+    assert dst.size(G2) == 0
+    with pytest.raises(Exception):
+        add_triples(src, dst, source_graph="not an iri")
+
+
+def _big_model(n, **kwargs):
+    lines = []
+    for i in range(n):
+        lines.append(f"<{EX}s{i}> <{EX}rel> <{EX}o{i % 1000}> .")
+        lines.append(f'<{EX}s{i}> <{EX}value> "{i}"^^<http://www.w3.org/2001/XMLSchema#integer> .')
+        lines.append(f'<{EX}s{i}> <{EX}label> "label {i}"@en .')
+    m = Model(**kwargs)
+    m.reads("\n".join(lines), format="ntriples")
+    return m
+
+
+@pytest.mark.parametrize("dst_storage", disk_params())
+@pytest.mark.parametrize("src_storage", disk_params())
+def test_add_triples_larger_copy(src_storage, dst_storage, tmp_path):
+    def kwargs(storage, name):
+        if storage == "memory":
+            return {}
+        return {"storage": storage, "storage_folder": str(tmp_path / name)}
+
+    n = 200_000
+    src = _big_model(n, **kwargs(src_storage, "src"))
+    src.reads(BLANKS, format="ntriples")
+    dst = Model(**kwargs(dst_storage, "dst"))
+    dst.reads(DATA, format="ntriples")
+    dst.reads(BLANKS, format="ntriples")
+    add_triples(src, dst, target_graph=G1)
+    add_triples(src, dst)
+    assert dst.size(G1) == 3 * n + 3
+    assert dst.size() == 3 * n + 3 + 5 + 3
+    q = f"SELECT ?s ?v WHERE {{ ?s <{EX}value> ?v FILTER(?v >= {n - 3}) }} ORDER BY ?v"
+    assert_frame_equal(src.query(q), dst.query(q, graph=G1))
+    assert_frame_equal(src.query(q), dst.query(q))
+    q = f"SELECT (COUNT(DISTINCT ?o) AS ?n) WHERE {{ ?s <{EX}rel> ?o }}"
+    assert dst.query(q, graph=G1)["n"][0] == 1000
+    q = f"SELECT ?l WHERE {{ <{EX}s7> <{EX}label> ?l }}"
+    assert_frame_equal(src.query(q), dst.query(q))
+    q = "SELECT (COUNT(DISTINCT ?s) AS ?n) WHERE { ?s ?p ?o FILTER(isBLANK(?s)) }"
+    assert dst.query(q)["n"][0] == 4
 
 
 # --- indexing / compaction -----------------------------------------------------------

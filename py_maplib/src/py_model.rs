@@ -2017,6 +2017,47 @@ impl PyModel {
     }
 }
 
+/// Copies the triples of a graph of source into a graph of target, without going through Python.
+/// Blank nodes of another model get new labels, so they stay distinct from those of target.
+#[pyfunction]
+#[pyo3(signature = (source, target, source_graph=None, target_graph=None))]
+pub fn add_triples(
+    py: Python<'_>,
+    source: &Bound<'_, PyModel>,
+    target: &Bound<'_, PyModel>,
+    source_graph: Option<String>,
+    target_graph: Option<String>,
+) -> PyResult<()> {
+    let source_graph = parse_optional_named_node(source_graph)?;
+    let target_graph = parse_optional_named_node(target_graph)?;
+    let source_graph = NamedGraph::from_maybe_named_node(source_graph.as_ref());
+    let target_graph = NamedGraph::from_maybe_named_node(target_graph.as_ref());
+    let source = source.get().inner.clone();
+    let target = target.get().inner.clone();
+    py.detach(move || -> PyResult<()> {
+        if Arc::ptr_eq(&source, &target) {
+            let mut inner = target.write().unwrap_or_else(|e| e.into_inner());
+            inner
+                .add_triples(None, &source_graph, &target_graph)
+                .map_err(PyMaplibError::from)?;
+            return Ok(());
+        }
+        // Lock the two models in a fixed order, so that copies in opposite directions in two
+        // threads do not deadlock.
+        let (mut inner, source_inner) = if Arc::as_ptr(&target) < Arc::as_ptr(&source) {
+            let inner = target.write().unwrap_or_else(|e| e.into_inner());
+            (inner, source.read().unwrap_or_else(|e| e.into_inner()))
+        } else {
+            let source_inner = source.read().unwrap_or_else(|e| e.into_inner());
+            (target.write().unwrap_or_else(|e| e.into_inner()), source_inner)
+        };
+        inner
+            .add_triples(Some(&source_inner.triplestore), &source_graph, &target_graph)
+            .map_err(PyMaplibError::from)?;
+        Ok(())
+    })
+}
+
 fn path_to_string(path: PathBuf) -> String {
     path.to_string_lossy().into_owned()
 }

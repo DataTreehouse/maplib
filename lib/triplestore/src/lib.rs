@@ -1,6 +1,7 @@
 extern crate core;
 
 mod add_triples;
+mod copy_triples;
 pub mod cats;
 mod dblf;
 pub mod errors;
@@ -31,8 +32,8 @@ use geo::GeoIndex;
 use oxrdf::vocab::{rdf, rdfs};
 use oxrdf::NamedNode;
 use polars::prelude::{
-    as_struct, col, concat, lit, AnyValue, DataFrame, Expr, IntoLazy, PlSmallStr, RankMethod,
-    RankOptions, UnionArgs,
+    as_struct, col, lit, AnyValue, DataFrame, Expr, IntoLazy, PlSmallStr, RankMethod,
+    RankOptions,
 };
 use polars_core::frame::column::ScalarColumn;
 use polars_core::prelude::IntoSeries;
@@ -106,59 +107,6 @@ impl Triplestore {
 
     pub fn set_blank_node_scope(&mut self, scope: usize) {
         self.parser_call = scope;
-    }
-
-    pub fn add_graph(
-        &mut self,
-        other: &Triplestore,
-        source_graph: NamedGraph,
-        target_graph: NamedGraph,
-    ) -> Result<(), TriplestoreError> {
-        if let Some(graph) = other.graph_triples_map.get(&source_graph) {
-            let mut triples_to_add = vec![];
-            for (nn, map) in graph {
-                for ((subject_type, object_type), triples) in map {
-                    let lfs = triples.get_all_triples_lazy_frames(true)?;
-                    let df = concat(
-                        lfs,
-                        UnionArgs {
-                            parallel: true,
-                            rechunk: false,
-                            to_supertypes: false,
-                            diagonal: false,
-                            strict: false,
-                            from_partitioned_ds: false,
-                            maintain_order: true,
-                        },
-                    )
-                    .and_then(|lf| lf.collect())
-                    .map_err(TriplestoreError::LazyLoadError)?;
-                    let subject_cat_state = if subject_type.stored_cat() {
-                        BaseCatState::CategoricalNative(Some(other.global_cats.clone()))
-                    } else {
-                        subject_type.default_stored_cat_state()
-                    };
-                    let object_cat_state = if object_type.stored_cat() {
-                        BaseCatState::CategoricalNative(Some(other.global_cats.clone()))
-                    } else {
-                        object_type.default_stored_cat_state()
-                    };
-                    let tta = TriplesToAdd {
-                        df,
-                        subject_type: subject_type.clone(),
-                        object_type: object_type.clone(),
-                        predicate: Some(nn.clone()),
-                        graph: target_graph.clone(),
-                        subject_cat_state,
-                        object_cat_state,
-                        predicate_cat_state: None,
-                    };
-                    triples_to_add.push(tta);
-                }
-            }
-            self.add_triples_vec(triples_to_add)?;
-        }
-        Ok(())
     }
 }
 

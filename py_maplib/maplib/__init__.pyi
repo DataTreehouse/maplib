@@ -2377,6 +2377,29 @@ class FunctionArgumentException(Exception):
     """
 
 
+def add_triples(
+        source: Model,
+        target: Model,
+        source_graph: str = None,
+        target_graph: str = None,
+) -> None:
+    """(Zero) copy the triples from one Model into another.
+
+    The triples are copied natively, keeping datatypes and language tags. Blank nodes of the source
+    get new labels in the target, so that they stay distinct from the blank nodes of the target
+    (each copy gets new ones). Source and target may be the same Model, to copy a graph into another
+    graph; the blank nodes are then shared by the two graphs.
+
+    Usage:
+    >>> add_triples(source, target, source_graph="urn:graph:a", target_graph="urn:graph:b")
+
+    :param source: The source model
+    :param target: The target model
+    :param source_graph: The named graph in the source model to copy from. None means default graph.
+    :param target_graph: The named graph in the target model to copy into. None means default graph.
+    """
+
+
 def set_memory_limit(
         max_memory_mb: Optional[int] = None,
         spill_dir: Optional[Union[str, Path]] = None,
