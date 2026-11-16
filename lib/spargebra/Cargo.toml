@@ -12,7 +12,7 @@ edition.workspace = true
 rust-version.workspace = true
 
 [features]
-default = []
+default = ["sep-0006"]
 sparql-12 = ["oxrdf/rdf-12"]
 sep-0002 = []
 sep-0006 = []

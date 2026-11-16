@@ -128,6 +128,29 @@ pub fn rewrite_gp_pushdown(
             outer = create_filter_gps(outer, outer_filters);
             outer
         }
+        GraphPattern::Lateral { left, right } => {
+            // Filters on the left variables can be applied before the right side is evaluated.
+            let left_vars = get_gp_vars(&left);
+            let mut left_filters = vec![];
+            let mut outer_filters = vec![];
+            for f in filters {
+                let expr_vars = get_expr_vars(&f);
+                if expr_vars.is_subset(&left_vars) {
+                    left_filters.push(f);
+                } else {
+                    outer_filters.push(f);
+                }
+            }
+            let all_seen_vars: HashSet<_> = seen_vars.union(&left_vars).cloned().collect();
+            let left = rewrite_gp_pushdown(*left, left_filters, seen_vars);
+            let right = rewrite_gp_pushdown(*right, vec![], all_seen_vars);
+            let mut outer = GraphPattern::Lateral {
+                left: Box::new(left),
+                right: Box::new(right),
+            };
+            outer = create_filter_gps(outer, outer_filters);
+            outer
+        }
         GraphPattern::Union { left, right } => {
             let left = rewrite_gp_pushdown(*left, vec![], seen_vars.clone());
             let right = rewrite_gp_pushdown(*right, vec![], seen_vars);
@@ -290,6 +313,7 @@ fn contains_variable_predicate(graph_pattern: &GraphPattern) -> bool {
         | GraphPattern::PValues { .. } => false,
         GraphPattern::Join { left, right }
         | GraphPattern::LeftJoin { left, right, .. }
+        | GraphPattern::Lateral { left, right }
         | GraphPattern::Union { left, right } => {
             contains_variable_predicate(left) || contains_variable_predicate(right)
         }

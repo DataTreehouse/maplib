@@ -112,6 +112,14 @@ pub fn rewrite_lift_extend(gp: GraphPattern) -> (GraphPattern, Vec<(Expression, 
             };
             (inner, Vec::new())
         }
+        // The right side may use variables bound by BIND on the left side.
+        GraphPattern::Lateral { left, right } => (
+            GraphPattern::Lateral {
+                left: Box::new(terminating_lift_extend(*left)),
+                right: Box::new(terminating_lift_extend(*right)),
+            },
+            Vec::new(),
+        ),
         GraphPattern::Minus { left, right } => (
             GraphPattern::Minus {
                 left: Box::new(terminating_lift_extend(*left)),

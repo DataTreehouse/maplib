@@ -443,6 +443,13 @@ fn bad_properties(
             (left_p, left_vars)
         }
         GraphPattern::Graph { name: _name, inner } => bad_properties(inner, incoming_cols),
+        GraphPattern::Lateral { left, right } => {
+            let (mut left_bp, mut left_vs) = bad_properties(left, incoming_cols);
+            let (right_bp, right_vs) = bad_properties(right, Some(&left_vs));
+            left_bp.with_additional(right_bp);
+            left_vs.extend(right_vs);
+            (left_bp, left_vs)
+        }
         GraphPattern::Minus { left, right } => {
             let (mut left_properties, left_vars) = bad_properties(left, incoming_cols);
             let (right_properties, _) = bad_properties(right, incoming_cols);

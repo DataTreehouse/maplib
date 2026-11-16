@@ -5,6 +5,7 @@ mod geo_filter;
 mod graph;
 mod group;
 mod join;
+pub(crate) mod lateral;
 mod left_join;
 pub mod length_path;
 mod minus;
@@ -25,7 +26,7 @@ use crate::sparql::evaluation_hook::HookDecision;
 use tracing::{instrument, trace, warn};
 
 use crate::sparql::lazy_graph_patterns::triples_ordering::order_triple_patterns;
-use polars::prelude::{IntoLazy, JoinType};
+use polars::prelude::{col, int_range, len, lit, DataType, IntoLazy, JoinType};
 use polars_core::frame::DataFrame;
 use query_processing::graph_patterns::join;
 use query_processing::pushdowns::Pushdowns;
@@ -54,6 +55,22 @@ impl Triplestore {
             graph_pattern,
             context.as_str()
         );
+        // Inside the right side of a LATERAL, a pattern that no solutions flow into starts from
+        // the seed of substituted bindings. Sub-selects and the solution modifiers handle the
+        // seed themselves, as they start a new scope or work on whole solution sequences.
+        if solution_mappings.is_none()
+            && !matches!(
+                graph_pattern,
+                GraphPattern::Project { .. }
+                    | GraphPattern::Slice { .. }
+                    | GraphPattern::Distinct { .. }
+                    | GraphPattern::Reduced { .. }
+                    | GraphPattern::OrderBy { .. }
+                    | GraphPattern::Group { .. }
+            )
+        {
+            solution_mappings = lateral::seed_solution_mappings(parameters);
+        }
         utils::cancel::check()?;
         if let Some(hook) = &query_settings.evaluation_hook {
             let decision = {
@@ -286,6 +303,16 @@ impl Triplestore {
                 query_settings,
                 dataset,
             ),
+            GraphPattern::Lateral { left, right } => self.lazy_lateral(
+                left,
+                right,
+                solution_mappings,
+                context,
+                parameters,
+                pushdowns,
+                query_settings,
+                dataset,
+            ),
             GraphPattern::Minus { left, right } => self.lazy_minus(
                 left,
                 right,
@@ -369,7 +396,22 @@ impl Triplestore {
                     query_settings,
                     dataset,
                 )?;
-                if let Some(length) = length {
+                // Inside the right side of a LATERAL, each substituted binding is sliced on its
+                // own, e.g. ORDER BY .. LIMIT n gives the top n for every left solution.
+                let keys: Vec<_> = lateral::lateral_key_columns(parameters)
+                    .into_iter()
+                    .filter(|k| newsols.rdf_node_types.contains_key(k))
+                    .collect();
+                if !keys.is_empty() {
+                    let row = int_range(lit(0), len(), 1, DataType::Int64)
+                        .over(keys.iter().map(|k| col(k)).collect::<Vec<_>>())
+                        .unwrap();
+                    let mut keep = row.clone().gt_eq(lit(*start as i64));
+                    if let Some(length) = length {
+                        keep = keep.and(row.lt(lit((*start + *length) as i64)));
+                    }
+                    newsols.mappings = newsols.mappings.filter(keep);
+                } else if let Some(length) = length {
                     let input_estimate = newsols.height_estimate;
                     newsols.mappings = newsols.mappings.slice(*start as i64, *length as u32);
                     let ordered = is_ordered(inner);

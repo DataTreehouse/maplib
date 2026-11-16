@@ -75,7 +75,7 @@ pub fn find_all_used_variables_in_graph_pattern(
             );
             find_all_used_variables_in_expression(expr, used_vars, include_exists, include_bound);
         }
-        GraphPattern::Union { left, right } => {
+        GraphPattern::Union { left, right } | GraphPattern::Lateral { left, right } => {
             find_all_used_variables_in_graph_pattern(
                 left,
                 used_vars,

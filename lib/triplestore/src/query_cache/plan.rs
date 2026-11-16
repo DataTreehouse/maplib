@@ -245,7 +245,8 @@ impl Planner<'_> {
             }
             GraphPattern::Join { left, right }
             | GraphPattern::Union { left, right }
-            | GraphPattern::Minus { left, right } => {
+            | GraphPattern::Minus { left, right }
+            | GraphPattern::Lateral { left, right } => {
                 self.pattern(left, scope);
                 self.pattern(right, scope);
             }

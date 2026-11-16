@@ -980,7 +980,7 @@ fn add_defined_variables<'a>(pattern: &'a GraphPattern, set: &mut HashSet<&'a Va
                 }
             }
         }
-        GraphPattern::Values { variables, .. } => {
+        GraphPattern::Values { variables, .. } | GraphPattern::PValues { variables, .. } => {
             for v in variables {
                 set.insert(v);
             }

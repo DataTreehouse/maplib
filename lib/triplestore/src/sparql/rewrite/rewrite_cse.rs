@@ -72,6 +72,10 @@ pub fn rewrite_gp_cse(gp: GraphPattern) -> GraphPattern {
             variable,
             expression,
         },
+        GraphPattern::Lateral { left, right } => GraphPattern::Lateral {
+            left: Box::new(rewrite_gp_cse(*left)),
+            right: Box::new(rewrite_gp_cse(*right)),
+        },
         GraphPattern::Minus { left, right } => GraphPattern::Minus {
             left: Box::new(rewrite_gp_cse(*left)),
             right: Box::new(rewrite_gp_cse(*right)),

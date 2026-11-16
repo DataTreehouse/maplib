@@ -58,7 +58,8 @@ pub(crate) fn contains_service(gp: &GraphPattern) -> bool {
         GraphPattern::Join { left, right }
         | GraphPattern::LeftJoin { left, right, .. }
         | GraphPattern::Union { left, right }
-        | GraphPattern::Minus { left, right } => contains_service(left) || contains_service(right),
+        | GraphPattern::Minus { left, right }
+        | GraphPattern::Lateral { left, right } => contains_service(left) || contains_service(right),
         GraphPattern::Filter { inner, .. }
         | GraphPattern::Graph { inner, .. }
         | GraphPattern::Extend { inner, .. }

@@ -5,7 +5,9 @@ use tracing::{instrument, trace};
 
 use crate::sparql::QuerySettings;
 use oxrdf::vocab::xsd;
-use polars::prelude::{coalesce, col, cols, lit, when, DataType, IntoLazy, JoinType};
+use crate::sparql::lazy_graph_patterns::lateral::{lateral_key_columns, lateral_seed};
+use polars::prelude::{coalesce, col, cols, lit, when, DataType, IntoLazy, JoinArgs, JoinType};
+use polars_core::prelude::UniqueKeepStrategy;
 use polars_core::df;
 use polars_core::frame::DataFrame;
 use polars_core::prelude::Column;
@@ -37,7 +39,9 @@ impl Triplestore {
         dataset: &QueryGraph,
     ) -> Result<SolutionMappings, SparqlError> {
         trace!("Processing group graph pattern");
-        if variables.is_empty() {
+        // Inside the right side of a LATERAL, each substituted binding is grouped on its own.
+        let lateral_keys = lateral_key_columns(parameters);
+        if variables.is_empty() && lateral_keys.is_empty() {
             if let Some(grouped) = self.count_all_triples(inner, aggregates, dataset) {
                 return Ok(if let Some(solution_mappings) = solution_mappings {
                     join(
@@ -64,11 +68,20 @@ impl Triplestore {
             query_settings,
             dataset,
         )?;
+        let lateral_keys: Vec<_> = lateral_keys
+            .into_iter()
+            .filter(|k| output_solution_mappings.rdf_node_types.contains_key(k))
+            .collect();
+        let group_variables: Vec<Variable> = variables
+            .iter()
+            .cloned()
+            .chain(lateral_keys.iter().map(|k| Variable::new_unchecked(k.clone())))
+            .collect();
         let (mut output_solution_mappings, by, dummy_varname) =
-            prepare_group_by(output_solution_mappings, variables);
+            prepare_group_by(output_solution_mappings, &group_variables);
         let mut aggregate_expressions = vec![];
         let mut new_rdf_node_types = HashMap::new();
-        for v in variables {
+        for v in &group_variables {
             let maybe_t = output_solution_mappings.rdf_node_types.get(v.as_str());
             if let Some(t) = maybe_t {
                 new_rdf_node_types.insert(v.as_str().to_string(), t.clone());
@@ -141,9 +154,25 @@ impl Triplestore {
                 .with_column(lit(0u32).alias(&dummy_col_name))
                 .with_column(lit(true).alias(&present_col_name));
 
-            let lf_rhs = df!(&dummy_col_name => [0u32]).unwrap().lazy();
-
-            let mut lf = lf_rhs.left_join(lf_lhs, &*dummy_col_name, &*dummy_col_name);
+            let mut lf = if lateral_keys.is_empty() {
+                let lf_rhs = df!(&dummy_col_name => [0u32]).unwrap().lazy();
+                lf_rhs.left_join(lf_lhs, &*dummy_col_name, &*dummy_col_name)
+            } else {
+                // One group for every substituted binding.
+                let seed = lateral_seed(parameters).unwrap();
+                let lf_rhs = seed
+                    .mappings
+                    .clone()
+                    .lazy()
+                    .select(lateral_keys.iter().map(|k| col(k)).collect::<Vec<_>>())
+                    .unique(None, UniqueKeepStrategy::Any)
+                    .with_column(lit(0u32).alias(&dummy_col_name));
+                let mut on: Vec<_> = lateral_keys.iter().map(|k| col(k)).collect();
+                on.push(col(&*dummy_col_name));
+                lf_rhs
+                    .join(lf_lhs, on.clone(), on, JoinArgs::new(JoinType::Left))
+                    .unwrap()
+            };
             for c in count_cols {
                 // COUNT over an empty group is 0, COUNT results are Int64 (xsd:integer).
                 lf = lf.with_column(coalesce(&[

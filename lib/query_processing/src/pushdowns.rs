@@ -161,7 +161,7 @@ impl Pushdowns {
             GraphPattern::LeftJoin { left, .. } => {
                 self.add_graph_pattern_pushdowns_impl(left, only_vars)
             }
-            GraphPattern::Minus { left, .. } => {
+            GraphPattern::Minus { left, .. } | GraphPattern::Lateral { left, .. } => {
                 self.add_graph_pattern_pushdowns_impl(left, only_vars)
             }
             GraphPattern::Filter { inner, expr } => {

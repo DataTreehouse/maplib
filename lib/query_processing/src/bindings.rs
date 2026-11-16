@@ -167,6 +167,10 @@ pub fn replace_bindings_graph_pattern(
                 expression: replace_bindings_expression(expression, bindings)?,
             })
         }
+        GraphPattern::Lateral { left, right } => Ok(GraphPattern::Lateral {
+            left: Box::new(replace_bindings_graph_pattern(*left, bindings)?),
+            right: Box::new(replace_bindings_graph_pattern(*right, bindings)?),
+        }),
         GraphPattern::Minus { left, right } => Ok(GraphPattern::Minus {
             left: Box::new(replace_bindings_graph_pattern(*left, bindings)?),
             right: Box::new(replace_bindings_graph_pattern(*right, bindings)?),

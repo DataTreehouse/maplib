@@ -88,6 +88,7 @@ impl Triplestore {
             },
             GraphPattern::Extend { inner, .. }
             | GraphPattern::LeftJoin { left: inner, .. }
+            | GraphPattern::Lateral { left: inner, .. }
             | GraphPattern::OrderBy { inner, .. }
             | GraphPattern::Project { inner, .. }
             | GraphPattern::Distinct { inner, .. }
