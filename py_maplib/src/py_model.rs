@@ -536,6 +536,7 @@ impl PyModel {
         // The result of each logical table query: given in tables (by query or table name), or
         // from the database.
         let mut results: HashMap<String, polars::prelude::DataFrame> = HashMap::new();
+        let fetch_start = std::time::Instant::now();
         for tm in &parsed.triples_maps {
             let sql = tm.logical_table.sql();
             if results.contains_key(&sql) {
@@ -560,17 +561,30 @@ impl PyModel {
                     .into())
                 }
             };
-            // duckdb relations and similar results convert to polars with .pl()
-            let frame = if frame.hasattr("to_arrow")? && frame.hasattr("height")? {
-                frame
+            let df = if frame.hasattr("to_arrow")? && frame.hasattr("height")? {
+                // A polars DataFrame
+                representation::python_df_to_rust::polars_df_to_rust_df(&frame)?
+            } else if frame.hasattr("to_arrow_table")? {
+                // duckdb relations give Arrow record batches directly, without a round trip
+                // through polars in Python.
+                let table = frame.call_method0("to_arrow_table")?;
+                let batches: Vec<Bound<'_, PyAny>> =
+                    table.call_method0("to_batches")?.extract()?;
+                if batches.is_empty() {
+                    polars::prelude::DataFrame::empty()
+                } else {
+                    representation::python_df_to_rust::array_to_rust_df(&batches)?
+                }
             } else if frame.hasattr("pl")? {
-                frame.call_method0("pl")?
+                representation::python_df_to_rust::polars_df_to_rust_df(
+                    &frame.call_method0("pl")?,
+                )?
             } else {
-                frame
+                representation::python_df_to_rust::polars_df_to_rust_df(&frame)?
             };
-            let df = representation::python_df_to_rust::polars_df_to_rust_df(&frame)?;
             results.insert(sql, df);
         }
+        tracing::debug!(target: "r2rml_timing", "r2rml_timing: fetch={}", fetch_start.elapsed().as_secs_f64());
         let graph = parse_optional_named_node(graph)?;
         let options = r2rml::R2RMLOptions {
             base_iri,

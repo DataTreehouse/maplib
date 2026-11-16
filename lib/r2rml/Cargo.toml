@@ -15,3 +15,4 @@ polars = { workspace = true, features = ["lazy", "dtype-full", "strings", "conca
 thiserror.workspace = true
 uuid.workspace = true
 tracing.workspace = true
+rayon.workspace = true

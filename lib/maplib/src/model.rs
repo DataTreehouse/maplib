@@ -467,23 +467,41 @@ impl Model {
         tables: &HashMap<String, DataFrame>,
         options: &r2rml::R2RMLOptions,
     ) -> Result<Vec<String>, MaplibError> {
+        let t0 = std::time::Instant::now();
         let (batches, warnings) = r2rml::execute(mapping, tables, options)?;
-        for b in batches {
-            let types: HashMap<String, MappingColumnType> = b
-                .types
-                .into_iter()
-                .map(|(k, v)| (k, MappingColumnType::Flat(v)))
-                .collect();
-            self.expand_triples(
-                b.df,
-                Some(types),
-                b.predicate,
-                MapOptions {
-                    graph: b.graph,
-                    validate_iris: false,
-                },
-            )?;
+        tracing::debug!(target: "r2rml_timing", "r2rml_timing: evaluate={}", t0.elapsed().as_secs_f64());
+        let t0 = std::time::Instant::now();
+        // The batches have flat columns of one RDF type each, which is all the ottr:Triple
+        // expansion would check, so they are added to the triplestore directly, in one call so
+        // that they are encoded and indexed together.
+        let flat = |types: &mut HashMap<String, RDFNodeState>, c: &str| {
+            types
+                .remove(c)
+                .and_then(|t| t.map.into_iter().next())
+                .ok_or_else(|| MaplibError::R2RMLError(r2rml::R2RMLError::MappingError(format!("no type for the {c} column"))))
+        };
+        let mut to_add = Vec::with_capacity(batches.len());
+        for mut b in batches {
+            let (subject_type, subject_cat_state) = flat(&mut b.types, representation::SUBJECT_COL_NAME)?;
+            let (object_type, object_cat_state) = flat(&mut b.types, representation::OBJECT_COL_NAME)?;
+            let predicate_cat_state = if b.predicate.is_none() {
+                Some(flat(&mut b.types, representation::PREDICATE_COL_NAME)?.1)
+            } else {
+                None
+            };
+            to_add.push(triplestore::TriplesToAdd {
+                df: b.df,
+                subject_type,
+                object_type,
+                predicate: b.predicate,
+                graph: b.graph,
+                subject_cat_state,
+                object_cat_state,
+                predicate_cat_state,
+            });
         }
+        self.triplestore.add_triples_vec(to_add)?;
+        tracing::debug!(target: "r2rml_timing", "r2rml_timing: expand={}", t0.elapsed().as_secs_f64());
         Ok(warnings)
     }
 

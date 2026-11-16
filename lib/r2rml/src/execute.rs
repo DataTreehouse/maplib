@@ -16,8 +16,8 @@ use oxiri::Iri;
 use oxrdf::vocab::{rdf, xsd};
 use oxrdf::{NamedNode, Term};
 use polars::prelude::{
-    as_struct, ChunkApply, ChunkFull, col, concat_str, lit, Column, DataFrame, DataType, Expr, IntoColumn, IntoLazy,
-    IntoSeries, JoinArgs, JoinType, NamedFrom, Series, StringChunked, TimeUnit,
+    as_struct, ChunkFull, ChunkFullNull, col, concat_str, lit, Column, DataFrame, DataType, Expr, IntoColumn, IntoLazy,
+    IntoSeries, JoinArgs, JoinType, Series, StringChunked, TimeUnit,
 };
 use representation::dataset::NamedGraph;
 use representation::polars_to_rdf::polars_type_to_literal_type;
@@ -25,8 +25,8 @@ use representation::{
     literal_time_zone, BaseRDFNodeType, RDFNodeState, SeriesBuilder, LANG_STRING_LANG_FIELD,
     LANG_STRING_VALUE_FIELD, OBJECT_COL_NAME, PREDICATE_COL_NAME, SUBJECT_COL_NAME,
 };
-use std::borrow::Cow;
-use std::collections::HashMap;
+use rayon::prelude::*;
+use std::collections::{BTreeSet, HashMap};
 use tracing::warn;
 
 const GRAPH_COL: &str = "graph";
@@ -154,33 +154,144 @@ fn hex_upper(b: &[u8]) -> String {
     s
 }
 
-/// IRI-safe percent encoding of template values, <https://www.w3.org/TR/r2rml/#dfn-iri-safe>.
-fn iri_safe(v: &str) -> Cow<'_, str> {
-    if v.bytes().all(|b| b.is_ascii_alphanumeric() || matches!(b, b'-' | b'.' | b'_' | b'~')) {
-        return Cow::Borrowed(v);
+/// Rows per parallel slice, at least.
+const MIN_SLICE: usize = 1 << 16;
+
+/// Row ranges (offset, length) that split n rows over the threads.
+fn slices(n: usize) -> Vec<(usize, usize)> {
+    let parts = (n / MIN_SLICE).clamp(1, rayon::current_num_threads().max(1));
+    let stride = n.div_ceil(parts).max(1);
+    let mut out = vec![];
+    let mut start = 0;
+    while start < n {
+        out.push((start, stride.min(n - start)));
+        start += stride;
     }
-    let mut s = String::with_capacity(v.len() * 3);
-    for b in v.bytes() {
-        if b.is_ascii_alphanumeric() || matches!(b, b'-' | b'.' | b'_' | b'~') {
-            s.push(b as char);
-        } else {
-            s.push_str(&format!("%{b:02X}"));
-        }
+    if out.is_empty() {
+        out.push((0, 0));
     }
-    Cow::Owned(s)
+    out
 }
 
-fn blank_label(prefix: &str, v: &str) -> String {
-    let mut s = String::with_capacity(prefix.len() + v.len() * 2);
-    s.push_str(prefix);
+fn concat_strings(parts: Vec<StringChunked>, name: &str) -> Result<StringChunked, R2RMLError> {
+    let mut it = parts.into_iter();
+    let mut out = it.next().unwrap_or_else(|| StringChunked::full_null(name.into(), 0));
+    for p in it {
+        out.append(&p)?;
+    }
+    Ok(out.with_name(name.into()))
+}
+
+/// Writes f of each value of a string column, in parallel over slices of rows. Nulls stay null.
+fn par_strings<F>(ca: &StringChunked, f: F) -> Result<StringChunked, R2RMLError>
+where
+    F: Fn(&str, &mut String) + Sync,
+{
+    let parts: Vec<StringChunked> = slices(ca.len())
+        .into_par_iter()
+        .map(|(o, l)| ca.slice(o as i64, l).apply_into_string_amortized(|v, buf| f(v, buf)))
+        .collect();
+    concat_strings(parts, ca.name().as_str())
+}
+
+/// Whether f holds for any value of a string column.
+fn par_any<F>(ca: &StringChunked, f: F) -> bool
+where
+    F: Fn(&str) -> bool + Sync,
+{
+    slices(ca.len())
+        .into_par_iter()
+        .any(|(o, l)| ca.slice(o as i64, l).iter().flatten().any(&f))
+}
+
+fn is_unreserved(b: u8) -> bool {
+    b.is_ascii_alphanumeric() || matches!(b, b'-' | b'.' | b'_' | b'~')
+}
+
+const HEX_UPPER: &[u8; 16] = b"0123456789ABCDEF";
+const HEX_LOWER: &[u8; 16] = b"0123456789abcdef";
+
+/// IRI-safe percent encoding of template values, <https://www.w3.org/TR/r2rml/#dfn-iri-safe>.
+fn push_iri_safe(v: &str, buf: &mut String) {
     for b in v.bytes() {
-        if b.is_ascii_alphanumeric() {
-            s.push(b as char);
+        if is_unreserved(b) {
+            buf.push(b as char);
         } else {
-            s.push_str(&format!("_{b:02x}"));
+            buf.push('%');
+            buf.push(HEX_UPPER[(b >> 4) as usize] as char);
+            buf.push(HEX_UPPER[(b & 15) as usize] as char);
         }
     }
-    s
+}
+
+/// The IRI-safe form of the lexical forms of a column of the given type. Integers and booleans
+/// are IRI-safe as they are, as are strings without reserved characters.
+fn iri_safe_column(l: StringChunked, dtype: &DataType) -> Result<StringChunked, R2RMLError> {
+    if dtype.is_integer() || dtype == &DataType::Boolean {
+        return Ok(l);
+    }
+    if !par_any(&l, |v| !v.bytes().all(is_unreserved)) {
+        return Ok(l);
+    }
+    par_strings(&l, push_iri_safe)
+}
+
+/// Blank node labels: the prefix, then the value with characters other than ASCII letters and
+/// digits escaped as _xx.
+fn push_blank_label(prefix: &str, v: &str, buf: &mut String) {
+    buf.push_str(prefix);
+    for b in v.bytes() {
+        if b.is_ascii_alphanumeric() {
+            buf.push(b as char);
+        } else {
+            buf.push('_');
+            buf.push(HEX_LOWER[(b >> 4) as usize] as char);
+            buf.push(HEX_LOWER[(b & 15) as usize] as char);
+        }
+    }
+}
+
+/// The template with each column reference replaced by fill.
+fn template_shape(parts: &[TemplatePart], fill: &str) -> String {
+    parts
+        .iter()
+        .map(|p| match p {
+            TemplatePart::Text(t) => t.as_str(),
+            TemplatePart::Column(_) => fill,
+        })
+        .collect()
+}
+
+/// Whether an IRI template with IRI-safe values always gives valid absolute IRIs, so that they
+/// need not be checked one by one. This holds when the text before the first column has a
+/// scheme and, if it has an authority, ends the authority: the values then are in the path,
+/// query or fragment, where unreserved characters and percent encodings are always allowed.
+fn template_gives_valid_iris(parts: &[TemplatePart]) -> bool {
+    if !parts.iter().any(|p| matches!(p, TemplatePart::Column(_))) {
+        return false;
+    }
+    let prefix: String = parts
+        .iter()
+        .map_while(|p| match p {
+            TemplatePart::Text(t) => Some(t.as_str()),
+            TemplatePart::Column(_) => None,
+        })
+        .collect();
+    let Some(colon) = prefix.find(':') else {
+        return false;
+    };
+    let scheme = &prefix[..colon];
+    if scheme.is_empty() || scheme.contains(['/', '?', '#']) {
+        return false;
+    }
+    let after_authority = match prefix[colon + 1..].strip_prefix("//") {
+        Some(authority) => authority.contains(['/', '?', '#']),
+        None => true,
+    };
+    after_authority
+        && ["a", "", "%41", "a.b-c_d~e"]
+            .iter()
+            .all(|fill| Iri::parse(template_shape(parts, fill).as_str()).is_ok())
 }
 
 fn state(t: BaseRDFNodeType) -> RDFNodeState {
@@ -193,6 +304,8 @@ fn evaluate(
     df: &DataFrame,
     location: &str,
 ) -> Result<Evaluated, R2RMLError> {
+    // Whether the strings are known to be valid absolute IRIs, from the shape of the template.
+    let mut valid_iris = false;
     let strings: StringChunked = match &tm.value {
         TermValue::Constant(t) => return Ok(Evaluated::Constant(t.clone())),
         TermValue::Column(c) => {
@@ -203,6 +316,24 @@ fn evaluate(
             lexical(column)?
         }
         TermValue::Template(parts) => {
+            let mut parts: Vec<TemplatePart> = parts.clone();
+            if tm.term_type == TermType::IRI {
+                if template_gives_valid_iris(&parts) {
+                    valid_iris = true;
+                } else if !parts
+                    .iter()
+                    .any(|p| matches!(p, TemplatePart::Text(t) if t.contains(':')))
+                {
+                    // IRI-safe values have no colon, so without one in the text the IRIs are
+                    // all relative, and resolved against the base IRI.
+                    let mut with_base = vec![TemplatePart::Text(ctx.options.base_iri.clone())];
+                    with_base.extend(parts.iter().cloned());
+                    if template_gives_valid_iris(&with_base) {
+                        parts = with_base;
+                        valid_iris = true;
+                    }
+                }
+            }
             let mut lf_cols = vec![];
             let mut exprs: Vec<Expr> = vec![];
             for (i, p) in parts.iter().enumerate() {
@@ -212,7 +343,7 @@ fn evaluate(
                         let column = resolve_column(df, c, location)?;
                         let mut l = lexical(column)?;
                         if tm.term_type == TermType::IRI {
-                            l = l.apply_values(iri_safe);
+                            l = iri_safe_column(l, column.dtype())?;
                         }
                         let name = format!("_{i}");
                         lf_cols.push(l.with_name(name.as_str().into()).into_series().into_column());
@@ -222,30 +353,102 @@ fn evaluate(
             }
             if lf_cols.is_empty() {
                 // A template without columns gives the same string for each row.
-                let s: String = parts
-                    .iter()
-                    .map(|p| match p {
-                        TemplatePart::Text(t) => t.as_str(),
-                        TemplatePart::Column(_) => "",
-                    })
-                    .collect();
+                let s: String = template_shape(&parts, "");
                 StringChunked::full("t".into(), s.as_str(), df.height())
+            } else if exprs.len() == 1 {
+                lf_cols.pop().unwrap().as_materialized_series().str()?.clone()
             } else {
-            let tmp = DataFrame::new(df.height(), lf_cols)?;
-            let out = tmp
-                .lazy()
-                .select([concat_str(exprs, "", false).alias("t")])
-                .collect()?;
-            out.column("t")?.str()?.clone()
+                let tmp = DataFrame::new(df.height(), lf_cols)?;
+                let out = tmp
+                    .lazy()
+                    .select([concat_str(exprs, "", false).alias("t")])
+                    .collect()?;
+                out.column("t")?.str()?.clone()
             }
         }
     };
     let n = strings.len();
     match tm.term_type {
         TermType::IRI => {
+            let resolved = if valid_iris {
+                strings
+            } else {
+                resolve_iris(ctx, strings, location)?
+            };
+            Ok(Evaluated::Columns(vec![(
+                None,
+                Terms {
+                    series: resolved.into_series(),
+                    state: state(BaseRDFNodeType::IRI),
+                },
+            )]))
+        }
+        TermType::BlankNode => {
+            let prefix = ctx.options.blank_node_prefix.as_str();
+            let labels = par_strings(&strings, |v, buf| push_blank_label(prefix, v, buf))?;
+            Ok(Evaluated::Columns(vec![(
+                None,
+                Terms {
+                    series: labels.into_series(),
+                    state: state(BaseRDFNodeType::BlankNode),
+                },
+            )]))
+        }
+        TermType::Literal => {
+            if let Some(l) = &tm.language {
+                // Null values give null structs.
+                let mask = if strings.null_count() > 0 {
+                    Some(strings.is_not_null().into_series())
+                } else {
+                    None
+                };
+                let tmp = DataFrame::new(
+                    n,
+                    vec![strings.with_name("v".into()).into_series().into_column()],
+                )?;
+                let out = tmp
+                    .lazy()
+                    .select([as_struct(vec![
+                        col("v").alias(LANG_STRING_VALUE_FIELD),
+                        lit(l.clone()).alias(LANG_STRING_LANG_FIELD),
+                    ])
+                    .alias("t")])
+                    .collect()?;
+                let s = out.column("t")?.as_materialized_series().clone();
+                return Ok(Evaluated::Columns(vec![(
+                    mask,
+                    Terms {
+                        series: s,
+                        state: state(BaseRDFNodeType::Literal(rdf::LANG_STRING.into_owned(), None)),
+                    },
+                )]));
+            }
+            let datatype = tm
+                .datatype
+                .clone()
+                .unwrap_or_else(|| xsd::STRING.into_owned());
+            typed_literals(ctx, &strings, &datatype, location)
+        }
+    }
+}
+
+/// Checks that the strings are IRIs, and resolves the relative ones against the base IRI.
+/// Strings that are not IRIs either way are data errors, and give no term.
+fn resolve_iris(
+    ctx: &mut Ctx,
+    strings: StringChunked,
+    location: &str,
+) -> Result<StringChunked, R2RMLError> {
+    let base = ctx.options.base_iri.as_str();
+    let parts: Vec<(StringChunked, Vec<String>)> = slices(strings.len())
+        .into_par_iter()
+        .map(|(o, l)| {
+            let s = strings.slice(o as i64, l);
+            if s.iter().flatten().all(|v| Iri::parse(v).is_ok()) {
+                return (s, vec![]);
+            }
             let mut errors = vec![];
-            let base = ctx.options.base_iri.as_str();
-            let resolved: StringChunked = strings
+            let out: StringChunked = s
                 .iter()
                 .map(|v| {
                     v.and_then(|v| {
@@ -265,117 +468,123 @@ fn evaluate(
                     })
                 })
                 .collect();
-            if !errors.is_empty() {
-                ctx.data_error(location, format!("invalid IRIs, e.g. {}", errors.join(", ")))?;
-            }
-            let _ = n;
-            Ok(Evaluated::Columns(vec![(
-                None,
-                Terms {
-                    series: resolved.into_series(),
-                    state: state(BaseRDFNodeType::IRI),
-                },
-            )]))
-        }
-        TermType::BlankNode => {
-            let prefix = ctx.options.blank_node_prefix.as_str();
-            let labels: StringChunked = strings
-                .iter()
-                .map(|v| v.map(|v| blank_label(prefix, v)))
-                .collect();
-            Ok(Evaluated::Columns(vec![(
-                None,
-                Terms {
-                    series: labels.into_series(),
-                    state: state(BaseRDFNodeType::BlankNode),
-                },
-            )]))
-        }
-        TermType::Literal => {
-            if let Some(l) = &tm.language {
-                // Null values give null structs.
-                let mask = strings.is_not_null();
-                let tmp = DataFrame::new(
-                    n,
-                    vec![strings.with_name("v".into()).into_series().into_column()],
-                )?;
-                let out = tmp
-                    .lazy()
-                    .select([as_struct(vec![
-                        col("v").alias(LANG_STRING_VALUE_FIELD),
-                        lit(l.clone()).alias(LANG_STRING_LANG_FIELD),
-                    ])
-                    .alias("t")])
-                    .collect()?;
-                let s = out.column("t")?.as_materialized_series().clone();
-                return Ok(Evaluated::Columns(vec![(
-                    Some(mask.into_series()),
-                    Terms {
-                        series: s,
-                        state: state(BaseRDFNodeType::Literal(rdf::LANG_STRING.into_owned(), None)),
-                    },
-                )]));
-            }
-            let datatype = tm
-                .datatype
-                .clone()
-                .unwrap_or_else(|| xsd::STRING.into_owned());
-            typed_literals(ctx, &strings, &datatype, location)
-        }
+            (out, errors)
+        })
+        .collect();
+    let mut errors = vec![];
+    let mut cas = vec![];
+    for (ca, e) in parts {
+        cas.push(ca);
+        errors.extend(e);
     }
+    errors.truncate(5);
+    if !errors.is_empty() {
+        ctx.data_error(location, format!("invalid IRIs, e.g. {}", errors.join(", ")))?;
+    }
+    concat_strings(cas, strings.name().as_str())
 }
 
-/// Literals with the given datatype from their lexical forms.
+/// Literals with the given datatype from their lexical forms. Values that are null, or not
+/// valid for the datatype (data errors), give null terms.
 fn typed_literals(
     ctx: &mut Ctx,
     strings: &StringChunked,
     datatype: &NamedNode,
     location: &str,
 ) -> Result<Evaluated, R2RMLError> {
-    // Group by the time zone offset, which is part of the type of xsd:dateTime literals.
-    let mut groups: Vec<(Option<i16>, Vec<bool>)> = vec![];
-    let n = strings.len();
-    for (i, v) in strings.iter().enumerate() {
-        if let Some(v) = v {
-            let tz = literal_time_zone(v, datatype.as_ref());
-            let g = match groups.iter().position(|(t, _)| *t == tz) {
-                Some(g) => g,
-                None => {
-                    groups.push((tz, vec![false; n]));
-                    groups.len() - 1
-                }
-            };
-            groups[g].1[i] = true;
-        }
+    let plain = BaseRDFNodeType::Literal(datatype.clone(), None);
+    if matches!(SeriesBuilder::new(&plain), SeriesBuilder::String(..)) {
+        // Stored by the lexical form: the strings are the terms.
+        return Ok(Evaluated::Columns(vec![(
+            None,
+            Terms {
+                series: strings.clone().with_name("t".into()).into_series(),
+                state: state(plain),
+            },
+        )]));
     }
+    let ranges = slices(strings.len());
+    // The time zone offset is part of the type of xsd:dateTime literals, so there is one column
+    // of terms per offset.
+    let has_zones = matches!(datatype.as_ref(), xsd::DATE_TIME | xsd::DATE_TIME_STAMP);
+    let zones_per_row: Vec<Vec<Option<i16>>> = if has_zones {
+        ranges
+            .par_iter()
+            .map(|(o, l)| {
+                strings
+                    .slice(*o as i64, *l)
+                    .iter()
+                    .map(|v| v.and_then(|v| literal_time_zone(v, datatype.as_ref())))
+                    .collect()
+            })
+            .collect()
+    } else {
+        vec![]
+    };
+    let zones: BTreeSet<Option<i16>> = if has_zones {
+        zones_per_row
+            .par_iter()
+            .zip(ranges.par_iter())
+            .map(|(z, (o, l))| {
+                let s = strings.slice(*o as i64, *l);
+                z.iter()
+                    .zip(s.iter())
+                    .filter(|(_, v)| v.is_some())
+                    .map(|(z, _)| *z)
+                    .collect::<BTreeSet<_>>()
+            })
+            .reduce(BTreeSet::new, |mut a, b| {
+                a.extend(b);
+                a
+            })
+    } else {
+        BTreeSet::from([None])
+    };
     let mut out = vec![];
     let mut bad = vec![];
-    for (tz, mask) in groups {
+    for tz in zones {
         let t = BaseRDFNodeType::Literal(datatype.clone(), tz);
-        let mut builder = SeriesBuilder::new_with_capacity(&t, n);
-        let mut keep = mask.clone();
-        for (i, v) in strings.iter().enumerate() {
-            match v {
-                Some(v) if mask[i] => {
-                    if builder.parse_literal(v, None).is_err() {
-                        if bad.len() < 5 {
-                            bad.push(v.to_string());
+        let parts: Vec<(Series, Vec<String>)> = ranges
+            .par_iter()
+            .enumerate()
+            .map(|(k, (o, l))| {
+                let mut builder = SeriesBuilder::new_with_capacity(&t, *l);
+                let mut bad = vec![];
+                for (i, v) in strings.slice(*o as i64, *l).iter().enumerate() {
+                    match v {
+                        Some(v) if !has_zones || zones_per_row[k][i] == tz => {
+                            if builder.parse_literal(v, None).is_err() {
+                                if bad.len() < 5 {
+                                    bad.push(v.to_string());
+                                }
+                                builder.push_none();
+                            }
                         }
-                        keep[i] = false;
-                        builder.push_none();
+                        _ => builder.push_none(),
                     }
                 }
-                _ => builder.push_none(),
+                (builder.into_series("t"), bad)
+            })
+            .collect();
+        let mut series: Option<Series> = None;
+        for (p, b) in parts {
+            bad.extend(b);
+            match &mut series {
+                None => series = Some(p),
+                Some(s) => {
+                    s.append(&p)?;
+                }
             }
         }
         out.push((
-            Some(Series::new("m".into(), keep)),
+            None,
             Terms {
-                series: builder.into_series("t"),
+                series: series.unwrap(),
                 state: state(t),
             },
         ));
     }
+    bad.truncate(5);
     if !bad.is_empty() {
         ctx.data_error(
             location,
@@ -515,8 +724,11 @@ fn emit(
             let mut filter = col(SUBJECT_COL_NAME)
                 .is_not_null()
                 .and(col(OBJECT_COL_NAME).is_not_null());
-            if predicate_terms.is_some() {
+            let mut has_nulls =
+                subjects.series.null_count() > 0 || objects.series.null_count() > 0;
+            if let Some(p) = &predicate_terms {
                 filter = filter.and(col(PREDICATE_COL_NAME).is_not_null());
+                has_nulls |= p.series.null_count() > 0;
             }
             if let Some(m) = &mask {
                 cols.push(m.clone().with_name("_mask".into()).into_column());
@@ -525,12 +737,18 @@ fn emit(
             if let Graphs::Column(gs) = g {
                 cols.push(gs.clone().with_name(GRAPH_COL.into()).into_column());
                 filter = filter.and(col(GRAPH_COL).is_not_null());
+                has_nulls |= gs.null_count() > 0;
             }
-            let df = DataFrame::new(height, cols)?
-                .lazy()
-                .filter(filter)
-                .drop(polars::prelude::by_name(["_mask"], false, false))
-                .collect()?;
+            let df = DataFrame::new(height, cols)?;
+            // Filtering copies every column, so only when there is something to filter out.
+            let df = if has_nulls || mask.is_some() {
+                df.lazy()
+                    .filter(filter)
+                    .drop(polars::prelude::by_name(["_mask"], false, false))
+                    .collect()?
+            } else {
+                df
+            };
             if df.height() == 0 {
                 continue;
             }
@@ -542,14 +760,14 @@ fn emit(
                     graph: graph.clone(),
                 }),
                 Graphs::Column(_) => {
-                    let names = df.column(GRAPH_COL)?.unique()?.str()?.clone();
-                    for name in names.iter().flatten() {
-                        let part = df
-                            .clone()
-                            .lazy()
-                            .filter(col(GRAPH_COL).eq(lit(name)))
-                            .drop(polars::prelude::by_name([GRAPH_COL], false, false))
-                            .collect()?;
+                    for mut part in df.partition_by([GRAPH_COL], true)? {
+                        let name = part
+                            .column(GRAPH_COL)?
+                            .str()?
+                            .get(0)
+                            .map(|x| x.to_string());
+                        let _ = part.drop_in_place(GRAPH_COL)?;
+                        let Some(name) = name else { continue };
                         out.push(MappedTriples {
                             df: part,
                             types: types.clone(),
@@ -568,7 +786,7 @@ fn emit(
 fn constant_terms(t: &Term, height: usize) -> Result<Terms, R2RMLError> {
     match t {
         Term::NamedNode(nn) => Ok(Terms {
-            series: Series::new("c".into(), vec![nn.as_str(); height]),
+            series: StringChunked::full("c".into(), nn.as_str(), height).into_series(),
             state: state(BaseRDFNodeType::IRI),
         }),
         Term::Literal(l) => {
@@ -629,12 +847,24 @@ fn join_tables(
     child: &DataFrame,
     parent: &DataFrame,
     r: &RefObjectMap,
+    child_references: &[&str],
+    parent_references: &[&str],
     location: &str,
 ) -> Result<DataFrame, R2RMLError> {
     const P: &str = "\u{1}p:";
-    let parent_p = prefixed(parent, P)?;
-    let mut left = child.clone();
-    let mut right = parent_p;
+    // Only the columns the term maps evaluated on the joined table reference are joined.
+    let project = |df: &DataFrame, references: &[&str]| -> Result<DataFrame, R2RMLError> {
+        let mut names: Vec<polars::prelude::PlSmallStr> = vec![];
+        for c in references {
+            let name = resolve_column(df, c, location)?.name().clone();
+            if !names.contains(&name) {
+                names.push(name);
+            }
+        }
+        Ok(df.select(names)?)
+    };
+    let mut left = project(child, child_references)?;
+    let mut right = prefixed(&project(parent, parent_references)?, P)?;
     let mut left_on = vec![];
     let mut right_on = vec![];
     for (i, (c, p)) in r.join_conditions.iter().enumerate() {
@@ -642,6 +872,17 @@ fn join_tables(
         let pc = resolve_column(parent, p, location)?;
         let (cs, ps) = if cc.dtype() == pc.dtype() {
             (cc.as_materialized_series().clone(), pc.as_materialized_series().clone())
+        } else if cc.dtype().is_primitive_numeric() && pc.dtype().is_primitive_numeric() {
+            // Numbers are compared as numbers, as in SQL.
+            let t = if cc.dtype().is_float() || pc.dtype().is_float() {
+                DataType::Float64
+            } else {
+                DataType::Int64
+            };
+            (
+                cc.as_materialized_series().cast(&t)?,
+                pc.as_materialized_series().cast(&t)?,
+            )
         } else {
             (lexical(cc)?.into_series(), lexical(pc)?.into_series())
         };
@@ -761,7 +1002,20 @@ pub fn execute(
                             if parent_df.height() == 0 {
                                 continue;
                             }
-                            let joined = join_tables(df, parent_df, r, &location)?;
+                            let child_references: Vec<&str> = std::iter::once(&tm.subject_map)
+                                .chain(graph_maps.iter().copied())
+                                .chain(pom.predicates.iter())
+                                .flat_map(|t| t.columns())
+                                .collect();
+                            let parent_references = parent.subject_map.columns();
+                            let joined = join_tables(
+                                df,
+                                parent_df,
+                                r,
+                                &child_references,
+                                &parent_references,
+                                &location,
+                            )?;
                             let jh = joined.height();
                             let child_subjects = subject_terms(&mut ctx, tm, &joined)?;
                             let objects = parent_subjects(&mut ctx, parent, &joined)?;

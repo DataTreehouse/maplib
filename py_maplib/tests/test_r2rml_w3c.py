@@ -112,18 +112,22 @@ def _graphs(ds: rdflib.Dataset):
     return out
 
 
+# The query results come as polars DataFrames (DuckDB above), or as Arrow record batches from
+# the duckdb connection itself.
+@pytest.mark.parametrize("source", ["polars", "arrow"])
 @pytest.mark.parametrize("identifier,script,mapping,has_expected,output", _cases())
-def test_r2rml_w3c(identifier, script, mapping, has_expected, output, tmp_path):
+def test_r2rml_w3c(identifier, script, mapping, has_expected, output, source, tmp_path):
     if identifier in KNOWN_DEVIATIONS:
         pytest.skip(KNOWN_DEVIATIONS[identifier])
     con = _database(script)
+    database = DuckDB(con) if source == "polars" else con
     m = Model()
     mapping_path = TESTDATA / identifier / mapping
     if not has_expected:
         with pytest.raises(Exception):
-            m.map_r2rml(mapping_path, database=DuckDB(con), base_iri=BASE)
+            m.map_r2rml(mapping_path, database=database, base_iri=BASE)
         return
-    m.map_r2rml(mapping_path, database=DuckDB(con), base_iri=BASE)
+    m.map_r2rml(mapping_path, database=database, base_iri=BASE)
     out = tmp_path / "out.nq"
     m.write(out, format="nquads")
     actual = rdflib.Dataset()
