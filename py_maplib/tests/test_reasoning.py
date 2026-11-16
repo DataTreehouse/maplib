@@ -241,6 +241,35 @@ def test_same_as_from_functional_and_keys():
     assert not ask(m, "ex:b3 owl:sameAs ex:b3")
 
 
+def test_same_as_groups():
+    # Two groups from an inverse functional property merge through an asserted owl:sameAs, so
+    # every member gets the triples of all members. A class in a group is replaced as well.
+    m = model("""
+    ex:id a owl:InverseFunctionalProperty .
+    ex:a ex:id "1" . ex:b ex:id "1" . ex:c ex:id "2" . ex:d ex:id "2" .
+    ex:b owl:sameAs ex:c .
+    ex:a a ex:Pump . ex:Pump rdfs:subClassOf ex:Equipment .
+    ex:Equipment owl:sameAs ex:Asset .
+    ex:d ex:feeds ex:x . ex:x ex:partOf ex:a .
+    """)
+    res = reason_or_skip(m, "owl-rl")
+    assert res.consistent
+    members = ["ex:a", "ex:b", "ex:c", "ex:d"]
+    for x in members:
+        for y in members:
+            assert ask(m, f"{x} owl:sameAs {y}")
+        assert ask(m, f"{x} a ex:Pump . {x} a ex:Equipment . {x} a ex:Asset")
+        assert ask(m, f'{x} ex:feeds ex:x . ex:x ex:partOf {x} . {x} ex:id "1", "2"')
+    assert ask(m, "ex:Pump rdfs:subClassOf ex:Asset . ex:Asset owl:sameAs ex:Equipment")
+    inferred = m.query(
+        Q_PREFIXES + "SELECT ?x ?y WHERE { ?x owl:sameAs ?y }",
+        graph=TRANSIENT_GRAPH,
+        include_graphs=[],
+    )
+    # All pairs of each group, except the asserted ones.
+    assert inferred.height == 4 * 4 + 2 * 2 - 2
+
+
 def test_class_expressions():
     m = model("""
     ex:Parent owl:equivalentClass [ a owl:Restriction ; owl:onProperty ex:hasChild ; owl:someValuesFrom ex:Person ] .
