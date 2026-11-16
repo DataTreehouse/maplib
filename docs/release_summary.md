@@ -97,7 +97,7 @@ A short guide for deciding whether to upgrade from v0.20.32 to v0.22.0. It cover
 - Many corrections from the W3C test suites: typed `COUNT` and `SUM`/`AVG`/`MIN`/`MAX`, decimal division, `GROUP_CONCAT`, casts, effective boolean values, and left-associative arithmetic.
 - Syntax errors in SPARQL and stOTTR are reported compiler-style, with the line, the source and hints.
 
-**Formats and I/O.** TriG and N-Quads are read and written. JSON-LD output is compacted JSON-LD 1.1. `graph=[DEFAULT_GRAPH, "http://…/g1"]` writes exactly those graphs. `m.read` takes bytes or file-like objects, and `m.write_bytes(format=...)` and `write(<binary file-like>)` write to memory. RDF/XML is read in parallel and written by a new pretty serializer. HDT reading and writing are much faster.
+**Formats and I/O.** HDT is read 12× and written 28× faster (see Performance). TriG and N-Quads are read and written. JSON-LD output is compacted JSON-LD 1.1. `graph=[DEFAULT_GRAPH, "http://…/g1"]` writes exactly those graphs. `m.read` takes bytes or file-like objects, and `m.write_bytes(format=...)` and `write(<binary file-like>)` write to memory. RDF/XML is read in parallel and written by a new pretty serializer.
 
 **Query result cache.** `m.set_query_cache(QueryCacheOptions(...))` keeps query results until a write changes a graph and predicate they read. It is shared with `serve`, and `query_cache_stats()` and `clear_query_cache()` report on it and empty it. It is off by default.
 
@@ -159,6 +159,7 @@ These numbers compare v0.21.0 with v0.20.33 on an Apple M-series laptop:
 v0.22.0 adds more on top of v0.21.0: reading N-Triples is up to 81% faster, RDF/XML reading is up to 68% faster and template mapping is up to 89% faster, with up to 39% lower peak memory. Other improvements in v0.22.0:
 
 - Disk-mode lookups of a subject's properties are about 10× faster **EE**.
+- HDT is read 12× and written 28× faster than in v0.20.32 (CIM, 2.2 M triples: 3.41 s → 0.28 s and 5.69 s → 0.20 s), without building HDT query indexes; the written files are unchanged.
 - Bound property paths are 84–92% faster.
 - `VALUES` joins with large tables are about 80% faster.
 - `ORDER BY ... LIMIT` over millions of strings is up to 90% faster.
