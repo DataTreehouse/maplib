@@ -543,25 +543,53 @@ fn is_ordered(gp: &GraphPattern) -> bool {
 /// Predicates of the full text search index (maplib vocab fts, ftsQuery, ...).
 const FTS_PREDICATE_PREFIX: &str = "https://datatreehouse.github.io/maplib/vocab#fts";
 
-/// Whether any of the triple patterns uses a full text search predicate.
-/// Predicates in the maplib namespace that are ordinary data, e.g. time series links, which may
-/// be absent from a model without that being an error.
-const MAPLIB_DATA_PREDICATES: [&str; 6] = [
-    "hasTimeseries",
-    "hasDataPoint",
-    "hasTimestamp",
-    "hasValue",
-    "hasResource",
-    "hasExternalId",
+/// The magic predicates that start a magic pattern. maplib has no list of the terms of its
+/// vocabulary (maplib, maplib_ee, the portal and applications all add data predicates to it),
+/// so only these are checked for misspellings.
+const MAGIC_ENTRY_POINTS: [&str; 7] = [
+    "path",
+    "shortestPath",
+    "component",
+    "bridge",
+    "articulationPoint",
+    "fts",
+    "vectorSearch",
 ];
 
+/// The magic predicate that `local` is probably a misspelling of: one that differs only in
+/// case, or for longer names by at most two edits.
+fn misspelt_magic_predicate(local: &str) -> Option<&'static str> {
+    let lower = local.to_lowercase();
+    MAGIC_ENTRY_POINTS.iter().copied().find(|m| {
+        if *m == local {
+            return false;
+        }
+        let ml = m.to_lowercase();
+        lower == ml || (ml.len() >= 6 && edit_distance(&lower, &ml) <= 2)
+    })
+}
+
+fn edit_distance(a: &str, b: &str) -> usize {
+    let a: Vec<char> = a.chars().collect();
+    let b: Vec<char> = b.chars().collect();
+    let mut prev: Vec<usize> = (0..=b.len()).collect();
+    for i in 1..=a.len() {
+        let mut cur = vec![i; b.len() + 1];
+        for j in 1..=b.len() {
+            let sub = prev[j - 1] + usize::from(a[i - 1] != b[j - 1]);
+            cur[j] = sub.min(prev[j] + 1).min(cur[j - 1] + 1);
+        }
+        prev = cur;
+    }
+    prev[b.len()]
+}
+
 impl Triplestore {
-    /// The magic predicates this build supports (maplib:path, maplib:shortestPath,
-    /// maplib:component, maplib:bridge, maplib:articulationPoint, maplib:fts
-    /// with an index, maplib:vectorSearch) have been taken out of the patterns before this is
-    /// called. A remaining predicate in the maplib namespace that no triples use is a magic
-    /// predicate that this build does not have, a misspelt one, or maplib:fts without an
-    /// index. It would silently give no solutions, so it is an error.
+    /// The magic predicates this build supports have been taken out of the patterns before
+    /// this is called. Of the maplib predicates that remain and that no triples use, a
+    /// misspelt magic predicate and maplib:fts without a full text index would silently give
+    /// no solutions, so they are errors. Other maplib predicates are ordinary data that a model
+    /// may lack (time series, serves relations, config and summary terms, ...).
     fn check_maplib_predicates(&self, patterns: &[TriplePattern]) -> Result<(), SparqlError> {
         for tp in patterns {
             let NamedNodePattern::NamedNode(nn) = &tp.predicate else {
@@ -570,21 +598,35 @@ impl Triplestore {
             let Some(local) = nn.as_str().strip_prefix(MAPLIB_PREFIX_IRI) else {
                 continue;
             };
-            if MAPLIB_DATA_PREDICATES.contains(&local) {
+            let problem = if local == "fts" {
+                Some(
+                    "maplib:fts needs a full text index on the queried graph \
+                     (create_index(IndexingOptions(fts=True)))"
+                        .to_string(),
+                )
+            } else {
+                misspelt_magic_predicate(local)
+                    .map(|m| format!("did you mean the magic predicate maplib:{m}?"))
+            };
+            let Some(problem) = problem else {
                 continue;
-            }
+            };
             let used = self.graph_triples_map.values().any(|m| {
                 m.get(nn)
                     .is_some_and(|t| t.values().any(|x| x.get_height() > 0))
             });
             if !used {
-                return Err(SparqlError::UnknownMaplibPredicate(nn.as_str().to_string()));
+                return Err(SparqlError::UnknownMaplibPredicate(
+                    nn.as_str().to_string(),
+                    problem,
+                ));
             }
         }
         Ok(())
     }
 }
 
+/// Whether any of the triple patterns uses a full text search predicate.
 fn uses_fts(patterns: &[TriplePattern]) -> bool {
     patterns.iter().any(|tp| {
         matches!(&tp.predicate, NamedNodePattern::NamedNode(p) if p.as_str().starts_with(FTS_PREDICATE_PREFIX))

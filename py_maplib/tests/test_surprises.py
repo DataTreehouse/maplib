@@ -205,14 +205,69 @@ def test_add_graph_from_itself():
     assert df["s"].to_list() == ["<http://ex/c>"]
 
 
-def test_unknown_maplib_magic_predicate_raises():
+MAPLIB = "PREFIX maplib: <https://datatreehouse.github.io/maplib/vocab#> "
+
+
+@pytest.mark.parametrize(
+    "predicate,suggestion",
+    [
+        ("shortestpathh", "shortestPath"),
+        ("shortestpath", "shortestPath"),
+        ("Path", "path"),
+        ("vectorSerch", "vectorSearch"),
+        ("articulationPoints", "articulationPoint"),
+        ("Component", "component"),
+    ],
+)
+def test_misspelt_magic_predicate_raises(predicate, suggestion):
     m = Model()
     m.reads("<urn:a> <urn:p> <urn:b> .", format="turtle")
-    with pytest.raises(MaplibException, match="noSuchMagic"):
-        m.query(
-            "PREFIX maplib: <https://datatreehouse.github.io/maplib/vocab#> "
-            "SELECT ?p WHERE { <urn:a> maplib:noSuchMagic ?p }"
-        )
+    with pytest.raises(MaplibException, match=f"maplib:{suggestion}"):
+        m.query(MAPLIB + f"SELECT ?p WHERE {{ <urn:a> maplib:{predicate} ?p }}")
+
+
+# Data predicates of the maplib vocabulary that a model may well lack: time series, serves
+# relations, summary, config and OPC UA terms, and terms of applications.
+VOCABULARY = [
+    "hasTimeseries",
+    "hasDataPoint",
+    "hasTimestamp",
+    "hasValue",
+    "hasResource",
+    "hasExternalId",
+    "normallyServesSameVoltage",
+    "normallyServesDecreasedVoltage",
+    "normallyServesIncreasedVoltage",
+    "timestamp",
+    "OpcUaModel",
+    "modelUri",
+    "noSuchTermYet",
+    "paths",
+]
+
+
+@pytest.mark.parametrize("predicate", VOCABULARY)
+def test_maplib_vocabulary_predicate_on_an_empty_model_gives_no_solutions(predicate):
+    m = Model()
+    m.reads("<urn:a> <urn:p> <urn:b> .", format="turtle")
+    df = m.query(MAPLIB + f"SELECT ?o WHERE {{ ?s maplib:{predicate} ?o }}")
+    assert df.height == 0
+    df = m.query(
+        MAPLIB + f"SELECT ?s ?o WHERE {{ ?s <urn:p> ?b OPTIONAL {{ ?s maplib:{predicate} ?o }} }}"
+    )
+    assert df.height == 1
+
+
+def test_serves_exists_on_a_model_without_serves_is_false():
+    m = Model()
+    m.reads("<urn:a> <urn:p> <urn:b> .", format="turtle")
+    df = m.query(
+        MAPLIB
+        + "SELECT ?a ?b ?serves WHERE { ?a <urn:p> ?b BIND(EXISTS { ?a "
+        "(maplib:normallyServesSameVoltage|maplib:normallyServesDecreasedVoltage|"
+        "maplib:normallyServesIncreasedVoltage) ?b } AS ?serves) }"
+    )
+    assert df["serves"].to_list() == [False]
 
 
 def test_maplib_namespace_predicate_with_triples_is_queried():
