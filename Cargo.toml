@@ -13,6 +13,7 @@ members = [
     "lib/query_processing",
     "lib/spargebra",
     "lib/oxrdfxml",
+    "lib/sparesults",
     "lib/hdt",
     "lib/shacl",
     "lib/fts",
@@ -126,6 +127,8 @@ codegen-units = 16
 [patch.crates-io]
 # Vendored RDF/XML parser/serializer from oxigraph, with parallel parsing added.
 oxrdfxml = { path = "lib/oxrdfxml" }
+# Vendored SPARQL results parser/serializer from oxigraph, ported to quick-xml 0.41 (RUSTSEC-2026-0194/0195).
+sparesults = { path = "lib/sparesults" }
 polars = { git = 'https://github.com/pola-rs/polars', rev = "7f902bd3ffd27ff82d14278a09a295ff2f7aed92" }
 polars-core = { git = 'https://github.com/pola-rs/polars', rev = "7f902bd3ffd27ff82d14278a09a295ff2f7aed92" }
 polars-arrow = { git = 'https://github.com/pola-rs/polars', rev = "7f902bd3ffd27ff82d14278a09a295ff2f7aed92" }
