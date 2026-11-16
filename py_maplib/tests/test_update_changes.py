@@ -208,3 +208,28 @@ def test_insert_template_with_several_graphs(model):
         WHERE {{ ?s <{EX}knows> ?o BIND(IRI(IF(?o = <{EX}c>, "{G1}", "{g2}")) AS ?g) }}"""
     )
     assert {g: c for g, c in counts(changes).items() if c != (0, 0)} == {}
+
+
+def test_add_copy_move():
+    # COPY and MOVE clear the target first, which is only supported in memory.
+    g2, g3 = "http://example.net/g2", "http://example.net/g3"
+    m = Model()
+    m.reads(DATA, format="turtle")
+    m.update(f"INSERT DATA {{ GRAPH <{G1}> {{ <{EX}x> <{EX}knows> <{EX}y> . <{EX}a> <{EX}knows> <{EX}b> }} }}")
+    # ADD inserts what is not in the target yet.
+    assert counts(m.update(f"ADD <{G1}> TO DEFAULT")) == {DEFAULT_GRAPH: (1, 0)}
+    assert counts(m.update(f"ADD <{G1}> TO <{g2}>")) == {g2: (2, 0)}
+    # COPY replaces the target: its triples that are not in the source are deleted, and those
+    # that are are deleted and inserted again.
+    m.update(f"INSERT DATA {{ GRAPH <{g3}> {{ <{EX}z> <{EX}knows> <{EX}z> }} }}")
+    c = counts(m.update(f"COPY <{G1}> TO <{g3}>"))
+    assert c[g3] == (2, 1)
+    assert c.get(G1, (0, 0)) == (0, 0)
+    # MOVE also empties the source.
+    c = counts(m.update(f"MOVE <{g2}> TO <{g3}>"))
+    assert c[g3] == (2, 2)
+    assert c[g2] == (0, 2)
+    assert count_triples(m, graph=g2) == 0
+    assert count_triples(m, graph=g3) == 2
+    # Copying a graph to itself changes nothing.
+    assert {k: v for k, v in counts(m.update(f"COPY <{g3}> TO <{g3}>")).items() if v != (0, 0)} == {}

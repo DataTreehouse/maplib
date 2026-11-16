@@ -5,3 +5,4 @@ rdflib-endpoint
 fastapi
 uvicorn
 numpy
+pyoxigraph
