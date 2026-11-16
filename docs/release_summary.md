@@ -12,6 +12,7 @@ A short guide to v0.22.1, which adds features and fixes to v0.22.0. Features mar
 - **Vector search.** `maplib:vector` literals hold embeddings, and `maplib:vectorSearch` **EE** finds the nearest ones.
 - **Streams on a persistent model.** `stream=True, in_place=True` maps each batch into the model itself, so steps can join batches with the model's other graphs.
 - **Outbound connection policy.** `maplib.set_outbound_policy(mode="public" | "allowlist", allow=[...])` decides which hosts maplib may connect to, against SSRF; cloud metadata services are always refused.
+- **SHACL entailment.** Shapes graphs that declare `sh:entailment` RDFS or OWL **EE** are validated over the matching `reason` profile, and complex result paths are kept in reports.
 - **Graph management with a storage folder.** `CLEAR`, `DROP`, `COPY`, `MOVE` and `truncate_graph` work in hybrid and disk storage **EE**.
 
 ## Major features
