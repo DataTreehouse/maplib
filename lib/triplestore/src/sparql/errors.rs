@@ -58,6 +58,8 @@ pub enum SparqlError {
     /// An error in the use of maplib:path or maplib:shortestPath.
     #[error("Path error: {0}")]
     PathError(String),
+    #[error("Paging error: {0}")]
+    PagingError(String),
     #[error("Error constructing quads from quad patterns `{0}`")]
     QuadPatternsError(String),
     #[error("{0}")]

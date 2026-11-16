@@ -2,7 +2,7 @@ use crate::errors::QueryProcessingError;
 use polars::datatypes::{DataType, Field};
 use polars::error::PolarsResult;
 use polars::prelude::{
-    coalesce, col, lit, when, Column, Expr, IntoColumn, NULL, PlSmallStr, Schema, SortMultipleOptions, StructChunked,
+    by_name, coalesce, col, lit, when, Column, DataFrame, Expr, IntoColumn, IntoLazy, NULL, PlSmallStr, Schema, SortMultipleOptions, StructChunked,
 };
 use polars::prelude::{IntoSeries, UInt32Chunked};
 use polars::series::Series;
@@ -39,6 +39,139 @@ pub fn sort_options(asc_bools: &[bool]) -> SortMultipleOptions {
         .with_nulls_last_multi(asc_bools.iter().map(|asc| !asc).collect::<Vec<bool>>())
 }
 
+/// Where a page of an ordered result starts (keyset pagination): the solutions are those after
+/// the marker row (the last row of the previous page), in the order of the sort columns.
+#[derive(Debug, Clone)]
+pub struct KeysetBound {
+    pub marker: KeysetMarker,
+    /// Also keep the rows equal to the marker row in all sort columns, which come first. For
+    /// results with duplicate rows, where the caller skips those already returned.
+    pub include_equal: bool,
+}
+
+#[derive(Debug, Clone)]
+pub enum KeysetMarker {
+    /// The marker row is among the solutions, where this boolean column is true only for it. It
+    /// is ranked together with them, so this works with any dictionaries.
+    Column(String),
+    /// The marker row, one row with the sort columns, typed as the solutions. Its sort keys are
+    /// computed once and compared with those of the solutions as constants, so the filter is
+    /// element-wise. Only for sort keys ranked with the cached ranks of in-memory dictionaries,
+    /// which are the same in both frames, see [`ranks_are_global`].
+    Row(DataFrame),
+}
+
+const KEYSET_KEY_PREFIX: &str = "__maplib_keyset_key_";
+
+/// Sorts as [`order_by`], keeping only the rows after the marker row of `bound` in that order.
+/// The marker row is compared with the other rows with the same sort keys as the sort uses, so
+/// the rows kept are exactly those that the sort puts after it. The marker row is removed.
+pub fn keyset_order_by(
+    mut solution_mappings: SolutionMappings,
+    columns: &[String],
+    asc_ordering: Vec<bool>,
+    global_cats: LockedCats,
+    bound: &KeysetBound,
+) -> Result<SolutionMappings, QueryProcessingError> {
+    let (exprs, ascs, is_lang) =
+        ordering_exprs_with_lang(&solution_mappings, columns, asc_ordering, global_cats);
+    // Language-tagged strings are ranked as structs of the ranks of the value and the language,
+    // sorted by the value, then the language. Structs can not be compared with < and >, so
+    // they are split into their fields.
+    let mut key_exprs = vec![];
+    let mut asc_bools = vec![];
+    for ((e, asc), lang) in exprs.into_iter().zip(ascs).zip(is_lang) {
+        if lang {
+            for f in [LANG_STRING_VALUE_FIELD, LANG_STRING_LANG_FIELD] {
+                key_exprs.push(e.clone().struct_().field_by_name(f));
+                asc_bools.push(asc);
+            }
+        } else {
+            key_exprs.push(e);
+            asc_bools.push(asc);
+        }
+    }
+    let key_names: Vec<String> = (0..key_exprs.len())
+        .map(|i| format!("{KEYSET_KEY_PREFIX}{i}"))
+        .collect();
+    let aliased: Vec<Expr> = key_exprs
+        .into_iter()
+        .zip(&key_names)
+        .map(|(e, n)| e.alias(n))
+        .collect();
+    let mut lf = solution_mappings.mappings.with_columns(aliased.clone());
+
+    // The keys of the marker row.
+    let marker_keys: Vec<Expr> = match &bound.marker {
+        KeysetMarker::Column(marker) => key_names
+            .iter()
+            .map(|k| col(k).filter(col(marker)).first())
+            .collect(),
+        KeysetMarker::Row(row) => {
+            let row = row
+                .clone()
+                .lazy()
+                .select(aliased)
+                .collect()
+                .map_err(|e| QueryProcessingError::BadArgument(e.to_string()))?;
+            let mut keys = vec![];
+            for k in &key_names {
+                let c = row
+                    .column(k)
+                    .map_err(|e| QueryProcessingError::BadArgument(e.to_string()))?
+                    .as_materialized_series()
+                    .clone();
+                keys.push(lit(c).first());
+            }
+            keys
+        }
+    };
+    // Is the row after the marker in the sort order? Ascending sorts put nulls first and
+    // descending sorts put them last, so null is the smallest value either way.
+    let mut after: Option<Expr> = None;
+    let mut all_equal: Option<Expr> = None;
+    for ((k, m), asc) in key_names
+        .iter()
+        .zip(&marker_keys)
+        .zip(&asc_bools)
+        .rev()
+    {
+        let v = col(k);
+        let gt = if *asc {
+            (v.clone().is_not_null().and(m.clone().is_null()))
+                .or(v.clone().gt(m.clone()).fill_null(lit(false)))
+        } else {
+            (v.clone().is_null().and(m.clone().is_not_null()))
+                .or(v.clone().lt(m.clone()).fill_null(lit(false)))
+        };
+        let eq = v.eq_missing(m.clone());
+        after = Some(match after {
+            None => gt,
+            Some(after) => gt.or(eq.clone().and(after)),
+        });
+        all_equal = Some(match all_equal {
+            None => eq,
+            Some(all_equal) => eq.and(all_equal),
+        });
+    }
+    let mut keep = after.unwrap_or(lit(false));
+    if bound.include_equal {
+        keep = keep.or(all_equal.unwrap_or(lit(true)));
+    }
+    if let KeysetMarker::Column(marker) = &bound.marker {
+        keep = col(marker).not().and(keep);
+    }
+    lf = lf.filter(keep);
+    lf = lf.sort(key_names.clone(), sort_options(&asc_bools).with_maintain_order(false));
+    let mut to_drop = key_names;
+    if let KeysetMarker::Column(marker) = &bound.marker {
+        to_drop.push(marker.clone());
+        solution_mappings.rdf_node_types.remove(marker);
+    }
+    solution_mappings.mappings = lf.drop(by_name(to_drop, true, false));
+    Ok(solution_mappings)
+}
+
 /// The sort keys that order the columns as SPARQL ORDER BY does, with whether each key is
 /// ascending. A column with several types gives several keys.
 pub fn ordering_exprs(
@@ -47,6 +180,20 @@ pub fn ordering_exprs(
     asc_ordering: Vec<bool>,
     global_cats: LockedCats,
 ) -> (Vec<Expr>, Vec<bool>) {
+    let (exprs, ascs, _) =
+        ordering_exprs_with_lang(solution_mappings, columns, asc_ordering, global_cats);
+    (exprs, ascs)
+}
+
+/// As [`ordering_exprs`], also telling for each key whether it is a struct of the ranks of the
+/// value and the language of language-tagged strings.
+pub fn ordering_exprs_with_lang(
+    solution_mappings: &SolutionMappings,
+    columns: &[String],
+    asc_ordering: Vec<bool>,
+    global_cats: LockedCats,
+) -> (Vec<Expr>, Vec<bool>, Vec<bool>) {
+    let mut is_lang = vec![];
     let mut order_exprs = vec![];
     let mut asc_bools = vec![];
     for (c, a) in columns.iter().zip(asc_ordering) {
@@ -122,6 +269,7 @@ pub fn ordering_exprs(
                         &ts[i..i + numeric_run].iter().map(|(u, _)| *u).collect::<Vec<_>>(),
                     ));
                     asc_bools.push(a);
+                    is_lang.push(false);
                     for (u, us) in &ts[i..i + numeric_run] {
                         order_exprs.push(make_ordering_expr(
                             col(c).struct_().field_by_name(&u.field_col_name()),
@@ -130,6 +278,7 @@ pub fn ordering_exprs(
                             (*us).clone(),
                         ));
                         asc_bools.push(a);
+                        is_lang.push(false);
                     }
                     i += numeric_run;
                     continue;
@@ -139,6 +288,8 @@ pub fn ordering_exprs(
                     run_types.sort();
                     order_exprs.push(date_time_instant_expr(c, &run_types));
                     order_exprs.push(time_zone_rank_expr(c, &run_types));
+                    is_lang.push(false);
+                    is_lang.push(false);
                     asc_bools.push(a);
                     asc_bools.push(a);
                     i += run;
@@ -146,6 +297,7 @@ pub fn ordering_exprs(
                 }
                 i += 1;
                 asc_bools.push(a);
+                is_lang.push(t.is_lang_string());
                 if t.is_lang_string() {
                     order_exprs.push(make_ordering_expr(
                         col(c),
@@ -164,6 +316,7 @@ pub fn ordering_exprs(
             }
         } else {
             asc_bools.push(a);
+            is_lang.push(t.get_base_type().unwrap().is_lang_string());
             order_exprs.push(make_ordering_expr(
                 col(c),
                 global_cats.clone(),
@@ -172,8 +325,7 @@ pub fn ordering_exprs(
             ));
         }
     }
-
-    (order_exprs, asc_bools)
+    (order_exprs, asc_bools, is_lang)
 }
 
 fn is_date_time(t: &BaseRDFNodeType) -> bool {
@@ -346,4 +498,33 @@ fn map_to_rank(series: &Series, ranks: &Ranks) -> PolarsResult<Series> {
         ch.iter().map(|u| u.and_then(|u| ranks.get(u))).collect()
     };
     Ok(out.into_series())
+}
+
+/// Are the sort keys of these columns ranked with ranks that are the same in any frame with
+/// the same types, so that the keys of a marker row can be computed on their own: the cached
+/// ranks of in-memory dictionaries, with no local dictionaries. Columns that are not dictionary
+/// encoded (numbers, dates, ...) are compared by value.
+pub fn ranks_are_global(
+    solution_mappings: &SolutionMappings,
+    columns: &[String],
+    global_cats: &LockedCats,
+) -> bool {
+    let cats = global_cats.read().unwrap();
+    for c in columns {
+        let Some(t) = solution_mappings.rdf_node_types.get(c) else {
+            return false;
+        };
+        for (bt, bs) in &t.map {
+            match bs {
+                BaseCatState::CategoricalNative(None) => {
+                    if cats.all_global_ranks(bt).is_none() {
+                        return false;
+                    }
+                }
+                BaseCatState::CategoricalNative(Some(_)) | BaseCatState::String => return false,
+                BaseCatState::NonString => {}
+            }
+        }
+    }
+    true
 }

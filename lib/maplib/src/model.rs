@@ -31,6 +31,7 @@ use templates::dataset::TemplateDataset;
 use templates::document::document_from_str;
 use templates::MappingColumnType;
 use triplestore::sparql::errors::SparqlError;
+use triplestore::sparql::paging::{PageCursor, QueryPage};
 use triplestore::sparql::{InsertResult, QuerySettings, UpdateResult};
 use triplestore::{IndexingOptions, NewTriples, StorageOptions, Triplestore};
 
@@ -927,6 +928,51 @@ SELECT ?loc ?crs ?seq ?x ?y ?z WHERE {{
                     udfs: &udfs,
                 },
             )
+        })
+    }
+
+    /// A page of at most `page_size` solutions of a SELECT query, after the cursor `after`
+    /// (None for the first page), with federation settings as in `query_with_federation`. See
+    /// [`triplestore::sparql::paging`].
+    #[allow(clippy::too_many_arguments)]
+    #[instrument(skip_all)]
+    pub fn query_page(
+        &self,
+        query: &str,
+        parameters: Option<&HashMap<String, EagerSolutionMappings>>,
+        graph: Option<&NamedGraph>,
+        include_graphs: Vec<NamedGraph>,
+        max_rows: Option<usize>,
+        bindings: Option<&HashMap<String, GroundTerm>>,
+        page_size: usize,
+        after: Option<&PageCursor>,
+        federation: Option<Arc<FederationSettings>>,
+    ) -> Result<QueryPage, MaplibError> {
+        if self.chrontext_settings.is_some() {
+            return Err(MaplibError::SparqlError(SparqlError::PagingError(
+                "queries of models with virtualized databases can not be paged yet".to_string(),
+            )));
+        }
+        let query_settings = QuerySettings {
+            include_graphs,
+            max_rows,
+            strict_project: false,
+            federation,
+            evaluation_hook: None,
+        };
+        on_big_stack(|| {
+            self.triplestore
+                .query_page(
+                    query,
+                    parameters,
+                    &query_settings,
+                    graph,
+                    Some(&self.prefixes),
+                    bindings,
+                    page_size,
+                    after,
+                )
+                .map_err(|x| x.into())
         })
     }
 

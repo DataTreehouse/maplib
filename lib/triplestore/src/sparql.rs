@@ -9,6 +9,7 @@ pub(crate) mod lazy_graph_patterns;
 mod lazy_order;
 mod lazy_window;
 mod load;
+pub mod paging;
 mod rewrite;
 
 use tracing::{instrument, trace, warn};

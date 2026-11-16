@@ -593,6 +593,27 @@ class ValidationReport:
 
 
 
+class QueryPages:
+    """
+    The pages of a SELECT query, from Model.query_pages(). Iterating gives the pages as
+    DataFrames (or SolutionMappings), each evaluated when it is reached.
+    """
+
+    page_size: int
+    """The largest number of solutions in a page."""
+
+    token: Optional[str]
+    """
+    The token of the next page, None when there are no more pages. Give it to
+    Model.query_pages(..., page_token=) or Model.query_page(..., page_token=) to continue,
+    e.g. in another process or after a restart.
+    """
+
+    def __iter__(self) -> "QueryPages": ...
+
+    def __next__(self) -> DataFrame | SolutionMappings: ...
+
+
 class ModelStream:
     """
     A lazy pipeline over batched mapping input, created with stream=True in Model.map, Model.map_triples,
@@ -1838,6 +1859,76 @@ class Model:
         :param allow_load: Allow SPARQL Update LOAD.
         :param arrow: Use maplib's Arrow format with maplib endpoints. Set it to False to query them with SPARQL JSON
             results, as other endpoints.
+    def query_pages(
+            self,
+            query: str,
+            page_size: int = 10000,
+            page_token: Optional[str] = None,
+            parameters: ParametersType = None,
+            solution_mappings: bool = False,
+            graph: str = None,
+            include_graphs: Optional[List[str]] = None,
+            max_rows: int = None,
+            bindings: Dict[str, Union[str, IRI, Literal]] = None,
+    ) -> QueryPages:
+        """
+        Pages through the solutions of a SELECT query with keyset pagination: each page starts
+        after the last solution of the previous page, instead of skipping the solutions before
+        it with OFFSET, so reading a page costs the same however far into the result it is.
+
+        >>> for df in model.query_pages("SELECT ?s ?o WHERE { ?s ex:p ?o } ORDER BY ?o", page_size=10000):
+        ...     process(df)
+
+        The solutions are ordered by the ORDER BY of the query, then by the projected variables,
+        so the order is total and the pages put together are the result of the query, without
+        duplicates or gaps. A query without ORDER BY is ordered by its projected variables.
+        Solutions that are equal in all projected variables (without DISTINCT) are counted, so
+        they are also returned as often as in the result. The LIMIT and OFFSET of the query apply
+        to the pages as a whole. SELECT DISTINCT can be paged when its ORDER BY only uses
+        projected variables.
+
+        Each page is evaluated when the iterator reaches it, so the model can change between
+        pages. A page sees the model as it is when it is evaluated: a solution is never returned
+        twice, solutions that are in the result throughout are returned exactly once, solutions
+        removed before their page is read are not returned, and new solutions are returned if
+        they sort after the last solution returned (and not otherwise).
+
+        Queries of models with virtualized databases can not be paged yet.
+
+        :param query: The SPARQL SELECT query.
+        :param page_size: The largest number of solutions in a page. Every page but the last has this many.
+        :param page_token: Continue from this token (QueryPages.token or from query_page) instead of the first page.
+            It must come from the same query, graph and include_graphs.
+        :param parameters: PVALUES parameters, as for query().
+        :param solution_mappings: Give the pages as SolutionMappings, as for query().
+        :param graph: The IRI of the graph to query.
+        :param include_graphs: As for query().
+        :param max_rows: As for query(), applies to each page.
+        :param bindings: As for query().
+        :return: An iterator over the pages.
+        """
+
+    def query_page(
+            self,
+            query: str,
+            page_size: int = 10000,
+            page_token: Optional[str] = None,
+            parameters: ParametersType = None,
+            solution_mappings: bool = False,
+            graph: str = None,
+            include_graphs: Optional[List[str]] = None,
+            max_rows: int = None,
+            bindings: Dict[str, Union[str, IRI, Literal]] = None,
+    ) -> Tuple[DataFrame | SolutionMappings, Optional[str]]:
+        """
+        One page of the solutions of a SELECT query, see query_pages(): the first page, or the
+        page that page_token points to.
+
+        >>> df, token = model.query_page(q, page_size=1000)
+        >>> while token is not None:
+        ...     df, token = model.query_page(q, page_size=1000, page_token=token)
+
+        :return: The page and the token of the next page, None for the last page.
         """
 
     @overload

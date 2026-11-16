@@ -6,6 +6,7 @@ mod py_indexing_options;
 mod py_io;
 mod py_model;
 mod py_query_cache;
+mod py_pages;
 mod py_server;
 mod py_storage;
 mod py_stream;
@@ -235,6 +236,7 @@ fn _maplib(py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyIndexingOptions>()?;
     m.add_class::<py_query_cache::PyQueryCacheOptions>()?;
     m.add_class::<PyModel>()?;
+    m.add_class::<py_pages::PyQueryPages>()?;
     m.add_class::<py_server::PyServer>()?;
     m.add_class::<py_graph_snapshots::PyGraphSnapshots>()?;
     m.add_class::<py_stream::PyModelStream>()?;

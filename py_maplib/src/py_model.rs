@@ -11,6 +11,7 @@ use crate::mutexes::{
     update_mutex, validate_mutex, write_bytes_mutex, write_cim_xml_mutex, write_triples_mutex,
     writes_mutex, GraphArg,
 };
+use crate::py_pages::{parse_page_token, run_page, PagedQuery, PyQueryPages};
 use crate::py_server::{server_error, PyServer};
 use crate::py_io::{ReadSource, WriteTarget};
 use crate::py_stream::{parse_graphs, DocumentKind, PyModelStream, StreamSource};
@@ -1317,6 +1318,93 @@ impl PyModel {
     #[allow(clippy::too_many_arguments)]
     #[pyo3(signature = (
         query,
+        page_size=10000,
+        page_token=None,
+        parameters=None,
+        solution_mappings=None,
+        graph=None,
+        include_graphs=None,
+        max_rows=None,
+        bindings=None,
+    ))]
+    #[instrument(skip_all)]
+    fn query_page(
+        &self,
+        py: Python<'_>,
+        query: String,
+        page_size: usize,
+        page_token: Option<String>,
+        parameters: Option<ParametersType>,
+        solution_mappings: Option<bool>,
+        graph: Option<String>,
+        include_graphs: Option<Vec<String>>,
+        max_rows: Option<usize>,
+        bindings: Option<HashMap<String, Py<PyAny>>>,
+    ) -> PyResult<(Py<PyAny>, Option<String>)> {
+        let q = paged_query(
+            query,
+            page_size,
+            parameters,
+            solution_mappings,
+            graph,
+            include_graphs,
+            max_rows,
+            bindings,
+            py,
+        )?;
+        let after = parse_page_token(page_token.as_deref())?;
+        let (page, next) = run_page(self, &q, after.as_ref(), py)?;
+        Ok((page, next.map(|c| c.to_token())))
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    #[pyo3(signature = (
+        query,
+        page_size=10000,
+        page_token=None,
+        parameters=None,
+        solution_mappings=None,
+        graph=None,
+        include_graphs=None,
+        max_rows=None,
+        bindings=None,
+    ))]
+    #[instrument(skip_all)]
+    fn query_pages(
+        slf: Bound<'_, Self>,
+        py: Python<'_>,
+        query: String,
+        page_size: usize,
+        page_token: Option<String>,
+        parameters: Option<ParametersType>,
+        solution_mappings: Option<bool>,
+        graph: Option<String>,
+        include_graphs: Option<Vec<String>>,
+        max_rows: Option<usize>,
+        bindings: Option<HashMap<String, Py<PyAny>>>,
+    ) -> PyResult<PyQueryPages> {
+        let q = paged_query(
+            query,
+            page_size,
+            parameters,
+            solution_mappings,
+            graph,
+            include_graphs,
+            max_rows,
+            bindings,
+            py,
+        )?;
+        let after = parse_page_token(page_token.as_deref())?;
+        Ok(PyQueryPages {
+            model: slf.unbind(),
+            query: q,
+            state: std::sync::Mutex::new((after, false)),
+        })
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    #[pyo3(signature = (
+        query,
         endpoint,
         method=None,
         solution_mappings=None,
@@ -2533,4 +2621,35 @@ fn check_outbound_host(py: Python<'_>, host: &str, scheme: &str, port: u16) -> P
     py.import("maplib.outbound")?
         .call_method1("check_host", (host, scheme, port))?;
     Ok(())
+}
+
+#[allow(clippy::too_many_arguments)]
+fn paged_query(
+    query: String,
+    page_size: usize,
+    parameters: Option<ParametersType>,
+    solution_mappings: Option<bool>,
+    graph: Option<String>,
+    include_graphs: Option<Vec<String>>,
+    max_rows: Option<usize>,
+    bindings: Option<HashMap<String, Py<PyAny>>>,
+    py: Python<'_>,
+) -> PyResult<PagedQuery> {
+    if page_size == 0 {
+        return Err(PyMaplibError::FunctionArgumentError(
+            "page_size must be at least 1".to_string(),
+        )
+        .into());
+    }
+    let graph = parse_optional_named_node(graph)?;
+    Ok(PagedQuery {
+        query,
+        parameters: map_parameters(parameters, py)?,
+        graph: graph.map(|graph| NamedGraph::from_maybe_named_node(Some(&graph))),
+        include_graphs,
+        max_rows,
+        bindings: maybe_parse_bindings(bindings, py)?,
+        page_size,
+        solution_mappings: solution_mappings.unwrap_or(false),
+    })
 }

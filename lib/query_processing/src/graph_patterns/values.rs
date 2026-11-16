@@ -5,7 +5,7 @@ use polars::prelude::{as_struct, col, Column, IntoColumn, IntoLazy};
 use representation::errors::RepresentationError;
 use representation::solution_mapping::EagerSolutionMappings;
 use representation::{
-    get_ground_term_datatype_ref, BaseRDFNodeType, BaseRDFNodeTypeRef, RDFNodeState, SeriesBuilder,
+    get_term_datatype_ref, BaseRDFNodeType, BaseRDFNodeTypeRef, RDFNodeState, SeriesBuilder,
     LANG_STRING_LANG_FIELD, LANG_STRING_VALUE_FIELD,
 };
 use spargebra::term::GroundTerm;
@@ -14,6 +14,29 @@ use std::collections::HashMap;
 pub fn values_pattern(
     variables: &[Variable],
     bindings: &[Vec<Option<GroundTerm>>],
+) -> Result<EagerSolutionMappings, RepresentationError> {
+    #[allow(unreachable_patterns)]
+    let bindings: Vec<Vec<Option<Term>>> = bindings
+        .iter()
+        .map(|row| {
+            row.iter()
+                .map(|gt| {
+                    gt.as_ref().map(|gt| match gt {
+                        GroundTerm::NamedNode(nn) => Term::NamedNode(nn.clone()),
+                        GroundTerm::Literal(l) => Term::Literal(l.clone()),
+                        _ => unimplemented!(),
+                    })
+                })
+                .collect()
+        })
+        .collect();
+    values_pattern_terms(variables, &bindings)
+}
+
+/// Solution mappings with the given rows of terms, as [`values_pattern`], also for blank nodes.
+pub fn values_pattern_terms(
+    variables: &[Variable],
+    bindings: &[Vec<Option<Term>>],
 ) -> Result<EagerSolutionMappings, RepresentationError> {
     let mut variable_datatype_opt_term_vecs: HashMap<
         usize,
@@ -26,8 +49,8 @@ pub fn values_pattern(
     for (i, row) in bindings.iter().enumerate() {
         for (j, col) in row.iter().enumerate() {
             let map = variable_datatype_opt_term_vecs.get_mut(&j).unwrap();
-            if let Some(gt) = col {
-                let dt = get_ground_term_datatype_ref(gt);
+            if let Some(term) = col {
+                let dt = get_term_datatype_ref(term);
                 {
                     let builder = if let Some(builder) = map.get_mut(&dt) {
                         builder
@@ -40,13 +63,7 @@ pub fn values_pattern(
                         map.insert(dt.clone(), builder);
                         map.get_mut(&dt).unwrap()
                     };
-                    #[allow(unreachable_patterns)]
-                    let term = match gt {
-                        GroundTerm::NamedNode(nn) => Term::NamedNode(nn.clone()),
-                        GroundTerm::Literal(l) => Term::Literal(l.clone()),
-                        _ => unimplemented!(),
-                    };
-                    builder.parse_term(&term)?;
+                    builder.parse_term(term)?;
                 }
                 for (k, b) in &mut *map {
                     if k != &dt {
