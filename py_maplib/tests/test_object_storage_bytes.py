@@ -60,7 +60,8 @@ def _listing(prefix, opts):
         ("uploads/m1/nodesets.zip", 3),
     ]
     assert listed[1].url == f"{prefix}/manifest.json"
-    assert listed[1].version == storage.head(listed[1].url, storage_options=opts).version
+    # On GCS listings have no generation, so their version is the ETag only.
+    assert storage.head(listed[1].url, storage_options=opts).version.startswith(listed[1].version)
     assert storage.list(prefix + "/", storage_options=opts) == listed
     for o in listed:
         storage.delete(o.url, storage_options=opts)
@@ -146,3 +147,38 @@ def test_errors(tmp_path):
     # Plain HTTP stores have no conditional puts. Fails before any request is made.
     with pytest.raises(storage.NotSupported):
         storage.put("http://127.0.0.1:9/x", b"", if_none_match=True)
+
+
+@pytest.fixture
+def gcs_mock():
+    from .gcs_mock_server import GcsMock
+
+    mock = GcsMock()
+    yield mock
+    mock.stop()
+
+
+def test_gcs_generation_preconditions(gcs_mock):
+    """On GCS, if_match and if_none_match are generation preconditions, and the version
+    tokens of put, get and head carry the generation."""
+    opts = gcs_mock.storage_options
+    _publish_cycle("gs://bucket/model/manifest.json", opts)
+    sent = [m for (method, key, m) in gcs_mock.requests if key == "model/manifest.json"]
+    # if_none_match puts send generation 0, if_match puts the generation that was read.
+    assert sent[0] == "0" and sent[1] == "0"
+    assert sent[2] is not None and sent[2] != "0"
+    assert None in sent  # the unconditional put
+
+    url = "gs://bucket/model/manifest.json"
+    t1 = storage.put(url, b"a", storage_options=opts)
+    assert ";version=" in t1
+    assert storage.get(url, storage_options=opts)[1] == t1
+    assert storage.head(url, storage_options=opts).version == t1
+    # The same token until the object changes, a new one afterwards.
+    assert storage.get(url, storage_options=opts)[1] == t1
+    t2 = storage.put(url, b"a", if_match=t1, storage_options=opts)
+    assert t2 != t1
+
+
+def test_gcs_list(gcs_mock):
+    _listing("gs://bucket/model", gcs_mock.storage_options)

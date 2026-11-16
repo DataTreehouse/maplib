@@ -25,7 +25,9 @@ back as ``if_match`` to replace an object only if nobody changed it since::
 
 Conditional puts on each backend:
 
-- S3, Google Cloud Storage, Azure Blob Storage: made by the store. For S3-compatible stores
+- S3, Google Cloud Storage, Azure Blob Storage: made by the store. On Google Cloud Storage
+  they are generation preconditions (``x-goog-if-generation-match``, 0 for ``if_none_match``),
+  so the token carries the generation; tokens from ``list`` do not, see ``ObjectInfo.version``. For S3-compatible stores
   this needs support for ``If-Match`` / ``If-None-Match`` on puts (AWS S3, R2 and MinIO have
   it); ``{"aws_conditional_put": "disabled"}`` turns conditional puts off, and they then raise
   ``NotSupported``.
@@ -106,7 +108,10 @@ class ObjectInfo:
     """When the object was last written, in UTC."""
     version: Optional[str]
     """The version token, for ``put(..., if_match=...)``. None only for stores with neither
-    ETags nor object versions (some plain HTTP servers)."""
+    ETags nor object versions (some plain HTTP servers). Listings on Google Cloud Storage do
+    not give the generation, so there the version from ``list`` is the ETag only: it tells
+    whether an object changed, but ``if_match`` needs the token of ``get``, ``head`` or
+    ``put``."""
 
 
 def _info(url: str, t: Tuple[str, int, int, Optional[str]]) -> ObjectInfo:
