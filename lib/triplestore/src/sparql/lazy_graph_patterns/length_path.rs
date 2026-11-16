@@ -25,6 +25,10 @@
 use super::path::{
     bound_start_keys, path_leaves, term_variable_name, PathLeaf, U32DataFrameCreator, VALUE_COLUMN,
 };
+use super::magic_paths::{
+    boolean_option, has_maplib_predicate, iri_option, maplib_local_name,
+    non_negative_integer_option, path_error, PATH,
+};
 use super::Triplestore;
 use crate::sparql::errors::SparqlError;
 use crate::sparql::QuerySettings;
@@ -37,18 +41,13 @@ use query_processing::expressions::{literal_enc, named_node_enc};
 use query_processing::graph_patterns::join;
 use query_processing::pushdowns::Pushdowns;
 use rayon::prelude::*;
-use representation::constants::MAPLIB_PREFIX_IRI;
 use representation::dataset::QueryGraph;
 use representation::multitype::{compress_actual_multitypes, force_convert_multicol_to_single_col};
 use representation::solution_mapping::SolutionMappings;
-use representation::subtypes::is_literal_subtype;
 use representation::{BaseRDFNodeType, RDFNodeState};
 use spargebra::algebra::PropertyPathExpression;
 use spargebra::term::{NamedNodePattern, TermPattern, TriplePattern};
 use std::collections::{HashMap, HashSet};
-
-/// The magic predicate.
-pub const PATH: &str = "https://datatreehouse.github.io/maplib/vocab#path";
 
 const PREDICATE: &str = "predicate";
 const INVERSE_PREDICATE: &str = "inversePredicate";
@@ -114,16 +113,12 @@ pub struct LengthPathPattern {
     pub path_node: Option<Variable>,
 }
 
-fn path_error(msg: impl Into<String>) -> SparqlError {
-    SparqlError::PathError(msg.into())
-}
-
 /// Takes the `maplib:path` patterns, and the patterns describing their options, out of the
 /// patterns of a basic graph pattern.
 pub fn extract_length_path_patterns(
     patterns: &[TriplePattern],
 ) -> Result<(Vec<TriplePattern>, Vec<LengthPathPattern>), SparqlError> {
-    let is_path = |tp: &TriplePattern| matches!(&tp.predicate, NamedNodePattern::NamedNode(nn) if nn.as_str() == PATH);
+    let is_path = |tp: &TriplePattern| has_maplib_predicate(tp, PATH);
     if !patterns.iter().any(is_path) {
         return Ok((patterns.to_vec(), vec![]));
     }
@@ -153,10 +148,9 @@ pub fn extract_length_path_patterns(
         }
         if option_nodes.contains(&tp.subject) {
             let name = match &tp.predicate {
-                NamedNodePattern::NamedNode(nn) => nn
-                    .as_str()
-                    .strip_prefix(MAPLIB_PREFIX_IRI)
-                    .filter(|n| OPTIONS.contains(n)),
+                NamedNodePattern::NamedNode(nn) => {
+                    maplib_local_name(nn).filter(|n| OPTIONS.contains(n))
+                }
                 NamedNodePattern::Variable(_) => None,
             };
             let Some(name) = name else {
@@ -204,18 +198,8 @@ fn parse_options(
             return Err(path_error(format!("maplib:{name} is given more than once")));
         }
         match name.as_str() {
-            PREDICATE | INVERSE_PREDICATE => {
-                let TermPattern::NamedNode(nn) = value else {
-                    return Err(path_error(format!(
-                        "maplib:{name} must be an IRI, got {value}"
-                    )));
-                };
-                if name == PREDICATE {
-                    predicates.push(nn);
-                } else {
-                    inverse_predicates.push(nn);
-                }
-            }
+            PREDICATE => predicates.push(iri_option(&name, &value)?.clone()),
+            INVERSE_PREDICATE => inverse_predicates.push(iri_option(&name, &value)?.clone()),
             MIN_LENGTH => min = Some(parse_length(&name, &value)?),
             MAX_LENGTH => max = Some(parse_length(&name, &value)?),
             OBJECT => object = Some(value),
@@ -238,18 +222,7 @@ fn parse_options(
                     ))),
                 };
             }
-            SHORTEST => {
-                shortest = match &value {
-                    TermPattern::Literal(l) if l.datatype() == xsd::BOOLEAN => {
-                        matches!(l.value(), "true" | "1")
-                    }
-                    _ => {
-                        return Err(path_error(format!(
-                            "maplib:shortest must be true or false, got {value}"
-                        )))
-                    }
-                };
-            }
+            SHORTEST => shortest = boolean_option(&name, &value)?,
             _ => unreachable!("Should never happen"),
         }
     }
@@ -292,16 +265,8 @@ fn parse_options(
 }
 
 fn parse_length(name: &str, value: &TermPattern) -> Result<usize, SparqlError> {
-    if let TermPattern::Literal(l) = value {
-        if is_literal_subtype(l.datatype(), xsd::INTEGER) {
-            if let Ok(n) = l.value().parse::<usize>() {
-                return Ok(n);
-            }
-        }
-    }
-    Err(path_error(format!(
-        "maplib:{name} must be a non-negative integer, got {value}"
-    )))
+    let n = non_negative_integer_option(name, value)?;
+    usize::try_from(n).map_err(|_| path_error(format!("maplib:{name} is too large, got {n}")))
 }
 
 fn output_variable(name: &str, value: TermPattern) -> Result<Variable, SparqlError> {
@@ -836,6 +801,7 @@ impl Triplestore {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use representation::constants::MAPLIB_PREFIX_IRI;
 
     fn spec(min: usize, max: Option<usize>) -> PathSpec {
         PathSpec {
@@ -1108,7 +1074,7 @@ mod tests {
         let int = |i: i64| TermPattern::Literal(oxrdf::Literal::from(i));
         let patterns = vec![
             tp(s.clone(), "http://ex/type", s.clone()),
-            tp(s.clone(), PATH, b.clone()),
+            tp(s.clone(), &opt(PATH), b.clone()),
             tp(b.clone(), &opt("minLength"), int(2)),
             tp(b.clone(), &opt("maxLength"), int(1)),
         ];
@@ -1116,7 +1082,7 @@ mod tests {
         assert!(err.to_string().contains("greater than"), "{err}");
 
         let patterns = vec![
-            tp(s.clone(), PATH, b.clone()),
+            tp(s.clone(), &opt(PATH), b.clone()),
             tp(
                 b.clone(),
                 &opt("predicate"),
@@ -1138,14 +1104,14 @@ mod tests {
         assert_eq!(lps[0].spec.max, Some(3));
 
         let patterns = vec![
-            tp(s.clone(), PATH, b.clone()),
+            tp(s.clone(), &opt(PATH), b.clone()),
             tp(b.clone(), &opt("maxLenght"), int(3)),
         ];
         assert!(extract_length_path_patterns(&patterns).is_err());
 
         // Walk lengths without a maximum never end on a cycle.
         let patterns = vec![
-            tp(s.clone(), PATH, b.clone()),
+            tp(s.clone(), &opt(PATH), b.clone()),
             tp(
                 b.clone(),
                 &opt("length"),

@@ -8,6 +8,7 @@ mod join;
 pub(crate) mod lateral;
 mod left_join;
 pub mod length_path;
+pub mod magic_paths;
 mod minus;
 mod order_by;
 pub mod path;

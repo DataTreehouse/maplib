@@ -26,6 +26,10 @@
 
 pub mod algo;
 
+use super::magic_paths::{
+    boolean_option, has_maplib_predicate, iri_option, literal_option, maplib_local_name,
+    non_negative_integer_option, number_option, SHORTEST_PATH,
+};
 use super::path::{U32DataFrameCreator, LOOKUP_COLUMN, VALUE_COLUMN};
 use crate::sparql::errors::SparqlError;
 use crate::sparql::QuerySettings;
@@ -40,12 +44,10 @@ use query_processing::expressions::{literal_enc, named_node_local_enc};
 use query_processing::graph_patterns::{distinct, join, union};
 use query_processing::pushdowns::Pushdowns;
 use representation::cats::{Cats, LockedCats};
-use representation::constants::MAPLIB_PREFIX_IRI;
 use representation::dataset::{NamedGraph, QueryGraph};
 use representation::multitype::compress_actual_multitypes;
 use representation::query_context::Context;
 use representation::solution_mapping::{BaseCatState, EagerSolutionMappings, SolutionMappings};
-use representation::subtypes::is_literal_subtype;
 use representation::{BaseRDFNodeType, RDFNodeState, OBJECT_COL_NAME, SUBJECT_COL_NAME};
 use spargebra::algebra::{GraphPattern, PropertyPathExpression};
 use spargebra::term::{NamedNodePattern, TermPattern, TriplePattern};
@@ -53,30 +55,16 @@ use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex};
 use tracing::debug;
 
-pub const SHORTEST_PATH: &str = "shortestPath";
-
 /// The scratch memory of the parallel searches, in bytes.
 const SCRATCH_BUDGET: usize = 2 << 30;
 /// The number of cached search graphs.
 const CACHE_SIZE: usize = 4;
 
-fn maplib_iri(local: &str) -> String {
-    format!("{MAPLIB_PREFIX_IRI}{local}")
-}
-
-/// Whether a basic graph pattern uses a path search predicate.
+/// Whether a basic graph pattern uses `maplib:shortestPath`.
 pub fn has_path_search(patterns: &[TriplePattern]) -> bool {
-    let sp = maplib_iri(SHORTEST_PATH);
-    patterns.iter().any(|p| match &p.predicate {
-        NamedNodePattern::NamedNode(nn) => nn.as_str() == sp,
-        _ => false,
-    })
-}
-
-/// Whether a graph pattern is a basic graph pattern with a path search, which must be joined
-/// after the other patterns of its group, as their values are the sources and targets.
-pub fn is_path_search_pattern(gp: &GraphPattern) -> bool {
-    matches!(gp, GraphPattern::Bgp { patterns } if has_path_search(patterns))
+    patterns
+        .iter()
+        .any(|tp| has_maplib_predicate(tp, SHORTEST_PATH))
 }
 
 /// One end of a search: a variable, or constant terms.
@@ -120,9 +108,7 @@ impl PathSearchSpec {
     }
 }
 
-fn err(s: impl Into<String>) -> SparqlError {
-    SparqlError::PathSearchError(s.into())
-}
+use super::magic_paths::path_error as err;
 
 fn var_name(t: &TermPattern) -> Option<String> {
     match t {
@@ -134,41 +120,6 @@ fn var_name(t: &TermPattern) -> Option<String> {
 
 fn output_var(param: &str, t: &TermPattern) -> Result<String, SparqlError> {
     var_name(t).ok_or_else(|| err(format!("maplib:{param} must be a variable, got {t}")))
-}
-
-fn literal_of<'a>(param: &str, t: &'a TermPattern) -> Result<&'a oxrdf::Literal, SparqlError> {
-    match t {
-        TermPattern::Literal(l) => Ok(l),
-        _ => Err(err(format!("maplib:{param} must be a literal, got {t}"))),
-    }
-}
-
-fn integer_of(param: &str, t: &TermPattern) -> Result<u64, SparqlError> {
-    let l = literal_of(param, t)?;
-    if !is_literal_subtype(l.datatype(), xsd::INTEGER) {
-        return Err(err(format!("maplib:{param} must be an integer, got {l}")));
-    }
-    l.value().parse::<u64>().map_err(|_| {
-        err(format!(
-            "maplib:{param} must be a non-negative integer, got {l}"
-        ))
-    })
-}
-
-fn number_of(param: &str, t: &TermPattern) -> Result<f64, SparqlError> {
-    let l = literal_of(param, t)?;
-    l.value()
-        .parse::<f64>()
-        .map_err(|_| err(format!("maplib:{param} must be a number, got {l}")))
-}
-
-fn boolean_of(param: &str, t: &TermPattern) -> Result<bool, SparqlError> {
-    let l = literal_of(param, t)?;
-    match l.value() {
-        "true" | "1" => Ok(true),
-        "false" | "0" => Ok(false),
-        _ => Err(err(format!("maplib:{param} must be a boolean, got {l}"))),
-    }
 }
 
 fn add_endpoint(
@@ -193,12 +144,9 @@ fn add_endpoint(
 fn parse_spec(
     patterns: &[TriplePattern],
 ) -> Result<(PathSearchSpec, Vec<TriplePattern>), SparqlError> {
-    let sp_iri = maplib_iri(SHORTEST_PATH);
     let magic: Vec<&TriplePattern> = patterns
         .iter()
-        .filter(
-            |p| matches!(&p.predicate, NamedNodePattern::NamedNode(nn) if nn.as_str() == sp_iri),
-        )
+        .filter(|tp| has_maplib_predicate(tp, SHORTEST_PATH))
         .collect();
     if magic.len() != 1 {
         return Err(err(
@@ -249,31 +197,19 @@ fn parse_spec(
             rest.push(p.clone());
             continue;
         };
-        if &p.subject != node || !pred.as_str().starts_with(MAPLIB_PREFIX_IRI) {
+        let Some(name) = maplib_local_name(pred).filter(|_| &p.subject == node) else {
             rest.push(p.clone());
             continue;
-        }
-        let name = &pred.as_str()[MAPLIB_PREFIX_IRI.len()..];
+        };
         let o = &p.object;
         match name {
             "object" => add_endpoint(name, &mut spec.target, o)?,
             "avoid" => add_endpoint(name, &mut spec.avoid, o)?,
-            "excludePredicate" => match o {
-                TermPattern::NamedNode(nn) => spec.exclude.push(nn.clone()),
-                _ => return Err(err(format!("maplib:{name} must be an IRI, got {o}"))),
-            },
-            "predicate" | "inversePredicate" => match o {
-                TermPattern::NamedNode(nn) => {
-                    if name == "predicate" {
-                        spec.forward.push(nn.clone())
-                    } else {
-                        spec.inverse.push(nn.clone())
-                    }
-                }
-                _ => return Err(err(format!("maplib:{name} must be an IRI, got {o}"))),
-            },
+            "excludePredicate" => spec.exclude.push(iri_option(name, o)?.clone()),
+            "predicate" => spec.forward.push(iri_option(name, o)?.clone()),
+            "inversePredicate" => spec.inverse.push(iri_option(name, o)?.clone()),
             "anyPredicate" => {
-                let l = literal_of(name, o)?;
+                let l = literal_option(name, o)?;
                 spec.any_predicate = Some(match l.value().to_lowercase().as_str() {
                     "forward" => (true, false),
                     "backward" => (false, true),
@@ -286,22 +222,19 @@ fn parse_spec(
                 });
             }
             "minLength" => {
-                spec.params.min_length = integer_of(name, o)?.min(u32::MAX as u64) as u32
+                spec.params.min_length = non_negative_integer_option(name, o)?.min(u32::MAX as u64) as u32
             }
             "maxLength" => {
-                spec.params.max_length = Some(integer_of(name, o)?.min(u32::MAX as u64) as u32)
+                spec.params.max_length = Some(non_negative_integer_option(name, o)?.min(u32::MAX as u64) as u32)
             }
-            "maxCost" => spec.params.max_cost = Some(number_of(name, o)?),
-            "weight" => match o {
-                TermPattern::NamedNode(nn) => spec.weight = Some(nn.clone()),
-                _ => return Err(err(format!("maplib:weight must be an IRI, got {o}"))),
-            },
-            "defaultWeight" => spec.default_weight = number_of(name, o)?,
-            "limit" => spec.params.limit = Some(integer_of(name, o)? as usize),
-            "kShortest" => spec.params.k = (integer_of(name, o)? as usize).max(1),
-            "allShortest" => spec.params.all = boolean_of(name, o)?,
+            "maxCost" => spec.params.max_cost = Some(number_option(name, o)?),
+            "weight" => spec.weight = Some(iri_option(name, o)?.clone()),
+            "defaultWeight" => spec.default_weight = number_option(name, o)?,
+            "limit" => spec.params.limit = Some(non_negative_integer_option(name, o)? as usize),
+            "kShortest" => spec.params.k = (non_negative_integer_option(name, o)? as usize).max(1),
+            "allShortest" => spec.params.all = boolean_option(name, o)?,
             "maxPaths" => {
-                spec.params.max_paths = integer_of(name, o)? as usize;
+                spec.params.max_paths = non_negative_integer_option(name, o)? as usize;
                 max_paths_set = true;
             }
             "length" => spec.length_var = Some(output_var(name, o)?),

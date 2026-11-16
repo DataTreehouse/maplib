@@ -107,11 +107,11 @@ impl Triplestore {
         // SERVICE is evaluated after the local patterns, so that the solutions bound by them can
         // be sent with it (a bind join), and SERVICE ?var has ?var bound. Services with a
         // variable endpoint come after those with a fixed endpoint, which may bind it.
-        // Path searches take their sources and targets from the other patterns of the group
-        // (services included), so they are joined last.
-        let (rest, path_searches): (Vec<_>, Vec<_>) = ordered
+        // maplib:path and maplib:shortestPath take their start (and target) nodes from the other
+        // patterns of the group (services included), so they are joined last.
+        let (rest, magic_paths): (Vec<_>, Vec<_>) = ordered
             .into_iter()
-            .partition(|(gp, _)| !super::path_search::is_path_search_pattern(gp));
+            .partition(|(gp, _)| !super::magic_paths::is_magic_path_bgp(gp));
         let (local, mut services): (Vec<_>, Vec<_>) = rest
             .into_iter()
             .partition(|(gp, _)| !matches!(gp, GraphPattern::Service { .. }));
@@ -191,7 +191,7 @@ impl Triplestore {
             });
             output_maybe_unbound.extend(maybe_unbound);
         }
-        for (gp, ctx) in path_searches {
+        for (gp, ctx) in magic_paths {
             output_solution_mappings = Some(self.lazy_graph_pattern(
                 gp,
                 output_solution_mappings,

@@ -333,3 +333,39 @@ def test_random_graphs(seed):
         assert from_start == {(l, o) for (l, o, s) in expected if s == start}
         pairs = rows(m, f"SELECT ?s ?o WHERE {{ ?s (ex:p|ex:q){{{min_len},{max_len}}} ?o }}")
         assert pairs == {(o, s) for (_, o, s) in expected}
+
+
+LONG_CHAIN = " ".join(f"ex:n{i} ex:p ex:n{i + 1} ." for i in range(50)) + " ex:n0 ex:start true ."
+
+
+@pytest.mark.parametrize(
+    "start",
+    [
+        "{ SELECT ?s WHERE { ?s ex:start true } }",
+        "VALUES ?s { ex:n0 }",
+        "{ ?s ex:start true }",
+    ],
+)
+def test_path_starts_from_other_patterns_of_the_group(start):
+    # maplib:path is joined after the patterns that bind its start, also when they are not in its
+    # basic graph pattern. Evaluated first, it would enumerate the paths from all 51 nodes, more
+    # than max_rows.
+    m = model(LONG_CHAIN)
+    for q in [
+        f"SELECT ?s ?o ?i WHERE {{ {start} ?s maplib:path [ maplib:predicate ex:p ; "
+        f"maplib:maxLength 3 ; maplib:object ?o ; maplib:pathIndex ?i ] }}",
+        f"SELECT ?s ?o ?i WHERE {{ ?s maplib:path [ maplib:predicate ex:p ; "
+        f"maplib:maxLength 3 ; maplib:object ?o ; maplib:pathIndex ?i ] {start} }}",
+    ]:
+        df = m.query(PREFIXES + q, max_rows=20)
+        assert sorted(df["o"].to_list()) == [
+            "<http://example.org/n1>",
+            "<http://example.org/n2>",
+            "<http://example.org/n3>",
+        ]
+    with pytest.raises(Exception, match="more than the configured maximum"):
+        m.query(
+            PREFIXES + "SELECT ?s ?o ?i WHERE { ?s maplib:path [ maplib:predicate ex:p ; "
+            "maplib:maxLength 3 ; maplib:object ?o ; maplib:pathIndex ?i ] }",
+            max_rows=20,
+        )

@@ -28,17 +28,29 @@ pub enum InterruptableCollectError {
 /// dominates small queries such as lookups of one subject.
 pub const SMALL_COLLECT_HEIGHT: usize = 65_536;
 
+/// What is known about a query result before it is collected, for choosing the engine.
+#[derive(Debug, Clone, Copy)]
+enum CollectHint {
+    /// Nothing.
+    None,
+    /// The result is estimated to have at most this many rows.
+    Height(usize),
+    /// The plan ends in a sort followed by a slice (ORDER BY with LIMIT).
+    SortedSlice,
+}
+
 /// The engine used for query result collection. `MAPLIB_POLARS_ENGINE=in-memory` or `streaming`
-/// selects that engine. Otherwise results estimated to be small (see [SMALL_COLLECT_HEIGHT]) use
-/// the in-memory engine and everything else the streaming engine.
-fn query_engine(height_estimate: Option<usize>) -> Engine {
+/// selects that engine. Otherwise results estimated to be small (see [SMALL_COLLECT_HEIGHT]) and
+/// sorted slices use the in-memory engine, and everything else the streaming engine.
+fn query_engine(hint: CollectHint) -> Engine {
     match std::env::var("MAPLIB_POLARS_ENGINE").as_deref() {
         Ok("in-memory") | Ok("in_memory") => Engine::InMemory,
         Ok("streaming") => Engine::Streaming,
         // Only the streaming engine stops a running join when the query is cancelled.
         _ if cancel::has_large_join() => Engine::Streaming,
-        _ => match height_estimate {
-            Some(h) if h <= SMALL_COLLECT_HEIGHT => Engine::InMemory,
+        _ => match hint {
+            CollectHint::Height(h) if h <= SMALL_COLLECT_HEIGHT => Engine::InMemory,
+            CollectHint::SortedSlice => Engine::InMemory,
             _ => Engine::Streaming,
         },
     }
@@ -92,19 +104,14 @@ pub fn collect_sized(lf: LazyFrame, height: usize) -> Result<DataFrame, PolarsEr
 pub fn pl_interruptable_collect_sorted_slice(
     lf: LazyFrame,
 ) -> Result<DataFrame, InterruptableCollectError> {
-    let engine = match std::env::var("MAPLIB_POLARS_ENGINE").as_deref() {
-        Ok("streaming") => Engine::Streaming,
-        _ if cancel::has_large_join() => Engine::Streaming,
-        _ => Engine::InMemory,
-    };
-    collect_with_engine(lf, engine)
+    collect_with_engine(lf, query_engine(CollectHint::SortedSlice))
 }
 
 /// collect a Polars LazyFrame in a way that allows a KeyboardInterrupt to cancel the search.
 /// On the streaming engine this relies on Polars' abort mechanism, so the SIGINT hook must be
 /// installed with `polars::error::abort::register_polars_abort_mechanism` at startup.
 pub fn pl_interruptable_collect(lf: LazyFrame) -> Result<DataFrame, InterruptableCollectError> {
-    collect_with_engine(lf, query_engine(None))
+    collect_with_engine(lf, query_engine(CollectHint::None))
 }
 
 /// Like [pl_interruptable_collect], for a result estimated to have at most `height_estimate`
@@ -113,7 +120,7 @@ pub fn pl_interruptable_collect_estimated(
     lf: LazyFrame,
     height_estimate: usize,
 ) -> Result<DataFrame, InterruptableCollectError> {
-    collect_with_engine(lf, query_engine(Some(height_estimate)))
+    collect_with_engine(lf, query_engine(CollectHint::Height(height_estimate)))
 }
 
 fn collect_with_engine(

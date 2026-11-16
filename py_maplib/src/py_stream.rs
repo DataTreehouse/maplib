@@ -435,7 +435,7 @@ impl PyModelStream {
     fn collect(&self, py: Python<'_>) -> PyResult<()> {
         let model = self.model.bind(py).get();
         let (carrier, prefixes) = py.detach(|| -> PyResult<_> {
-            let mut inner = model.inner.write().unwrap_or_else(|e| e.into_inner());
+            let mut inner = model.write_inner();
             self.validate(&inner)?;
             let carrier = if self.in_place {
                 None
@@ -456,7 +456,7 @@ impl PyModelStream {
         // in_place, the counters already live on the model.
         if let Some(carrier) = &state.carrier {
             py.detach(|| {
-                let mut inner = model.inner.write().unwrap_or_else(|e| e.into_inner());
+                let mut inner = model.write_inner();
                 inner.blank_node_counter = inner.blank_node_counter.max(carrier.blank_node_counter);
                 let scope = inner
                     .triplestore
@@ -563,7 +563,7 @@ impl PyModelStream {
         let steps = &self.steps;
         state.batches += 1;
         let Some(carrier) = state.carrier.as_mut() else {
-            let mut inner = model.inner.write().unwrap_or_else(|e| e.into_inner());
+            let mut inner = model.write_inner();
             run_batch_steps(
                 &mut inner,
                 &mut state.default_template,
