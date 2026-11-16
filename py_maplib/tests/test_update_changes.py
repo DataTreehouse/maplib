@@ -180,3 +180,31 @@ def test_clear_and_drop():
     changes = m.update("DROP DEFAULT")
     assert counts(changes) == {DEFAULT_GRAPH: (0, 5)}
 
+
+
+def test_insert_template_with_several_graphs(model):
+    # One INSERT template writing to the default graph, a named graph and a graph from a variable:
+    # the inserted triples are counted in the graph they went to.
+    g2 = "http://example.net/g2"
+    changes = model.update(
+        f"""INSERT {{
+            ?s <{EX}copy> ?o .
+            GRAPH <{G1}> {{ ?s <{EX}knows> ?o }}
+            GRAPH ?g {{ ?s <{EX}inG> ?o }}
+        }}
+        WHERE {{ ?s <{EX}knows> ?o BIND(IRI(IF(?o = <{EX}c>, "{G1}", "{g2}")) AS ?g) }}""",
+        return_triples=True,
+    )
+    assert counts(changes) == {DEFAULT_GRAPH: (3, 0), G1: (5, 0), g2: (1, 0)}
+    assert changes[G1]["inserted_triples"][f"{EX}inG"].height == 2
+    assert changes[g2]["inserted_triples"][f"{EX}inG"].height == 1
+    # Running it again inserts nothing new.
+    changes = model.update(
+        f"""INSERT {{
+            ?s <{EX}copy> ?o .
+            GRAPH <{G1}> {{ ?s <{EX}knows> ?o }}
+            GRAPH ?g {{ ?s <{EX}inG> ?o }}
+        }}
+        WHERE {{ ?s <{EX}knows> ?o BIND(IRI(IF(?o = <{EX}c>, "{G1}", "{g2}")) AS ?g) }}"""
+    )
+    assert {g: c for g, c in counts(changes).items() if c != (0, 0)} == {}
