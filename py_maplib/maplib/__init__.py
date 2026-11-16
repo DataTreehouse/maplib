@@ -57,7 +57,6 @@ import pathlib
 from importlib.metadata import version
 from .maplib import *
 from .adding_triples import add_triples
-from .template_generator import generate_templates
 
 """
 http://www.w3.org/1999/02/22-rdf-syntax-ns#type

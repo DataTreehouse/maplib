@@ -7,6 +7,7 @@ mod py_query_cache;
 mod py_server;
 mod py_storage;
 mod py_stream;
+mod py_template_generator;
 mod py_io;
 mod shacl;
 
@@ -233,6 +234,10 @@ fn _maplib(py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyTemplate>()?;
     m.add_class::<PyInstance>()?;
     m.add_function(wrap_pyfunction!(py_triple, m)?)?;
+    m.add_function(wrap_pyfunction!(
+        py_template_generator::py_generate_templates,
+        m
+    )?)?;
     m.add_function(wrap_pyfunction!(set_memory_limit, m)?)?;
     m.add_function(wrap_pyfunction!(memory_usage, m)?)?;
     m.add_function(wrap_pyfunction!(memory_limit, m)?)?;
