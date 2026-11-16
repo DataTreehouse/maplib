@@ -52,6 +52,23 @@ impl Changes {
         }
     }
 
+    /// Counts triples inserted into the graph, without their triples.
+    pub fn add_inserted_count(&mut self, graph: &NamedGraph, n: usize) {
+        self.touch(graph).inserted += n;
+    }
+
+    /// Keeps inserted triples that were counted with `add_inserted_count`.
+    pub fn keep_inserted_triples(&mut self, new_triples: Vec<NewTriples>) {
+        if !self.keep_triples {
+            return;
+        }
+        for nt in new_triples {
+            if nt.df.as_ref().is_some_and(|df| df.height() > 0) {
+                self.touch(&nt.graph).inserted_triples.push(nt);
+            }
+        }
+    }
+
     pub fn add_deleted(&mut self, graph: &NamedGraph, deleted: Deleted) {
         let g = self.touch(graph);
         g.deleted += deleted.count;

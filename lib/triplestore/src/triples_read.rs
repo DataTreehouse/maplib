@@ -201,6 +201,38 @@ impl Triplestore {
         triples_batch_size: usize,
         known_contexts: HashMap<String, String>,
     ) -> Result<(), TriplestoreError> {
+        self.read_triples_keep_new(
+            slice,
+            rdf_format,
+            base_iri,
+            parallel,
+            checked,
+            strict,
+            graph,
+            prefixes,
+            triples_batch_size,
+            known_contexts,
+            None,
+        )
+    }
+
+    /// As `read_triples`, and with `new_triples` the triples that were not already present are
+    /// added to it (not for HDT).
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn read_triples_keep_new(
+        &mut self,
+        slice: &[u8],
+        rdf_format: ExtendedRdfFormat,
+        base_iri: Option<String>,
+        parallel: Option<bool>,
+        checked: bool,
+        strict: bool,
+        graph: &NamedGraph,
+        prefixes: &HashMap<String, NamedNode>,
+        triples_batch_size: usize,
+        known_contexts: HashMap<String, String>,
+        mut new_triples: Option<&mut Vec<NewTriples>>,
+    ) -> Result<(), TriplestoreError> {
         let use_slice = if slice.starts_with(&UTF8_BOM) {
             &slice[UTF8_BOM.len()..]
         } else {
@@ -402,7 +434,10 @@ impl Triplestore {
             );
             let start_add_triples_vec = Instant::now();
             self.parser_call += 1;
-            self.add_triples_vec(ttas)?;
+            let added = self.add_triples_vec(ttas)?;
+            if let Some(new_triples) = new_triples.as_deref_mut() {
+                new_triples.extend(added);
+            }
             debug!(
                 "Adding triples vec took {} seconds",
                 start_add_triples_vec.elapsed().as_secs_f64()

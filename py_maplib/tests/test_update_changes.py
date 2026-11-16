@@ -210,6 +210,27 @@ def test_insert_template_with_several_graphs(model):
     assert {g: c for g, c in counts(changes).items() if c != (0, 0)} == {}
 
 
+def test_load(model, tmp_path):
+    # LOAD reports the triples it really inserted, in the graph they went to.
+    nt = tmp_path / "load.nt"
+    nt.write_text(f"<{EX}a> <{EX}knows> <{EX}b> .\n<{EX}l> <{EX}knows> <{EX}m> .\n")
+    trig = tmp_path / "load.trig"
+    trig.write_text(f"<{EX}t> <{EX}knows> <{EX}u> .\n<{G1}> {{ <{EX}t> <{EX}knows> <{EX}v> }}\n")
+    urls = [nt.as_uri(), trig.as_uri()]
+    model.set_federation(allow_load=True, allowed_endpoints=urls)
+    changes = model.update(f"LOAD <{urls[0]}> INTO GRAPH <{G1}>", return_triples=True)
+    assert counts(changes) == {G1: (2, 0)}
+    assert changes[G1]["inserted_triples"][f"{EX}knows"].height == 2
+    changes = model.update(f"LOAD <{urls[0]}>")
+    # One of the two triples is already in the default graph.
+    assert counts(changes) == {DEFAULT_GRAPH: (1, 0)}
+    changes = model.update(f"LOAD <{urls[0]}> INTO GRAPH <{G1}>")
+    assert counts(changes) == {G1: (0, 0)}
+    # Quads of a dataset loaded into the default graph go to their own graphs.
+    changes = model.update(f"LOAD <{urls[1]}>")
+    assert counts(changes) == {DEFAULT_GRAPH: (1, 0), G1: (1, 0)}
+
+
 def test_add_copy_move():
     # COPY and MOVE clear the target first, which is only supported in memory.
     g2, g3 = "http://example.net/g2", "http://example.net/g3"

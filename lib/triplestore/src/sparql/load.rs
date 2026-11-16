@@ -8,7 +8,7 @@
 use super::errors::SparqlError;
 use super::QuerySettings;
 use crate::triples_read::ExtendedRdfFormat;
-use crate::Triplestore;
+use crate::{NewTriples, Triplestore};
 use external_sparql::federation::{fetch_for_load, ServiceError};
 use file_io::remote::{RemoteLocation, RemoteOptions};
 use oxrdfio::{JsonLdProfileSet, RdfFormat};
@@ -54,15 +54,17 @@ fn format_from_extension(url: &str) -> Option<ExtendedRdfFormat> {
 }
 
 impl Triplestore {
-    /// Runs `LOAD <url> INTO GRAPH <target>`.
+    /// Runs `LOAD <url> INTO GRAPH <target>`. With `new_triples` the triples that were not
+    /// already present are added to it (not for HDT).
     pub(crate) fn load(
         &mut self,
         url: &str,
         target: &NamedGraph,
         silent: bool,
         query_settings: &QuerySettings,
+        new_triples: Option<&mut Vec<NewTriples>>,
     ) -> Result<(), SparqlError> {
-        match self.load_inner(url, target, query_settings) {
+        match self.load_inner(url, target, query_settings, new_triples) {
             Ok(()) => Ok(()),
             Err(SparqlError::ServiceError(e)) if e.is_policy_error() => {
                 Err(SparqlError::ServiceError(e))
@@ -80,6 +82,7 @@ impl Triplestore {
         url: &str,
         target: &NamedGraph,
         query_settings: &QuerySettings,
+        new_triples: Option<&mut Vec<NewTriples>>,
     ) -> Result<(), SparqlError> {
         let settings = self.federation_settings(query_settings);
         if !settings.allow_load {
@@ -118,7 +121,7 @@ impl Triplestore {
                 .map_err(|e| SparqlError::LoadError(e.to_string()))?;
             (bytes.to_vec(), format)
         };
-        self.read_triples(
+        self.read_triples_keep_new(
             &bytes,
             format,
             Some(url.to_string()),
@@ -129,6 +132,7 @@ impl Triplestore {
             &HashMap::new(),
             LOAD_TRIPLES_BATCH_SIZE,
             HashMap::new(),
+            new_triples,
         )
         .map_err(|e| SparqlError::LoadError(format!("Could not read <{url}>: {e}")))
     }

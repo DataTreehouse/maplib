@@ -645,7 +645,32 @@ impl Triplestore {
                             graph.cloned().unwrap_or(NamedGraph::DefaultGraph)
                         }
                     };
-                    self.load(source.as_str(), &target, *silent, query_settings)?;
+                    // LOAD only inserts, and triples that are already present are not added again,
+                    // so the growth of each graph is the number of triples it really inserted.
+                    // Quads in the source go to their own graphs when the target is the default.
+                    let sizes_before: HashMap<NamedGraph, usize> = self
+                        .graph_triples_map
+                        .keys()
+                        .map(|g| (g.clone(), self.graph_size(g)))
+                        .collect();
+                    let mut new_triples = vec![];
+                    self.load(
+                        source.as_str(),
+                        &target,
+                        *silent,
+                        query_settings,
+                        keep_triples.then_some(&mut new_triples),
+                    )?;
+                    changes.touch(&target);
+                    let graphs: Vec<NamedGraph> = self.graph_triples_map.keys().cloned().collect();
+                    for g in graphs {
+                        let before = sizes_before.get(&g).copied().unwrap_or(0);
+                        let n = self.graph_size(&g).saturating_sub(before);
+                        if n > 0 {
+                            changes.add_inserted_count(&g, n);
+                        }
+                    }
+                    changes.keep_inserted_triples(new_triples);
                 }
                 GraphUpdateOperation::Clear { graph: target, .. }
                 | GraphUpdateOperation::Drop { graph: target, .. } => {
