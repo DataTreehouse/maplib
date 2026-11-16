@@ -16,6 +16,9 @@ jobs:
   build_and_test:
     runs-on:
       group: ubuntu_very_beefy_test_maplib
+    # The debug build runs the suite in about 20 minutes; a hung test should not hold the
+    # runner for the default 6 hours.
+    timeout-minutes: 90
     strategy:
       fail-fast: false
       matrix:
