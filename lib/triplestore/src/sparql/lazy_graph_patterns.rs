@@ -93,6 +93,35 @@ impl Triplestore {
                     }
                     None
                 };
+                // Vector searches are answered by the vector index of the graph.
+                let vector_patterns;
+                let patterns = if vector::uses_vector_search(patterns) {
+                    let Some(index) = graph.and_then(|g| self.vector_index.get(g)) else {
+                        return Err(vector::VectorError::NoIndex.into());
+                    };
+                    let (rest, vector_solution_mappings) = index.lookup_from_triple_patterns(
+                        patterns,
+                        self.global_cats.clone(),
+                        query_settings.max_rows,
+                    )?;
+                    if let Some(vsm) = vector_solution_mappings {
+                        solution_mappings = if let Some(sm) = solution_mappings {
+                            Some(join(
+                                sm,
+                                vsm,
+                                JoinType::Inner,
+                                self.global_cats.clone(),
+                                query_settings.max_rows,
+                            )?)
+                        } else {
+                            Some(vsm)
+                        };
+                    }
+                    vector_patterns = rest;
+                    &vector_patterns
+                } else {
+                    patterns
+                };
                 let patterns = if let Some(graph) = graph {
                     if let Some(fts_index) = self.fts_index.get(graph) {
                         let (patterns, fts_solution_mappings) = fts_index

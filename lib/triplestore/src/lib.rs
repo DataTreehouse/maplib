@@ -8,6 +8,7 @@ pub mod errors;
 mod fts_rebuild;
 mod geo_index;
 mod graph_map;
+mod vector_index;
 mod map_df;
 mod map_json;
 mod map_xml;
@@ -29,6 +30,7 @@ use external_sparql::federation::FederationSettings;
 use file_io::create_folder_if_not_exists;
 use fts::{FtsIndex, FtsOptions};
 use geo::GeoIndex;
+use vector::VectorIndex;
 use oxrdf::vocab::{rdf, rdfs};
 use oxrdf::NamedNode;
 use polars::prelude::{
@@ -86,6 +88,9 @@ pub struct Triplestore {
     /// Geometry literals in DuckDB with a spatial index, when GeoSPARQL indexing is enabled.
     /// One per triplestore: it is keyed by cats, which are shared between the graphs.
     pub(crate) geo_index: Option<GeoIndex>,
+    /// Vector literals with their parsed vectors, when vector indexing is enabled. One per
+    /// graph, as searches return triples.
+    pub(crate) vector_index: HashMap<NamedGraph, VectorIndex>,
     pub global_cats: LockedCats,
     n_triples_deleted: usize,
     pub udf_registry: Arc<UdfRegistry>,
@@ -302,6 +307,7 @@ impl Triplestore {
         // Compaction renumbers the cats that the full text search and geo indexes refer to.
         self.rebuild_fts_indexes()?;
         self.rebuild_geo_index()?;
+        self.rebuild_vector_indexes()?;
         Ok(())
     }
 
@@ -491,8 +497,9 @@ impl Triplestore {
                 parser_call: self.parser_call,
                 indexing: self.indexing.clone(),
                 fts_index: new_fts_index_map,
-                // The new triplestore has its own cats, so it gets its own geo index.
+                // The new triplestore has its own cats, so it gets its own geo and vector indexes.
                 geo_index: None,
+                vector_index: HashMap::new(),
                 global_cats: LockedCats::new(cats_image),
                 n_triples_deleted: 0,
                 path_graph_cache: Default::default(),
@@ -504,6 +511,8 @@ impl Triplestore {
                     maybe_create_geo_index(&detached.indexing, detached.storage_folder.as_deref())?;
                 detached.rebuild_geo_index()?;
             }
+            detached.rebuild_vector_indexes()?;
+            self.vector_index.remove(graph);
             Ok(detached)
         } else {
             Err(TriplestoreError::GraphDoesNotExist(graph.to_string()))
@@ -533,6 +542,7 @@ impl Triplestore {
     pub fn remove_temporary_graph(&mut self, graph: &NamedGraph) {
         self.graph_triples_map.remove_graph(graph);
         self.fts_index.remove(graph);
+        self.vector_index.remove(graph);
     }
 
     pub fn truncate(&mut self, graph: &NamedGraph) {
@@ -541,6 +551,7 @@ impl Triplestore {
         }
         self.graph_triples_map.remove_graph(graph);
         self.fts_index.remove(graph);
+        self.vector_index.remove(graph);
     }
 }
 
@@ -645,6 +656,13 @@ pub struct IndexingOptions {
     /// when the triplestore is read back.
     #[serde(default)]
     pub geo: bool,
+    /// Index vector literals for vector search. Kept when serializing, and the index is rebuilt
+    /// when the triplestore is read back.
+    #[serde(default)]
+    pub vectors: bool,
+    /// Also build an approximate nearest neighbour index for vector search.
+    #[serde(default)]
+    pub vector_ann: bool,
 }
 
 impl IndexingOptions {
@@ -664,6 +682,8 @@ impl IndexingOptions {
             fts_local_names: false,
             fts_iris: false,
             geo: false,
+            vectors: false,
+            vector_ann: false,
         }
     }
 
@@ -692,6 +712,13 @@ impl IndexingOptions {
 
     pub fn with_geo(mut self, geo: bool) -> Self {
         self.geo = geo;
+        self
+    }
+
+    /// Enables vector indexing, optionally with an approximate nearest neighbour index.
+    pub fn with_vectors(mut self, vectors: bool, vector_ann: bool) -> Self {
+        self.vectors = vectors || vector_ann;
+        self.vector_ann = vector_ann;
         self
     }
 
@@ -844,6 +871,7 @@ impl Triplestore {
             indexing,
             fts_index,
             geo_index,
+            vector_index: HashMap::new(),
             global_cats: locked_cats,
             n_triples_deleted: 0,
             path_graph_cache: Default::default(),
@@ -896,6 +924,12 @@ impl Triplestore {
             self.geo_index = maybe_create_geo_index(&indexing, self.storage_folder.as_deref())?;
             self.rebuild_geo_index()?;
         }
+        let rebuild_vectors = (indexing.vectors && !self.indexing.vectors)
+            || (indexing.vector_ann && !self.indexing.vector_ann);
+        // Indexes that exist are kept when the new options do not mention them.
+        let mut indexing = indexing;
+        indexing.vectors |= self.indexing.vectors;
+        indexing.vector_ann |= self.indexing.vector_ann;
         if self.indexing != indexing {
             self.query_cache.versions.record(Touched::All);
         }
@@ -917,6 +951,9 @@ impl Triplestore {
         }
         drop(cats);
         self.indexing = indexing;
+        if rebuild_vectors {
+            self.rebuild_vector_indexes()?;
+        }
         Ok(())
     }
 

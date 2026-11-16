@@ -16,6 +16,7 @@ members = [
     "lib/shacl",
     "lib/fts",
     "lib/geo",
+    "lib/vector",
     "lib/datalog",
     "lib/cimxml_export",
     "lib/cimxml_import",

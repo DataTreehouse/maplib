@@ -29,6 +29,7 @@ pub mod solution_mapping;
 pub mod solution_mappings_builder;
 pub mod subtypes;
 pub mod variable_names;
+pub mod vectors;
 
 pub use series_builder::SeriesBuilder;
 

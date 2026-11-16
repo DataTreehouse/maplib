@@ -476,6 +476,8 @@ class IndexingOptions:
             fts_predicates: List["IRI"] = None,
             fts_local_names: bool = None,
             fts_iris: bool = None,
+            vectors: bool = None,
+            vector_ann: bool = None,
     ):
         """
         Defaults to indexing on subjects and objects for select types (e.g. rdf:type and rdfs:label)
@@ -497,6 +499,14 @@ class IndexingOptions:
         :param fts_iris: Also index IRIs in the object position for full text search, by the whole IRI,
                          with the predicate of the triple: <http://ex.org/ns#BreakerType> has the tokens
                          http, ex, org, ns and breakertype. Enables full text search.
+        :param vectors: Enable the vector index (maplib EE). Vector literals (maplib:vector, e.g. mapped
+                    from Polars Array columns of numbers) are stored with their parsed vectors, and the
+                    maplib:vectorSearch magic predicate finds the nearest neighbours of a query vector
+                    with exact search. The maplib:cosineSimilarity, maplib:dotProduct and
+                    maplib:euclideanDistance functions also work without the index, but slower.
+        :param vector_ann: Also build an approximate nearest neighbour index (maplib EE), which
+                    answers cosine similarity searches much faster than exact search at a small
+                    loss of recall. Implies vectors=True.
         """
 
 

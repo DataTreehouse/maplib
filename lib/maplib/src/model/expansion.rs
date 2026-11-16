@@ -78,6 +78,20 @@ impl Model {
             validate_iris,
         } = options;
 
+        // Columns of fixed size arrays of numbers hold vectors, which are mapped to vector
+        // literals.
+        let mut df = df;
+        let mut mapping_column_types = mapping_column_types;
+        if let Some(df) = &mut df {
+            let converted = representation::vectors::vector_columns_to_literals(df)
+                .map_err(MappingError::VectorColumnError)?;
+            if !converted.is_empty() {
+                let types = mapping_column_types.get_or_insert_with(HashMap::new);
+                for (c, t) in converted {
+                    types.entry(c).or_insert(MappingColumnType::Flat(t));
+                }
+            }
+        }
         let (mut df, mut columns) =
             validate(df, mapping_column_types, &target_template, validate_iris)?;
 

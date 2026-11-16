@@ -25,6 +25,8 @@ impl PyIndexingOptions {
         fts_predicates=None,
         fts_local_names=None,
         fts_iris=None,
+        vectors=None,
+        vector_ann=None,
     ))]
     pub fn new(
         object_sort_all: Option<bool>,
@@ -35,6 +37,8 @@ impl PyIndexingOptions {
         fts_predicates: Option<Vec<PyIRI>>,
         fts_local_names: Option<bool>,
         fts_iris: Option<bool>,
+        vectors: Option<bool>,
+        vector_ann: Option<bool>,
     ) -> PyIndexingOptions {
         let fts = fts.unwrap_or(DEFAULT_FTS) || fts_path.is_some();
         let fts_path = fts_path.map(|fts_path| Path::new(&fts_path).to_owned());
@@ -58,7 +62,8 @@ impl PyIndexingOptions {
             fts_predicates,
             fts_local_names.unwrap_or(false),
             fts_iris.unwrap_or(false),
-        );
+        )
+            .with_vectors(vectors.unwrap_or(false), vector_ann.unwrap_or(false));
         PyIndexingOptions { inner }
     }
 }

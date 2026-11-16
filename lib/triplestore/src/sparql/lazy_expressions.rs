@@ -639,6 +639,22 @@ impl Triplestore {
                         context,
                         self.global_cats.clone(),
                     )?,
+                    Function::Custom(nn) if vector::is_vector_function(nn) => {
+                        let index = if let QueryGraph::NamedGraph(g) = dataset {
+                            self.vector_index.get(g)
+                        } else {
+                            None
+                        };
+                        vector::evaluate_function(
+                            index,
+                            nn,
+                            args,
+                            output_solution_mappings,
+                            &args_contexts,
+                            context,
+                            self.global_cats.clone(),
+                        )?
+                    }
                     _ => func_expression(
                         output_solution_mappings,
                         func,

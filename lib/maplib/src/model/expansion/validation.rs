@@ -287,6 +287,11 @@ fn infer_cast_mapping_column_type(
 }
 
 pub fn infer_type_from_column(column: &Column) -> Result<MappingColumnType, MappingError> {
+    if representation::vectors::is_vector_column_dtype(column.dtype()) {
+        return Ok(MappingColumnType::Flat(
+            representation::vectors::vector_base_type().into_default_input_rdf_node_state(),
+        ));
+    }
     if is_iri_col(column) {
         return Ok(MappingColumnType::Flat(
             BaseRDFNodeType::IRI.into_default_input_rdf_node_state(),

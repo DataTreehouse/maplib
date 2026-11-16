@@ -1,6 +1,7 @@
 use crate::errors::TriplestoreError;
 use fts::FtsError;
 use geo::GeoError;
+use vector::VectorError;
 use oxrdf::Variable;
 use query_processing::errors::QueryProcessingError;
 use representation::errors::RepresentationError;
@@ -32,6 +33,8 @@ pub enum SparqlError {
     FtsLookupError(#[from] FtsError),
     #[error("GeoSPARQL error: {}", .0)]
     GeoError(#[from] GeoError),
+    #[error("Vector search error: {}", .0)]
+    VectorError(#[from] VectorError),
     #[error("Query interrupted via signal")]
     InterruptSignal,
     #[error("{0}")]

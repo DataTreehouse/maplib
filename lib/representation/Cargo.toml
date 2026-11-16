@@ -24,6 +24,7 @@ thiserror.workspace = true
 pyo3 = { workspace = true, features = ["chrono-tz", "chrono"] }
 oxsdatatypes.workspace = true
 rayon.workspace = true
+ryu.workspace = true
 nohash-hasher.workspace = true
 uuid.workspace = true
 polars-arrow.workspace = true

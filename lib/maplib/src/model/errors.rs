@@ -10,6 +10,8 @@ use triplestore::errors::TriplestoreError;
 
 #[derive(Error, Debug)]
 pub enum MappingError {
+    #[error("Could not map vector column: {}", .0)]
+    VectorColumnError(String),
     #[error("Invalid template name {}", .0)]
     InvalidTemplateNameError(IriParseError),
     #[error("Could not find template: {}", .0)]

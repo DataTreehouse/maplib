@@ -4078,6 +4078,7 @@ dependencies = [
  "range-set-blaze",
  "rayon",
  "rust_decimal",
+ "ryu",
  "serde",
  "serde_json",
  "sparesults",
@@ -5137,6 +5138,7 @@ dependencies = [
  "urlencoding",
  "utils",
  "uuid",
+ "vector",
 ]
 
 [[package]]
@@ -5270,6 +5272,17 @@ dependencies = [
  "halfbrown",
  "itoa",
  "ryu",
+]
+
+[[package]]
+name = "vector"
+version = "0.1.0"
+dependencies = [
+ "oxrdf",
+ "polars",
+ "representation",
+ "spargebra",
+ "thiserror",
 ]
 
 [[package]]

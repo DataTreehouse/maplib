@@ -409,6 +409,7 @@ impl Triplestore {
             indexing: triplestore_metadata.indexing,
             fts_index,
             geo_index,
+            vector_index: HashMap::new(),
             global_cats: LockedCats::new(cats),
             n_triples_deleted: 0,
             path_graph_cache: Default::default(),
@@ -417,6 +418,7 @@ impl Triplestore {
         };
         // The geo index is not serialized, it is rebuilt from the triples.
         triplestore.rebuild_geo_index()?;
+        triplestore.rebuild_vector_indexes()?;
         Ok(triplestore)
     }
 }
