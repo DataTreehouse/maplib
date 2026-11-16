@@ -970,3 +970,150 @@ def test_question_iri():
     a, b = question_iri("Lines and their lengths!"), question_iri("Lines and their lengths!")
     assert a.startswith("urn:maplib:config:question:lines-and-their-lengths-") and a != b
     assert question_iri("§§").startswith("urn:maplib:config:question:question-")
+
+
+# ── prefixes ────────────────────────────────────────────────────────
+
+from maplib.config import (  # noqa: E402
+    PREFIXES,
+    PrefixConfig,
+    apply_prefixes,
+    generate_prefixes,
+    namespace_of,
+    prefix_name_for,
+    read_prefixes,
+    remove_prefix,
+    write_prefix,
+    write_prefixes,
+)
+
+
+def test_prefixes_are_shacl_declarations_in_the_config_graph():
+    m = Model()
+    write_prefix(m, PrefixConfig("ex", "http://example.org/"))
+    write_prefix(m, PrefixConfig("plant", "http://example.org/plant/"))
+    assert read_prefixes(m) == [
+        PrefixConfig("ex", "http://example.org/"),
+        PrefixConfig("plant", "http://example.org/plant/"),
+    ]
+    df = m.query(
+        f"""PREFIX sh: <http://www.w3.org/ns/shacl#>
+PREFIX owl: <http://www.w3.org/2002/07/owl#>
+SELECT ?name (STR(?ns) AS ?namespace) WHERE {{ GRAPH <{CONFIG_GRAPH}> {{
+  <{PREFIXES}> a owl:Ontology ; sh:declare ?d . ?d a sh:PrefixDeclaration ; sh:prefix ?name ; sh:namespace ?ns
+}} }} ORDER BY ?name"""
+    )
+    assert df["name"].to_list() == ["ex", "plant"]
+    assert df["namespace"].to_list() == ["http://example.org/", "http://example.org/plant/"]
+
+
+def test_prefix_replace_and_remove():
+    m = Model()
+    write_prefix(m, PrefixConfig("ex", "http://example.org/a/"))
+    write_prefix(m, PrefixConfig("ex", "http://example.org/b/"))
+    assert read_prefixes(m) == [PrefixConfig("ex", "http://example.org/b/")]
+    with pytest.raises(ValueError, match="already has the prefix ex"):
+        write_prefix(m, PrefixConfig("other", "http://example.org/b/"))
+    remove_prefix(m, "ex")
+    assert read_prefixes(m) == []
+    # nothing is left of the declaration, and the ontology declares nothing
+    rdf_type = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type"
+    left = m.query(f"SELECT ?s ?p ?o WHERE {{ GRAPH <{CONFIG_GRAPH}> {{ ?s ?p ?o FILTER(?p != <{rdf_type}>) }} }}")
+    assert left.height == 0
+
+
+def test_prefixes_survive_serialization(tmp_path):
+    m = Model()
+    m.reads("<http://example.org/a> <http://example.org/p> 1 .", format="turtle")
+    write_prefixes(m, [PrefixConfig("ex", "http://example.org/"), PrefixConfig("g", "urn:g:", generated=True)])
+    path = tmp_path / "model.trig"
+    m.write(str(path), format="trig")
+    m2 = Model()
+    m2.read(str(path))
+    assert read_prefixes(m2) == [PrefixConfig("ex", "http://example.org/"), PrefixConfig("g", "urn:g:", generated=True)]
+
+
+@pytest.mark.parametrize(
+    "prefix",
+    [PrefixConfig("", "http://example.org/"), PrefixConfig("1x", "http://example.org/"),
+     PrefixConfig("a b", "http://example.org/"), PrefixConfig("ex.", "http://example.org/"),
+     PrefixConfig("ex", "not an iri"), PrefixConfig("ex", "relative/")],
+)
+def test_prefix_rejected(prefix):
+    with pytest.raises(ValueError):
+        write_prefix(Model(), prefix)
+
+
+def test_apply_prefixes():
+    m = Model()
+    m.reads("<http://example.org/a> <http://example.org/p> 1 .", format="turtle")
+    write_prefix(m, PrefixConfig("ex", "http://example.org/"))
+    apply_config(m)
+    assert m.query("SELECT ?s WHERE { ?s ex:p 1 }").height == 1
+    apply_prefixes(m, [PrefixConfig("ex2", "http://example.org/")])
+    assert m.query("SELECT ?s WHERE { ?s ex2:p 1 }").height == 1
+
+
+def test_namespace_of_and_prefix_names():
+    assert namespace_of("http://example.org/plant/p1") == "http://example.org/plant/"
+    assert namespace_of("http://example.org/onto#Pump") == "http://example.org/onto#"
+    assert namespace_of("urn:acme:pump:1") == "urn:acme:pump:"
+    assert namespace_of("http://example.org/") is None
+    assert namespace_of("urn:x") is None
+    assert prefix_name_for("http://example.org/plant/") == "plant"
+    assert prefix_name_for("https://data.example.no/ontology/v2/") == "example"
+    assert prefix_name_for("urn:acme:pump:") == "pump"
+    assert prefix_name_for("http://example.org/meter-readings/") == "mr"
+    assert prefix_name_for("http://www.w3.org/2004/02/skos/core#") == "skos"
+
+
+def test_generate_prefixes():
+    m = Model()
+    m.reads(
+        """@prefix ex: <http://example.org/plant/> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix cim: <http://iec.ch/TC57/CIM100#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+ex:b1 a cim:Breaker ; rdfs:label "B1" ; cim:IdentifiedObject.name "b1" .
+ex:b2 a cim:Breaker ; skos:prefLabel "B2" .
+<urn:acme:pump:1> a <http://example.org/onto/Pump> .
+""",
+        format="turtle",
+        graph="urn:graph:upload",
+    )
+    write_prefix(m, PrefixConfig("plant", "http://example.org/other/"))
+    new = generate_prefixes(m, graph="urn:graph:upload")
+    got = {p.namespace: p.name for p in new}
+    assert all(p.generated for p in new)
+    assert got["http://www.w3.org/1999/02/22-rdf-syntax-ns#"] == "rdf"
+    assert got["http://www.w3.org/2000/01/rdf-schema#"] == "rdfs"
+    assert got["http://www.w3.org/2004/02/skos/core#"] == "skos"
+    # CGMES 3 gets cim: when it is free
+    assert got["http://iec.ch/TC57/CIM100#"] == "cim"
+    # plant is taken, so the namespace gets the next free name
+    assert got["http://example.org/plant/"] == "plant2"
+    assert got["urn:acme:pump:"] == "pump"
+    assert {p.name: p.namespace for p in read_prefixes(m)}["plant2"] == "http://example.org/plant/"
+    # again: everything has a prefix already
+    assert generate_prefixes(m, graph="urn:graph:upload") == []
+    # the default graph is empty
+    assert generate_prefixes(Model()) == []
+
+
+def test_generate_prefixes_limit_and_dry_run():
+    m = Model()
+    m.reads(
+        "\n".join(f"<http://example.org/ns{i}/a> <http://example.org/ns{i}/p> {i} ." for i in range(5)),
+        format="turtle",
+    )
+    new = generate_prefixes(m, max_generated=2, write=False)
+    assert len(new) == 2
+    assert read_prefixes(m) == []
+
+
+def test_generate_prefixes_over_several_graphs():
+    m = Model()
+    m.reads("<http://example.org/a/x> <http://example.org/a/p> 1 .", format="turtle", graph="urn:g:a")
+    m.reads("<http://example.org/b/x> <http://example.org/b/p> 1 .", format="turtle")
+    got = {p.namespace: p.name for p in generate_prefixes(m, graph=["urn:g:a", None], write=False)}
+    assert got == {"http://example.org/a/": "a", "http://example.org/b/": "b"}

@@ -267,6 +267,63 @@ names in `maplib.config.QUESTION_DOMAINS`: `cim` (CIM16), `era` (the ERA vocabul
 `opcua` (OPC UA nodes). maplib Enterprise Edition ships common questions for these, with a way
 to find which the model's data has (`maplib.bundled_questions`).
 
+## Prefixes
+
+The prefixes of the model: short names for namespaces, used to write and show IRIs (`ex:Pump` for
+`http://example.org/Pump`). They are SHACL prefix declarations
+([SHACL 5.2.1](https://www.w3.org/TR/shacl/#sparql-prefixes)), declared with `sh:declare` by the
+`owl:Ontology` `mcfg:prefixes`:
+
+```turtle
+@prefix mcfg: <https://datatreehouse.github.io/maplib/config#> .
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+mcfg:prefixes a owl:Ontology ;
+    sh:declare <https://datatreehouse.github.io/maplib/config#prefixes/plant> .
+
+<https://datatreehouse.github.io/maplib/config#prefixes/plant> a sh:PrefixDeclaration ;
+    sh:prefix "plant" ;
+    sh:namespace "http://example.org/plant/"^^xsd:anyURI ;
+    mcfg:generated true .                 # optional: made by generate_prefixes
+```
+
+| Term | On | Value |
+|---|---|---|
+| `sh:declare` | `mcfg:prefixes` | a prefix declaration (any number) |
+| `sh:prefix` | `sh:PrefixDeclaration` | the name, e.g. `"plant"` |
+| `sh:namespace` | `sh:PrefixDeclaration` | the namespace, an `xsd:anyURI` |
+| `mcfg:generated` | `sh:PrefixDeclaration` | `xsd:boolean`: made by `generate_prefixes`, not by a person |
+
+A name has one namespace and a namespace one name. Since these are ordinary SHACL declarations,
+anything that reads `sh:declare`d prefixes (e.g. the Graph portal, which also reads them from shapes
+graphs) finds them. `apply_config` makes them known to the model (`Model.add_prefixes`), so SPARQL,
+Datalog and OTTR given to the model can use them without `PREFIX` declarations.
+
+`generate_prefixes(m, graph=None, max_generated=8, write=True)` makes prefixes for the data in a
+graph (the default graph when not given, or a list of graphs, `None` in it for the default graph,
+whose uses are added up): the usual prefix of each well-known vocabulary it uses
+(`maplib.config.WELL_KNOWN_PREFIXES`: `rdf`, `rdfs`, `xsd`, `owl`, `sh`, `skos`, `dcterms`, `dc`,
+`prov`, `geo`, `geof`, `sf`, `cim` (CIM16; CIM100 gets `cim` when it is free, else `cim100`),
+`entsoe`, `md`, `opc`, `foaf`, `schema`, `dcat`, `time`, `sosa`, `ssn`, `qudt`, `unit`, `era`,
+`maplib`, ...), and a short name for each of the `max_generated` other namespaces it uses most (the
+predicates by their triples, the classes by their instances and the typed subjects;
+`prefix_name_for` names `http://example.org/plant/` `plant` and `urn:acme:pump:` `pump`).
+Namespaces that have a prefix already, in the config graph or declared in any graph, keep it, and
+taken names get a number (`plant2`). It returns the new prefixes, and writes them unless `write=False`.
+
+```python
+from maplib.config import PrefixConfig, write_prefix, read_prefixes, remove_prefix, generate_prefixes
+
+write_prefix(m, PrefixConfig(name="plant", namespace="http://example.org/plant/"))
+m.read("substations.xml", format="cim/xml", graph="urn:graph:substations")
+generate_prefixes(m, graph="urn:graph:substations")   # cim, md, rdf, ...
+for p in read_prefixes(m):
+    print(p.name, p.namespace, p.generated)
+remove_prefix(m, "plant")
+```
+
 ## Python
 
 ```python
@@ -314,7 +371,9 @@ apply_config(m2)                       # connects (secrets from the environment)
 
 ## The Model portal
 
-The portal's Model › Connect page edits the config graph of the portal's model (the routes under
+The portal's Graphs › Prefixes page lists, adds, edits and removes the prefixes (`/api/config/prefixes`),
+and the portal formats IRIs and declares the prefixes of its queries with them; its Upload and Build
+graph pages can generate prefixes for the data they add. The portal's Model › Connect page edits the config graph of the portal's model (the routes under
 `/api/config`) and applies it. Its Query › Common questions page lists, runs, edits and removes the
 common questions (`/api/config/questions`), and offers the bundled ones for the data the model has;
 Query › SPARQL and Query › Paths save a query as a common question. Everything else reads the

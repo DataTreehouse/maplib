@@ -4,9 +4,9 @@ maplib's configuration as triples, in the model itself.
 The configuration of a model, what it virtualizes, which indexes it has and how it caches query
 results, is kept in a named graph of its own, CONFIG_GRAPH, in the namespace CONFIG
 (https://datatreehouse.github.io/maplib/config#), together with its common questions (saved SPARQL
-queries, CommonQuestion). It travels with the model: written, serialized
-and served like any other graph, and applied with apply_config. See CONFIG_GRAPH.md for the
-vocabulary.
+queries, CommonQuestion) and its prefixes (PrefixConfig, SHACL prefix declarations). It travels
+with the model: written, serialized and served like any other graph, and applied with
+apply_config. See CONFIG_GRAPH.md for the vocabulary.
 
 Secrets are never stored: a secret parameter names the environment variable that holds it, read
 when the configuration is applied.
@@ -25,7 +25,7 @@ when the configuration is applied.
 
 import os
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Dict, List, Mapping, Optional
+from typing import TYPE_CHECKING, Dict, List, Mapping, Optional, Union
 
 if TYPE_CHECKING:
     from maplib import IndexingOptions, Model, QueryCacheOptions
@@ -778,6 +778,370 @@ def read_query_cache(m: "Model") -> Optional[QueryCacheConfig]:
     )
 
 
+# ── prefixes ────────────────────────────────────────────────────────
+
+OWL = "http://www.w3.org/2002/07/owl#"
+
+#: The owl:Ontology of the config graph that declares the model's prefixes (sh:declare).
+PREFIXES = CONFIG + "prefixes"
+
+#: Well-known vocabularies and their usual prefixes (namespace to name), as generate_prefixes
+#: names them when the data uses them.
+WELL_KNOWN_PREFIXES: Dict[str, str] = {
+    "http://www.w3.org/1999/02/22-rdf-syntax-ns#": "rdf",
+    "http://www.w3.org/2000/01/rdf-schema#": "rdfs",
+    XSD: "xsd",
+    OWL: "owl",
+    SHACL: "sh",
+    "http://www.w3.org/2004/02/skos/core#": "skos",
+    DCTERMS: "dcterms",
+    "http://purl.org/dc/elements/1.1/": "dc",
+    "http://www.w3.org/ns/prov#": "prov",
+    "http://www.opengis.net/ont/geosparql#": "geo",
+    "http://www.opengis.net/def/function/geosparql/": "geof",
+    "http://www.opengis.net/ont/sf#": "sf",
+    "http://www.w3.org/2003/01/geo/wgs84_pos#": "wgs",
+    "http://iec.ch/TC57/2013/CIM-schema-cim16#": "cim",
+    "http://iec.ch/TC57/CIM100#": "cim100",
+    "http://iec.ch/TC57/CIM100-European#": "eu",
+    "http://entsoe.eu/CIM/SchemaExtension/3/1#": "entsoe",
+    "http://iec.ch/TC57/61970-552/ModelDescription/1#": "md",
+    "http://iec.ch/TC57/61970-552/DifferenceModel/1#": "dm",
+    "http://opcfoundation.org/UA/": "opc",
+    "http://xmlns.com/foaf/0.1/": "foaf",
+    "https://schema.org/": "schema",
+    "http://schema.org/": "schema",
+    "http://www.w3.org/ns/dcat#": "dcat",
+    "http://www.w3.org/2006/time#": "time",
+    "http://www.w3.org/ns/sosa/": "sosa",
+    "http://www.w3.org/ns/ssn/": "ssn",
+    "http://qudt.org/schema/qudt/": "qudt",
+    "http://qudt.org/vocab/unit/": "unit",
+    "http://qudt.org/vocab/quantitykind/": "quantitykind",
+    "http://purl.org/vocab/vann/": "vann",
+    "http://rdfs.org/ns/void#": "void",
+    "http://data.europa.eu/949/": "era",
+    "http://ns.ottr.xyz/0.4/": "ottr",
+    MAPLIB: "maplib",
+    CONFIG: "mcfg",
+}
+
+#: Names generate_prefixes prefers for some well-known vocabularies when they are free: CGMES 3
+#: (CIM100) data is usually written with cim:, which WELL_KNOWN_PREFIXES gives to CIM16.
+PREFERRED_PREFIXES: Dict[str, str] = {"http://iec.ch/TC57/CIM100#": "cim"}
+
+#: generate_prefixes names at most this many of the other namespaces the data uses, the most used first.
+GENERATED_PREFIXES = 8
+
+_PREFIX_NAME = r"^[^\W\d_](?:[\w.-]*[\w-])?$"
+
+#: Path segments that say little about a vocabulary, skipped when a prefix is named after its namespace.
+_GENERIC_SEGMENTS = {
+    "ns", "ontology", "ontologies", "onto", "vocab", "vocabulary", "schema", "schemas", "def", "resource",
+    "resources", "data", "id", "ids", "rdf", "owl", "core", "terms", "model", "models", "www", "html", "index",
+}
+
+
+@dataclass
+class PrefixConfig:
+    """A prefix of the model: a short name for a namespace, used to write and show IRIs (ex:Pump for
+    http://example.org/Pump). In the config graph a SHACL prefix declaration (sh:prefix, sh:namespace),
+    declared (sh:declare) by the owl:Ontology PREFIXES."""
+
+    name: str
+    """sh:prefix, e.g. ex."""
+    namespace: str
+    """sh:namespace, e.g. http://example.org/."""
+    generated: bool = False
+    """mcfg:generated: made by generate_prefixes, not by a person."""
+
+
+def prefix_iri(name: str) -> str:
+    """The IRI of the declaration of a prefix in the config graph."""
+    return f"{PREFIXES}/{name}"
+
+
+def _check_prefix(prefix: PrefixConfig):
+    import re
+
+    if not prefix.name:
+        raise ValueError("A prefix needs a name")
+    if not re.match(_PREFIX_NAME, prefix.name):
+        raise ValueError(
+            f"{prefix.name!r} is not a prefix name: a letter, then letters, digits, '_', '-' or '.', not ending in '.'"
+        )
+    if ":" not in prefix.namespace:
+        raise ValueError(f"The namespace of a prefix must be an absolute IRI: {prefix.namespace!r}")
+    _iri(prefix.namespace)
+
+
+def _prefix_lines(prefix: PrefixConfig) -> List[str]:
+    d = _iri(prefix_iri(prefix.name))
+    lines = [
+        f"{_iri(PREFIXES)} <{RDF_TYPE}> <{OWL}Ontology> .",
+        f"{_iri(PREFIXES)} <{SHACL}declare> {d} .",
+        f"{d} <{RDF_TYPE}> <{SHACL}PrefixDeclaration> .",
+        f"{d} <{SHACL}prefix> {_literal(prefix.name)} .",
+        f"{d} <{SHACL}namespace> {_literal(prefix.namespace, XSD + 'anyURI')} .",
+    ]
+    if prefix.generated:
+        lines.append(f"{d} <{CONFIG}generated> {_boolean(True)} .")
+    return lines
+
+
+def _remove_declarations(m: "Model", names: List[str]):
+    """Removes the declarations of these prefix names from the config graph, whatever their IRIs."""
+    if not names:
+        return
+    g = _iri(CONFIG_GRAPH)
+    values = " ".join(_literal(n) for n in names)
+    m.update(
+        f"""PREFIX sh: <{SHACL}>
+DELETE {{ GRAPH {g} {{ ?d ?p ?o }} }}
+WHERE {{ GRAPH {g} {{ VALUES ?name {{ {values} }} ?d sh:prefix ?name . ?d ?p ?o }} }}"""
+    )
+    m.update(
+        f"""PREFIX sh: <{SHACL}>
+DELETE {{ GRAPH {g} {{ ?x sh:declare ?d }} }}
+WHERE {{ GRAPH {g} {{ ?x sh:declare ?d FILTER NOT EXISTS {{ ?d sh:prefix ?name }} }} }}"""
+    )
+
+
+def write_prefixes(m: "Model", prefixes: List[PrefixConfig]):
+    """
+    Adds prefixes to the configuration, replacing those with the same names. A namespace has one
+    prefix: writing a prefix for a namespace that has another one raises ValueError.
+    """
+    names = [p.name for p in prefixes]
+    if len(set(names)) != len(names):
+        raise ValueError("The prefixes must have different names")
+    for p in prefixes:
+        _check_prefix(p)
+    namespaces = [p.namespace for p in prefixes]
+    if len(set(namespaces)) != len(namespaces):
+        raise ValueError("The prefixes must have different namespaces")
+    for existing in read_prefixes(m):
+        for p in prefixes:
+            if existing.namespace == p.namespace and existing.name != p.name and existing.name not in names:
+                raise ValueError(f"The namespace {p.namespace} already has the prefix {existing.name}")
+    _remove_declarations(m, names)
+    if prefixes:
+        m.reads("\n".join(line for p in prefixes for line in _prefix_lines(p)), format="ntriples", graph=CONFIG_GRAPH)
+
+
+def write_prefix(m: "Model", prefix: PrefixConfig):
+    """Adds a prefix to the configuration, or replaces the one with its name."""
+    write_prefixes(m, [prefix])
+
+
+def remove_prefix(m: "Model", name: str):
+    """Removes a prefix from the configuration."""
+    _remove_declarations(m, [name])
+
+
+def read_prefixes(m: "Model") -> List[PrefixConfig]:
+    """The prefixes in the configuration (the SHACL prefix declarations in the config graph), by name."""
+    rows = _rows(
+        m,
+        f"""PREFIX sh: <{SHACL}>
+SELECT ?d ?name ?namespace ?generated WHERE {{ GRAPH {_iri(CONFIG_GRAPH)} {{
+  ?d sh:prefix ?name ; sh:namespace ?namespace .
+  OPTIONAL {{ ?d mcfg:generated ?generated }}
+}} }}""",
+    )
+    prefixes: Dict[str, PrefixConfig] = {}
+    for r in rows:
+        name = _strip(r["name"])
+        if name in prefixes:
+            continue
+        generated = r.get("generated")
+        prefixes[name] = PrefixConfig(
+            name=name,
+            namespace=_strip(_literal_value(r["namespace"])),
+            generated=generated is True or "true" in str(generated).lower(),
+        )
+    return sorted(prefixes.values(), key=lambda p: p.name)
+
+
+def _literal_value(value) -> str:
+    """The lexical form of a literal that may come with its datatype ("..."^^<...>)."""
+    text = str(value)
+    if text.startswith('"') and '"^^' in text:
+        return text[1 : text.rindex('"^^')]
+    return text
+
+
+def apply_prefixes(m: "Model", prefixes: Optional[List[PrefixConfig]] = None):
+    """Makes the configured prefixes (read from the config graph when not given) known to the
+    model, for parsing SPARQL, Datalog and OTTR (Model.add_prefixes)."""
+    prefixes = read_prefixes(m) if prefixes is None else prefixes
+    if prefixes:
+        m.add_prefixes({p.name: p.namespace for p in prefixes})
+
+
+def namespace_of(iri: str) -> Optional[str]:
+    """
+    The namespace of an IRI: up to its last '#' or '/' (for http and https IRIs), or its last ':'
+    for other schemes (urn:example:pump:1 has urn:example:pump:). None when there is no local name.
+    """
+    import re
+
+    if re.match(r"^https?://", iri, re.IGNORECASE):
+        match = re.match(r"^(https?://[^/#]+[/#](?:.*[/#])?)[^/#]+$", iri, re.IGNORECASE)
+    else:
+        match = re.match(r"^([A-Za-z][A-Za-z0-9+.-]*:.*[:/#])[^:/#]+$", iri)
+    if match is None:
+        return None
+    namespace = match.group(1)
+    if re.match(r"^[A-Za-z][A-Za-z0-9+.-]*:$", namespace):
+        return None  # urn: alone
+    return namespace
+
+
+def prefix_name_for(namespace: str) -> str:
+    """A short prefix name for a namespace: its last telling path segment (http://example.org/plant/
+    is plant), else the name of its host (http://data.example.org/ is example)."""
+    import re
+    from urllib.parse import urlparse
+
+    if namespace in WELL_KNOWN_PREFIXES:
+        return WELL_KNOWN_PREFIXES[namespace]
+    candidates: List[str] = []
+    if re.match(r"^https?://", namespace, re.IGNORECASE):
+        u = urlparse(namespace)
+        segments = [s for s in re.split(r"[/#]", u.path) if s]
+        candidates += reversed(segments)
+        host = [h for h in (u.hostname or "").split(".") if h and h != "www"]
+        if len(host) > 1:
+            host = host[:-1]  # the top level domain
+        candidates += reversed(host)
+    else:
+        parts = [s for s in namespace.split(":") if s]
+        candidates += reversed(parts[1:])
+    for candidate in candidates:
+        if candidate.lower() in _GENERIC_SEGMENTS or re.match(r"^v?\d[\d._-]*$", candidate, re.IGNORECASE):
+            continue
+        words = [w.lower() for w in re.findall(r"[A-Z]?[a-z]+|[A-Z]+(?![a-z])|\d+", candidate)]
+        if not words or not words[0][0].isalpha():
+            continue
+        joined = "".join(words)
+        if len(joined) <= 10:
+            return joined
+        if len(words) > 1:
+            return "".join(w[0] for w in words)
+        return joined[:8]
+    return "ns"
+
+
+def _scope(graph: Optional[str], pattern: str) -> str:
+    return f"GRAPH {_iri(graph)} {{ {pattern} }}" if graph else pattern
+
+
+def _used_namespaces(m: "Model", graph: Optional[str] = None) -> Dict[str, int]:
+    """How much the data uses each namespace: the triples of its predicates, the instances of its
+    classes and the subjects in it with a type (or a sample of the subjects, without types)."""
+    import polars as pl
+
+    counts: Dict[str, int] = {}
+
+    def add(df, column: str, weight: Optional[str] = None):
+        if df is None or df.height == 0:
+            return
+        iri = pl.col(column).cast(pl.Utf8).str.strip_chars("<>")
+        http = iri.str.extract(r"(?i)^(https?://[^/#]+[/#](?:.*[/#])?)[^/#]+$", 1)
+        other = iri.str.extract(r"^([A-Za-z][A-Za-z0-9+.-]*:.*[:/#])[^:/#]+$", 1)
+        namespace = pl.when(iri.str.contains(r"(?i)^https?://")).then(http).otherwise(other)
+        n = pl.col(weight).cast(pl.Int64) if weight else pl.lit(1, dtype=pl.Int64)
+        frame = (
+            df.select(namespace.alias("ns"), n.alias("n"))
+            .filter(pl.col("ns").is_not_null() & ~pl.col("ns").str.contains(r"^[A-Za-z][A-Za-z0-9+.-]*:$"))
+            .group_by("ns")
+            .agg(pl.col("n").sum())
+        )
+        for ns, total in frame.iter_rows():
+            counts[ns] = counts.get(ns, 0) + int(total)
+
+    add(m.query(f"SELECT ?p (COUNT(*) AS ?n) WHERE {{ {_scope(graph, '?s ?p ?o')} }} GROUP BY ?p"), "p", "n")
+    add(m.query(f"SELECT ?c (COUNT(*) AS ?n) WHERE {{ {_scope(graph, f'?s <{RDF_TYPE}> ?c')} }} GROUP BY ?c"), "c", "n")
+    subjects = m.query(f"SELECT DISTINCT ?s WHERE {{ {_scope(graph, f'?s <{RDF_TYPE}> ?c')} FILTER(isIRI(?s)) }}")
+    if subjects is None or subjects.height == 0:
+        subjects = m.query(f"SELECT DISTINCT ?s WHERE {{ {_scope(graph, '?s ?p ?o')} FILTER(isIRI(?s)) }} LIMIT 100000")
+    add(subjects, "s")
+    return counts
+
+
+def _declared_anywhere(m: "Model") -> List[PrefixConfig]:
+    """The prefixes declared (sh:prefix, sh:namespace) in any graph of the model."""
+    rows = _rows(
+        m,
+        f"""PREFIX sh: <{SHACL}>
+SELECT DISTINCT ?name ?namespace WHERE {{ {{ ?d sh:prefix ?name ; sh:namespace ?namespace }}
+  UNION {{ GRAPH ?g {{ ?d sh:prefix ?name ; sh:namespace ?namespace }} }} }}""",
+    )
+    return [PrefixConfig(name=_strip(r["name"]), namespace=_strip(_literal_value(r["namespace"]))) for r in rows]
+
+
+def generate_prefixes(
+    m: "Model",
+    graph: Union[None, str, List[Optional[str]]] = None,
+    max_generated: int = GENERATED_PREFIXES,
+    write: bool = True,
+) -> List[PrefixConfig]:
+    """
+    Makes prefixes for the namespaces the data uses: the usual prefix of each well-known vocabulary
+    in it (WELL_KNOWN_PREFIXES: rdf, rdfs, xsd, owl, sh, skos, dcterms, prov, geo, cim, opc, ...),
+    and a short name (prefix_name_for) for the max_generated namespaces it uses most besides these.
+    Namespaces that have a prefix already (in the config graph, or declared with sh:prefix in any
+    graph) keep it, and names in use are not given again.
+
+    :param m: The model.
+    :param graph: The named graph whose data is looked at, by default the default graph; or a list
+        of graphs (None in it for the default graph), whose uses of each namespace are added up.
+    :param max_generated: How many namespaces that are not well known get a prefix at most.
+    :param write: Writes the new prefixes to the config graph (as generated, mcfg:generated true).
+    :return: The new prefixes.
+    """
+    used: Dict[str, int] = {}
+    for g in graph if isinstance(graph, list) else [graph]:
+        for namespace, n in _used_namespaces(m, g).items():
+            used[namespace] = used.get(namespace, 0) + n
+    existing = read_prefixes(m) + _declared_anywhere(m)
+    taken_namespaces = {p.namespace for p in existing}
+    taken_names = {p.name for p in existing}
+    new: List[PrefixConfig] = []
+
+    def give(namespace: str, name: str):
+        base, i = name, 2
+        while name in taken_names:
+            name, i = f"{base}{i}", i + 1
+        taken_names.add(name)
+        taken_namespaces.add(namespace)
+        new.append(PrefixConfig(name=name, namespace=namespace, generated=True))
+
+    by_use = sorted(used.items(), key=lambda kv: (-kv[1], kv[0]))
+    known = [ns for ns, _ in by_use if ns in WELL_KNOWN_PREFIXES and ns not in taken_namespaces]
+    for namespace in known:
+        if namespace not in PREFERRED_PREFIXES:
+            give(namespace, WELL_KNOWN_PREFIXES[namespace])
+    for namespace in known:
+        if namespace in PREFERRED_PREFIXES:
+            preferred = PREFERRED_PREFIXES[namespace]
+            give(namespace, preferred if preferred not in taken_names else WELL_KNOWN_PREFIXES[namespace])
+    # the well-known names stay for their vocabularies
+    taken_names.update(WELL_KNOWN_PREFIXES.values())
+    others = 0
+    for namespace, _ in by_use:
+        if others >= max_generated:
+            break
+        if namespace in taken_namespaces:
+            continue
+        give(namespace, prefix_name_for(namespace))
+        others += 1
+    if write and new:
+        write_prefixes(m, new)
+    return new
+
+
 # ── applying ────────────────────────────────────────────────────────
 
 
@@ -1069,13 +1433,15 @@ def apply_properties(m: "Model", config: VirtualizationConfig):
 
 def apply_config(m: "Model", environ: Optional[Mapping[str, str]] = None) -> List[str]:
     """
-    Applies the configuration in the model's config graph: creates the configured indexes, sets
-    the query result cache and virtualizes the enabled databases.
+    Applies the configuration in the model's config graph: makes the configured prefixes known to
+    the model, creates the configured indexes, sets the query result cache and virtualizes the
+    enabled databases.
 
     :param m: The model.
     :param environ: Where the secrets are read from, by default the environment variables.
     :return: The IRIs of the virtualizations applied.
     """
+    apply_prefixes(m)
     indexing = read_indexing(m)
     if indexing.any():
         m.create_index(indexing.options())
