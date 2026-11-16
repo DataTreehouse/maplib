@@ -10,6 +10,7 @@ Not everything spills: the hash tables of joins and group-bys stay in memory, as
 bottom-k that Polars uses for ORDER BY with LIMIT/OFFSET.
 """
 
+import os
 import subprocess
 import sys
 import textwrap
@@ -25,6 +26,7 @@ OFFSET = N_TRIPLES // 2
 # and stays under 170 MB.
 CEILING_MB = 210
 LIMIT_MB = 120
+N_THREADS = 4
 
 CHILD = textwrap.dedent(
     """
@@ -67,6 +69,11 @@ CHILD = textwrap.dedent(
 def run_child(limit_mb, tmp_path, ceiling_mb=CEILING_MB):
     spill_dir = tmp_path / "spill"
     spill_dir.mkdir()
+    # The peak memory of the sort depends on the number of threads: with 32 or more (as on large
+    # CI runners) the query without a limit stays under the ceiling. So the query runs on the
+    # same number of threads everywhere. The memory count is updated per thread in steps of
+    # POLARS_OOC_DRIFT_THRESHOLD (4 MB by default), which is made 64 KB to keep it close.
+    env = dict(os.environ, POLARS_MAX_THREADS=str(N_THREADS), POLARS_OOC_DRIFT_THRESHOLD="65536")
     return subprocess.run(
         [
             sys.executable,
@@ -81,6 +88,7 @@ def run_child(limit_mb, tmp_path, ceiling_mb=CEILING_MB):
         capture_output=True,
         text=True,
         timeout=600,
+        env=env,
     )
 
 
