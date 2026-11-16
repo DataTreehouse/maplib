@@ -372,8 +372,12 @@ mod tests {
         ]);
         assert_eq!(c.compact("http://example.com/a").unwrap(), "ex:a");
         assert_eq!(c.compact("http://example.com/ns#a").unwrap(), "exns:a");
-        assert_eq!(c.compact("http://example.com//a").unwrap(), "ex:/a");
-        // A suffix starting with // would be read as an absolute IRI
+        // A suffix starting with / reads like a path, and one starting with // would be read as an
+        // absolute IRI, so both are kept
+        assert_eq!(
+            c.compact("http://example.com//a").unwrap(),
+            "http://example.com//a"
+        );
         assert_eq!(
             c.compact("http://example.com///a").unwrap(),
             "http://example.com///a"
