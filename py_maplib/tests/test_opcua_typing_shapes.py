@@ -194,6 +194,64 @@ def test_61850_fully_inherited(tmp_path):
     _check_expected(_validate_report(m), "expected_fully_inherited_61850.csv")
 
 
+# Copies of a Direction object (IEC 61850-7-4 ACD) with its dirGeneral data attribute, all
+# dirGeneral children sharing one browse name.
+SCALED_INSTANCE = """<UAObject NodeId="ns=1;i={b}" BrowseName="1:Direction_{k}">
+  <DisplayName>Direction_{k}</DisplayName>
+  <References>
+    <Reference ReferenceType="HasTypeDefinition">ns=2;i=246</Reference>
+  </References>
+</UAObject>
+<UAVariable NodeId="ns=1;i={c}" BrowseName="2:dirGeneral" ParentNodeId="ns=1;i={b}" DataType="ns=2;i=75">
+  <DisplayName>dirGeneral</DisplayName>
+  <References>
+    <Reference ReferenceType="HasTypeDefinition">i=63</Reference>
+    <Reference ReferenceType="ns=2;i=2" IsForward="false">ns=1;i={b}</Reference>
+  </References>
+</UAVariable>
+"""
+
+
+def test_browse_path_instances_with_a_shared_browse_name(tmp_path):
+    # Every dirGeneral child gets the type of its own instance declaration, and only that one:
+    # joining instance children to instance declarations on the browse name alone (a regression
+    # that took 134 GB for 100 000 copies) gives every instance every dirGeneral child.
+    copies = 3000
+    m_folder = tmp_path / "scaled"
+    shutil.copytree(TESTDATA_PATH / "61850", m_folder)
+    shutil.copy(BASE_NODESET, m_folder)
+    instances = m_folder / "Opc.Ua.Instances.NodeSet2.xml"
+    head, _, _ = instances.read_text().partition("<UAObject")
+    body = "".join(
+        SCALED_INSTANCE.format(b=100_000 + 2 * k, c=100_001 + 2 * k, k=k)
+        for k in range(copies)
+    )
+    instances.write_text(head + body + "</UANodeSet>\n")
+    m = Model()
+    try:
+        m.map_opc_ua(m_folder)
+    except BaseException as e:
+        if _unavailable(e):
+            pytest.skip("OPC UA mapping is not available in this build")
+        raise
+    m.opcua.add_typing_shapes(shapes_graph=SHAPES, instance_namespaces=[INSTANCE_NS])
+    typed = m.query(
+        PREFIXES
+        + """
+        SELECT ?direction ?child ?declaration WHERE {
+            ?direction ua:BrowseName ?name .
+            FILTER(STRSTARTS(?name, "Direction_"))
+            ?child ua:BrowseName "dirGeneral" .
+            ?direction ?ref ?child .
+            ?child a ?declaration .
+            ?declaration uamapper:path ?path .
+        }"""
+    )
+    assert typed.height == copies
+    assert typed.get_column("child").n_unique() == copies
+    assert typed.get_column("declaration").n_unique() == 1
+
+
 def test_own_shapes_use_helper_triples(tmp_path):
     m = _mapped("61850", tmp_path)
     m.opcua.add_typing_shapes(shapes_graph=SHAPES, instance_namespaces=[INSTANCE_NS])

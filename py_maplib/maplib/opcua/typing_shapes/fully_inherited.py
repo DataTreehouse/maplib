@@ -125,18 +125,28 @@ def infer_browse_path_instances(m: Model) -> Model:
 
     logger.info(f"Finish infer browse path instances helper")
 
-    # We need to work around a memory issue here
-    # Possibly this should be built into maplib
+    # One query per pair of reference types keeps each join small. The type side and the
+    # instance side are joined on both ?parent and ?browse_name in one go: joined on
+    # ?browse_name alone, every instance child with a common browse name (one per instance)
+    # meets every instance, quadratic in the number of instances.
     browse_path_instances_query = """
         PREFIX ua:<http://opcfoundation.org/UA/>
         PREFIX uamapper:<https://github.com/DataTreehouse/uamapper#>
         CONSTRUCT { ?instance_child a ?type_child } WHERE {
-            ?parent uamapper:fiid ?type_child .
-            ?parent {parent_reference_type} ?type_child .
-            ?instance a ?parent .
-            ?instance {child_reference_type} ?instance_child .
-            ?type_child ua:BrowseName ?browse_name .
-            ?instance_child ua:BrowseName ?browse_name .
+            {
+                SELECT ?parent ?type_child ?browse_name WHERE {
+                    ?parent uamapper:fiid ?type_child .
+                    ?parent {parent_reference_type} ?type_child .
+                    ?type_child ua:BrowseName ?browse_name .
+                }
+            }
+            {
+                SELECT ?parent ?instance_child ?browse_name WHERE {
+                    ?instance a ?parent .
+                    ?instance {child_reference_type} ?instance_child .
+                    ?instance_child ua:BrowseName ?browse_name .
+                }
+            }
         }"""
 
     finished = False
