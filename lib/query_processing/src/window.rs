@@ -429,7 +429,7 @@ fn aggregate(
     };
     let arg = arg.unwrap();
     Ok(match name {
-        AggregateFunction::Count => count_with_expression(arg, *distinct),
+        AggregateFunction::Count => count_with_expression(solution_mappings, arg, *distinct),
         AggregateFunction::Sum => sum(solution_mappings, arg, *distinct),
         AggregateFunction::Avg => avg(solution_mappings, arg, *distinct),
         AggregateFunction::Min => min(solution_mappings, arg),

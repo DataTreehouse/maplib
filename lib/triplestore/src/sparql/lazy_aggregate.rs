@@ -71,8 +71,11 @@ impl Triplestore {
                 output_solution_mappings = sm;
                 match name {
                     AggregateFunction::Count => {
-                        (out_expr, out_rdf_node_type) =
-                            count_with_expression(column_context.as_ref().unwrap(), *distinct);
+                        (out_expr, out_rdf_node_type) = count_with_expression(
+                            &output_solution_mappings,
+                            column_context.as_ref().unwrap(),
+                            *distinct,
+                        );
                     }
                     AggregateFunction::Sum => {
                         (out_expr, out_rdf_node_type) = sum(

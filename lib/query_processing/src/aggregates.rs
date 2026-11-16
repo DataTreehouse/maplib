@@ -21,11 +21,22 @@ pub struct AggregateReturn {
     pub rdf_node_type: RDFNodeState,
 }
 
-pub fn count_with_expression(column_context: &Context, distinct: bool) -> (Expr, RDFNodeState) {
+pub fn count_with_expression(
+    solution_mappings: &SolutionMappings,
+    column_context: &Context,
+    distinct: bool,
+) -> (Expr, RDFNodeState) {
+    let c = col(column_context.as_str());
+    // Unbound values are not counted (SPARQL 1.1 section 18.5.1.2), also not as a distinct value.
+    // Multi-type and language-tagged columns are structs, so their unbound values are not null structs.
+    let is_bound = match solution_mappings.rdf_node_types.get(column_context.as_str()) {
+        Some(state) => expr_is_null_workaround(c.clone(), state).not(),
+        None => c.clone().is_not_null(),
+    };
     let out_expr = if distinct {
-        col(column_context.as_str()).n_unique()
+        c.filter(is_bound).n_unique()
     } else {
-        col(column_context.as_str()).count()
+        is_bound.sum()
     };
     count_output(out_expr)
 }
