@@ -33,6 +33,7 @@ use representation::dataset::QueryGraph;
 use representation::query_context::{Context, PathEntry};
 use representation::solution_mapping::{EagerSolutionMappings, SolutionMappings};
 use spargebra::algebra::GraphPattern;
+use spargebra::term::{NamedNodePattern, TriplePattern};
 use std::collections::HashMap;
 use utils::polars::{pl_interruptable_collect_sorted_slice, InterruptableCollectError};
 
@@ -86,8 +87,8 @@ impl Triplestore {
                 let graph = if let QueryGraph::NamedGraph(n) = dataset {
                     Some(n)
                 } else {
-                    // Only worth a warning when some graph has a full-text index to miss.
-                    if !self.fts_index.is_empty() {
+                    // Only warn when the basic graph pattern uses full text search and some graph has an index to miss.
+                    if uses_fts(patterns) && !self.fts_index.is_empty() {
                         warn!("FTS is only defined when named graphs are provided or for the default graph");
                     }
                     None
@@ -451,4 +452,14 @@ fn is_ordered(gp: &GraphPattern) -> bool {
         | GraphPattern::Reduced { inner } => is_ordered(inner),
         _ => false,
     }
+}
+
+/// Predicates of the full text search index (maplib vocab fts, ftsQuery, ...).
+const FTS_PREDICATE_PREFIX: &str = "https://datatreehouse.github.io/maplib/vocab#fts";
+
+/// Whether any of the triple patterns uses a full text search predicate.
+fn uses_fts(patterns: &[TriplePattern]) -> bool {
+    patterns.iter().any(|tp| {
+        matches!(&tp.predicate, NamedNodePattern::NamedNode(p) if p.as_str().starts_with(FTS_PREDICATE_PREFIX))
+    })
 }
