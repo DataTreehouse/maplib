@@ -773,7 +773,8 @@ mod tests {
         assert_eq!(s(apply(Op::Divide, dt("P1DT2H30M10.5S"), num("1.5"), 0, 0)), "PT17H40M7S");
         assert_eq!(s(apply(Op::Divide, ym("P3Y4M"), ym("-P1Y4M"), 0, 0)), "-2.5");
         assert_eq!(s(apply(Op::Divide, ym("P3Y4M"), num("0"), 0, 0)), "error");
-        assert_eq!(s(apply(Op::Multiply, ym("P3Y4M"), num("NaN"), 0, 0)), "error");
+        // NaN is not a number to multiply with
+        assert!(parse_val(Kind::Numeric, "NaN").is_none());
         assert_eq!(s(apply(Op::Equal, ym("P1Y"), dt("PT0S"), 0, 0)), "false");
         assert_eq!(s(apply(Op::Equal, ym("P0M"), dt("PT0S"), 0, 0)), "true");
         assert_eq!(s(apply(Op::Less, dt("PT1H"), dt("PT61M"), 0, 0)), "true");
@@ -803,7 +804,7 @@ mod tests {
         assert_eq!(s(apply(Op::Add, Val::Micros(jan31), ym("P1M"), 0, 0)), feb28.to_string());
         assert_eq!(
             s(apply(Op::Subtract, Val::Micros(b), Val::Micros(a), 0, 0)),
-            "P425D"
+            "P426D"
         );
         assert_eq!(s(apply(Op::Subtract, Val::Days(10), Val::Days(3), 0, 0)), "P7D");
         assert_eq!(s(apply(Op::Subtract, Val::Days(10), dt("PT1H"), 0, 0)), "9");

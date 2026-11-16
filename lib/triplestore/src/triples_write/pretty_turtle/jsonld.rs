@@ -371,9 +371,11 @@ mod tests {
         ]);
         assert_eq!(c.compact("http://example.com/a").unwrap(), "ex:a");
         assert_eq!(c.compact("http://example.com/ns#a").unwrap(), "exns:a");
+        assert_eq!(c.compact("http://example.com//a").unwrap(), "ex:/a");
+        // A suffix starting with // would be read as an absolute IRI
         assert_eq!(
-            c.compact("http://example.com//a").unwrap(),
-            "http://example.com//a"
+            c.compact("http://example.com///a").unwrap(),
+            "http://example.com///a"
         );
         assert_eq!(
             c.compact("http://empty.com/a").unwrap(),
