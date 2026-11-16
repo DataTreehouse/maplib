@@ -180,7 +180,6 @@ The maplib core (everything above that isn't marked **EE**) is open source under
 
 - [API usage guide with examples](API_USAGE.md)
 - [API reference](https://datatreehouse.github.io/maplib/maplib.html)
-- [Example notebook](examples/mapping/mapping.ipynb)
 - [Changelog](CHANGES.md)
 - [GitHub issues](https://github.com/DataTreehouse/maplib/issues)
 
