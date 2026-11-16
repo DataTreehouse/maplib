@@ -142,6 +142,8 @@ pub fn avg(
     } else {
         col(column_context.as_str()).mean()
     };
+    // The average of no values is 0 (SPARQL 1.1, 18.5.1.4).
+    let out_expr = out_expr.fill_null(lit(0));
     (out_expr, out_rdf_node_type)
 }
 

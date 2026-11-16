@@ -493,14 +493,16 @@ fn cumulative(
         // As AVG in GROUP BY, which is Polars' mean.
         AggregateFunction::Avg => {
             let mean = filled_sum.cast(DataType::Float64) / count.clone().cast(DataType::Float64);
-            let mean = if dtype == DataType::Float32 {
-                mean.cast(DataType::Float32)
+            let dtype_of_mean = if dtype == DataType::Float32 {
+                DataType::Float32
             } else {
-                mean
+                DataType::Float64
             };
+            let mean = mean.cast(dtype_of_mean.clone());
+            // The average of no values is 0, as in GROUP BY.
             polars::prelude::when(count.gt(lit(0i64)))
                 .then(mean)
-                .otherwise(lit(polars::prelude::NULL))
+                .otherwise(lit(0.0).cast(dtype_of_mean))
         }
         AggregateFunction::Min => c
             .cum_min(false)
