@@ -4,7 +4,7 @@ use tracing::{instrument, trace};
 
 use crate::sparql::QuerySettings;
 use oxrdf::NamedNode;
-use polars::prelude::{col, Expr, IntoLazy, JoinType};
+use polars::prelude::{col, lit, Expr, IntoLazy, JoinType, LiteralValue};
 use polars_core::frame::DataFrame;
 use query_processing::expressions::named_node_local_enc;
 use query_processing::graph_patterns::{join, union};
@@ -75,6 +75,19 @@ impl Triplestore {
                     )?;
                     sm.mappings = sm.mappings.limit(0);
                     sm.height_estimate = 0;
+                    // There are no solutions, but the graph variable is still in scope,
+                    // so that e.g. GROUP BY ?g or projecting ?g gives an empty result.
+                    if !sm.rdf_node_types.contains_key(v.as_str()) {
+                        sm.mappings = sm.mappings.with_column(
+                            lit(LiteralValue::untyped_null())
+                                .cast(BaseRDFNodeType::IRI.default_stored_polars_data_type())
+                                .alias(v.as_str()),
+                        );
+                        sm.rdf_node_types.insert(
+                            v.as_str().to_string(),
+                            BaseRDFNodeType::IRI.into_default_stored_rdf_node_state(),
+                        );
+                    }
                     return Ok(sm);
                 }
                 let mut sms = Vec::with_capacity(graphs.len());

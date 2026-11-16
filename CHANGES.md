@@ -1,5 +1,9 @@
 # Change log
 
+## v0.22.2
+### Bug fixes
+- `GRAPH ?g { ... }` on a model or dataset without named graphs keeps `?g` in scope, so `GROUP BY ?g`, ORDER BY or projecting `?g` give an empty result instead of an error that `?g` is not defined
+
 ## v0.22.1
 ### Breaking changes
 - `Model.update` returns what the update changed instead of `None`, see Features. In Rust, `UpdateResult` has a `changes` field, and `Triplestore::delete_construct_result` and `delete_triples_vec` take `keep_triples` and return the deleted triples (`triplestore::changes::Deleted`) instead of nothing
