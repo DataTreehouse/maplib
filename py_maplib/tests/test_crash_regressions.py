@@ -77,8 +77,7 @@ def test_date_to_native():
 
 LONG_QUERIES = {
     "union": "' UNION '.join(f'{{ ?s <http://p/{i}> ?o }}' for i in range(3000))",
-    # A FILTER with 10000 || terms still overflows: the query cache parses and walks the query
-    # (Model::cache_plan) before query_mutex moves to the big stack.
+    "or": "' || '.join(f'?o = <http://e/{i}>' for i in range(10000))",
     "nested": "'(' * 5000 + '?o' + ')' * 5000",
 }
 

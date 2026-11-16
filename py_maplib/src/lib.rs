@@ -171,6 +171,14 @@ pub(crate) enum StringOrPathBuf {
 #[pymodule]
 #[pyo3(name = "maplib")]
 fn _maplib(py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
+    // Polars runs a query plan recursively on its own threads, which get Rust's default 2 MB
+    // stack. Long expressions (e.g. a FILTER with thousands of || terms) make deep plans that
+    // overflow it and kill the interpreter. RUST_MIN_STACK sets the default for threads spawned
+    // without an explicit size, and must be set before the first such thread, so here.
+    // The stack is reserved address space, memory is only used as deep as a thread goes.
+    if std::env::var_os("RUST_MIN_STACK").is_none() {
+        std::env::set_var("RUST_MIN_STACK", (64 * 1024 * 1024).to_string());
+    }
     // The python log writer is too slow, needs a logging object cache similar to pyo3-log
     // let make_writer = tracing_pyo3_logger::PythonLogMakeWriter::new(py)?;
     // let pyo3_log_layer = tracing_subscriber::fmt::layer()

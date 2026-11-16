@@ -822,31 +822,34 @@ SELECT ?loc ?crs ?seq ?x ?y ?z WHERE {{
         include_graphs: &[NamedGraph],
         bindings: Option<&HashMap<String, GroundTerm>>,
     ) -> CachePlan {
-        let Ok(parsed) = spargebra::Query::parse(query, None, Some(&self.prefixes)) else {
-            return CachePlan::Bypass("error");
-        };
-        let Ok(parsed) = maybe_replace_bindings(parsed, bindings) else {
-            return CachePlan::Bypass("error");
-        };
-        let virtualized_iris = self.chrontext_settings.as_ref().map(|s| {
-            let mut nns = vec![];
-            for b in &s.backends {
-                for t in b.virtualization.resources.values() {
-                    t.find_named_nodes(&mut nns);
+        // Parsing and planning recurse like the query itself.
+        on_big_stack(|| {
+            let Ok(parsed) = spargebra::Query::parse(query, None, Some(&self.prefixes)) else {
+                return CachePlan::Bypass("error");
+            };
+            let Ok(parsed) = maybe_replace_bindings(parsed, bindings) else {
+                return CachePlan::Bypass("error");
+            };
+            let virtualized_iris = self.chrontext_settings.as_ref().map(|s| {
+                let mut nns = vec![];
+                for b in &s.backends {
+                    for t in b.virtualization.resources.values() {
+                        t.find_named_nodes(&mut nns);
+                    }
                 }
-            }
-            nns.into_iter().collect::<HashSet<_>>()
-        });
-        let udfs = self.triplestore.udf_registry.list_udfs();
-        cache_plan(
-            &parsed,
-            &PlanContext {
-                graph,
-                include_graphs,
-                virtualized_iris: virtualized_iris.as_ref(),
-                udfs: &udfs,
-            },
-        )
+                nns.into_iter().collect::<HashSet<_>>()
+            });
+            let udfs = self.triplestore.udf_registry.list_udfs();
+            cache_plan(
+                &parsed,
+                &PlanContext {
+                    graph,
+                    include_graphs,
+                    virtualized_iris: virtualized_iris.as_ref(),
+                    udfs: &udfs,
+                },
+            )
+        })
     }
 
     #[instrument(skip_all)]
