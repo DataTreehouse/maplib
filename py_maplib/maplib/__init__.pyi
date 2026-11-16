@@ -2711,7 +2711,9 @@ class GraphSnapshots:
 
     def restore(self) -> int:
         """Reads the snapshot at the URL (if any) into the model and returns its generation, 0 when there is
-        none. A graph in the snapshot adds to a graph of the same name in the model."""
+        none. A graph the model already has (e.g. shapes loaded from code before restoring) keeps the model's copy;
+        when that differs from the snapshot's, the next snapshot publishes it. What was restored counts as published:
+        the next snapshot only writes graphs whose content changes."""
 
     def snapshot(self) -> bool:
         """Writes the graphs that changed and publishes the manifest. Returns whether it published."""
