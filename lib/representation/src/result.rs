@@ -547,7 +547,7 @@ fn mint_blank_nodes(
             RDFNodeState::from_bases(BaseRDFNodeType::BlankNode, BaseCatState::String),
         );
     }
-    lf.collect().unwrap()
+    collect_sized(lf, height).unwrap()
 }
 
 pub fn unique_workaround(

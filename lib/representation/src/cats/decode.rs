@@ -16,6 +16,7 @@ use polars::series::Series;
 use polars_arrow::array::{Array, MutableBinaryViewArray, PrimitiveArray, Utf8ViewArray};
 use rayon::prelude::*;
 use std::borrow::Cow;
+use utils::polars::collect_sized;
 
 impl CatEncs {
     // Does not break apart lang strings, assumes only series of u32 in input, not struct.
@@ -219,7 +220,8 @@ pub fn decode_column(
     let mut df = DataFrame::new(column.len(), vec![column.clone()]).unwrap();
     let mut expr = col(&name);
     expr = maybe_decode_expr(expr, base_type, base_state, global_cats);
-    df = df.lazy().with_column(expr.alias(&name)).collect().unwrap();
+    let height = df.height();
+    df = collect_sized(df.lazy().with_column(expr.alias(&name)), height).unwrap();
     df.drop_in_place(&name).unwrap()
 }
 

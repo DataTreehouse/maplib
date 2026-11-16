@@ -239,15 +239,16 @@ fn pl_interruptable_collect_in_memory(
             //                     min  med  avg  95%   99%   99.9%
             // check_signals takes 20 - 30 - 85 - 261 - 691 - 908
             // Signals are checked at most every SIGNAL_CHECK_INTERVAL. The result is polled with a
-            // sleep that doubles up to MAX_POLL_SLEEP, so it is picked up at most that long after
-            // it is ready (with a cap of 50 ms, a query of a few milliseconds often waited as long
-            // again, which added up over the many small queries of rule inference).
+            // sleep that grows by a quarter up to MAX_POLL_SLEEP, so it is picked up at most a
+            // quarter of its running time (or MAX_POLL_SLEEP) after it is ready. With a sleep that
+            // doubled, a query of a few hundred microseconds often waited as long again, which
+            // added up over the many small queries of each update or batch of a stream.
             const SIGNAL_CHECK_INTERVAL: Duration = Duration::from_millis(50);
-            const MAX_POLL_SLEEP: Duration = Duration::from_millis(1);
-            let mut sleeptime = Duration::from_nanos(15);
+            const MIN_POLL_SLEEP: Duration = Duration::from_micros(5);
+            const MAX_POLL_SLEEP: Duration = Duration::from_micros(250);
+            let mut sleeptime = MIN_POLL_SLEEP;
             let mut last_check = Instant::now();
             loop {
-                sleep(sleeptime);
                 match future.fetch() {
                     None => {
                         if let Some(c) = token.as_ref().and_then(|t| t.stopped()) {
@@ -262,7 +263,8 @@ fn pl_interruptable_collect_in_memory(
                             abandon(future);
                             break Err(InterruptableCollectError::Interrupted);
                         }
-                        sleeptime = std::cmp::min(sleeptime * 2, MAX_POLL_SLEEP);
+                        sleep(sleeptime);
+                        sleeptime = std::cmp::min(sleeptime + sleeptime / 4, MAX_POLL_SLEEP);
                     }
                     Some(dfr) => break Ok(dfr?),
                 }

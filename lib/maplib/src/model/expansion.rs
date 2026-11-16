@@ -16,6 +16,7 @@ use polars::prelude::{
     LazyFrame, Series,
 };
 use rayon::iter::{IndexedParallelIterator, ParallelDrainRange, ParallelIterator};
+use representation::collect_sized;
 use representation::constants::OTTR_TRIPLE;
 use representation::dataset::NamedGraph;
 use representation::multitype::split_df_multicols;
@@ -47,14 +48,15 @@ impl Model {
         expand_options: MapOptions,
     ) -> Result<(), MaplibError> {
         if let Some(predicate) = predicate {
-            df = df
-                .lazy()
-                .with_column(
+            let height = df.height();
+            df = collect_sized(
+                df.lazy().with_column(
                     lit(rdf_named_node_to_polars_literal_value(&predicate))
                         .alias(PREDICATE_COL_NAME),
-                )
-                .collect()
-                .unwrap();
+                ),
+                height,
+            )
+            .unwrap();
         }
         self.expand(OTTR_TRIPLE, Some(df), mapping_column_types, expand_options)
     }
@@ -108,6 +110,7 @@ impl Model {
             validate(df, mapping_column_types, &target_template, validate_iris)?;
 
         let mut static_columns = HashMap::new();
+        let height = df.as_ref().map(|df| df.height()).unwrap_or(0);
         let mut lf = df.map(|df| df.lazy());
         for p in &target_template.signature.parameter_list {
             if let Some(default) = &p.default_value {
@@ -124,7 +127,7 @@ impl Model {
             }
         }
 
-        df = lf.map(|lf| lf.collect().unwrap());
+        df = lf.map(|lf| collect_sized(lf, height).unwrap());
 
         let (result_vec, new_blank_node_counter) = self._expand(
             0,
@@ -344,6 +347,7 @@ impl Model {
                     .unwrap();
                 // Splitting by multi introduces nulls
                 if has_multi {
+                    let height = df.height();
                     let mut lf = df.lazy();
                     if subject_multi {
                         lf = lf.filter(
@@ -357,7 +361,7 @@ impl Model {
                                 .not(),
                         )
                     }
-                    df = lf.collect().unwrap();
+                    df = collect_sized(lf, height).unwrap();
                 }
                 let predicate_state = if predicate.is_none() {
                     let (_, s) = part_types
@@ -511,6 +515,7 @@ fn create_triples(
         }
     }
 
+    let height = df.height();
     let mut lf = df.lazy();
     for e in expressions {
         lf = lf.with_column(e);
@@ -521,7 +526,7 @@ fn create_triples(
         keep_cols.push(col(PREDICATE_COL_NAME));
     }
     lf = lf.select(keep_cols.as_slice());
-    let mut df = lf.collect().expect("Collect problem");
+    let mut df = collect_sized(lf, height).expect("Collect problem");
     let subj_t = dynamic_columns.remove(SUBJECT_COL_NAME).unwrap();
     let subj_rdf_node_type = match subj_t {
         MappingColumnType::Flat(f) => f,
@@ -903,6 +908,7 @@ fn create_remapped(
     } else {
         1
     };
+    let height = l;
     let mut lf = DataFrame::new(l, column_vec).unwrap().lazy();
     for expr in expressions {
         lf = lf.with_column(expr);
@@ -988,7 +994,7 @@ fn create_remapped(
         now.elapsed().as_secs_f32()
     );
     Ok(Some(RemapResult {
-        df: lf.collect().unwrap(),
+        df: collect_sized(lf, height).unwrap(),
         dynamic_columns: new_dynamic_columns,
         constant_columns: new_constant_columns,
         blank_node_counter: out_blank_node_counter,

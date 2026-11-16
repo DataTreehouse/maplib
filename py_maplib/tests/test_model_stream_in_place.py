@@ -578,6 +578,27 @@ def test_storage_drop_graphs_and_many_iterations(storage):
     gc.collect()
 
 
+@pytest.mark.parametrize("storage", disk_params())
+def test_compact_every_same_output_in_every_storage_mode(storage):
+    # The batches revisit subjects of earlier batches and bring new ones, and the dictionary is
+    # compacted (its codes renumbered) every other batch, so encoding, decoding and ranking in
+    # later batches must not use codes from before a compaction.
+    def run(**kwargs):
+        m = _model(**kwargs)
+        links = io.BytesIO()
+        batches = [_df(10, start=7 * k) for k in range(8)]
+        m.map(TEMPLATE_IRI, batches, graph=BATCH, stream=True, in_place=True, compact_every=2).update(
+            LINK, include_graphs=[BATCH]
+        ).insert(SUMMARY, source_graph=SCRATCH, target_graph=None).write(
+            links, graph=SCRATCH
+        ).drop_graphs([BATCH, SCRATCH]).collect()
+        return _lines(links.getvalue()), _default_lines(m)
+
+    expected = run()
+    assert run(**storage_kwargs(storage)) == expected
+    assert len(expected[0]) > 0
+
+
 def test_compact_every_keeps_results():
     m = _model()
     m.map(TEMPLATE_IRI, _batches(size=5), graph=BATCH, stream=True, in_place=True, compact_every=3).update(

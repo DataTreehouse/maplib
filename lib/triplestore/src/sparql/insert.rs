@@ -11,6 +11,7 @@ use representation::result::ConstructedTriples;
 use representation::solution_mapping::EagerSolutionMappings;
 use representation::{OBJECT_COL_NAME, PREDICATE_COL_NAME, SUBJECT_COL_NAME};
 use std::collections::HashMap;
+use utils::polars::collect_sized;
 
 impl Triplestore {
     pub fn insert_construct_result(
@@ -123,6 +124,7 @@ fn construct_result_as_triples_to_add(
                                 object_type.map.drain().next().unwrap();
 
                             // Separate dataframes for multicolumns introduces nulls that must be dropped
+                            let height = df.height();
                             let mut lf = df.lazy();
                             for c in multicols.keys() {
                                 let t = if c == SUBJECT_COL_NAME {
@@ -132,7 +134,7 @@ fn construct_result_as_triples_to_add(
                                 };
                                 lf = lf.filter(non_multi_col_is_null_workaround(col(c), t).not());
                             }
-                            let df = lf.collect().unwrap();
+                            let df = collect_sized(lf, height).unwrap();
 
                             all_triples_to_add.push(TriplesToAdd {
                                 df,

@@ -7,6 +7,7 @@ use polars::prelude::{
 
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use std::collections::HashMap;
+use utils::polars::collect_sized;
 
 pub const MULTI_IRI_DT: &str = "I";
 pub const MULTI_BLANK_DT: &str = "B";
@@ -88,7 +89,7 @@ fn filter_multitype(multitype_column: &Column, names: &Vec<&str>, col_name: &str
                 .copied() // Make sure not to drop col_name even if it overlaps with one of the provided field names
                 .collect();
             lf = lf.drop(by_name(columns_drop, true, false));
-            let df = lf.collect();
+            let df = collect_sized(lf, multitype_column.len());
 
             df.unwrap().drop_in_place(col_name).unwrap()
         }
@@ -161,6 +162,7 @@ pub fn compress_actual_multitypes(
             updated_types.insert(c, t);
         }
     }
+    let height = df.height();
     let mut lf = df.lazy();
     for (c, (t, s)) in to_single {
         lf = known_convert_lf_multicol_to_single(lf, &c, &t);
@@ -170,7 +172,7 @@ pub fn compress_actual_multitypes(
     if !col_exprs.is_empty() {
         lf = lf.with_columns(col_exprs);
     }
-    df = lf.collect().unwrap();
+    df = collect_sized(lf, height).unwrap();
     (df, updated_types)
 }
 
@@ -178,10 +180,11 @@ pub fn split_df_multicols(
     df: DataFrame,
     types: &HashMap<String, RDFNodeState>,
 ) -> Vec<(DataFrame, HashMap<String, RDFNodeState>)> {
+    let height = df.height();
     let split = split_df_multicols_to_lf(df, types);
     split
         .into_par_iter()
-        .map(|(lf, types)| (lf.collect().unwrap(), types))
+        .map(|(lf, types)| (collect_sized(lf, height).unwrap(), types))
         .collect()
 }
 

@@ -10,6 +10,7 @@ use polars::prelude::{
 use rayon::current_num_threads;
 use rayon::iter::IntoParallelIterator;
 use rayon::iter::ParallelIterator;
+use representation::collect_sized;
 use representation::polars_to_rdf::polars_type_to_literal_type;
 use representation::rdf_to_polars::normalize_datetime_columns;
 use representation::{
@@ -178,7 +179,8 @@ pub fn normalize_lang_string_structs(df: DataFrame) -> DataFrame {
     if exprs.is_empty() {
         df
     } else {
-        df.lazy().with_columns(exprs).collect().unwrap()
+        let height = df.height();
+        collect_sized(df.lazy().with_columns(exprs), height).unwrap()
     }
 }
 

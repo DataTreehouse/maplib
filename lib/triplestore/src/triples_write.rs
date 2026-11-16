@@ -16,6 +16,7 @@ use representation::{
 };
 use std::collections::HashMap;
 use std::io::Write;
+use utils::polars::collect_sized;
 
 mod fast_ntriples;
 mod hdt_write;
@@ -61,7 +62,7 @@ impl Triplestore {
                             (OBJECT_COL_NAME.to_string(), object_type.clone()),
                         ])
                     };
-                    for (mut lf, _) in tt.get_lazy_frames(&None, &None)? {
+                    for (mut lf, height) in tt.get_lazy_frames(&None, &None)? {
                         lf = lf.with_columns([
                             maybe_decode_complex_expr(
                                 col(SUBJECT_COL_NAME),
@@ -89,7 +90,8 @@ impl Triplestore {
                         } else {
                             lf = lf.select([col(SUBJECT_COL_NAME), col(OBJECT_COL_NAME)]);
                         };
-                        let mut df = lf.collect().map_err(TriplestoreError::LazyLoadError)?;
+                        let mut df =
+                            collect_sized(lf, height).map_err(TriplestoreError::LazyLoadError)?;
                         if !object_type.is_lang_string() {
                             convert_datelike_to_string(
                                 &mut df,
@@ -119,9 +121,9 @@ impl Triplestore {
 
             for (predicate, df_map) in self.graph_triples_map.get(graph).unwrap() {
                 for ((subject_type, object_type), tt) in df_map {
-                    for (lf, _) in tt.get_lazy_frames(&None, &None)? {
+                    for (lf, height) in tt.get_lazy_frames(&None, &None)? {
                         let triples = global_df_as_triples(
-                            lf.collect().map_err(TriplestoreError::LazyLoadError)?,
+                            collect_sized(lf, height).map_err(TriplestoreError::LazyLoadError)?,
                             subject_type.clone(),
                             object_type.clone(),
                             predicate,
@@ -200,9 +202,9 @@ impl Triplestore {
             let graph_name = GraphName::from(graph);
             for (predicate, df_map) in self.graph_triples_map.get(graph).unwrap() {
                 for ((subject_type, object_type), tt) in df_map {
-                    for (lf, _) in tt.get_lazy_frames(&None, &None)? {
+                    for (lf, height) in tt.get_lazy_frames(&None, &None)? {
                         let triples = global_df_as_triples(
-                            lf.collect().map_err(TriplestoreError::LazyLoadError)?,
+                            collect_sized(lf, height).map_err(TriplestoreError::LazyLoadError)?,
                             subject_type.clone(),
                             object_type.clone(),
                             predicate,

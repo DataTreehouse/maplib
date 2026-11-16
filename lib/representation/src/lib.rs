@@ -32,6 +32,9 @@ pub mod variable_names;
 pub mod vectors;
 
 pub use series_builder::SeriesBuilder;
+/// Collects a lazy frame with the in-memory engine when its input is small, for crates that do
+/// not depend on utils (e.g. template expansion in maplib).
+pub use utils::polars::collect_sized;
 
 pub use base_rdf_type::*;
 pub use rdf_state::*;
