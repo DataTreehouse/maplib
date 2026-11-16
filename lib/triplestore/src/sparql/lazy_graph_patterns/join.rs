@@ -141,14 +141,22 @@ impl Triplestore {
                 *used_vars.entry(v).or_default() += 1;
             }
         }
-        // VALUES handles its own UNDEF values when it is joined with the incoming solutions.
+        // VALUES handles its own UNDEF values when it is joined with the incoming solutions, and
+        // SERVICE joins its results with them as compatible on unbound variables, sending only
+        // the variables bound in every row.
         let (ordered, deferred): (Vec<_>, Vec<_>) = ordered.into_iter().partition(|(gp, _)| {
             let own = in_scope_variable_names(gp);
-            matches!(gp, GraphPattern::Values { .. })
-                || !maybe_unbound_variables(gp)
-                    .iter()
-                    .any(|v| own.contains(v) && used_vars.get(v).copied().unwrap_or(0) > 1)
+            matches!(
+                gp,
+                GraphPattern::Values { .. } | GraphPattern::Service { .. }
+            ) || !maybe_unbound_variables(gp)
+                .iter()
+                .any(|v| own.contains(v) && used_vars.get(v).copied().unwrap_or(0) > 1)
         });
+        // Services come after the deferred patterns, so that the solutions of those are sent too.
+        let (ordered, services): (Vec<_>, Vec<_>) = ordered
+            .into_iter()
+            .partition(|(gp, _)| !matches!(gp, GraphPattern::Service { .. }));
         let mut output_maybe_unbound = HashSet::new();
         for (gp, _) in &ordered {
             output_maybe_unbound.extend(maybe_unbound_variables(gp));
@@ -190,6 +198,17 @@ impl Triplestore {
                 sm
             });
             output_maybe_unbound.extend(maybe_unbound);
+        }
+        for (gp, ctx) in services {
+            output_solution_mappings = Some(self.lazy_graph_pattern(
+                gp,
+                output_solution_mappings,
+                &ctx,
+                parameters,
+                pushdowns.clone(),
+                query_settings,
+                dataset,
+            )?);
         }
         for (gp, ctx) in magic_paths {
             output_solution_mappings = Some(self.lazy_graph_pattern(
