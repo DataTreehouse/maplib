@@ -238,7 +238,8 @@ pub fn sample(
     sample_sorted(solution_mappings, column_context, None)
 }
 
-/// SAMPLE, choosing the first value in the given order (any value without an order).
+/// SAMPLE, choosing the first value in the given order (any value without an order). Unbound
+/// values (errors) are not values of the aggregate, so they are skipped.
 pub fn sample_sorted(
     solution_mappings: &SolutionMappings,
     column_context: &Context,
@@ -246,7 +247,10 @@ pub fn sample_sorted(
 ) -> (Expr, RDFNodeState) {
     let out_rdf_node_type = rdf_node_type_from_context(column_context, solution_mappings).clone();
 
-    let out_expr = sorted(col(column_context.as_str()), order).first();
+    let bound = expr_is_null_workaround(col(column_context.as_str()), &out_rdf_node_type).not();
+    let out_expr = sorted(col(column_context.as_str()), order.clone())
+        .filter(sorted(bound, order))
+        .first();
     (out_expr, out_rdf_node_type)
 }
 
