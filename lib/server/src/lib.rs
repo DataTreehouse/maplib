@@ -130,6 +130,11 @@ pub struct GraphSnapshotOptions {
     pub storage_options: std::collections::HashMap<String, String>,
     /// The name of this writer in the manifest, by default host-pid-random.
     pub writer: Option<String>,
+    /// Graphs left out of the snapshot, as manifest keys ("" for the default graph): never
+    /// written, restored or applied from other writers, and their writes are not changes to
+    /// publish. Their entries in an existing manifest are dropped by the next publish. E.g. a
+    /// default graph the application derives from the named graphs after restoring.
+    pub exclude: std::collections::HashSet<String>,
     /// How long a file no manifest names is kept (another writer may still merge against it);
     /// tombstones of removed graphs are kept twice as long.
     pub grace: Duration,
@@ -172,12 +177,19 @@ pub struct GraphSnapshotOptions {
 /// function. It must not be one that is held while waiting for the snapshots.
 pub type WriteLock = std::sync::Arc<dyn Fn(Duration, &mut (dyn FnMut() + Send)) -> bool + Send + Sync>;
 
+/// Called with the graphs (manifest keys, "" for the default graph) that other writers' snapshots
+/// changed in the model, after they were applied (by a refresh, a catch-up or the merge after a
+/// lost put), under the write lock and the snapshots' own lock: it may change the model, e.g.
+/// rebuild a default graph derived from the named graphs, but must not call the snapshots.
+pub type OnRefresh = std::sync::Arc<dyn Fn(&[String]) + Send + Sync>;
+
 impl GraphSnapshotOptions {
     pub fn new(url: String) -> GraphSnapshotOptions {
         GraphSnapshotOptions {
             url,
             storage_options: Default::default(),
             writer: None,
+            exclude: Default::default(),
             grace: Duration::from_secs(3600),
             snapshot_interval: Some(Duration::from_secs(300)),
             debounce: Duration::from_secs(2),
@@ -242,6 +254,10 @@ impl GraphSnapshots {
         Ok(())
     }
     pub fn set_write_lock(&self, _lock: Option<WriteLock>) {}
+    pub fn set_on_refresh(&self, _f: Option<OnRefresh>) {}
+    pub fn skipped_graphs(&self) -> Vec<String> {
+        vec![]
+    }
     pub fn catch_up(&self) -> Result<bool, ServerError> {
         Err(ServerError::NotAvailable)
     }

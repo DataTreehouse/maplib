@@ -3,7 +3,7 @@ use crate::py_server::server_error;
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
-use server::{GraphSnapshotOptions, GraphSnapshots, WriteLock};
+use server::{GraphSnapshotOptions, GraphSnapshots, OnRefresh, WriteLock};
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
@@ -131,7 +131,7 @@ pub struct PyGraphSnapshots {
 #[pymethods]
 impl PyGraphSnapshots {
     #[new]
-    #[pyo3(signature = (model, url, storage_options=None, writer=None, grace=3600.0, snapshot_interval=Some(300.0), refresh_interval=Some(10.0), debounce=2.0, gc_interval=None, warn_after=10.0, clock=None, max_delay=5.0, jitter=1.0, write_lock=None, random=None, lock_timeout=0.2, on_event=None, backoff_min=1.0, backoff_max=300.0))]
+    #[pyo3(signature = (model, url, storage_options=None, writer=None, grace=3600.0, snapshot_interval=Some(300.0), refresh_interval=Some(10.0), debounce=2.0, gc_interval=None, warn_after=10.0, clock=None, max_delay=5.0, jitter=1.0, write_lock=None, random=None, lock_timeout=0.2, on_event=None, backoff_min=1.0, backoff_max=300.0, exclude_graphs=None))]
     #[allow(clippy::too_many_arguments)]
     fn new(
         model: &PyModel,
@@ -153,6 +153,7 @@ impl PyGraphSnapshots {
         on_event: Option<Py<PyAny>>,
         backoff_min: f64,
         backoff_max: f64,
+        exclude_graphs: Option<Vec<Option<String>>>,
     ) -> PyResult<PyGraphSnapshots> {
         let non_negative = |name: &str, t: f64| -> PyResult<Duration> {
             if t.is_finite() && t >= 0.0 {
@@ -164,6 +165,12 @@ impl PyGraphSnapshots {
         let mut o = GraphSnapshotOptions::new(url);
         o.storage_options = storage_options.unwrap_or_default();
         o.writer = writer;
+        // None (or "") is the default graph, as the manifest's key ""
+        o.exclude = exclude_graphs
+            .unwrap_or_default()
+            .into_iter()
+            .map(|g| g.unwrap_or_default())
+            .collect();
         o.grace = seconds("grace", Some(grace))?.unwrap_or_default();
         o.snapshot_interval = seconds("snapshot_interval", snapshot_interval)?;
         o.refresh_interval = seconds("refresh_interval", refresh_interval)?;
@@ -213,6 +220,39 @@ impl PyGraphSnapshots {
     #[getter]
     fn manifest_json(&self) -> String {
         self.inner.manifest_json()
+    }
+
+    /// The excluded graphs (exclude_graphs) whose entries the last restore() found in the snapshot
+    /// and did not load, None for the default graph.
+    #[getter]
+    fn skipped_graphs(&self) -> Vec<Option<String>> {
+        self.inner
+            .skipped_graphs()
+            .into_iter()
+            .map(|k| if k.is_empty() { None } else { Some(k) })
+            .collect()
+    }
+
+    /// Calls callback(graphs) after other writers' graphs were applied to the model (by refresh(),
+    /// catch_up() or the merge after a lost put), with their IRIs (None for the default graph),
+    /// while the write lock is held: it may change the model, e.g. rebuild a default graph derived
+    /// from the named graphs, but must not call this object. None removes it. Errors are printed.
+    #[pyo3(signature = (callback=None))]
+    fn on_refresh(&self, callback: Option<Py<PyAny>>) {
+        let f: Option<OnRefresh> = callback.map(|cb| -> OnRefresh {
+            Arc::new(move |graphs: &[String]| {
+                Python::attach(|py| {
+                    let graphs: Vec<Option<String>> = graphs
+                        .iter()
+                        .map(|k| if k.is_empty() { None } else { Some(k.clone()) })
+                        .collect();
+                    if let Err(e) = cb.call1(py, (graphs,)) {
+                        e.print(py);
+                    }
+                })
+            })
+        });
+        self.inner.set_on_refresh(f);
     }
 
     /// Whether the model has changes that are not published.

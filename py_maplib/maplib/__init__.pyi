@@ -2948,6 +2948,12 @@ class GraphSnapshots:
                         backoff_max. One warning is logged per try, an event with kind "backoff", and a success resets
                         it. stop() and snapshot() try at once.
     :param backoff_max: The longest wait between tries, see backoff_min.
+    :param exclude_graphs: Graphs left out of the snapshot (None or "" for the default graph): never written,
+                           restored or loaded from other writers, and writes to them are not changes to publish (nor
+                           pending). For a graph the application derives after restore(), e.g. the writable Model
+                           portal's default graph, rebuilt from its named graphs. A snapshot written before it was
+                           excluded may still have the graph: restore() does not read it, and the next snapshot drops
+                           it from the manifest.
     """
 
     url: str
@@ -2976,10 +2982,21 @@ class GraphSnapshots:
             on_event: Optional[Callable[[Dict[str, Any]], None]] = None,
             backoff_min: float = 1,
             backoff_max: float = 300,
+            exclude_graphs: Optional[List[Optional[str]]] = None,
     ): ...
 
     behind: bool
     """Whether a graph of the last manifest read is not yet applied to the model (the write lock was taken)."""
+
+    skipped_graphs: List[Optional[str]]
+    """The excluded graphs (exclude_graphs) whose entries the last restore() found in the snapshot and did not load,
+    None for the default graph."""
+
+    def on_refresh(self, callback: Optional[Callable[[List[Optional[str]]], None]] = None) -> None:
+        """Calls callback(graphs) after other writers' graphs were applied to the model (by refresh(), catch_up() or
+        the merge after a lost put), with their IRIs (None for the default graph), while the write lock is held: it
+        may change the model, e.g. rebuild a default graph derived from the named graphs, but must not call this
+        object (it would wait for itself). None removes it. Errors are printed."""
 
     def events(self, since: Optional[int] = None) -> List[Dict[str, Any]]:
         """The last snapshots and refreshes (at most 1000), oldest first, with an id greater than since. Each is a
