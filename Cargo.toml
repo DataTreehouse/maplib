@@ -106,6 +106,7 @@ object_store = { version = "0.14.2", features = ["gcp", "azure", "aws", "http", 
 futures = "0.3.31"
 bytes = "1.10.1"
 url = "2.5.4"
+fs4 = "1.1.0"
 
 [profile.release]
 lto = "fat"

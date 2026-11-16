@@ -286,33 +286,33 @@ impl RemoteLocation {
 
     /// Stores `bytes` as the object only if it is still at `expected` (None: if it does not
     /// exist), so that two writers can not both replace the same version. Returns false if the
-    /// object was changed by someone else. Stores without conditional puts (the local file
-    /// system for updates) replace the object unconditionally.
+    /// object was changed by someone else. See [`RemoteLocation::put_with`] for how each store
+    /// makes the condition (the local file system emulates it with a lock file). Stores without
+    /// conditional puts (plain HTTP) replace the object unconditionally.
     pub fn put_if(
         &self,
         bytes: Bytes,
         expected: Option<UpdateVersion>,
     ) -> Result<bool, RemoteError> {
-        let mode = match expected {
-            Some(v) => PutMode::Update(v),
-            None => PutMode::Create,
+        let condition = match expected {
+            None => PutCondition::IfNoneMatch,
+            Some(v) => match version_token(v.e_tag.as_deref(), v.version.as_deref()) {
+                Some(token) => PutCondition::IfMatch(token),
+                // The store gave no version to compare with.
+                None => PutCondition::Overwrite,
+            },
         };
-        let opts = PutOptions {
-            mode,
-            ..Default::default()
-        };
-        match block_on(
-            self.store
-                .put_opts(&self.path, PutPayload::from_bytes(bytes.clone()), opts),
-        ) {
+        match self.put_with(bytes.clone(), &condition) {
             Ok(_) => Ok(true),
-            Err(object_store::Error::Precondition { .. })
-            | Err(object_store::Error::AlreadyExists { .. }) => Ok(false),
-            Err(object_store::Error::NotImplemented { .. }) => {
+            Err(RemoteError::ObjectStore(_, object_store::Error::Precondition { .. }))
+            | Err(RemoteError::ObjectStore(_, object_store::Error::AlreadyExists { .. })) => {
+                Ok(false)
+            }
+            Err(RemoteError::ObjectStore(_, object_store::Error::NotImplemented { .. })) => {
                 self.put(bytes)?;
                 Ok(true)
             }
-            Err(e) => Err(self.err(e)),
+            Err(e) => Err(e),
         }
     }
 
@@ -450,6 +450,229 @@ impl RemoteLocation {
             }
         }
         Ok(())
+    }
+}
+
+/// The metadata of an object, see [`RemoteLocation::info`] and [`RemoteLocation::list_info`].
+#[derive(Debug, Clone, PartialEq)]
+pub struct ObjectInfo {
+    /// The path of the object relative to the location it was found from, with `/` separators.
+    pub name: String,
+    pub size: u64,
+    /// Microseconds since the Unix epoch.
+    pub last_modified_micros: i64,
+    /// The version token of the object, see [`version_token`].
+    pub version_token: Option<String>,
+}
+
+/// The condition of a [`RemoteLocation::put_with`].
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum PutCondition {
+    /// Replace the object if it exists.
+    Overwrite,
+    /// Only if the object is still at this version token: an update that fails if someone
+    /// else changed (or deleted) the object since the token was read.
+    IfMatch(String),
+    /// Only if there is no object yet.
+    IfNoneMatch,
+}
+
+/// Separates the ETag from the store's object version (the GCS generation, the S3 version id)
+/// in a version token.
+const VERSION_SEPARATOR: &str = ";version=";
+
+/// An opaque token for the version of an object, used for conditional puts: the ETag, followed
+/// by the object version where the store has one. Google Cloud Storage makes conditional updates
+/// against the object generation, not the ETag, so both are kept.
+pub fn version_token(e_tag: Option<&str>, version: Option<&str>) -> Option<String> {
+    match (e_tag, version) {
+        (Some(e), Some(v)) => Some(format!("{e}{VERSION_SEPARATOR}{v}")),
+        (Some(e), None) => Some(e.to_string()),
+        (None, Some(v)) => Some(format!("{VERSION_SEPARATOR}{v}")),
+        (None, None) => None,
+    }
+}
+
+/// The inverse of [`version_token`]. Any other string is taken to be an ETag.
+pub fn parse_version_token(token: &str) -> UpdateVersion {
+    match token.rsplit_once(VERSION_SEPARATOR) {
+        Some((e, v)) => UpdateVersion {
+            e_tag: (!e.is_empty()).then(|| e.to_string()),
+            version: Some(v.to_string()),
+        },
+        None => UpdateVersion {
+            e_tag: Some(token.to_string()),
+            version: None,
+        },
+    }
+}
+
+impl RemoteLocation {
+    /// Like [`RemoteLocation::parse`], and a local path (not a URL) is taken to be a file,
+    /// relative paths to the current folder.
+    pub fn parse_path_or_url(
+        path_or_url: &str,
+        options: &RemoteOptions,
+    ) -> Result<Self, RemoteError> {
+        if is_remote(path_or_url) {
+            return Self::parse(path_or_url, options);
+        }
+        let invalid = |m: String| RemoteError::InvalidUrl(path_or_url.to_string(), m);
+        let abs = std::path::absolute(path_or_url).map_err(|e| invalid(e.to_string()))?;
+        let url = Url::from_file_path(&abs)
+            .map_err(|_| invalid("not a valid file path".to_string()))?;
+        Self::parse(url.as_str(), options)
+    }
+
+    fn is_local(&self) -> bool {
+        self.root == "file://"
+    }
+
+    /// The local file of a `file://` location.
+    fn local_file_path(&self) -> PathBuf {
+        if cfg!(windows) {
+            PathBuf::from(self.path.as_ref())
+        } else {
+            PathBuf::from(format!("/{}", self.path))
+        }
+    }
+
+    /// The metadata of the object, None if there is no object here.
+    pub fn info(&self) -> Result<Option<ObjectInfo>, RemoteError> {
+        match block_on(self.store.head(&self.path)) {
+            Ok(meta) => Ok(Some(ObjectInfo {
+                name: self.path.filename().unwrap_or_default().to_string(),
+                size: meta.size,
+                last_modified_micros: meta.last_modified.timestamp_micros(),
+                version_token: version_token(meta.e_tag.as_deref(), meta.version.as_deref()),
+            })),
+            Err(object_store::Error::NotFound { .. }) => Ok(None),
+            Err(e) => Err(self.err(e)),
+        }
+    }
+
+    /// The object and its version token. A `NotFound` error if there is none.
+    pub fn get_with_version(&self) -> Result<(Bytes, Option<String>), RemoteError> {
+        block_on(async {
+            let res = self.store.get(&self.path).await.map_err(|e| self.err(e))?;
+            let token = version_token(res.meta.e_tag.as_deref(), res.meta.version.as_deref());
+            let bytes = res.bytes().await.map_err(|e| self.err(e))?;
+            Ok((bytes, token))
+        })
+    }
+
+    /// Stores `bytes` as the object with a single put, if `condition` holds, and returns the
+    /// version token of the new object (None if the store has neither ETags nor versions).
+    ///
+    /// A failed condition is an `object_store::Error::Precondition` (`IfMatch`) or
+    /// `AlreadyExists` (`IfNoneMatch`) error. S3 (with the default `aws_conditional_put` of
+    /// `etag`), GCS, Azure and the in-memory store make the conditional puts themselves. The
+    /// local file system makes `IfNoneMatch` puts atomically, and `IfMatch` puts are emulated
+    /// by holding a lock file while the version is compared and the file replaced: that
+    /// serializes the writers on one machine (not over network file systems). Plain HTTP
+    /// stores have no conditional puts and give a `NotImplemented` error.
+    pub fn put_with(
+        &self,
+        bytes: Bytes,
+        condition: &PutCondition,
+    ) -> Result<Option<String>, RemoteError> {
+        let mode = match condition {
+            PutCondition::Overwrite => PutMode::Overwrite,
+            PutCondition::IfNoneMatch => PutMode::Create,
+            PutCondition::IfMatch(token) if self.is_local() => {
+                return self.put_if_match_local(bytes, token);
+            }
+            PutCondition::IfMatch(token) => PutMode::Update(parse_version_token(token)),
+        };
+        let opts = PutOptions {
+            mode,
+            ..Default::default()
+        };
+        let res = block_on(
+            self.store
+                .put_opts(&self.path, PutPayload::from_bytes(bytes), opts),
+        )
+        .map_err(|e| self.err(e))?;
+        Ok(version_token(res.e_tag.as_deref(), res.version.as_deref()))
+    }
+
+    fn put_if_match_local(&self, bytes: Bytes, token: &str) -> Result<Option<String>, RemoteError> {
+        let _lock = LocalLock::acquire(&self.local_file_path()).map_err(|e| self.io_err(e))?;
+        let current = self.info()?.and_then(|i| i.version_token);
+        if current.as_deref() != Some(token) {
+            return Err(self.err(object_store::Error::Precondition {
+                path: self.path.to_string(),
+                source: match current {
+                    Some(c) => format!("the object is at {c}, not {token}").into(),
+                    None => "the object does not exist".into(),
+                },
+            }));
+        }
+        self.put_with(bytes, &PutCondition::Overwrite)
+    }
+
+    /// The objects under this location (as a prefix), with names relative to it.
+    pub fn list_info(&self) -> Result<Vec<ObjectInfo>, RemoteError> {
+        let prefix = if self.path.as_ref().is_empty() {
+            None
+        } else {
+            Some(&self.path)
+        };
+        let metas: Vec<_> = match block_on(self.store.list(prefix).try_collect::<Vec<_>>()) {
+            Ok(m) => m,
+            Err(object_store::Error::NotFound { .. }) => vec![],
+            Err(e) => return Err(self.err(e)),
+        };
+        let base = self.path.as_ref();
+        let mut infos: Vec<_> = metas
+            .into_iter()
+            .filter_map(|m| {
+                let p = m.location.as_ref();
+                let rel = if base.is_empty() {
+                    Some(p)
+                } else {
+                    p.strip_prefix(base).and_then(|r| r.strip_prefix('/'))
+                }?;
+                Some(ObjectInfo {
+                    name: rel.to_string(),
+                    size: m.size,
+                    last_modified_micros: m.last_modified.timestamp_micros(),
+                    version_token: version_token(m.e_tag.as_deref(), m.version.as_deref()),
+                })
+            })
+            .collect();
+        infos.sort_by(|a, b| a.name.cmp(&b.name));
+        Ok(infos)
+    }
+}
+
+/// An exclusive lock on a lock file for a local file, in the system temporary folder so that
+/// listings of the file's folder do not show it. The lock is released when dropped.
+struct LocalLock(File);
+
+impl LocalLock {
+    fn acquire(path: &Path) -> io::Result<LocalLock> {
+        let dir = std::env::temp_dir().join("maplib-storage-locks");
+        std::fs::create_dir_all(&dir)?;
+        // FNV-1a, stable across processes and builds.
+        let mut hash: u64 = 0xcbf29ce484222325;
+        for b in path.to_string_lossy().as_bytes() {
+            hash ^= *b as u64;
+            hash = hash.wrapping_mul(0x100000001b3);
+        }
+        let file = std::fs::OpenOptions::new()
+            .create(true)
+            .truncate(false)
+            .write(true)
+            .open(dir.join(format!("{hash:016x}.lock")))?;
+        fs4::FileExt::lock(&file)?;
+        Ok(LocalLock(file))
+    }
+}
+
+impl Drop for LocalLock {
+    fn drop(&mut self) {
+        let _ = fs4::FileExt::unlock(&self.0);
     }
 }
 
@@ -690,5 +913,98 @@ mod tests {
         folder.delete_all().unwrap();
         assert!(!loc.exists().unwrap());
         std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    fn conditional_puts(root: &RemoteLocation) {
+        let loc = root.child("folder/manifest.json");
+        let t1 = loc
+            .put_with(Bytes::from_static(b"one"), &PutCondition::IfNoneMatch)
+            .unwrap()
+            .unwrap();
+        // A second create fails.
+        match loc.put_with(Bytes::from_static(b"x"), &PutCondition::IfNoneMatch) {
+            Err(RemoteError::ObjectStore(_, object_store::Error::AlreadyExists { .. })) => {}
+            r => panic!("expected AlreadyExists, got {r:?}"),
+        }
+        let (bytes, t) = loc.get_with_version().unwrap();
+        assert_eq!(&bytes[..], b"one");
+        assert_eq!(t.as_deref(), Some(t1.as_str()));
+        assert_eq!(loc.info().unwrap().unwrap().version_token, Some(t1.clone()));
+        let t2 = loc
+            .put_with(Bytes::from_static(b"two"), &PutCondition::IfMatch(t1.clone()))
+            .unwrap()
+            .unwrap();
+        assert_ne!(t1, t2);
+        // An update against the old version fails and leaves the object as it is.
+        match loc.put_with(Bytes::from_static(b"three"), &PutCondition::IfMatch(t1)) {
+            Err(RemoteError::ObjectStore(_, object_store::Error::Precondition { .. })) => {}
+            r => panic!("expected Precondition, got {r:?}"),
+        }
+        assert_eq!(&loc.get_with_version().unwrap().0[..], b"two");
+        root.child("other").put(Bytes::from_static(b"o")).unwrap();
+        let names: Vec<_> = root
+            .child("folder")
+            .list_info()
+            .unwrap()
+            .into_iter()
+            .map(|i| (i.name, i.size))
+            .collect();
+        assert_eq!(names, vec![("manifest.json".to_string(), 3)]);
+        loc.delete().unwrap();
+        assert!(loc.info().unwrap().is_none());
+        // An update of a deleted object fails.
+        match loc.put_with(Bytes::from_static(b"four"), &PutCondition::IfMatch(t2)) {
+            Err(RemoteError::ObjectStore(_, object_store::Error::Precondition { .. })) => {}
+            r => panic!("expected Precondition, got {r:?}"),
+        }
+        assert!(root.child("folder/nothing/here").list_info().unwrap().is_empty());
+    }
+
+    #[test]
+    fn conditional_puts_in_memory() {
+        conditional_puts(&RemoteLocation::in_memory());
+    }
+
+    #[test]
+    fn conditional_puts_local() {
+        let dir = std::env::temp_dir().join(format!("maplib-remote-test-{}", Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let root = RemoteLocation::parse_path_or_url(dir.to_str().unwrap(), &RemoteOptions::new())
+            .unwrap();
+        conditional_puts(&root);
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn put_if_detects_other_writers_locally() {
+        let dir = std::env::temp_dir().join(format!("maplib-remote-test-{}", Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let loc = RemoteLocation::parse_path_or_url(
+            dir.join("LATEST").to_str().unwrap(),
+            &RemoteOptions::new(),
+        )
+        .unwrap();
+        assert!(loc.put_if(Bytes::from_static(b"g1"), None).unwrap());
+        assert!(!loc.put_if(Bytes::from_static(b"g1"), None).unwrap());
+        let v1 = loc.version().unwrap();
+        loc.put(Bytes::from_static(b"other writer")).unwrap();
+        assert!(!loc.put_if(Bytes::from_static(b"g2"), v1).unwrap());
+        assert_eq!(&loc.get().unwrap()[..], b"other writer");
+        let v2 = loc.version().unwrap();
+        assert!(loc.put_if(Bytes::from_static(b"g2"), v2).unwrap());
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn version_tokens_round_trip() {
+        let t = version_token(Some("\"abc\""), Some("123")).unwrap();
+        let v = parse_version_token(&t);
+        assert_eq!(v.e_tag.as_deref(), Some("\"abc\""));
+        assert_eq!(v.version.as_deref(), Some("123"));
+        let v = parse_version_token("\"abc\"");
+        assert_eq!(v.e_tag.as_deref(), Some("\"abc\""));
+        assert_eq!(v.version, None);
+        let v = parse_version_token(&version_token(None, Some("7")).unwrap());
+        assert_eq!((v.e_tag, v.version.as_deref()), (None, Some("7")));
     }
 }

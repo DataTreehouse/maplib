@@ -1318,6 +1318,7 @@ name = "file_io"
 version = "0.5.0"
 dependencies = [
  "bytes",
+ "fs4",
  "futures",
  "object_store",
  "polars",
@@ -3594,6 +3595,7 @@ dependencies = [
 name = "py_maplib"
 version = "0.22.0"
 dependencies = [
+ "bytes",
  "cdf",
  "chrono",
  "cimxml_export",
@@ -3602,6 +3604,7 @@ dependencies = [
  "external_sparql",
  "file_io",
  "maplib",
+ "object_store",
  "opc_ua",
  "oxrdf",
  "oxrdfio",

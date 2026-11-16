@@ -13,3 +13,4 @@ futures = { workspace = true }
 bytes = { workspace = true }
 url = { workspace = true }
 uuid = { workspace = true }
+fs4 = { workspace = true }

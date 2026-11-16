@@ -5,6 +5,7 @@ mod py_indexing_options;
 mod py_model;
 mod py_query_cache;
 mod py_server;
+mod py_storage;
 mod py_stream;
 mod py_io;
 mod shacl;
@@ -235,6 +236,7 @@ fn _maplib(py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(set_memory_limit, m)?)?;
     m.add_function(wrap_pyfunction!(memory_usage, m)?)?;
     m.add_function(wrap_pyfunction!(memory_limit, m)?)?;
+    py_storage::register(m)?;
     m.add("MaplibException", py.get_type::<MaplibException>())?;
     m.add("TRANSIENT_GRAPH", TRANSIENT_GRAPH_IRI)?;
     m.add("DEFAULT_GRAPH", DEFAULT_GRAPH_IRI)?;
