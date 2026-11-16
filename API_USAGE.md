@@ -1345,7 +1345,7 @@ should be set.
 
 ### infer_rdfs
 
-`infer_rdfs(graph=None)` applies the RDFS rules 2, 3, 5, 6, 8, 9, 10 and 11 (domain, range,
+`infer_rdfs(graph=None)` applies the RDFS rules 2, 3, 5, 6, 7, 8, 9, 10 and 11 (domain, range,
 subproperties and subclasses). The inferred triples go in the transient graph, so they can be
 queried but are not written. It returns the number of inferred triples.
 
@@ -1362,6 +1362,74 @@ ex:alice ex:owns ex:rex .
 print(m.infer_rdfs())
 print(m.query("SELECT ?t WHERE { <http://example.net/ns#rex> a ?t }"))   # Dog, Animal, Thing
 ```
+
+### reason **EE**
+
+`reason(profile="owl-rl", graph=None, target_graph=None, include_graphs=None, max_violations=1000,
+max_rows=100_000_000)` materializes the entailments of a built-in reasoning profile with the Datalog
+engine. The schema (classes, properties, restrictions and lists) is compiled into rules, which run to
+a fixpoint. The profiles are:
+
+- `"owl-rl"`: the OWL 2 RL/RDF rules of OWL 2 Profiles: equality, property axioms (inverse,
+  symmetric, transitive, functional, inverse functional, property chains, keys), class expressions
+  (intersection, union, one of, some, all and has value, max (qualified) cardinality 1), class
+  axioms and schema rules. The rules that conclude `false` are checked after inference and
+  reported as violations. Not included: `x owl:sameAs x` for every term (eq-ref) and the datatype
+  rules dt-type2, dt-eq, dt-diff and dt-not-type.
+- `"rdfs-plus"`: a cheaper preset: domain, range, subproperties and subclasses, plus
+  `owl:inverseOf`, symmetric and transitive properties, `owl:equivalentClass`,
+  `owl:equivalentProperty`, `owl:sameAs` and functional and inverse functional properties. It adds
+  no axiomatic or reflexive triples and checks nothing.
+- `"rdfs"`: all the RDFS entailment rules of RDF 1.1 Semantics (rdfD2, rdfs1 to rdfs13) with the
+  RDF and RDFS axiomatic triples, except rdfs4a, rdfs4b and the axiomatic triples that would make
+  every term an `rdfs:Resource`.
+
+Parameters:
+
+- `graph`: the graph to reason over, the default graph by default.
+- `target_graph`: where the inferred triples go. By default the transient graph, so they can be
+  queried but are not written. There is one transient graph, shared by all graphs and included in
+  queries by default, so when you reason over several named graphs separately, give each its own
+  target graph. Pass `DEFAULT_GRAPH` (or the graph itself) to add the triples to it. Triples that
+  are already in the graph are not added again.
+- `include_graphs`: graphs read along with the graph, as with FROM. `None` includes the transient
+  graph, `[]` reads only the graph itself and the target graph.
+- `max_violations`: the most violations reported per rule; `0` skips the consistency checks.
+- `max_rows`: the most estimated rows in the result of a rule, to avoid running out of memory.
+
+It returns a `ReasoningResult` with `profile`, `inferred_triples`, `consistent`, `violations` (a
+list of dicts with `rule`, `message` and `nodes`), `violations_truncated`, `rounds`, `rules`,
+`rule_executions` and `seconds`.
+
+<!-- skip: EE -->
+```python
+m = Model()
+m.reads("""
+@prefix ex: <http://example.org/> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+ex:partOf a owl:TransitiveProperty ; owl:inverseOf ex:hasPart .
+ex:Breaker owl:disjointWith ex:Transformer .
+ex:bay1 ex:partOf ex:substation1 . ex:substation1 ex:partOf ex:region1 .
+ex:b1 a ex:Breaker, ex:Transformer .
+""", format="turtle")
+res = m.reason("owl-rl")        # EE
+print(res.inferred_triples, res.consistent)   # consistent is False
+for v in res.violations:
+    print(v["rule"], v["message"])            # cax-dw: ex:b1 is an instance of the disjoint classes ...
+print(m.query("SELECT ?x WHERE { <http://example.org/region1> <http://example.org/hasPart> ?x }"))
+# bay1 and substation1, through transitivity and the inverse property
+```
+
+Choosing between them: `infer_rdfs` is in the open-source core. It runs the RDFS rules once each,
+in order, as SPARQL inserts, which is fast and enough for typical class and property hierarchies.
+`reason("rdfs")` computes the complete RDFS closure (for example, types from domains of
+subproperties found late), with the axiomatic triples, on the Datalog engine. `reason("rdfs-plus")`
+adds the common OWL property axioms and equality without the cost of axiomatic triples or checks;
+use it for inverse and transitive properties in models such as CIM. Use `reason("owl-rl")` for
+class expressions, property chains, keys and consistency checks.
+
+Inferring or asserting `owl:sameAs` is costly for large groups of equal resources, because the
+triples of every member are copied to the others.
 
 ### Datalog: infer **EE**
 

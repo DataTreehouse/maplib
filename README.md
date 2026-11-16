@@ -11,7 +11,7 @@
   <a href="https://datatreehouse.github.io/maplib/maplib.html"><img alt="API docs" src="https://img.shields.io/badge/docs-API-green.svg"></a>
 </p>
 
-maplib is a knowledge graph engine that runs inside your Python process. It turns DataFrames, CSV, JSON, XML and RDF files into a knowledge graph, which you can query with SPARQL and GeoSPARQL, enrich with rules, validate with SHACL and write out in any standard RDF format. You don't need a server or a database: `pip install maplib`, create a `Model`, and query results come back as Polars DataFrames.
+maplib is a knowledge graph engine that runs inside your Python process. It turns DataFrames, CSV, JSON, XML and RDF files into a knowledge graph, which you can query with SPARQL and GeoSPARQL, enrich with rules and OWL 2 RL reasoning, validate with SHACL and write out in any standard RDF format. You don't need a server or a database: `pip install maplib`, create a `Model`, and query results come back as Polars DataFrames.
 
 maplib is written in Rust and stores triples column-wise in [Apache Arrow](https://arrow.apache.org/) via [Polars](https://pola.rs/). Mapping and querying therefore run as vectorised, multi-threaded table operations, not one triple at a time.
 
@@ -136,6 +136,7 @@ Ctrl-C stops a running query, and syntax errors show the offending source with a
 | Method | What it does |
 |---|---|
 | `m.infer_rdfs()` | Applies RDFS entailment (subclass, subproperty, domain and range) and puts the inferred triples in the transient graph. |
+| `m.reason(profile)` **EE** | Materializes a built-in reasoning profile with the Datalog engine: `"owl-rl"` (OWL 2 RL), `"rdfs-plus"` or `"rdfs"` (all RDFS entailment rules). Puts the inferred triples in the transient graph and returns a `ReasoningResult` with the count and the consistency violations. |
 | `m.infer(rules)` **EE** | Runs Datalog rules to a fixpoint. |
 | `m.validate(shape_graph=...)` **EE** | Validates the graph with SHACL Core and SHACL-SPARQL, evaluating shapes in parallel, and runs SHACL rules (`sh:rule`). Returns a `ValidationReport` with `.conforms`, `.results()` and `.details()` as DataFrames, and can also write the report as RDF. |
 
