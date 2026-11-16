@@ -175,7 +175,7 @@ impl Triplestore {
             federation: None,
             evaluation_hook: None,
         };
-        self.insert(RDFS_9, None, &qs, graph, &transient, None, false)
+        self.insert(RDFS_9_TRANSITIVE, None, &qs, graph, &transient, None, false)
             .map_err(|x| TriplestoreError::RDFSClassInheritanceError(x.to_string()))?;
         Ok(())
     }
