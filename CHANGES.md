@@ -17,6 +17,8 @@
 - SAMPLE skips unbound values, so it gives a value whenever the group has one, also with ORDER BY (`SAMPLE(?x ORDER BY ?y)` is the first bound value in that order)
 - AVG of no values (a group where the expression is never bound) is 0, as SPARQL 1.1 defines it, instead of unbound; also for AVG over a window
 - ORDER BY orders numbers of different datatypes by value, as the `<` operator compares them, instead of grouping them by datatype first (`1` before `1.5` before `2` for an integer, a decimal and an integer). Numbers that a double cannot tell apart keep their exact order
+### Fixes
+- `ModelStream.collect()` hands its blank node counters back to the Model, also when it fails, so a later stream or mapping from the same Model no longer reuses blank node labels that an earlier stream wrote (two streams of a template with a blank node both wrote `_:b_l0_p0_r0`, which merged distinct nodes when the outputs were combined)
 
 ## v0.22.0
 ### Breaking changes

@@ -345,6 +345,35 @@ impl PyModelStream {
             default_template: None,
         };
         let mut writers = open_writers(&self.steps, &state.carrier.prefixes)?;
+        let res = self.run_batches(py, &mut state, &mut writers);
+        // Hand the blank node counters back to the model, also after an error, so that later
+        // streams and mappings do not reuse blank node labels already written by this one.
+        py.detach(|| {
+            let mut inner = model.inner.write().unwrap_or_else(|e| e.into_inner());
+            inner.blank_node_counter = inner.blank_node_counter.max(state.carrier.blank_node_counter);
+            let scope = inner
+                .triplestore
+                .blank_node_scope()
+                .max(state.carrier.triplestore.blank_node_scope());
+            inner.triplestore.set_blank_node_scope(scope);
+        });
+        res?;
+        for w in writers.iter_mut().flatten() {
+            w.flush().map_err(|x| {
+                PyMaplibError::from(maplib::errors::MaplibError::FileCreateIOError(x))
+            })?;
+        }
+        Ok(())
+    }
+}
+
+impl PyModelStream {
+    fn run_batches(
+        &self,
+        py: Python<'_>,
+        state: &mut BatchState,
+        writers: &mut [Option<StreamWriter>],
+    ) -> PyResult<()> {
         let source = self.source.as_ref();
         let steps = &self.steps;
 
@@ -357,10 +386,10 @@ impl PyModelStream {
             let mut run = |py: Python<'_>, docs: Vec<(usize, StringOrPathBuf)>| -> PyResult<()> {
                 py.detach(|| {
                     run_batch(
-                        &mut state,
+                        state,
                         source,
                         steps,
-                        &mut writers,
+                        writers,
                         BatchInput::Documents(docs),
                     )
                 })
@@ -391,10 +420,10 @@ impl PyModelStream {
                 }
                 py.detach(|| {
                     run_batch(
-                        &mut state,
+                        state,
                         source,
                         steps,
-                        &mut writers,
+                        writers,
                         BatchInput::Frame(df, types),
                     )
                 })
@@ -412,11 +441,6 @@ impl PyModelStream {
                 )
                 .into());
             }
-        }
-        for w in writers.iter_mut().flatten() {
-            w.flush().map_err(|x| {
-                PyMaplibError::from(maplib::errors::MaplibError::FileCreateIOError(x))
-            })?;
         }
         Ok(())
     }
