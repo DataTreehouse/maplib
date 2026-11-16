@@ -1,0 +1,3 @@
+# W3C tests that maplib currently fails (used by test_w3c_sparql11_entailment.py).
+# One test id per line, optionally followed by "# reason".
+# These are marked as strict xfails: when a test starts passing, remove it from this list.

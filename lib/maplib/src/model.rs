@@ -9,6 +9,7 @@ use crate::model::errors::MappingError;
 use cimxml_export::export::{cim_xml_write, FullModelDetails};
 use cimxml_import::{cim_geometries_to_geosparql, CimPositionPoint};
 use datalog::inference::{infer, InferenceResult};
+use datalog::reasoning::{reason, ReasoningProfile, ReasoningResult};
 use datalog::parser::parse_datalog_ruleset;
 use external_sparql::federation::FederationSettings;
 use file_io::remote::{RemoteLocation, RemoteOptions};
@@ -1314,6 +1315,30 @@ SELECT ?loc ?crs ?seq ?x ?y ?z WHERE {{
             )
         });
         res.map_err(MaplibError::DatalogError)
+    }
+
+    /// Reasons over the graph with a built-in profile ("owl-rl", "rdfs-plus" or "rdfs"), putting
+    /// the inferred triples in the target graph.
+    pub fn reason(
+        &mut self,
+        profile: &str,
+        graph: &NamedGraph,
+        target_graph: &NamedGraph,
+        include_graphs: Vec<NamedGraph>,
+        max_rows: Option<usize>,
+        max_violations: usize,
+    ) -> Result<ReasoningResult, MaplibError> {
+        let profile = ReasoningProfile::parse(profile).map_err(MaplibError::DatalogError)?;
+        reason(
+            &mut self.triplestore,
+            profile,
+            graph,
+            target_graph,
+            include_graphs,
+            max_rows,
+            max_violations,
+        )
+        .map_err(MaplibError::DatalogError)
     }
 
     pub fn infer_rdfs(&mut self, graph: &NamedGraph) -> Result<usize, MaplibError> {

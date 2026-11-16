@@ -1,0 +1,18 @@
+# W3C tests that maplib currently fails (used by test_w3c_rdf_mt.py).
+# One test id per line, optionally followed by "# reason".
+# These are marked as strict xfails: when a test starts passing, remove it from this list.
+
+# The rdfs profile does not implement D-entailment for recognized datatypes: ill-typed literals
+# are not reported as inconsistencies (maplib drops them when reading), and literals of different
+# datatypes are not compared by value.
+datatypes-non-well-formed-literal-2 # ill-typed literal not detected as inconsistent (D-entailment)
+datatypes-range-clash # ill-typed literal not detected as inconsistent (D-entailment)
+datatypes-test010 # ill-typed literal not detected as inconsistent (D-entailment)
+rdfs-entailment-test001 # ill-formed rdf:XMLLiteral not detected as inconsistent
+rdfs-entailment-test002 # ill-formed rdf:XMLLiteral not detected as inconsistent
+xmlsch-02-whitespace-facet-2 # ill-typed literal not detected as inconsistent (D-entailment)
+xmlsch-02-whitespace-facet-4 # ill-typed literal not detected as inconsistent (D-entailment)
+datatypes-semantic-equivalence-between-datatypes # literals of different datatypes are not compared by value
+literal-type # rule rdfD1 (a blank node for a literal, typed with its datatype) is not materialized
+# maplib drops ill-typed literals when reading, so the conclusion graph is empty.
+xmlsch-02-whitespace-facet-1 # the triple with " 3 "^^xsd:int is dropped when read

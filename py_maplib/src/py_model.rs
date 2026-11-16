@@ -4,7 +4,7 @@ use crate::mutexes::{
     add_graph_mutex, add_prefixes_mutex, add_template_mutex, add_udf_mutex,
     add_virtualization_mutex, compact_mutex, create_index_mutex, detach_graph_mutex,
     generate_template_mutex, get_predicate_iris_mutex, get_predicate_mutex, infer_mutex,
-    infer_rdfs_mutex, insert_mutex, list_udfs_mutex, map_default_batch_mutex, map_default_first_batch_mutex, map_default_mutex,
+    infer_rdfs_mutex, insert_mutex, reason_mutex, list_udfs_mutex, map_default_batch_mutex, map_default_first_batch_mutex, map_default_mutex,
     map_df_mutex, map_mutex, map_resolved_mutex,
     map_triples_mutex, query_external_mutex, query_mutex, read_mutex, read_template_mutex,
     reads_mutex, resolve_template_mutex, serialize_triples_mutex, size_mutex, truncate_graph_mutex,
@@ -25,7 +25,7 @@ use crate::{
 };
 use server::{serve as serve_model, ArrowCompression, ServerOptions, SnapshotFormat, SnapshotOptions};
 
-use datalog::python::PyInferenceResult;
+use datalog::python::{PyInferenceResult, PyReasoningResult};
 use external_sparql::federation::{AllowedEndpoints, FederationSettings, ServiceMethod};
 use crate::error::{parse_timeout, timeout_error, QueryTimeoutError};
 use external_sparql::maplib_endpoint::{
@@ -1824,6 +1824,47 @@ impl PyModel {
             Ok((res, cats))
         })?;
         Ok(PyInferenceResult { inner: res })
+    }
+
+    #[pyo3(signature = (
+        profile="owl-rl".to_string(),
+        graph=None,
+        target_graph=None,
+        include_graphs=None,
+        max_violations=1000,
+        max_rows=100_000_000))]
+    #[instrument(skip_all)]
+    fn reason(
+        &self,
+        py: Python<'_>,
+        profile: String,
+        graph: Option<String>,
+        target_graph: Option<String>,
+        include_graphs: Option<Vec<String>>,
+        max_violations: usize,
+        max_rows: Option<usize>,
+    ) -> PyResult<PyReasoningResult> {
+        let graph = parse_optional_named_node(graph)?;
+        let graph = NamedGraph::from_maybe_named_node(graph.as_ref());
+        let target_graph = if let Some(target_graph) = target_graph {
+            NamedGraph::from_maybe_named_node(Some(&parse_named_node(target_graph)?))
+        } else {
+            NamedGraph::transient()
+        };
+        let include_graphs = parse_include_graphs(include_graphs, true)?;
+        let res = py.detach(|| -> PyResult<_> {
+            let mut inner = self.inner.write().unwrap();
+            Ok(reason_mutex(
+                &mut inner,
+                &profile,
+                &graph,
+                &target_graph,
+                include_graphs,
+                max_rows,
+                max_violations,
+            )?)
+        })?;
+        Ok(PyReasoningResult { inner: res })
     }
 
     #[pyo3(signature = (graph=None))]

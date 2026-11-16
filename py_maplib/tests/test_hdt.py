@@ -269,6 +269,9 @@ def _w3c_model() -> Model:
             continue
         m.read(str(f), format="ntriples")
     for f in sorted(W3C_SPARQL11_PATH.glob("*/*.ttl")):
+        # The entailment data (test_w3c_sparql11_entailment.py) has files with relative IRIs.
+        if f.parent.name == "entailment":
+            continue
         if not f.name.startswith("manifest") and f.name not in W3C_SPARQL11_RELATIVE:
             m.read(str(f), format="turtle")
     return m

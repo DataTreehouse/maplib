@@ -27,6 +27,7 @@ __all__ = [
     "IndexingOptions",
     "QueryCacheOptions",
     "ValidationReport",
+    "ReasoningResult",
     "Instance",
     "Template",
     "Argument",

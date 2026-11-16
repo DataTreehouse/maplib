@@ -8,6 +8,8 @@ use triplestore::Triplestore;
 pub enum DatalogError {
     #[error(transparent)]
     SparqlError(SparqlError),
+    #[error("{0}")]
+    ReasoningError(String),
 }
 
 #[derive(Clone)]

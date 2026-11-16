@@ -537,6 +537,14 @@ impl Triplestore {
         Ok(())
     }
 
+    /// Removes all triples with the predicate from the graph, returning how many were removed.
+    pub fn drop_predicate(&mut self, graph: &NamedGraph, predicate: &NamedNode) -> usize {
+        self.graph_triples_map
+            .remove_predicate(graph, predicate)
+            .map(|m| m.values().map(|t| t.get_height()).sum())
+            .unwrap_or(0)
+    }
+
     /// Forgets a graph that was only needed temporarily (e.g. while writing a file). Unlike
     /// `truncate`, this also works with a storage folder: the graph's files then stay in the
     /// folder until it is next reset.

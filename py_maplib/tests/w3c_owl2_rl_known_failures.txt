@@ -1,0 +1,27 @@
+# W3C tests that maplib currently fails (used by test_w3c_owl2_rl.py).
+# One test id per line, optionally followed by "# reason".
+# These are marked as strict xfails: when a test starts passing, remove it from this list.
+
+# eq-ref is not materialized (it would add x owl:sameAs x for every term).
+rdfbased-sem-eqdis-sameas-rflxv/positive-entailment # eq-ref (reflexive owl:sameAs) is not materialized
+# The conclusion is a schema axiom. The OWL 2 RL/RDF rules are complete only for assertions
+# (OWL 2 Profiles, Theorem PR1), and do not derive these.
+chain2trans1/positive-entailment # derives owl:TransitiveProperty from a property chain, not an OWL 2 RL rule
+DisjointClasses-001/positive-entailment # conclusion is an owl:disjointWith/AllDisjointClasses axiom
+DisjointClasses-003/positive-entailment # conclusion is an owl:disjointWith/AllDisjointClasses axiom
+New-Feature-DisjointDataProperties-002/positive-entailment # conclusion is an owl:propertyDisjointWith axiom
+New-Feature-DisjointObjectProperties-001/positive-entailment # conclusion is an owl:NegativePropertyAssertion
+New-Feature-DisjointObjectProperties-002/positive-entailment # conclusion is owl:differentFrom, which no OWL 2 RL rule derives
+New-Feature-ObjectQCR-002/positive-entailment # conclusion is a class axiom with a qualified cardinality restriction
+WebOnt-I5.26-010/positive-entailment # conclusion is a class axiom with a restriction
+WebOnt-I5.5-005/positive-entailment # conclusion is a class axiom with a restriction
+# OWL 2 RL has no rules that derive owl:differentFrom (only checks for it).
+owl2-rl-rules-fp-differentFrom/positive-entailment # derives owl:differentFrom, which no OWL 2 RL rule does
+owl2-rl-rules-ifp-differentFrom/positive-entailment # derives owl:differentFrom, which no OWL 2 RL rule does
+WebOnt-differentFrom-001/positive-entailment # symmetry of owl:differentFrom is not an OWL 2 RL rule
+# Not in OWL 2 RL.
+New-Feature-ReflexiveProperty-001/positive-entailment # owl:ReflexiveProperty is not in OWL 2 RL
+WebOnt-I5.8-006/positive-entailment # needs reasoning about the value spaces of datatypes (rdfs:range xsd:short)
+WebOnt-I5.8-008/positive-entailment # needs reasoning about the value spaces of datatypes (rdfs:range xsd:unsignedShort)
+WebOnt-I5.8-009/positive-entailment # needs reasoning about the value spaces of datatypes (rdfs:range xsd:short)
+WebOnt-imports-011/positive-entailment # owl:imports is not followed

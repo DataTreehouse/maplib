@@ -2497,11 +2497,68 @@ class Model:
             graph: Optional[str] = None,
     ) -> int:
         """
-        RDFS Inference with rules: 2, 3, 5, 6, 8, 9, 10, 11.
+        RDFS Inference with rules: 2, 3, 5, 6, 7, 8, 9, 10, 11 of RDF 1.1 Semantics, using SPARQL rules. See
+        Model.reason for all the RDFS entailment rules (profile "rdfs"), RDFS-Plus and OWL 2 RL.
         The inferred triples are put in the transient graph (TRANSIENT_GRAPH), so they are not written unless
         that graph is written explicitly.
         :param graph: Apply rdfs inferencing to this graph, defaults to the default graph, or the graph specified in the rules.
         :return number of inferred triples
+        """
+
+    def reason(
+            self,
+            profile: LiteralType["owl-rl", "rdfs-plus", "rdfs"] = "owl-rl",
+            graph: Optional[str] = None,
+            target_graph: Optional[str] = None,
+            include_graphs: Optional[List[str]] = None,
+            max_violations: int = 1000,
+            max_rows: Optional[int] = 100_000_000,
+    ) -> "ReasoningResult":
+        """
+        Materialize the entailments of a built-in reasoning profile, using the Datalog engine.
+
+        Profiles:
+
+        * ``"owl-rl"``: the OWL 2 RL/RDF rules of OWL 2 Profiles (section 4.3): equality (eq-*), properties (prp-*,
+          including owl:propertyChainAxiom and owl:hasKey), classes (cls-*, including owl:intersectionOf,
+          owl:unionOf, owl:oneOf, owl:someValuesFrom, owl:allValuesFrom, owl:hasValue and max (qualified)
+          cardinality 1), class axioms (cax-*), schema (scm-*) and the axiomatic dt-type1 triples. The rules with
+          ``false`` in the head are checked after inference, and their matches are reported as violations.
+          Not included: eq-ref (every term owl:sameAs itself) and the datatype rules dt-type2, dt-eq, dt-diff and
+          dt-not-type.
+        * ``"rdfs-plus"``: a cheaper preset in the style of GraphDB's RDFS-Plus (optimized): rdfs2, rdfs3, rdfs5,
+          rdfs7, rdfs9 and rdfs11, owl:inverseOf, owl:SymmetricProperty, owl:TransitiveProperty,
+          owl:equivalentClass, owl:equivalentProperty, owl:sameAs, owl:FunctionalProperty and
+          owl:InverseFunctionalProperty. No axiomatic or reflexive triples are added, and nothing is checked.
+        * ``"rdfs"``: the RDFS entailment rules of RDF 1.1 Semantics (rdfD2, rdfs1-rdfs13) with the RDF and RDFS
+          axiomatic triples, except rdfs4a, rdfs4b and the axiomatic triples that would make every term an
+          rdfs:Resource.
+
+        The schema (classes, properties, restrictions and lists) is compiled into rules with constant predicates,
+        which the Datalog engine evaluates semi-naively. If owl:sameAs triples are inferred or asserted, the triples
+        of equal resources are copied (eq-rep-s, eq-rep-o, eq-rep-p), which can be costly for large owl:sameAs
+        cliques.
+
+        >>> m = Model()
+        >>> m.read("model.ttl")
+        >>> res = m.reason("owl-rl")
+        >>> print(res.inferred_triples, res.consistent)
+        >>> for v in res.violations:
+        ...     print(v["rule"], v["message"])
+
+        :param profile: "owl-rl" (the default), "rdfs-plus" or "rdfs".
+        :param graph: The graph to reason over, defaults to the default graph.
+        :param target_graph: The graph the inferred triples are put in. Defaults to the transient graph
+            (TRANSIENT_GRAPH), so they are not written unless that graph is written explicitly. There is one
+            transient graph, shared by all graphs and included in queries by default, so when reasoning over
+            several named graphs separately, give each its own target graph. Pass the graph
+            itself (DEFAULT_GRAPH for the default graph) to add them to it. Triples that are already in the graph
+            (or the included graphs) are not added to the target graph.
+        :param include_graphs: IRIs of graphs whose triples are read along with the graph, as with FROM. None
+            includes the transient graph, use [] to read only the graph itself (and the target graph).
+        :param max_violations: The maximum number of violations reported per rule, 0 skips the consistency checks.
+        :param max_rows: Maximum estimated rows in the result of a rule, helps avoid out-of-memory errors.
+        :return: The number of inferred triples and the violations.
         """
 
     def size(self, graph: Optional[str] = None) -> int:
@@ -2581,6 +2638,33 @@ class InferenceResult:
     The result of running Datalog inference with Model.infer.
     Only constructed by maplib.
     """
+
+
+class ReasoningResult:
+    """
+    The result of Model.reason.
+    Only constructed by maplib.
+    """
+
+    profile: str
+    """The profile that was used."""
+    inferred_triples: int
+    """The number of triples that were added to the target graph."""
+    consistent: bool
+    """True if no rule with ``false`` in the head matched (always True for "rdfs" and "rdfs-plus")."""
+    violations: List[Dict[str, Any]]
+    """The matches of the OWL 2 RL rules with ``false`` in the head (e.g. cax-dw, prp-irp, cls-nothing2), each
+    a dict with "rule" (the rule name in OWL 2 Profiles), "message" and "nodes" (the terms in N-Triples syntax)."""
+    violations_truncated: bool
+    """True if a check reached max_violations, so that more violations may exist."""
+    rounds: int
+    """The number of times the schema was compiled and the rules run to a fixpoint."""
+    rules: int
+    """The number of rules in the last compiled ruleset."""
+    rule_executions: int
+    """The number of rule executions of the Datalog engine."""
+    seconds: float
+    """The time reasoning took."""
 
 
 class ExploreServer:

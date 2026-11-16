@@ -61,7 +61,7 @@ use representation::python::{
 };
 use representation::solution_mapping::EagerSolutionMappings;
 
-use datalog::python::PyInferenceResult;
+use datalog::python::{PyInferenceResult, PyReasoningResult};
 use pyo3::exceptions::PyTypeError;
 use representation::cats::LockedCats;
 use representation::constants::{DEFAULT_GRAPH_IRI, TRANSIENT_GRAPH_IRI};
@@ -222,6 +222,7 @@ fn _maplib(py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyValidationReport>()?;
     m.add_class::<PySolutionMappings>()?;
     m.add_class::<PyInferenceResult>()?;
+    m.add_class::<PyReasoningResult>()?;
     m.add_class::<PyRDFType>()?;
     m.add_class::<PyPrefix>()?;
     m.add_class::<PyVariable>()?;

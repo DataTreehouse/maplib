@@ -1,0 +1,3024 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE rdf:RDF[
+	<!ENTITY rdf 'http://www.w3.org/1999/02/22-rdf-syntax-ns#'>
+	<!ENTITY rdfs 'http://www.w3.org/2000/01/rdf-schema#'>
+	<!ENTITY owl 'http://www.w3.org/2002/07/owl#'>
+	<!ENTITY test 'http://www.w3.org/2007/OWL/testOntology#'>
+]>
+
+<rdf:RDF
+	xmlns:rdf="&rdf;"
+	xmlns:rdfs="&rdfs;"
+	xmlns:owl ="&owl;"
+	xmlns:test="&test;">
+
+	<owl:Ontology>
+		<owl:imports rdf:resource="http://www.w3.org/2007/OWL/testOntology" />
+	</owl:Ontology>
+
+	<owl:AnnotationProperty rdf:about="&rdfs;comment" />
+
+
+<!-- Test case export for query [[Category:Test Case]] [[:+]] <q>[[Category:No status test]] OR [[test case status::!Test:Rejected]]</q> -->
+
+		<test:TestCase rdf:about="http://owl.semanticweb.org/id/Rdfbased-2Dsem-2Dbool-2Dcomplement-2Dinst">
+		<rdf:type rdf:resource="&test;ProfileIdentificationTest" />
+		<rdf:type rdf:resource="&test;InconsistencyTest" />
+		<test:identifier rdf:datatype="http://www.w3.org/2001/XMLSchema#string">rdfbased-sem-bool-complement-inst</test:identifier>
+		<test:creator rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Michael Schneider</test:creator>
+		<test:creator rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Kai Mainzer</test:creator>
+		<test:description rdf:datatype="http://www.w3.org/2001/XMLSchema#string">An individual cannot be an instance of both a class and its complement.</test:description>
+		<test:normativeSyntax rdf:resource="&test;RDFXML" />
+		<test:status rdf:resource="&test;Approved" />
+		<test:semantics rdf:resource="&test;DIRECT" />
+		<test:semantics rdf:resource="&test;RDF-BASED" />
+		<test:species rdf:resource="&test;FULL" />
+		<test:rdfXmlPremiseOntology rdf:datatype="http://www.w3.org/2001/XMLSchema#string">&lt;rdf:RDF
+    xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+    xmlns:owl="http://www.w3.org/2002/07/owl#"
+    xmlns:xsd="http://www.w3.org/2001/XMLSchema#"
+    xmlns:ex="http://www.example.org#"
+    xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"&gt;
+  &lt;ex:c1 rdf:about="http://www.example.org#x"&gt;
+    &lt;rdf:type rdf:resource="http://www.example.org#c2"/&gt;
+  &lt;/ex:c1&gt;
+  &lt;rdf:Description rdf:about="http://www.example.org#c1"&gt;
+    &lt;owl:complementOf rdf:resource="http://www.example.org#c2"/&gt;
+  &lt;/rdf:Description&gt;
+&lt;/rdf:RDF&gt;</test:rdfXmlPremiseOntology>
+	</test:TestCase>
+	<test:TestCase rdf:about="http://owl.semanticweb.org/id/Rdfbased-2Dsem-2Dbool-2Dintersection-2Dinst-2Dcomp">
+		<rdf:type rdf:resource="&test;ProfileIdentificationTest" />
+		<rdf:type rdf:resource="&test;PositiveEntailmentTest" />
+		<rdf:type rdf:resource="&test;ConsistencyTest" />
+		<test:identifier rdf:datatype="http://www.w3.org/2001/XMLSchema#string">rdfbased-sem-bool-intersection-inst-comp</test:identifier>
+		<test:creator rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Michael Schneider</test:creator>
+		<test:creator rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Kai Mainzer</test:creator>
+		<test:description rdf:datatype="http://www.w3.org/2001/XMLSchema#string">An individual, which is an instance of every component class of an intersection, is an instance of the intersection class expression.</test:description>
+		<test:normativeSyntax rdf:resource="&test;RDFXML" />
+		<test:status rdf:resource="&test;Approved" />
+		<test:semantics rdf:resource="&test;DIRECT" />
+		<test:semantics rdf:resource="&test;RDF-BASED" />
+		<test:species rdf:resource="&test;FULL" />
+		<test:rdfXmlConclusionOntology rdf:datatype="http://www.w3.org/2001/XMLSchema#string">&lt;rdf:RDF
+    xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+    xmlns:owl="http://www.w3.org/2002/07/owl#"
+    xmlns:xsd="http://www.w3.org/2001/XMLSchema#"
+    xmlns:ex="http://www.example.org#"
+    xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"&gt;
+  &lt;ex:c rdf:about="http://www.example.org#z"/&gt;
+&lt;/rdf:RDF&gt;</test:rdfXmlConclusionOntology>
+		<test:rdfXmlPremiseOntology rdf:datatype="http://www.w3.org/2001/XMLSchema#string">&lt;rdf:RDF
+    xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+    xmlns:owl="http://www.w3.org/2002/07/owl#"
+    xmlns:xsd="http://www.w3.org/2001/XMLSchema#"
+    xmlns:ex="http://www.example.org#"
+    xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"&gt;
+  &lt;ex:x rdf:about="http://www.example.org#z"&gt;
+    &lt;rdf:type rdf:resource="http://www.example.org#y"/&gt;
+  &lt;/ex:x&gt;
+  &lt;rdf:Description rdf:about="http://www.example.org#c"&gt;
+    &lt;owl:intersectionOf rdf:parseType="Collection"&gt;
+      &lt;rdf:Description rdf:about="http://www.example.org#x"/&gt;
+      &lt;rdf:Description rdf:about="http://www.example.org#y"/&gt;
+    &lt;/owl:intersectionOf&gt;
+  &lt;/rdf:Description&gt;
+&lt;/rdf:RDF&gt;</test:rdfXmlPremiseOntology>
+	</test:TestCase>
+	<test:TestCase rdf:about="http://owl.semanticweb.org/id/Rdfbased-2Dsem-2Dbool-2Dintersection-2Dinst-2Dexpr">
+		<rdf:type rdf:resource="&test;ProfileIdentificationTest" />
+		<rdf:type rdf:resource="&test;PositiveEntailmentTest" />
+		<rdf:type rdf:resource="&test;ConsistencyTest" />
+		<test:identifier rdf:datatype="http://www.w3.org/2001/XMLSchema#string">rdfbased-sem-bool-intersection-inst-expr</test:identifier>
+		<test:creator rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Michael Schneider</test:creator>
+		<test:creator rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Kai Mainzer</test:creator>
+		<test:description rdf:datatype="http://www.w3.org/2001/XMLSchema#string">An individual, which is an instance of an intersection class expression of two classes, is an instance of every component class.</test:description>
+		<test:normativeSyntax rdf:resource="&test;RDFXML" />
+		<test:status rdf:resource="&test;Approved" />
+		<test:semantics rdf:resource="&test;DIRECT" />
+		<test:semantics rdf:resource="&test;RDF-BASED" />
+		<test:species rdf:resource="&test;FULL" />
+		<test:rdfXmlConclusionOntology rdf:datatype="http://www.w3.org/2001/XMLSchema#string">&lt;rdf:RDF
+    xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+    xmlns:owl="http://www.w3.org/2002/07/owl#"
+    xmlns:xsd="http://www.w3.org/2001/XMLSchema#"
+    xmlns:ex="http://www.example.org#"
+    xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"&gt;
+  &lt;ex:x rdf:about="http://www.example.org#z"&gt;
+    &lt;rdf:type rdf:resource="http://www.example.org#y"/&gt;
+  &lt;/ex:x&gt;
+&lt;/rdf:RDF&gt;</test:rdfXmlConclusionOntology>
+		<test:rdfXmlPremiseOntology rdf:datatype="http://www.w3.org/2001/XMLSchema#string">&lt;rdf:RDF
+    xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+    xmlns:owl="http://www.w3.org/2002/07/owl#"
+    xmlns:xsd="http://www.w3.org/2001/XMLSchema#"
+    xmlns:ex="http://www.example.org#"
+    xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"&gt;
+  &lt;ex:c rdf:about="http://www.example.org#z"/&gt;
+  &lt;rdf:Description rdf:nodeID="A0"&gt;
+    &lt;rdf:first rdf:resource="http://www.example.org#x"/&gt;
+    &lt;rdf:rest rdf:parseType="Collection"&gt;
+      &lt;rdf:Description rdf:about="http://www.example.org#y"/&gt;
+    &lt;/rdf:rest&gt;
+  &lt;/rdf:Description&gt;
+  &lt;rdf:Description rdf:about="http://www.example.org#c"&gt;
+    &lt;owl:intersectionOf rdf:nodeID="A0"/&gt;
+  &lt;/rdf:Description&gt;
+&lt;/rdf:RDF&gt;</test:rdfXmlPremiseOntology>
+	</test:TestCase>
+	<test:TestCase rdf:about="http://owl.semanticweb.org/id/Rdfbased-2Dsem-2Dbool-2Dintersection-2Dterm">
+		<rdf:type rdf:resource="&test;ProfileIdentificationTest" />
+		<rdf:type rdf:resource="&test;PositiveEntailmentTest" />
+		<rdf:type rdf:resource="&test;ConsistencyTest" />
+		<test:identifier rdf:datatype="http://www.w3.org/2001/XMLSchema#string">rdfbased-sem-bool-intersection-term</test:identifier>
+		<test:creator rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Michael Schneider</test:creator>
+		<test:creator rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Kai Mainzer</test:creator>
+		<test:description rdf:datatype="http://www.w3.org/2001/XMLSchema#string">If a class is an intersection of other classes, then the original class is a subclass of each of the other classes.</test:description>
+		<test:normativeSyntax rdf:resource="&test;RDFXML" />
+		<test:status rdf:resource="&test;Approved" />
+		<test:semantics rdf:resource="&test;DIRECT" />
+		<test:semantics rdf:resource="&test;RDF-BASED" />
+		<test:species rdf:resource="&test;FULL" />
+		<test:rdfXmlConclusionOntology rdf:datatype="http://www.w3.org/2001/XMLSchema#string">&lt;rdf:RDF
+    xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+    xmlns:owl="http://www.w3.org/2002/07/owl#"
+    xmlns:xsd="http://www.w3.org/2001/XMLSchema#"
+    xmlns:ex="http://www.example.org#"
+    xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"&gt;
+  &lt;rdf:Description rdf:about="http://www.example.org#c"&gt;
+    &lt;rdfs:subClassOf rdf:resource="http://www.example.org#x"/&gt;
+    &lt;rdfs:subClassOf rdf:resource="http://www.example.org#y"/&gt;
+  &lt;/rdf:Description&gt;
+&lt;/rdf:RDF&gt;</test:rdfXmlConclusionOntology>
+		<test:rdfXmlPremiseOntology rdf:datatype="http://www.w3.org/2001/XMLSchema#string">&lt;rdf:RDF
+    xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+    xmlns:owl="http://www.w3.org/2002/07/owl#"
+    xmlns:xsd="http://www.w3.org/2001/XMLSchema#"
+    xmlns:ex="http://www.example.org#"
+    xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"&gt;
+  &lt;rdf:Description rdf:about="http://www.example.org#c"&gt;
+    &lt;owl:intersectionOf rdf:parseType="Collection"&gt;
+      &lt;rdf:Description rdf:about="http://www.example.org#x"/&gt;
+      &lt;rdf:Description rdf:about="http://www.example.org#y"/&gt;
+    &lt;/owl:intersectionOf&gt;
+  &lt;/rdf:Description&gt;
+&lt;/rdf:RDF&gt;</test:rdfXmlPremiseOntology>
+	</test:TestCase>
+	<test:TestCase rdf:about="http://owl.semanticweb.org/id/Rdfbased-2Dsem-2Dbool-2Dunion-2Dinst-2Dcomp">
+		<rdf:type rdf:resource="&test;ProfileIdentificationTest" />
+		<rdf:type rdf:resource="&test;PositiveEntailmentTest" />
+		<rdf:type rdf:resource="&test;ConsistencyTest" />
+		<test:identifier rdf:datatype="http://www.w3.org/2001/XMLSchema#string">rdfbased-sem-bool-union-inst-comp</test:identifier>
+		<test:creator rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Michael Schneider</test:creator>
+		<test:creator rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Kai Mainzer</test:creator>
+		<test:description rdf:datatype="http://www.w3.org/2001/XMLSchema#string">An individual, which is an instance of one of the component classes of a union, is an instance of the union class expression.</test:description>
+		<test:normativeSyntax rdf:resource="&test;RDFXML" />
+		<test:status rdf:resource="&test;Approved" />
+		<test:semantics rdf:resource="&test;DIRECT" />
+		<test:semantics rdf:resource="&test;RDF-BASED" />
+		<test:species rdf:resource="&test;FULL" />
+		<test:rdfXmlConclusionOntology rdf:datatype="http://www.w3.org/2001/XMLSchema#string">&lt;rdf:RDF
+    xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+    xmlns:owl="http://www.w3.org/2002/07/owl#"
+    xmlns:xsd="http://www.w3.org/2001/XMLSchema#"
+    xmlns:ex="http://www.example.org#"
+    xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"&gt;
+  &lt;ex:c rdf:about="http://www.example.org#z"/&gt;
+&lt;/rdf:RDF&gt;</test:rdfXmlConclusionOntology>
+		<test:rdfXmlPremiseOntology rdf:datatype="http://www.w3.org/2001/XMLSchema#string">&lt;rdf:RDF
+    xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+    xmlns:owl="http://www.w3.org/2002/07/owl#"
+    xmlns:xsd="http://www.w3.org/2001/XMLSchema#"
+    xmlns:ex="http://www.example.org#"
+    xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"&gt;
+  &lt;ex:x rdf:about="http://www.example.org#z"/&gt;
+  &lt;rdf:Description rdf:about="http://www.example.org#c"&gt;
+    &lt;owl:unionOf rdf:parseType="Collection"&gt;
+      &lt;rdf:Description rdf:about="http://www.example.org#x"/&gt;
+      &lt;rdf:Description rdf:about="http://www.example.org#y"/&gt;
+    &lt;/owl:unionOf&gt;
+  &lt;/rdf:Description&gt;
+&lt;/rdf:RDF&gt;</test:rdfXmlPremiseOntology>
+	</test:TestCase>
+	<test:TestCase rdf:about="http://owl.semanticweb.org/id/Rdfbased-2Dsem-2Dbool-2Dunion-2Dterm">
+		<rdf:type rdf:resource="&test;ProfileIdentificationTest" />
+		<rdf:type rdf:resource="&test;PositiveEntailmentTest" />
+		<rdf:type rdf:resource="&test;ConsistencyTest" />
+		<test:identifier rdf:datatype="http://www.w3.org/2001/XMLSchema#string">rdfbased-sem-bool-union-term</test:identifier>
+		<test:creator rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Michael Schneider</test:creator>
+		<test:creator rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Kai Mainzer</test:creator>
+		<test:description rdf:datatype="http://www.w3.org/2001/XMLSchema#string">If a class is a union of other classes, then each of the other classes are subclasses of the original class.</test:description>
+		<test:normativeSyntax rdf:resource="&test;RDFXML" />
+		<test:status rdf:resource="&test;Approved" />
+		<test:semantics rdf:resource="&test;DIRECT" />
+		<test:semantics rdf:resource="&test;RDF-BASED" />
+		<test:species rdf:resource="&test;FULL" />
+		<test:rdfXmlConclusionOntology rdf:datatype="http://www.w3.org/2001/XMLSchema#string">&lt;rdf:RDF
+    xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+    xmlns:owl="http://www.w3.org/2002/07/owl#"
+    xmlns:xsd="http://www.w3.org/2001/XMLSchema#"
+    xmlns:ex="http://www.example.org#"
+    xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"&gt;
+  &lt;rdf:Description rdf:about="http://www.example.org#x"&gt;
+    &lt;rdfs:subClassOf rdf:resource="http://www.example.org#c"/&gt;
+  &lt;/rdf:Description&gt;
+  &lt;rdf:Description rdf:about="http://www.example.org#y"&gt;
+    &lt;rdfs:subClassOf rdf:resource="http://www.example.org#c"/&gt;
+  &lt;/rdf:Description&gt;
+&lt;/rdf:RDF&gt;</test:rdfXmlConclusionOntology>
+		<test:rdfXmlPremiseOntology rdf:datatype="http://www.w3.org/2001/XMLSchema#string">&lt;rdf:RDF
+    xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+    xmlns:owl="http://www.w3.org/2002/07/owl#"
+    xmlns:xsd="http://www.w3.org/2001/XMLSchema#"
+    xmlns:ex="http://www.example.org#"
+    xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"&gt;
+  &lt;rdf:Description rdf:about="http://www.example.org#c"&gt;
+    &lt;owl:unionOf rdf:parseType="Collection"&gt;
+      &lt;rdf:Description rdf:about="http://www.example.org#x"/&gt;
+      &lt;rdf:Description rdf:about="http://www.example.org#y"/&gt;
+    &lt;/owl:unionOf&gt;
+  &lt;/rdf:Description&gt;
+&lt;/rdf:RDF&gt;</test:rdfXmlPremiseOntology>
+	</test:TestCase>
+	<test:TestCase rdf:about="http://owl.semanticweb.org/id/Rdfbased-2Dsem-2Dchain-2Ddef">
+		<rdf:type rdf:resource="&test;ProfileIdentificationTest" />
+		<rdf:type rdf:resource="&test;PositiveEntailmentTest" />
+		<rdf:type rdf:resource="&test;ConsistencyTest" />
+		<test:identifier rdf:datatype="http://www.w3.org/2001/XMLSchema#string">rdfbased-sem-chain-def</test:identifier>
+		<test:creator rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Michael Schneider</test:creator>
+		<test:creator rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Kai Mainzer</test:creator>
+		<test:description rdf:datatype="http://www.w3.org/2001/XMLSchema#string">For a sub property chain axiom with super property p and chain properties p1 and p2, from x p1 y and y p2 z follows x p z.</test:description>
+		<test:normativeSyntax rdf:resource="&test;RDFXML" />
+		<test:status rdf:resource="&test;Approved" />
+		<test:semantics rdf:resource="&test;DIRECT" />
+		<test:semantics rdf:resource="&test;RDF-BASED" />
+		<test:species rdf:resource="&test;FULL" />
+		<test:rdfXmlConclusionOntology rdf:datatype="http://www.w3.org/2001/XMLSchema#string">&lt;rdf:RDF
+    xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+    xmlns:owl="http://www.w3.org/2002/07/owl#"
+    xmlns:xsd="http://www.w3.org/2001/XMLSchema#"
+    xmlns:ex="http://www.example.org#"
+    xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"&gt;
+  &lt;rdf:Description rdf:about="http://www.example.org#x"&gt;
+    &lt;ex:p rdf:resource="http://www.example.org#z"/&gt;
+  &lt;/rdf:Description&gt;
+&lt;/rdf:RDF&gt;</test:rdfXmlConclusionOntology>
+		<test:rdfXmlPremiseOntology rdf:datatype="http://www.w3.org/2001/XMLSchema#string">&lt;rdf:RDF
+    xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+    xmlns:owl="http://www.w3.org/2002/07/owl#"
+    xmlns:xsd="http://www.w3.org/2001/XMLSchema#"
+    xmlns:ex="http://www.example.org#"
+    xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"&gt;
+  &lt;rdf:Description rdf:about="http://www.example.org#x"&gt;
+    &lt;ex:p1&gt;
+      &lt;rdf:Description rdf:about="http://www.example.org#y"&gt;
+        &lt;ex:p2 rdf:resource="http://www.example.org#z"/&gt;
+      &lt;/rdf:Description&gt;
+    &lt;/ex:p1&gt;
+  &lt;/rdf:Description&gt;
+  &lt;rdf:Description rdf:about="http://www.example.org#p"&gt;
+    &lt;owl:propertyChainAxiom rdf:parseType="Collection"&gt;
+      &lt;rdf:Description rdf:about="http://www.example.org#p1"/&gt;
+      &lt;rdf:Description rdf:about="http://www.example.org#p2"/&gt;
+    &lt;/owl:propertyChainAxiom&gt;
+  &lt;/rdf:Description&gt;
+&lt;/rdf:RDF&gt;</test:rdfXmlPremiseOntology>
+	</test:TestCase>
+	<test:TestCase rdf:about="http://owl.semanticweb.org/id/Rdfbased-2Dsem-2Dchar-2Dasymmetric-2Dinst">
+		<rdf:type rdf:resource="&test;ProfileIdentificationTest" />
+		<rdf:type rdf:resource="&test;InconsistencyTest" />
+		<test:identifier rdf:datatype="http://www.w3.org/2001/XMLSchema#string">rdfbased-sem-char-asymmetric-inst</test:identifier>
+		<test:creator rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Michael Schneider</test:creator>
+		<test:creator rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Kai Mainzer</test:creator>
+		<test:description rdf:datatype="http://www.w3.org/2001/XMLSchema#string">For a triple having an asymmetrical property as its predicate, the reverse triple must not exist.</test:description>
+		<test:normativeSyntax rdf:resource="&test;RDFXML" />
+		<test:status rdf:resource="&test;Approved" />
+		<test:semantics rdf:resource="&test;DIRECT" />
+		<test:semantics rdf:resource="&test;RDF-BASED" />
+		<test:species rdf:resource="&test;FULL" />
+		<test:rdfXmlPremiseOntology rdf:datatype="http://www.w3.org/2001/XMLSchema#string">&lt;rdf:RDF
+    xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+    xmlns:owl="http://www.w3.org/2002/07/owl#"
+    xmlns:xsd="http://www.w3.org/2001/XMLSchema#"
+    xmlns:ex="http://www.example.org#"
+    xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"&gt;
+  &lt;owl:AsymmetricProperty rdf:about="http://www.example.org#p"/&gt;
+  &lt;rdf:Description rdf:about="http://www.example.org#x"&gt;
+    &lt;ex:p&gt;
+      &lt;rdf:Description rdf:about="http://www.example.org#y"&gt;
+        &lt;ex:p rdf:resource="http://www.example.org#x"/&gt;
+      &lt;/rdf:Description&gt;
+    &lt;/ex:p&gt;
+  &lt;/rdf:Description&gt;
+&lt;/rdf:RDF&gt;</test:rdfXmlPremiseOntology>
+	</test:TestCase>
+	<test:TestCase rdf:about="http://owl.semanticweb.org/id/Rdfbased-2Dsem-2Dchar-2Dasymmetric-2Dterm">
+		<rdf:type rdf:resource="&test;ProfileIdentificationTest" />
+		<rdf:type rdf:resource="&test;InconsistencyTest" />
+		<test:identifier rdf:datatype="http://www.w3.org/2001/XMLSchema#string">rdfbased-sem-char-asymmetric-term</test:identifier>
+		<test:creator rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Michael Schneider</test:creator>
+		<test:creator rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Kai Mainzer</test:creator>
+		<test:description rdf:datatype="http://www.w3.org/2001/XMLSchema#string">A non-empty property cannot be both symmetrical and asymmetrical.</test:description>
+		<test:normativeSyntax rdf:resource="&test;RDFXML" />
+		<test:status rdf:resource="&test;Approved" />
+		<test:semantics rdf:resource="&test;DIRECT" />
+		<test:semantics rdf:resource="&test;RDF-BASED" />
+		<test:species rdf:resource="&test;FULL" />
+		<test:rdfXmlPremiseOntology rdf:datatype="http://www.w3.org/2001/XMLSchema#string">&lt;rdf:RDF
+    xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+    xmlns:owl="http://www.w3.org/2002/07/owl#"
+    xmlns:xsd="http://www.w3.org/2001/XMLSchema#"
+    xmlns:ex="http://www.example.org#"
+    xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"&gt;
+  &lt;owl:SymmetricProperty rdf:about="http://www.example.org#p"&gt;
+    &lt;rdf:type rdf:resource="http://www.w3.org/2002/07/owl#AsymmetricProperty"/&gt;
+  &lt;/owl:SymmetricProperty&gt;
+  &lt;rdf:Description rdf:about="http://www.example.org#x"&gt;
+    &lt;ex:p rdf:resource="http://www.example.org#y"/&gt;
+  &lt;/rdf:Description&gt;
+&lt;/rdf:RDF&gt;</test:rdfXmlPremiseOntology>
+	</test:TestCase>
+	<test:TestCase rdf:about="http://owl.semanticweb.org/id/Rdfbased-2Dsem-2Dchar-2Dfunctional-2Dinst">
+		<rdf:type rdf:resource="&test;ProfileIdentificationTest" />
+		<rdf:type rdf:resource="&test;PositiveEntailmentTest" />
+		<rdf:type rdf:resource="&test;ConsistencyTest" />
+		<test:identifier rdf:datatype="http://www.w3.org/2001/XMLSchema#string">rdfbased-sem-char-functional-inst</test:identifier>
+		<test:creator rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Michael Schneider</test:creator>
+		<test:creator rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Kai Mainzer</test:creator>
+		<test:description rdf:datatype="http://www.w3.org/2001/XMLSchema#string">For two triples with the same functional property as their predicates and with the same subject, the objects are the same.</test:description>
+		<test:normativeSyntax rdf:resource="&test;RDFXML" />
+		<test:status rdf:resource="&test;Approved" />
+		<test:semantics rdf:resource="&test;DIRECT" />
+		<test:semantics rdf:resource="&test;RDF-BASED" />
+		<test:species rdf:resource="&test;FULL" />
+		<test:rdfXmlConclusionOntology rdf:datatype="http://www.w3.org/2001/XMLSchema#string">&lt;rdf:RDF
+    xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+    xmlns:owl="http://www.w3.org/2002/07/owl#"
+    xmlns:xsd="http://www.w3.org/2001/XMLSchema#"
+    xmlns:ex="http://www.example.org#"
+    xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"&gt;
+  &lt;rdf:Description rdf:about="http://www.example.org#y1"&gt;
+    &lt;owl:sameAs rdf:resource="http://www.example.org#y2"/&gt;
+  &lt;/rdf:Description&gt;
+&lt;/rdf:RDF&gt;</test:rdfXmlConclusionOntology>
+		<test:rdfXmlPremiseOntology rdf:datatype="http://www.w3.org/2001/XMLSchema#string">&lt;rdf:RDF
+    xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+    xmlns:owl="http://www.w3.org/2002/07/owl#"
+    xmlns:xsd="http://www.w3.org/2001/XMLSchema#"
+    xmlns:ex="http://www.example.org#"
+    xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"&gt;
+  &lt;owl:FunctionalProperty rdf:about="http://www.example.org#p"/&gt;
+  &lt;rdf:Description rdf:about="http://www.example.org#x"&gt;
+    &lt;ex:p rdf:resource="http://www.example.org#y1"/&gt;
+    &lt;ex:p rdf:resource="http://www.example.org#y2"/&gt;
+  &lt;/rdf:Description&gt;
+&lt;/rdf:RDF&gt;</test:rdfXmlPremiseOntology>
+	</test:TestCase>
+	<test:TestCase rdf:about="http://owl.semanticweb.org/id/Rdfbased-2Dsem-2Dchar-2Dinversefunc-2Ddata">
+		<rdf:type rdf:resource="&test;ProfileIdentificationTest" />
+		<rdf:type rdf:resource="&test;PositiveEntailmentTest" />
+		<rdf:type rdf:resource="&test;ConsistencyTest" />
+		<test:identifier rdf:datatype="http://www.w3.org/2001/XMLSchema#string">rdfbased-sem-char-inversefunc-data</test:identifier>
+		<test:creator rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Michael Schneider</test:creator>
+		<test:creator rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Kai Mainzer</test:creator>
+		<test:description rdf:datatype="http://www.w3.org/2001/XMLSchema#string">For two triples with the same inverse functional data property as their predicates and with the same data object, the subjects are the same. This test shows that the OWL 2 RDF-Based Semantics allows for IFDPs.</test:description>
+		<test:normativeSyntax rdf:resource="&test;RDFXML" />
+		<test:status rdf:resource="&test;Approved" />
+		<test:semantics rdf:resource="&test;DIRECT" />
+		<test:semantics rdf:resource="&test;RDF-BASED" />
+		<test:species rdf:resource="&test;FULL" />
+		<test:rdfXmlConclusionOntology rdf:datatype="http://www.w3.org/2001/XMLSchema#string">&lt;rdf:RDF
+    xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+    xmlns:owl="http://www.w3.org/2002/07/owl#"
+    xmlns:xsd="http://www.w3.org/2001/XMLSchema#"
+    xmlns:ex="http://www.example.org#"
+    xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"&gt;
+  &lt;rdf:Description rdf:about="http://www.example.org#x1"&gt;
+    &lt;owl:sameAs rdf:resource="http://www.example.org#x2"/&gt;
+  &lt;/rdf:Description&gt;
+&lt;/rdf:RDF&gt;</test:rdfXmlConclusionOntology>
+		<test:rdfXmlPremiseOntology rdf:datatype="http://www.w3.org/2001/XMLSchema#string">&lt;rdf:RDF
+    xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+    xmlns:owl="http://www.w3.org/2002/07/owl#"
+    xmlns:xsd="http://www.w3.org/2001/XMLSchema#"
+    xmlns:ex="http://www.example.org#"
+    xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"&gt;
+  &lt;owl:InverseFunctionalProperty rdf:about="http://www.example.org#p"&gt;
+    &lt;rdf:type rdf:resource="http://www.w3.org/2002/07/owl#DatatypeProperty"/&gt;
+  &lt;/owl:InverseFunctionalProperty&gt;
+  &lt;rdf:Description rdf:about="http://www.example.org#x1"&gt;
+    &lt;ex:p&gt;data&lt;/ex:p&gt;
+  &lt;/rdf:Description&gt;
+  &lt;rdf:Description rdf:about="http://www.example.org#x2"&gt;
+    &lt;ex:p&gt;data&lt;/ex:p&gt;
+  &lt;/rdf:Description&gt;
+&lt;/rdf:RDF&gt;</test:rdfXmlPremiseOntology>
+	</test:TestCase>
+	<test:TestCase rdf:about="http://owl.semanticweb.org/id/Rdfbased-2Dsem-2Dchar-2Dinversefunc-2Dinst">
+		<rdf:type rdf:resource="&test;ProfileIdentificationTest" />
+		<rdf:type rdf:resource="&test;PositiveEntailmentTest" />
+		<rdf:type rdf:resource="&test;ConsistencyTest" />
+		<test:identifier rdf:datatype="http://www.w3.org/2001/XMLSchema#string">rdfbased-sem-char-inversefunc-inst</test:identifier>
+		<test:creator rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Michael Schneider</test:creator>
+		<test:creator rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Kai Mainzer</test:creator>
+		<test:description rdf:datatype="http://www.w3.org/2001/XMLSchema#string">For two triples with the same inverse functional property as their predicates and with the same object, the subjects are the same.</test:description>
+		<test:normativeSyntax rdf:resource="&test;RDFXML" />
+		<test:status rdf:resource="&test;Approved" />
+		<test:semantics rdf:resource="&test;DIRECT" />
+		<test:semantics rdf:resource="&test;RDF-BASED" />
+		<test:species rdf:resource="&test;FULL" />
+		<test:rdfXmlConclusionOntology rdf:datatype="http://www.w3.org/2001/XMLSchema#string">&lt;rdf:RDF
+    xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+    xmlns:owl="http://www.w3.org/2002/07/owl#"
+    xmlns:xsd="http://www.w3.org/2001/XMLSchema#"
+    xmlns:ex="http://www.example.org#"
+    xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"&gt;
+  &lt;rdf:Description rdf:about="http://www.example.org#x1"&gt;
+    &lt;owl:sameAs rdf:resource="http://www.example.org#x2"/&gt;
+  &lt;/rdf:Description&gt;
+&lt;/rdf:RDF&gt;</test:rdfXmlConclusionOntology>
+		<test:rdfXmlPremiseOntology rdf:datatype="http://www.w3.org/2001/XMLSchema#string">&lt;rdf:RDF
+    xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+    xmlns:owl="http://www.w3.org/2002/07/owl#"
+    xmlns:xsd="http://www.w3.org/2001/XMLSchema#"
+    xmlns:ex="http://www.example.org#"
+    xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"&gt;
+  &lt;owl:InverseFunctionalProperty rdf:about="http://www.example.org#p"/&gt;
+  &lt;rdf:Description rdf:about="http://www.example.org#x1"&gt;
+    &lt;ex:p rdf:resource="http://www.example.org#y"/&gt;
+  &lt;/rdf:Description&gt;
+  &lt;rdf:Description rdf:about="http://www.example.org#x2"&gt;
+    &lt;ex:p rdf:resource="http://www.example.org#y"/&gt;
+  &lt;/rdf:Description&gt;
+&lt;/rdf:RDF&gt;</test:rdfXmlPremiseOntology>
+	</test:TestCase>
+	<test:TestCase rdf:about="http://owl.semanticweb.org/id/Rdfbased-2Dsem-2Dchar-2Dirreflexive-2Dinst">
+		<rdf:type rdf:resource="&test;ProfileIdentificationTest" />
+		<rdf:type rdf:resource="&test;InconsistencyTest" />
+		<test:identifier rdf:datatype="http://www.w3.org/2001/XMLSchema#string">rdfbased-sem-char-irreflexive-inst</test:identifier>
+		<test:creator rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Michael Schneider</test:creator>
+		<test:creator rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Kai Mainzer</test:creator>
+		<test:description rdf:datatype="http://www.w3.org/2001/XMLSchema#string">For an irreflexive property, there must not exist any reflexive triple.</test:description>
+		<test:normativeSyntax rdf:resource="&test;RDFXML" />
+		<test:status rdf:resource="&test;Approved" />
+		<test:semantics rdf:resource="&test;DIRECT" />
+		<test:semantics rdf:resource="&test;RDF-BASED" />
+		<test:species rdf:resource="&test;FULL" />
+		<test:rdfXmlPremiseOntology rdf:datatype="http://www.w3.org/2001/XMLSchema#string">&lt;rdf:RDF
+    xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+    xmlns:owl="http://www.w3.org/2002/07/owl#"
+    xmlns:xsd="http://www.w3.org/2001/XMLSchema#"
+    xmlns:ex="http://www.example.org#"
+    xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"&gt;
+  &lt;owl:IrreflexiveProperty rdf:about="http://www.example.org#p"/&gt;
+  &lt;rdf:Description rdf:about="http://www.example.org#x"&gt;
+    &lt;ex:p rdf:resource="http://www.example.org#x"/&gt;
+  &lt;/rdf:Description&gt;
+&lt;/rdf:RDF&gt;</test:rdfXmlPremiseOntology>
+	</test:TestCase>
+	<test:TestCase rdf:about="http://owl.semanticweb.org/id/Rdfbased-2Dsem-2Dchar-2Dsymmetric-2Dinst">
+		<rdf:type rdf:resource="&test;ProfileIdentificationTest" />
+		<rdf:type rdf:resource="&test;PositiveEntailmentTest" />
+		<rdf:type rdf:resource="&test;ConsistencyTest" />
+		<test:identifier rdf:datatype="http://www.w3.org/2001/XMLSchema#string">rdfbased-sem-char-symmetric-inst</test:identifier>
+		<test:creator rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Michael Schneider</test:creator>
+		<test:creator rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Kai Mainzer</test:creator>
+		<test:description rdf:datatype="http://www.w3.org/2001/XMLSchema#string">For a triple having a symmetrical property as its predicate, the reverse triple also exists.</test:description>
+		<test:normativeSyntax rdf:resource="&test;RDFXML" />
+		<test:status rdf:resource="&test;Approved" />
+		<test:semantics rdf:resource="&test;DIRECT" />
+		<test:semantics rdf:resource="&test;RDF-BASED" />
+		<test:species rdf:resource="&test;FULL" />
+		<test:rdfXmlConclusionOntology rdf:datatype="http://www.w3.org/2001/XMLSchema#string">&lt;rdf:RDF
+    xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+    xmlns:owl="http://www.w3.org/2002/07/owl#"
+    xmlns:xsd="http://www.w3.org/2001/XMLSchema#"
+    xmlns:ex="http://www.example.org#"
+    xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"&gt;
+  &lt;rdf:Description rdf:about="http://www.example.org#y"&gt;
+    &lt;ex:p rdf:resource="http://www.example.org#x"/&gt;
+  &lt;/rdf:Description&gt;
+&lt;/rdf:RDF&gt;</test:rdfXmlConclusionOntology>
+		<test:rdfXmlPremiseOntology rdf:datatype="http://www.w3.org/2001/XMLSchema#string">&lt;rdf:RDF
+    xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+    xmlns:owl="http://www.w3.org/2002/07/owl#"
+    xmlns:xsd="http://www.w3.org/2001/XMLSchema#"
+    xmlns:ex="http://www.example.org#"
+    xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"&gt;
+  &lt;owl:SymmetricProperty rdf:about="http://www.example.org#p"/&gt;
+  &lt;rdf:Description rdf:about="http://www.example.org#x"&gt;
+    &lt;ex:p rdf:resource="http://www.example.org#y"/&gt;
+  &lt;/rdf:Description&gt;
+&lt;/rdf:RDF&gt;</test:rdfXmlPremiseOntology>
+	</test:TestCase>
+	<test:TestCase rdf:about="http://owl.semanticweb.org/id/Rdfbased-2Dsem-2Dchar-2Dtransitive-2Dinst">
+		<rdf:type rdf:resource="&test;ProfileIdentificationTest" />
+		<rdf:type rdf:resource="&test;PositiveEntailmentTest" />
+		<rdf:type rdf:resource="&test;ConsistencyTest" />
+		<test:identifier rdf:datatype="http://www.w3.org/2001/XMLSchema#string">rdfbased-sem-char-transitive-inst</test:identifier>
+		<test:creator rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Michael Schneider</test:creator>
+		<test:creator rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Kai Mainzer</test:creator>
+		<test:description rdf:datatype="http://www.w3.org/2001/XMLSchema#string">For two chained triples having the same transitive property as their predicate, the transitive result triple also exists.</test:description>
+		<test:normativeSyntax rdf:resource="&test;RDFXML" />
+		<test:status rdf:resource="&test;Approved" />
+		<test:semantics rdf:resource="&test;DIRECT" />
+		<test:semantics rdf:resource="&test;RDF-BASED" />
+		<test:species rdf:resource="&test;FULL" />
+		<test:rdfXmlConclusionOntology rdf:datatype="http://www.w3.org/2001/XMLSchema#string">&lt;rdf:RDF
+    xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+    xmlns:owl="http://www.w3.org/2002/07/owl#"
+    xmlns:xsd="http://www.w3.org/2001/XMLSchema#"
+    xmlns:ex="http://www.example.org#"
+    xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"&gt;
+  &lt;rdf:Description rdf:about="http://www.example.org#x"&gt;
+    &lt;ex:p rdf:resource="http://www.example.org#z"/&gt;
+  &lt;/rdf:Description&gt;
+&lt;/rdf:RDF&gt;</test:rdfXmlConclusionOntology>
+		<test:rdfXmlPremiseOntology rdf:datatype="http://www.w3.org/2001/XMLSchema#string">&lt;rdf:RDF
+    xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+    xmlns:owl="http://www.w3.org/2002/07/owl#"
+    xmlns:xsd="http://www.w3.org/2001/XMLSchema#"
+    xmlns:ex="http://www.example.org#"
+    xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"&gt;
+  &lt;owl:TransitiveProperty rdf:about="http://www.example.org#p"/&gt;
+  &lt;rdf:Description rdf:about="http://www.example.org#x"&gt;
+    &lt;ex:p&gt;
+      &lt;rdf:Description rdf:about="http://www.example.org#y"&gt;
+        &lt;ex:p rdf:resource="http://www.example.org#z"/&gt;
+      &lt;/rdf:Description&gt;
+    &lt;/ex:p&gt;
+  &lt;/rdf:Description&gt;
+&lt;/rdf:RDF&gt;</test:rdfXmlPremiseOntology>
+	</test:TestCase>
+	<test:TestCase rdf:about="http://owl.semanticweb.org/id/Rdfbased-2Dsem-2Dclass-2Dnothing-2Dext">
+		<rdf:type rdf:resource="&test;ProfileIdentificationTest" />
+		<rdf:type rdf:resource="&test;InconsistencyTest" />
+		<test:identifier rdf:datatype="http://www.w3.org/2001/XMLSchema#string">rdfbased-sem-class-nothing-ext</test:identifier>
+		<test:creator rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Michael Schneider</test:creator>
+		<test:creator rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Kai Mainzer</test:creator>
+		<test:description rdf:datatype="http://www.w3.org/2001/XMLSchema#string">The extension of the vocabulary class owl:Nothing is empty.</test:description>
+		<test:normativeSyntax rdf:resource="&test;RDFXML" />
+		<test:status rdf:resource="&test;Approved" />
+		<test:semantics rdf:resource="&test;DIRECT" />
+		<test:semantics rdf:resource="&test;RDF-BASED" />
+		<test:species rdf:resource="&test;FULL" />
+		<test:rdfXmlPremiseOntology rdf:datatype="http://www.w3.org/2001/XMLSchema#string">&lt;rdf:RDF
+    xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+    xmlns:owl="http://www.w3.org/2002/07/owl#"
+    xmlns:xsd="http://www.w3.org/2001/XMLSchema#"
+    xmlns:ex="http://www.example.org#"
+    xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"&gt;
+  &lt;owl:Nothing rdf:about="http://www.example.org#x"/&gt;
+&lt;/rdf:RDF&gt;</test:rdfXmlPremiseOntology>
+	</test:TestCase>
+	<test:TestCase rdf:about="http://owl.semanticweb.org/id/Rdfbased-2Dsem-2Dclass-2Dnothing-2Dterm">
+		<rdf:type rdf:resource="&test;ProfileIdentificationTest" />
+		<rdf:type rdf:resource="&test;PositiveEntailmentTest" />
+		<rdf:type rdf:resource="&test;ConsistencyTest" />
+		<test:identifier rdf:datatype="http://www.w3.org/2001/XMLSchema#string">rdfbased-sem-class-nothing-term</test:identifier>
+		<test:creator rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Michael Schneider</test:creator>
+		<test:creator rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Kai Mainzer</test:creator>
+		<test:description rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Every OWL class is a super class of the vocabulary class owl:Nothing.</test:description>
+		<test:normativeSyntax rdf:resource="&test;RDFXML" />
+		<test:status rdf:resource="&test;Approved" />
+		<test:semantics rdf:resource="&test;DIRECT" />
+		<test:semantics rdf:resource="&test;RDF-BASED" />
+		<test:species rdf:resource="&test;FULL" />
+		<test:rdfXmlConclusionOntology rdf:datatype="http://www.w3.org/2001/XMLSchema#string">&lt;rdf:RDF
+    xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+    xmlns:owl="http://www.w3.org/2002/07/owl#"
+    xmlns:xsd="http://www.w3.org/2001/XMLSchema#"
+    xmlns:ex="http://www.example.org#"
+    xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"&gt;
+  &lt;rdf:Description rdf:about="http://www.w3.org/2002/07/owl#Nothing"&gt;
+    &lt;rdfs:subClassOf rdf:resource="http://www.example.org#c"/&gt;
+  &lt;/rdf:Description&gt;
+&lt;/rdf:RDF&gt;</test:rdfXmlConclusionOntology>
+		<test:rdfXmlPremiseOntology rdf:datatype="http://www.w3.org/2001/XMLSchema#string">&lt;rdf:RDF
+    xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+    xmlns:owl="http://www.w3.org/2002/07/owl#"
+    xmlns:xsd="http://www.w3.org/2001/XMLSchema#"
+    xmlns:ex="http://www.example.org#"
+    xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"&gt;
+  &lt;owl:Class rdf:about="http://www.example.org#c"/&gt;
+&lt;/rdf:RDF&gt;</test:rdfXmlPremiseOntology>
+	</test:TestCase>
+	<test:TestCase rdf:about="http://owl.semanticweb.org/id/Rdfbased-2Dsem-2Dclass-2Dnothing-2Dtype">
+		<rdf:type rdf:resource="&test;ProfileIdentificationTest" />
+		<rdf:type rdf:resource="&test;PositiveEntailmentTest" />
+		<rdf:type rdf:resource="&test;ConsistencyTest" />
+		<test:identifier rdf:datatype="http://www.w3.org/2001/XMLSchema#string">rdfbased-sem-class-nothing-type</test:identifier>
+		<test:creator rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Michael Schneider</test:creator>
+		<test:creator rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Kai Mainzer</test:creator>
+		<test:description rdf:datatype="http://www.w3.org/2001/XMLSchema#string">The type of the vocabulary class owl:Nothing is the class of OWL classes.</test:description>
+		<test:normativeSyntax rdf:resource="&test;RDFXML" />
+		<test:status rdf:resource="&test;Approved" />
+		<test:semantics rdf:resource="&test;DIRECT" />
+		<test:semantics rdf:resource="&test;RDF-BASED" />
+		<test:species rdf:resource="&test;FULL" />
+		<test:rdfXmlConclusionOntology rdf:datatype="http://www.w3.org/2001/XMLSchema#string">&lt;rdf:RDF
+    xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+    xmlns:owl="http://www.w3.org/2002/07/owl#"
+    xmlns:xsd="http://www.w3.org/2001/XMLSchema#"
+    xmlns:ex="http://www.example.org#"
+    xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"&gt;
+  &lt;owl:Class rdf:about="http://www.w3.org/2002/07/owl#Nothing"/&gt;
+&lt;/rdf:RDF&gt;</test:rdfXmlConclusionOntology>
+		<test:rdfXmlPremiseOntology rdf:datatype="http://www.w3.org/2001/XMLSchema#string">&lt;rdf:RDF
+    xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+    xmlns:owl="http://www.w3.org/2002/07/owl#"
+    xmlns:xsd="http://www.w3.org/2001/XMLSchema#"
+    xmlns:ex="http://www.example.org#"
+    xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"&gt;
+&lt;/rdf:RDF&gt;</test:rdfXmlPremiseOntology>
+	</test:TestCase>
+	<test:TestCase rdf:about="http://owl.semanticweb.org/id/Rdfbased-2Dsem-2Dclass-2Dthing-2Dterm">
+		<rdf:type rdf:resource="&test;ProfileIdentificationTest" />
+		<rdf:type rdf:resource="&test;PositiveEntailmentTest" />
+		<rdf:type rdf:resource="&test;ConsistencyTest" />
+		<test:identifier rdf:datatype="http://www.w3.org/2001/XMLSchema#string">rdfbased-sem-class-thing-term</test:identifier>
+		<test:creator rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Michael Schneider</test:creator>
+		<test:creator rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Kai Mainzer</test:creator>
+		<test:description rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Every OWL class is a sub class of the vocabulary class owl:Thing.</test:description>
+		<test:normativeSyntax rdf:resource="&test;RDFXML" />
+		<test:status rdf:resource="&test;Approved" />
+		<test:semantics rdf:resource="&test;DIRECT" />
+		<test:semantics rdf:resource="&test;RDF-BASED" />
+		<test:species rdf:resource="&test;FULL" />
+		<test:rdfXmlConclusionOntology rdf:datatype="http://www.w3.org/2001/XMLSchema#string">&lt;rdf:RDF
+    xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+    xmlns:owl="http://www.w3.org/2002/07/owl#"
+    xmlns:xsd="http://www.w3.org/2001/XMLSchema#"
+    xmlns:ex="http://www.example.org#"
+    xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"&gt;
+  &lt;rdf:Description rdf:about="http://www.example.org#c"&gt;
+    &lt;rdfs:subClassOf rdf:resource="http://www.w3.org/2002/07/owl#Thing"/&gt;
+  &lt;/rdf:Description&gt;
+&lt;/rdf:RDF&gt;</test:rdfXmlConclusionOntology>
+		<test:rdfXmlPremiseOntology rdf:datatype="http://www.w3.org/2001/XMLSchema#string">&lt;rdf:RDF
+    xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+    xmlns:owl="http://www.w3.org/2002/07/owl#"
+    xmlns:xsd="http://www.w3.org/2001/XMLSchema#"
+    xmlns:ex="http://www.example.org#"
+    xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"&gt;
+  &lt;owl:Class rdf:about="http://www.example.org#c"/&gt;
+&lt;/rdf:RDF&gt;</test:rdfXmlPremiseOntology>
+	</test:TestCase>
+	<test:TestCase rdf:about="http://owl.semanticweb.org/id/Rdfbased-2Dsem-2Dclass-2Dthing-2Dtype">
+		<rdf:type rdf:resource="&test;ProfileIdentificationTest" />
+		<rdf:type rdf:resource="&test;PositiveEntailmentTest" />
+		<rdf:type rdf:resource="&test;ConsistencyTest" />
+		<test:identifier rdf:datatype="http://www.w3.org/2001/XMLSchema#string">rdfbased-sem-class-thing-type</test:identifier>
+		<test:creator rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Michael Schneider</test:creator>
+		<test:creator rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Kai Mainzer</test:creator>
+		<test:description rdf:datatype="http://www.w3.org/2001/XMLSchema#string">The type of the vocabulary class owl:Thing is the class of OWL classes.</test:description>
+		<test:normativeSyntax rdf:resource="&test;RDFXML" />
+		<test:status rdf:resource="&test;Approved" />
+		<test:semantics rdf:resource="&test;DIRECT" />
+		<test:semantics rdf:resource="&test;RDF-BASED" />
+		<test:species rdf:resource="&test;FULL" />
+		<test:rdfXmlConclusionOntology rdf:datatype="http://www.w3.org/2001/XMLSchema#string">&lt;rdf:RDF
+    xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+    xmlns:owl="http://www.w3.org/2002/07/owl#"
+    xmlns:xsd="http://www.w3.org/2001/XMLSchema#"
+    xmlns:ex="http://www.example.org#"
+    xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"&gt;
+  &lt;owl:Class rdf:about="http://www.w3.org/2002/07/owl#Thing"/&gt;
+&lt;/rdf:RDF&gt;</test:rdfXmlConclusionOntology>
+		<test:rdfXmlPremiseOntology rdf:datatype="http://www.w3.org/2001/XMLSchema#string">&lt;rdf:RDF
+    xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+    xmlns:owl="http://www.w3.org/2002/07/owl#"
+    xmlns:xsd="http://www.w3.org/2001/XMLSchema#"
+    xmlns:ex="http://www.example.org#"
+    xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"&gt;
+&lt;/rdf:RDF&gt;</test:rdfXmlPremiseOntology>
+	</test:TestCase>
+	<test:TestCase rdf:about="http://owl.semanticweb.org/id/Rdfbased-2Dsem-2Denum-2Dinst-2Dincluded">
+		<rdf:type rdf:resource="&test;ProfileIdentificationTest" />
+		<rdf:type rdf:resource="&test;PositiveEntailmentTest" />
+		<rdf:type rdf:resource="&test;ConsistencyTest" />
+		<test:identifier rdf:datatype="http://www.w3.org/2001/XMLSchema#string">rdfbased-sem-enum-inst-included</test:identifier>
+		<test:creator rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Michael Schneider</test:creator>
+		<test:creator rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Kai Mainzer</test:creator>
+		<test:description rdf:datatype="http://www.w3.org/2001/XMLSchema#string">If a class defines an enumeration class expression from two individuals, than both individuals are instances of the class.</test:description>
+		<test:normativeSyntax rdf:resource="&test;RDFXML" />
+		<test:status rdf:resource="&test;Approved" />
+		<test:semantics rdf:resource="&test;DIRECT" />
+		<test:semantics rdf:resource="&test;RDF-BASED" />
+		<test:species rdf:resource="&test;FULL" />
+		<test:rdfXmlConclusionOntology rdf:datatype="http://www.w3.org/2001/XMLSchema#string">&lt;rdf:RDF
+    xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+    xmlns:owl="http://www.w3.org/2002/07/owl#"
+    xmlns:xsd="http://www.w3.org/2001/XMLSchema#"
+    xmlns:ex="http://www.example.org#"
+    xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"&gt;
+  &lt;ex:e rdf:about="http://www.example.org#x"/&gt;
+  &lt;ex:e rdf:about="http://www.example.org#y"/&gt;
+&lt;/rdf:RDF&gt;</test:rdfXmlConclusionOntology>
+		<test:rdfXmlPremiseOntology rdf:datatype="http://www.w3.org/2001/XMLSchema#string">&lt;rdf:RDF
+    xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+    xmlns:owl="http://www.w3.org/2002/07/owl#"
+    xmlns:xsd="http://www.w3.org/2001/XMLSchema#"
+    xmlns:ex="http://www.example.org#"
+    xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"&gt;
+  &lt;rdf:Description rdf:about="http://www.example.org#e"&gt;
+    &lt;owl:oneOf rdf:parseType="Collection"&gt;
+      &lt;rdf:Description rdf:about="http://www.example.org#x"/&gt;
+      &lt;rdf:Description rdf:about="http://www.example.org#y"/&gt;
+    &lt;/owl:oneOf&gt;
+  &lt;/rdf:Description&gt;
+&lt;/rdf:RDF&gt;</test:rdfXmlPremiseOntology>
+	</test:TestCase>
+	<test:TestCase rdf:about="http://owl.semanticweb.org/id/Rdfbased-2Dsem-2Deqdis-2Ddifferent-2Dirrflxv">
+		<rdf:type rdf:resource="&test;ProfileIdentificationTest" />
+		<rdf:type rdf:resource="&test;InconsistencyTest" />
+		<test:identifier rdf:datatype="http://www.w3.org/2001/XMLSchema#string">rdfbased-sem-eqdis-different-irrflxv</test:identifier>
+		<test:creator rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Michael Schneider</test:creator>
+		<test:creator rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Kai Mainzer</test:creator>
+		<test:description rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Diversity of two individuals is irreflexive.</test:description>
+		<test:normativeSyntax rdf:resource="&test;RDFXML" />
+		<test:status rdf:resource="&test;Approved" />
+		<test:semantics rdf:resource="&test;DIRECT" />
+		<test:semantics rdf:resource="&test;RDF-BASED" />
+		<test:species rdf:resource="&test;FULL" />
+		<test:rdfXmlPremiseOntology rdf:datatype="http://www.w3.org/2001/XMLSchema#string">&lt;rdf:RDF
+    xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+    xmlns:owl="http://www.w3.org/2002/07/owl#"
+    xmlns:xsd="http://www.w3.org/2001/XMLSchema#"
+    xmlns:ex="http://www.example.org#"
+    xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"&gt;
+  &lt;rdf:Description rdf:about="http://www.example.org#x"&gt;
+    &lt;owl:differentFrom rdf:resource="http://www.example.org#x"/&gt;
+  &lt;/rdf:Description&gt;
+&lt;/rdf:RDF&gt;</test:rdfXmlPremiseOntology>
+	</test:TestCase>
+	<test:TestCase rdf:about="http://owl.semanticweb.org/id/Rdfbased-2Dsem-2Deqdis-2Ddifferent-2Dsameas">
+		<rdf:type rdf:resource="&test;ProfileIdentificationTest" />
+		<rdf:type rdf:resource="&test;InconsistencyTest" />
+		<test:identifier rdf:datatype="http://www.w3.org/2001/XMLSchema#string">rdfbased-sem-eqdis-different-sameas</test:identifier>
+		<test:creator rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Michael Schneider</test:creator>
+		<test:creator rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Kai Mainzer</test:creator>
+		<test:description rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Two individuals cannot both be the same and different.</test:description>
+		<test:normativeSyntax rdf:resource="&test;RDFXML" />
+		<test:status rdf:resource="&test;Approved" />
+		<test:semantics rdf:resource="&test;DIRECT" />
+		<test:semantics rdf:resource="&test;RDF-BASED" />
+		<test:species rdf:resource="&test;FULL" />
+		<test:rdfXmlPremiseOntology rdf:datatype="http://www.w3.org/2001/XMLSchema#string">&lt;rdf:RDF
+    xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+    xmlns:owl="http://www.w3.org/2002/07/owl#"
+    xmlns:xsd="http://www.w3.org/2001/XMLSchema#"
+    xmlns:ex="http://www.example.org#"
+    xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"&gt;
+  &lt;rdf:Description rdf:about="http://www.example.org#x"&gt;
+    &lt;owl:sameAs rdf:resource="http://www.example.org#y"/&gt;
+    &lt;owl:differentFrom rdf:resource="http://www.example.org#y"/&gt;
+  &lt;/rdf:Description&gt;
+&lt;/rdf:RDF&gt;</test:rdfXmlPremiseOntology>
+	</test:TestCase>
+	<test:TestCase rdf:about="http://owl.semanticweb.org/id/Rdfbased-2Dsem-2Deqdis-2Ddisclass-2Deqclass">
+		<rdf:type rdf:resource="&test;ProfileIdentificationTest" />
+		<rdf:type rdf:resource="&test;InconsistencyTest" />
+		<test:identifier rdf:datatype="http://www.w3.org/2001/XMLSchema#string">rdfbased-sem-eqdis-disclass-eqclass</test:identifier>
+		<test:creator rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Michael Schneider</test:creator>
+		<test:creator rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Kai Mainzer</test:creator>
+		<test:description rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Two non-empty classes cannot both be equivalent and disjoint.</test:description>
+		<test:normativeSyntax rdf:resource="&test;RDFXML" />
+		<test:status rdf:resource="&test;Approved" />
+		<test:semantics rdf:resource="&test;DIRECT" />
+		<test:semantics rdf:resource="&test;RDF-BASED" />
+		<test:species rdf:resource="&test;FULL" />
+		<test:rdfXmlPremiseOntology rdf:datatype="http://www.w3.org/2001/XMLSchema#string">&lt;rdf:RDF
+    xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+    xmlns:owl="http://www.w3.org/2002/07/owl#"
+    xmlns:xsd="http://www.w3.org/2001/XMLSchema#"
+    xmlns:ex="http://www.example.org#"
+    xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"&gt;
+  &lt;ex:c1 rdf:about="http://www.example.org#x"/&gt;
+  &lt;ex:c2 rdf:about="http://www.example.org#y"/&gt;
+  &lt;rdf:Description rdf:about="http://www.example.org#c1"&gt;
+    &lt;owl:equivalentClass rdf:resource="http://www.example.org#c2"/&gt;
+    &lt;owl:disjointWith rdf:resource="http://www.example.org#c2"/&gt;
+  &lt;/rdf:Description&gt;
+&lt;/rdf:RDF&gt;</test:rdfXmlPremiseOntology>
+	</test:TestCase>
+	<test:TestCase rdf:about="http://owl.semanticweb.org/id/Rdfbased-2Dsem-2Deqdis-2Ddisclass-2Dinst">
+		<rdf:type rdf:resource="&test;ProfileIdentificationTest" />
+		<rdf:type rdf:resource="&test;InconsistencyTest" />
+		<test:identifier rdf:datatype="http://www.w3.org/2001/XMLSchema#string">rdfbased-sem-eqdis-disclass-inst</test:identifier>
+		<test:creator rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Michael Schneider</test:creator>
+		<test:creator rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Kai Mainzer</test:creator>
+		<test:description rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Individuals being instances of disjoint classes are different from each other.</test:description>
+		<test:normativeSyntax rdf:resource="&test;RDFXML" />
+		<test:status rdf:resource="&test;Approved" />
+		<test:semantics rdf:resource="&test;DIRECT" />
+		<test:semantics rdf:resource="&test;RDF-BASED" />
+		<test:species rdf:resource="&test;FULL" />
+		<test:rdfXmlPremiseOntology rdf:datatype="http://www.w3.org/2001/XMLSchema#string">&lt;rdf:RDF
+    xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+    xmlns:owl="http://www.w3.org/2002/07/owl#"
+    xmlns:xsd="http://www.w3.org/2001/XMLSchema#"
+    xmlns:ex="http://www.example.org#"
+    xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"&gt;
+  &lt;ex:c1 rdf:about="http://www.example.org#w"&gt;
+    &lt;rdf:type rdf:resource="http://www.example.org#c2"/&gt;
+  &lt;/ex:c1&gt;
+  &lt;rdf:Description rdf:about="http://www.example.org#c1"&gt;
+    &lt;owl:disjointWith rdf:resource="http://www.example.org#c2"/&gt;
+  &lt;/rdf:Description&gt;
+&lt;/rdf:RDF&gt;</test:rdfXmlPremiseOntology>
+	</test:TestCase>
+	<test:TestCase rdf:about="http://owl.semanticweb.org/id/Rdfbased-2Dsem-2Deqdis-2Ddisclass-2Dirrflxv">
+		<rdf:type rdf:resource="&test;ProfileIdentificationTest" />
+		<rdf:type rdf:resource="&test;InconsistencyTest" />
+		<test:identifier rdf:datatype="http://www.w3.org/2001/XMLSchema#string">rdfbased-sem-eqdis-disclass-irrflxv</test:identifier>
+		<test:creator rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Michael Schneider</test:creator>
+		<test:creator rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Kai Mainzer</test:creator>
+		<test:description rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Disjointness of two non-empty classes is irreflexive.</test:description>
+		<test:normativeSyntax rdf:resource="&test;RDFXML" />
+		<test:status rdf:resource="&test;Approved" />
+		<test:semantics rdf:resource="&test;DIRECT" />
+		<test:semantics rdf:resource="&test;RDF-BASED" />
+		<test:species rdf:resource="&test;FULL" />
+		<test:rdfXmlPremiseOntology rdf:datatype="http://www.w3.org/2001/XMLSchema#string">&lt;rdf:RDF
+    xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+    xmlns:owl="http://www.w3.org/2002/07/owl#"
+    xmlns:xsd="http://www.w3.org/2001/XMLSchema#"
+    xmlns:ex="http://www.example.org#"
+    xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"&gt;
+  &lt;ex:c rdf:about="http://www.example.org#x"/&gt;
+  &lt;rdf:Description rdf:about="http://www.example.org#c"&gt;
+    &lt;owl:disjointWith rdf:resource="http://www.example.org#c"/&gt;
+  &lt;/rdf:Description&gt;
+&lt;/rdf:RDF&gt;</test:rdfXmlPremiseOntology>
+	</test:TestCase>
+	<test:TestCase rdf:about="http://owl.semanticweb.org/id/Rdfbased-2Dsem-2Deqdis-2Ddisprop-2Deqprop">
+		<rdf:type rdf:resource="&test;ProfileIdentificationTest" />
+		<rdf:type rdf:resource="&test;InconsistencyTest" />
+		<test:identifier rdf:datatype="http://www.w3.org/2001/XMLSchema#string">rdfbased-sem-eqdis-disprop-eqprop</test:identifier>
+		<test:creator rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Michael Schneider</test:creator>
+		<test:creator rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Kai Mainzer</test:creator>
+		<test:description rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Two non-empty properties cannot both be equivalent and disjoint.</test:description>
+		<test:normativeSyntax rdf:resource="&test;RDFXML" />
+		<test:status rdf:resource="&test;Approved" />
+		<test:semantics rdf:resource="&test;DIRECT" />
+		<test:semantics rdf:resource="&test;RDF-BASED" />
+		<test:species rdf:resource="&test;FULL" />
+		<test:rdfXmlPremiseOntology rdf:datatype="http://www.w3.org/2001/XMLSchema#string">&lt;rdf:RDF
+    xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+    xmlns:owl="http://www.w3.org/2002/07/owl#"
+    xmlns:xsd="http://www.w3.org/2001/XMLSchema#"
+    xmlns:ex="http://www.example.org#"
+    xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"&gt;
+  &lt;rdf:Description rdf:about="http://www.example.org#s2"&gt;
+    &lt;ex:p2 rdf:resource="http://www.example.org#o2"/&gt;
+  &lt;/rdf:Description&gt;
+  &lt;rdf:Description rdf:about="http://www.example.org#s1"&gt;
+    &lt;ex:p1 rdf:resource="http://www.example.org#o1"/&gt;
+  &lt;/rdf:Description&gt;
+  &lt;rdf:Description rdf:about="http://www.example.org#p1"&gt;
+    &lt;owl:equivalentProperty rdf:resource="http://www.example.org#p2"/&gt;
+    &lt;owl:propertyDisjointWith rdf:resource="http://www.example.org#p2"/&gt;
+  &lt;/rdf:Description&gt;
+&lt;/rdf:RDF&gt;</test:rdfXmlPremiseOntology>
+	</test:TestCase>
+	<test:TestCase rdf:about="http://owl.semanticweb.org/id/Rdfbased-2Dsem-2Deqdis-2Ddisprop-2Dinst">
+		<rdf:type rdf:resource="&test;ProfileIdentificationTest" />
+		<rdf:type rdf:resource="&test;InconsistencyTest" />
+		<test:identifier rdf:datatype="http://www.w3.org/2001/XMLSchema#string">rdfbased-sem-eqdis-disprop-inst</test:identifier>
+		<test:creator rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Michael Schneider</test:creator>
+		<test:creator rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Kai Mainzer</test:creator>
+		<test:description rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Triples with disjoint properties as their predicates have different subjects or different objects.</test:description>
+		<test:normativeSyntax rdf:resource="&test;RDFXML" />
+		<test:status rdf:resource="&test;Approved" />
+		<test:semantics rdf:resource="&test;DIRECT" />
+		<test:semantics rdf:resource="&test;RDF-BASED" />
+		<test:species rdf:resource="&test;FULL" />
+		<test:rdfXmlPremiseOntology rdf:datatype="http://www.w3.org/2001/XMLSchema#string">&lt;rdf:RDF
+    xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+    xmlns:owl="http://www.w3.org/2002/07/owl#"
+    xmlns:xsd="http://www.w3.org/2001/XMLSchema#"
+    xmlns:ex="http://www.example.org#"
+    xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"&gt;
+  &lt;rdf:Description rdf:about="http://www.example.org#s"&gt;
+    &lt;ex:p1 rdf:resource="http://www.example.org#o"/&gt;
+    &lt;ex:p2 rdf:resource="http://www.example.org#o"/&gt;
+  &lt;/rdf:Description&gt;
+  &lt;rdf:Description rdf:about="http://www.example.org#p1"&gt;
+    &lt;owl:propertyDisjointWith rdf:resource="http://www.example.org#p2"/&gt;
+  &lt;/rdf:Description&gt;
+&lt;/rdf:RDF&gt;</test:rdfXmlPremiseOntology>
+	</test:TestCase>
+	<test:TestCase rdf:about="http://owl.semanticweb.org/id/Rdfbased-2Dsem-2Deqdis-2Ddisprop-2Dirrflxv">
+		<rdf:type rdf:resource="&test;ProfileIdentificationTest" />
+		<rdf:type rdf:resource="&test;InconsistencyTest" />
+		<test:identifier rdf:datatype="http://www.w3.org/2001/XMLSchema#string">rdfbased-sem-eqdis-disprop-irrflxv</test:identifier>
+		<test:creator rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Michael Schneider</test:creator>
+		<test:creator rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Kai Mainzer</test:creator>
+		<test:description rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Disjointness of two non-empty properties is irreflexive.</test:description>
+		<test:normativeSyntax rdf:resource="&test;RDFXML" />
+		<test:status rdf:resource="&test;Approved" />
+		<test:semantics rdf:resource="&test;DIRECT" />
+		<test:semantics rdf:resource="&test;RDF-BASED" />
+		<test:species rdf:resource="&test;FULL" />
+		<test:rdfXmlPremiseOntology rdf:datatype="http://www.w3.org/2001/XMLSchema#string">&lt;rdf:RDF
+    xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+    xmlns:owl="http://www.w3.org/2002/07/owl#"
+    xmlns:xsd="http://www.w3.org/2001/XMLSchema#"
+    xmlns:ex="http://www.example.org#"
+    xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"&gt;
+  &lt;rdf:Description rdf:about="http://www.example.org#s"&gt;
+    &lt;ex:p rdf:resource="http://www.example.org#o"/&gt;
+  &lt;/rdf:Description&gt;
+  &lt;rdf:Description rdf:about="http://www.example.org#p"&gt;
+    &lt;owl:propertyDisjointWith rdf:resource="http://www.example.org#p"/&gt;
+  &lt;/rdf:Description&gt;
+&lt;/rdf:RDF&gt;</test:rdfXmlPremiseOntology>
+	</test:TestCase>
+	<test:TestCase rdf:about="http://owl.semanticweb.org/id/Rdfbased-2Dsem-2Deqdis-2Deqclass-2Dinst">
+		<rdf:type rdf:resource="&test;ProfileIdentificationTest" />
+		<rdf:type rdf:resource="&test;PositiveEntailmentTest" />
+		<rdf:type rdf:resource="&test;ConsistencyTest" />
+		<test:identifier rdf:datatype="http://www.w3.org/2001/XMLSchema#string">rdfbased-sem-eqdis-eqclass-inst</test:identifier>
+		<test:creator rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Michael Schneider</test:creator>
+		<test:creator rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Kai Mainzer</test:creator>
+		<test:description rdf:datatype="http://www.w3.org/2001/XMLSchema#string">For two equivalent classes, any instance of one class is also an instance of the other class, and vice versa.</test:description>
+		<test:normativeSyntax rdf:resource="&test;RDFXML" />
+		<test:status rdf:resource="&test;Approved" />
+		<test:semantics rdf:resource="&test;DIRECT" />
+		<test:semantics rdf:resource="&test;RDF-BASED" />
+		<test:species rdf:resource="&test;FULL" />
+		<test:rdfXmlConclusionOntology rdf:datatype="http://www.w3.org/2001/XMLSchema#string">&lt;rdf:RDF
+    xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+    xmlns:owl="http://www.w3.org/2002/07/owl#"
+    xmlns:xsd="http://www.w3.org/2001/XMLSchema#"
+    xmlns:ex="http://www.example.org#"
+    xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"&gt;
+  &lt;ex:c2 rdf:about="http://www.example.org#x"/&gt;
+  &lt;ex:c1 rdf:about="http://www.example.org#y"/&gt;
+&lt;/rdf:RDF&gt;</test:rdfXmlConclusionOntology>
+		<test:rdfXmlPremiseOntology rdf:datatype="http://www.w3.org/2001/XMLSchema#string">&lt;rdf:RDF
+    xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+    xmlns:owl="http://www.w3.org/2002/07/owl#"
+    xmlns:xsd="http://www.w3.org/2001/XMLSchema#"
+    xmlns:ex="http://www.example.org#"
+    xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"&gt;
+  &lt;ex:c1 rdf:about="http://www.example.org#x"/&gt;
+  &lt;ex:c2 rdf:about="http://www.example.org#y"/&gt;
+  &lt;rdf:Description rdf:about="http://www.example.org#c1"&gt;
+    &lt;owl:equivalentClass rdf:resource="http://www.example.org#c2"/&gt;
+  &lt;/rdf:Description&gt;
+&lt;/rdf:RDF&gt;</test:rdfXmlPremiseOntology>
+	</test:TestCase>
+	<test:TestCase rdf:about="http://owl.semanticweb.org/id/Rdfbased-2Dsem-2Deqdis-2Deqclass-2Drflxv">
+		<rdf:type rdf:resource="&test;ProfileIdentificationTest" />
+		<rdf:type rdf:resource="&test;PositiveEntailmentTest" />
+		<rdf:type rdf:resource="&test;ConsistencyTest" />
+		<test:identifier rdf:datatype="http://www.w3.org/2001/XMLSchema#string">rdfbased-sem-eqdis-eqclass-rflxv</test:identifier>
+		<test:creator rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Michael Schneider</test:creator>
+		<test:creator rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Kai Mainzer</test:creator>
+		<test:description rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Equivalence of two classes is reflexive.</test:description>
+		<test:normativeSyntax rdf:resource="&test;RDFXML" />
+		<test:status rdf:resource="&test;Approved" />
+		<test:semantics rdf:resource="&test;DIRECT" />
+		<test:semantics rdf:resource="&test;RDF-BASED" />
+		<test:species rdf:resource="&test;FULL" />
+		<test:rdfXmlConclusionOntology rdf:datatype="http://www.w3.org/2001/XMLSchema#string">&lt;rdf:RDF
+    xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+    xmlns:owl="http://www.w3.org/2002/07/owl#"
+    xmlns:xsd="http://www.w3.org/2001/XMLSchema#"
+    xmlns:ex="http://www.example.org#"
+    xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"&gt;
+  &lt;rdf:Description rdf:about="http://www.example.org#c"&gt;
+    &lt;owl:equivalentClass rdf:resource="http://www.example.org#c"/&gt;
+  &lt;/rdf:Description&gt;
+&lt;/rdf:RDF&gt;</test:rdfXmlConclusionOntology>
+		<test:rdfXmlPremiseOntology rdf:datatype="http://www.w3.org/2001/XMLSchema#string">&lt;rdf:RDF
+    xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+    xmlns:owl="http://www.w3.org/2002/07/owl#"
+    xmlns:xsd="http://www.w3.org/2001/XMLSchema#"
+    xmlns:ex="http://www.example.org#"
+    xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"&gt;
+  &lt;owl:Class rdf:about="http://www.example.org#c"/&gt;
+&lt;/rdf:RDF&gt;</test:rdfXmlPremiseOntology>
+	</test:TestCase>
+	<test:TestCase rdf:about="http://owl.semanticweb.org/id/Rdfbased-2Dsem-2Deqdis-2Deqclass-2Dsubclass-2D1">
+		<rdf:type rdf:resource="&test;ProfileIdentificationTest" />
+		<rdf:type rdf:resource="&test;PositiveEntailmentTest" />
+		<rdf:type rdf:resource="&test;ConsistencyTest" />
+		<test:identifier rdf:datatype="http://www.w3.org/2001/XMLSchema#string">rdfbased-sem-eqdis-eqclass-subclass-1</test:identifier>
+		<test:creator rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Michael Schneider</test:creator>
+		<test:creator rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Kai Mainzer</test:creator>
+		<test:description rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Two equivalent classes are sub classes of each other.</test:description>
+		<test:normativeSyntax rdf:resource="&test;RDFXML" />
+		<test:status rdf:resource="&test;Approved" />
+		<test:semantics rdf:resource="&test;DIRECT" />
+		<test:semantics rdf:resource="&test;RDF-BASED" />
+		<test:species rdf:resource="&test;FULL" />
+		<test:rdfXmlConclusionOntology rdf:datatype="http://www.w3.org/2001/XMLSchema#string">&lt;rdf:RDF
+    xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+    xmlns:owl="http://www.w3.org/2002/07/owl#"
+    xmlns:xsd="http://www.w3.org/2001/XMLSchema#"
+    xmlns:ex="http://www.example.org#"
+    xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"&gt;
+  &lt;rdf:Description rdf:about="http://www.example.org#c2"&gt;
+    &lt;rdfs:subClassOf&gt;
+      &lt;rdf:Description rdf:about="http://www.example.org#c1"&gt;
+        &lt;rdfs:subClassOf rdf:resource="http://www.example.org#c2"/&gt;
+      &lt;/rdf:Description&gt;
+    &lt;/rdfs:subClassOf&gt;
+  &lt;/rdf:Description&gt;
+&lt;/rdf:RDF&gt;</test:rdfXmlConclusionOntology>
+		<test:rdfXmlPremiseOntology rdf:datatype="http://www.w3.org/2001/XMLSchema#string">&lt;rdf:RDF
+    xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+    xmlns:owl="http://www.w3.org/2002/07/owl#"
+    xmlns:xsd="http://www.w3.org/2001/XMLSchema#"
+    xmlns:ex="http://www.example.org#"
+    xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"&gt;
+  &lt;rdf:Description rdf:about="http://www.example.org#c1"&gt;
+    &lt;owl:equivalentClass rdf:resource="http://www.example.org#c2"/&gt;
+  &lt;/rdf:Description&gt;
+&lt;/rdf:RDF&gt;</test:rdfXmlPremiseOntology>
+	</test:TestCase>
+	<test:TestCase rdf:about="http://owl.semanticweb.org/id/Rdfbased-2Dsem-2Deqdis-2Deqclass-2Dsubclass-2D2">
+		<rdf:type rdf:resource="&test;ProfileIdentificationTest" />
+		<rdf:type rdf:resource="&test;PositiveEntailmentTest" />
+		<rdf:type rdf:resource="&test;ConsistencyTest" />
+		<test:identifier rdf:datatype="http://www.w3.org/2001/XMLSchema#string">rdfbased-sem-eqdis-eqclass-subclass-2</test:identifier>
+		<test:creator rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Michael Schneider</test:creator>
+		<test:creator rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Kai Mainzer</test:creator>
+		<test:description rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Two classes that are sub classes of each other are equivalent classes.</test:description>
+		<test:normativeSyntax rdf:resource="&test;RDFXML" />
+		<test:status rdf:resource="&test;Approved" />
+		<test:semantics rdf:resource="&test;DIRECT" />
+		<test:semantics rdf:resource="&test;RDF-BASED" />
+		<test:species rdf:resource="&test;FULL" />
+		<test:rdfXmlConclusionOntology rdf:datatype="http://www.w3.org/2001/XMLSchema#string">&lt;rdf:RDF
+    xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+    xmlns:owl="http://www.w3.org/2002/07/owl#"
+    xmlns:xsd="http://www.w3.org/2001/XMLSchema#"
+    xmlns:ex="http://www.example.org#"
+    xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"&gt;
+  &lt;rdf:Description rdf:about="http://www.example.org#c1"&gt;
+    &lt;owl:equivalentClass rdf:resource="http://www.example.org#c2"/&gt;
+  &lt;/rdf:Description&gt;
+&lt;/rdf:RDF&gt;</test:rdfXmlConclusionOntology>
+		<test:rdfXmlPremiseOntology rdf:datatype="http://www.w3.org/2001/XMLSchema#string">&lt;rdf:RDF
+    xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+    xmlns:owl="http://www.w3.org/2002/07/owl#"
+    xmlns:xsd="http://www.w3.org/2001/XMLSchema#"
+    xmlns:ex="http://www.example.org#"
+    xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"&gt;
+  &lt;rdf:Description rdf:about="http://www.example.org#c2"&gt;
+    &lt;rdfs:subClassOf&gt;
+      &lt;rdf:Description rdf:about="http://www.example.org#c1"&gt;
+        &lt;rdfs:subClassOf rdf:resource="http://www.example.org#c2"/&gt;
+      &lt;/rdf:Description&gt;
+    &lt;/rdfs:subClassOf&gt;
+  &lt;/rdf:Description&gt;
+&lt;/rdf:RDF&gt;</test:rdfXmlPremiseOntology>
+	</test:TestCase>
+	<test:TestCase rdf:about="http://owl.semanticweb.org/id/Rdfbased-2Dsem-2Deqdis-2Deqclass-2Dsubst">
+		<rdf:type rdf:resource="&test;ProfileIdentificationTest" />
+		<rdf:type rdf:resource="&test;PositiveEntailmentTest" />
+		<rdf:type rdf:resource="&test;ConsistencyTest" />
+		<test:identifier rdf:datatype="http://www.w3.org/2001/XMLSchema#string">rdfbased-sem-eqdis-eqclass-subst</test:identifier>
+		<test:creator rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Michael Schneider</test:creator>
+		<test:creator rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Kai Mainzer</test:creator>
+		<test:description rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Equivalence of two classes allows for substituting one class for the other in a sub class axiom.</test:description>
+		<test:normativeSyntax rdf:resource="&test;RDFXML" />
+		<test:status rdf:resource="&test;Approved" />
+		<test:semantics rdf:resource="&test;DIRECT" />
+		<test:semantics rdf:resource="&test;RDF-BASED" />
+		<test:species rdf:resource="&test;FULL" />
+		<test:rdfXmlConclusionOntology rdf:datatype="http://www.w3.org/2001/XMLSchema#string">&lt;rdf:RDF
+    xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+    xmlns:owl="http://www.w3.org/2002/07/owl#"
+    xmlns:xsd="http://www.w3.org/2001/XMLSchema#"
+    xmlns:ex="http://www.example.org#"
+    xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"&gt;
+  &lt;rdf:Description rdf:about="http://www.example.org#c1"&gt;
+    &lt;rdfs:subClassOf rdf:resource="http://www.example.org#d2"/&gt;
+  &lt;/rdf:Description&gt;
+  &lt;rdf:Description rdf:about="http://www.example.org#d1"&gt;
+    &lt;rdfs:subClassOf rdf:resource="http://www.example.org#c2"/&gt;
+  &lt;/rdf:Description&gt;
+&lt;/rdf:RDF&gt;</test:rdfXmlConclusionOntology>
+		<test:rdfXmlPremiseOntology rdf:datatype="http://www.w3.org/2001/XMLSchema#string">&lt;rdf:RDF
+    xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+    xmlns:owl="http://www.w3.org/2002/07/owl#"
+    xmlns:xsd="http://www.w3.org/2001/XMLSchema#"
+    xmlns:ex="http://www.example.org#"
+    xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"&gt;
+  &lt;rdf:Description rdf:about="http://www.example.org#c1"&gt;
+    &lt;rdfs:subClassOf&gt;
+      &lt;rdf:Description rdf:about="http://www.example.org#c2"&gt;
+        &lt;owl:equivalentClass rdf:resource="http://www.example.org#d2"/&gt;
+      &lt;/rdf:Description&gt;
+    &lt;/rdfs:subClassOf&gt;
+    &lt;owl:equivalentClass rdf:resource="http://www.example.org#d1"/&gt;
+  &lt;/rdf:Description&gt;
+&lt;/rdf:RDF&gt;</test:rdfXmlPremiseOntology>
+	</test:TestCase>
+	<test:TestCase rdf:about="http://owl.semanticweb.org/id/Rdfbased-2Dsem-2Deqdis-2Deqclass-2Dsym">
+		<rdf:type rdf:resource="&test;ProfileIdentificationTest" />
+		<rdf:type rdf:resource="&test;PositiveEntailmentTest" />
+		<rdf:type rdf:resource="&test;ConsistencyTest" />
+		<test:identifier rdf:datatype="http://www.w3.org/2001/XMLSchema#string">rdfbased-sem-eqdis-eqclass-sym</test:identifier>
+		<test:creator rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Michael Schneider</test:creator>
+		<test:creator rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Kai Mainzer</test:creator>
+		<test:description rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Equivalence of two classes is symmetrical.</test:description>
+		<test:normativeSyntax rdf:resource="&test;RDFXML" />
+		<test:status rdf:resource="&test;Approved" />
+		<test:semantics rdf:resource="&test;DIRECT" />
+		<test:semantics rdf:resource="&test;RDF-BASED" />
+		<test:species rdf:resource="&test;FULL" />
+		<test:rdfXmlConclusionOntology rdf:datatype="http://www.w3.org/2001/XMLSchema#string">&lt;rdf:RDF
+    xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+    xmlns:owl="http://www.w3.org/2002/07/owl#"
+    xmlns:xsd="http://www.w3.org/2001/XMLSchema#"
+    xmlns:ex="http://www.example.org#"
+    xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"&gt;
+  &lt;rdf:Description rdf:about="http://www.example.org#c2"&gt;
+    &lt;owl:equivalentClass rdf:resource="http://www.example.org#c1"/&gt;
+  &lt;/rdf:Description&gt;
+&lt;/rdf:RDF&gt;</test:rdfXmlConclusionOntology>
+		<test:rdfXmlPremiseOntology rdf:datatype="http://www.w3.org/2001/XMLSchema#string">&lt;rdf:RDF
+    xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+    xmlns:owl="http://www.w3.org/2002/07/owl#"
+    xmlns:xsd="http://www.w3.org/2001/XMLSchema#"
+    xmlns:ex="http://www.example.org#"
+    xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"&gt;
+  &lt;rdf:Description rdf:about="http://www.example.org#c1"&gt;
+    &lt;owl:equivalentClass rdf:resource="http://www.example.org#c2"/&gt;
+  &lt;/rdf:Description&gt;
+&lt;/rdf:RDF&gt;</test:rdfXmlPremiseOntology>
+	</test:TestCase>
+	<test:TestCase rdf:about="http://owl.semanticweb.org/id/Rdfbased-2Dsem-2Deqdis-2Deqclass-2Dtrans">
+		<rdf:type rdf:resource="&test;ProfileIdentificationTest" />
+		<rdf:type rdf:resource="&test;PositiveEntailmentTest" />
+		<rdf:type rdf:resource="&test;ConsistencyTest" />
+		<test:identifier rdf:datatype="http://www.w3.org/2001/XMLSchema#string">rdfbased-sem-eqdis-eqclass-trans</test:identifier>
+		<test:creator rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Michael Schneider</test:creator>
+		<test:creator rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Kai Mainzer</test:creator>
+		<test:description rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Equivalence of two classes is transitive.</test:description>
+		<test:normativeSyntax rdf:resource="&test;RDFXML" />
+		<test:status rdf:resource="&test;Approved" />
+		<test:semantics rdf:resource="&test;DIRECT" />
+		<test:semantics rdf:resource="&test;RDF-BASED" />
+		<test:species rdf:resource="&test;FULL" />
+		<test:rdfXmlConclusionOntology rdf:datatype="http://www.w3.org/2001/XMLSchema#string">&lt;rdf:RDF
+    xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+    xmlns:owl="http://www.w3.org/2002/07/owl#"
+    xmlns:xsd="http://www.w3.org/2001/XMLSchema#"
+    xmlns:ex="http://www.example.org#"
+    xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"&gt;
+  &lt;rdf:Description rdf:about="http://www.example.org#c1"&gt;
+    &lt;owl:equivalentClass rdf:resource="http://www.example.org#c3"/&gt;
+  &lt;/rdf:Description&gt;
+&lt;/rdf:RDF&gt;</test:rdfXmlConclusionOntology>
+		<test:rdfXmlPremiseOntology rdf:datatype="http://www.w3.org/2001/XMLSchema#string">&lt;rdf:RDF
+    xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+    xmlns:owl="http://www.w3.org/2002/07/owl#"
+    xmlns:xsd="http://www.w3.org/2001/XMLSchema#"
+    xmlns:ex="http://www.example.org#"
+    xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"&gt;
+  &lt;rdf:Description rdf:about="http://www.example.org#c1"&gt;
+    &lt;owl:equivalentClass&gt;
+      &lt;rdf:Description rdf:about="http://www.example.org#c2"&gt;
+        &lt;owl:equivalentClass rdf:resource="http://www.example.org#c3"/&gt;
+      &lt;/rdf:Description&gt;
+    &lt;/owl:equivalentClass&gt;
+  &lt;/rdf:Description&gt;
+&lt;/rdf:RDF&gt;</test:rdfXmlPremiseOntology>
+	</test:TestCase>
+	<test:TestCase rdf:about="http://owl.semanticweb.org/id/Rdfbased-2Dsem-2Deqdis-2Deqprop-2Dinst">
+		<rdf:type rdf:resource="&test;ProfileIdentificationTest" />
+		<rdf:type rdf:resource="&test;PositiveEntailmentTest" />
+		<rdf:type rdf:resource="&test;ConsistencyTest" />
+		<test:identifier rdf:datatype="http://www.w3.org/2001/XMLSchema#string">rdfbased-sem-eqdis-eqprop-inst</test:identifier>
+		<test:creator rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Michael Schneider</test:creator>
+		<test:creator rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Kai Mainzer</test:creator>
+		<test:description rdf:datatype="http://www.w3.org/2001/XMLSchema#string">For two equivalent properties and any triple having one property as its predicate, the corresponding triple having the other property as its predicate also exists, and vice versa.</test:description>
+		<test:normativeSyntax rdf:resource="&test;RDFXML" />
+		<test:status rdf:resource="&test;Approved" />
+		<test:semantics rdf:resource="&test;DIRECT" />
+		<test:semantics rdf:resource="&test;RDF-BASED" />
+		<test:species rdf:resource="&test;FULL" />
+		<test:rdfXmlConclusionOntology rdf:datatype="http://www.w3.org/2001/XMLSchema#string">&lt;rdf:RDF
+    xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+    xmlns:owl="http://www.w3.org/2002/07/owl#"
+    xmlns:xsd="http://www.w3.org/2001/XMLSchema#"
+    xmlns:ex="http://www.example.org#"
+    xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"&gt;
+  &lt;rdf:Description rdf:about="http://www.example.org#s2"&gt;
+    &lt;ex:p1 rdf:resource="http://www.example.org#o2"/&gt;
+  &lt;/rdf:Description&gt;
+  &lt;rdf:Description rdf:about="http://www.example.org#s1"&gt;
+    &lt;ex:p2 rdf:resource="http://www.example.org#o1"/&gt;
+  &lt;/rdf:Description&gt;
+&lt;/rdf:RDF&gt;</test:rdfXmlConclusionOntology>
+		<test:rdfXmlPremiseOntology rdf:datatype="http://www.w3.org/2001/XMLSchema#string">&lt;rdf:RDF
+    xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+    xmlns:owl="http://www.w3.org/2002/07/owl#"
+    xmlns:xsd="http://www.w3.org/2001/XMLSchema#"
+    xmlns:ex="http://www.example.org#"
+    xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"&gt;
+  &lt;rdf:Description rdf:about="http://www.example.org#s2"&gt;
+    &lt;ex:p2 rdf:resource="http://www.example.org#o2"/&gt;
+  &lt;/rdf:Description&gt;
+  &lt;rdf:Description rdf:about="http://www.example.org#s1"&gt;
+    &lt;ex:p1 rdf:resource="http://www.example.org#o1"/&gt;
+  &lt;/rdf:Description&gt;
+  &lt;rdf:Description rdf:about="http://www.example.org#p1"&gt;
+    &lt;owl:equivalentProperty rdf:resource="http://www.example.org#p2"/&gt;
+  &lt;/rdf:Description&gt;
+&lt;/rdf:RDF&gt;</test:rdfXmlPremiseOntology>
+	</test:TestCase>
+	<test:TestCase rdf:about="http://owl.semanticweb.org/id/Rdfbased-2Dsem-2Deqdis-2Deqprop-2Drflxv">
+		<rdf:type rdf:resource="&test;ProfileIdentificationTest" />
+		<rdf:type rdf:resource="&test;PositiveEntailmentTest" />
+		<rdf:type rdf:resource="&test;ConsistencyTest" />
+		<test:identifier rdf:datatype="http://www.w3.org/2001/XMLSchema#string">rdfbased-sem-eqdis-eqprop-rflxv</test:identifier>
+		<test:creator rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Michael Schneider</test:creator>
+		<test:creator rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Kai Mainzer</test:creator>
+		<test:description rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Equivalence of two properties is reflexive.</test:description>
+		<test:normativeSyntax rdf:resource="&test;RDFXML" />
+		<test:status rdf:resource="&test;Approved" />
+		<test:semantics rdf:resource="&test;DIRECT" />
+		<test:semantics rdf:resource="&test;RDF-BASED" />
+		<test:species rdf:resource="&test;FULL" />
+		<test:rdfXmlConclusionOntology rdf:datatype="http://www.w3.org/2001/XMLSchema#string">&lt;rdf:RDF
+    xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+    xmlns:owl="http://www.w3.org/2002/07/owl#"
+    xmlns:xsd="http://www.w3.org/2001/XMLSchema#"
+    xmlns:ex="http://www.example.org#"
+    xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"&gt;
+  &lt;rdf:Description rdf:about="http://www.example.org#dp"&gt;
+    &lt;owl:equivalentProperty rdf:resource="http://www.example.org#dp"/&gt;
+  &lt;/rdf:Description&gt;
+  &lt;rdf:Description rdf:about="http://www.example.org#op"&gt;
+    &lt;owl:equivalentProperty rdf:resource="http://www.example.org#op"/&gt;
+  &lt;/rdf:Description&gt;
+&lt;/rdf:RDF&gt;</test:rdfXmlConclusionOntology>
+		<test:rdfXmlPremiseOntology rdf:datatype="http://www.w3.org/2001/XMLSchema#string">&lt;rdf:RDF
+    xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+    xmlns:owl="http://www.w3.org/2002/07/owl#"
+    xmlns:xsd="http://www.w3.org/2001/XMLSchema#"
+    xmlns:ex="http://www.example.org#"
+    xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"&gt;
+  &lt;owl:ObjectProperty rdf:about="http://www.example.org#op"/&gt;
+  &lt;owl:DatatypeProperty rdf:about="http://www.example.org#dp"/&gt;
+&lt;/rdf:RDF&gt;</test:rdfXmlPremiseOntology>
+	</test:TestCase>
+	<test:TestCase rdf:about="http://owl.semanticweb.org/id/Rdfbased-2Dsem-2Deqdis-2Deqprop-2Dsubprop-2D1">
+		<rdf:type rdf:resource="&test;ProfileIdentificationTest" />
+		<rdf:type rdf:resource="&test;PositiveEntailmentTest" />
+		<rdf:type rdf:resource="&test;ConsistencyTest" />
+		<test:identifier rdf:datatype="http://www.w3.org/2001/XMLSchema#string">rdfbased-sem-eqdis-eqprop-subprop-1</test:identifier>
+		<test:creator rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Michael Schneider</test:creator>
+		<test:creator rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Kai Mainzer</test:creator>
+		<test:description rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Two equivalent properties are sub properties of each other.</test:description>
+		<test:normativeSyntax rdf:resource="&test;RDFXML" />
+		<test:status rdf:resource="&test;Approved" />
+		<test:semantics rdf:resource="&test;DIRECT" />
+		<test:semantics rdf:resource="&test;RDF-BASED" />
+		<test:species rdf:resource="&test;FULL" />
+		<test:rdfXmlConclusionOntology rdf:datatype="http://www.w3.org/2001/XMLSchema#string">&lt;rdf:RDF
+    xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+    xmlns:owl="http://www.w3.org/2002/07/owl#"
+    xmlns:xsd="http://www.w3.org/2001/XMLSchema#"
+    xmlns:ex="http://www.example.org#"
+    xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"&gt;
+  &lt;rdf:Description rdf:about="http://www.example.org#p2"&gt;
+    &lt;rdfs:subPropertyOf&gt;
+      &lt;rdf:Description rdf:about="http://www.example.org#p1"&gt;
+        &lt;rdfs:subPropertyOf rdf:resource="http://www.example.org#p2"/&gt;
+      &lt;/rdf:Description&gt;
+    &lt;/rdfs:subPropertyOf&gt;
+  &lt;/rdf:Description&gt;
+&lt;/rdf:RDF&gt;</test:rdfXmlConclusionOntology>
+		<test:rdfXmlPremiseOntology rdf:datatype="http://www.w3.org/2001/XMLSchema#string">&lt;rdf:RDF
+    xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+    xmlns:owl="http://www.w3.org/2002/07/owl#"
+    xmlns:xsd="http://www.w3.org/2001/XMLSchema#"
+    xmlns:ex="http://www.example.org#"
+    xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"&gt;
+  &lt;rdf:Description rdf:about="http://www.example.org#p1"&gt;
+    &lt;owl:equivalentProperty rdf:resource="http://www.example.org#p2"/&gt;
+  &lt;/rdf:Description&gt;
+&lt;/rdf:RDF&gt;</test:rdfXmlPremiseOntology>
+	</test:TestCase>
+	<test:TestCase rdf:about="http://owl.semanticweb.org/id/Rdfbased-2Dsem-2Deqdis-2Deqprop-2Dsubprop-2D2">
+		<rdf:type rdf:resource="&test;ProfileIdentificationTest" />
+		<rdf:type rdf:resource="&test;PositiveEntailmentTest" />
+		<rdf:type rdf:resource="&test;ConsistencyTest" />
+		<test:identifier rdf:datatype="http://www.w3.org/2001/XMLSchema#string">rdfbased-sem-eqdis-eqprop-subprop-2</test:identifier>
+		<test:creator rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Michael Schneider</test:creator>
+		<test:creator rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Kai Mainzer</test:creator>
+		<test:description rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Two properties that are sub properties of each other are equivalent properties.</test:description>
+		<test:normativeSyntax rdf:resource="&test;RDFXML" />
+		<test:status rdf:resource="&test;Approved" />
+		<test:semantics rdf:resource="&test;DIRECT" />
+		<test:semantics rdf:resource="&test;RDF-BASED" />
+		<test:species rdf:resource="&test;FULL" />
+		<test:rdfXmlConclusionOntology rdf:datatype="http://www.w3.org/2001/XMLSchema#string">&lt;rdf:RDF
+    xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+    xmlns:owl="http://www.w3.org/2002/07/owl#"
+    xmlns:xsd="http://www.w3.org/2001/XMLSchema#"
+    xmlns:ex="http://www.example.org#"
+    xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"&gt;
+  &lt;rdf:Description rdf:about="http://www.example.org#p1"&gt;
+    &lt;owl:equivalentProperty rdf:resource="http://www.example.org#p2"/&gt;
+  &lt;/rdf:Description&gt;
+&lt;/rdf:RDF&gt;</test:rdfXmlConclusionOntology>
+		<test:rdfXmlPremiseOntology rdf:datatype="http://www.w3.org/2001/XMLSchema#string">&lt;rdf:RDF
+    xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+    xmlns:owl="http://www.w3.org/2002/07/owl#"
+    xmlns:xsd="http://www.w3.org/2001/XMLSchema#"
+    xmlns:ex="http://www.example.org#"
+    xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"&gt;
+  &lt;rdf:Description rdf:about="http://www.example.org#p2"&gt;
+    &lt;rdfs:subPropertyOf&gt;
+      &lt;rdf:Description rdf:about="http://www.example.org#p1"&gt;
+        &lt;rdfs:subPropertyOf rdf:resource="http://www.example.org#p2"/&gt;
+      &lt;/rdf:Description&gt;
+    &lt;/rdfs:subPropertyOf&gt;
+  &lt;/rdf:Description&gt;
+&lt;/rdf:RDF&gt;</test:rdfXmlPremiseOntology>
+	</test:TestCase>
+	<test:TestCase rdf:about="http://owl.semanticweb.org/id/Rdfbased-2Dsem-2Deqdis-2Deqprop-2Dsubst">
+		<rdf:type rdf:resource="&test;ProfileIdentificationTest" />
+		<rdf:type rdf:resource="&test;PositiveEntailmentTest" />
+		<rdf:type rdf:resource="&test;ConsistencyTest" />
+		<test:identifier rdf:datatype="http://www.w3.org/2001/XMLSchema#string">rdfbased-sem-eqdis-eqprop-subst</test:identifier>
+		<test:creator rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Michael Schneider</test:creator>
+		<test:creator rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Kai Mainzer</test:creator>
+		<test:description rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Equivalence of two properties allows for substituting one property for the other in a sub property axiom.</test:description>
+		<test:normativeSyntax rdf:resource="&test;RDFXML" />
+		<test:status rdf:resource="&test;Approved" />
+		<test:semantics rdf:resource="&test;DIRECT" />
+		<test:semantics rdf:resource="&test;RDF-BASED" />
+		<test:species rdf:resource="&test;FULL" />
+		<test:rdfXmlConclusionOntology rdf:datatype="http://www.w3.org/2001/XMLSchema#string">&lt;rdf:RDF
+    xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+    xmlns:owl="http://www.w3.org/2002/07/owl#"
+    xmlns:xsd="http://www.w3.org/2001/XMLSchema#"
+    xmlns:ex="http://www.example.org#"
+    xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"&gt;
+  &lt;rdf:Description rdf:about="http://www.example.org#q1"&gt;
+    &lt;rdfs:subPropertyOf rdf:resource="http://www.example.org#p2"/&gt;
+  &lt;/rdf:Description&gt;
+  &lt;rdf:Description rdf:about="http://www.example.org#p1"&gt;
+    &lt;rdfs:subPropertyOf rdf:resource="http://www.example.org#q2"/&gt;
+  &lt;/rdf:Description&gt;
+&lt;/rdf:RDF&gt;</test:rdfXmlConclusionOntology>
+		<test:rdfXmlPremiseOntology rdf:datatype="http://www.w3.org/2001/XMLSchema#string">&lt;rdf:RDF
+    xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+    xmlns:owl="http://www.w3.org/2002/07/owl#"
+    xmlns:xsd="http://www.w3.org/2001/XMLSchema#"
+    xmlns:ex="http://www.example.org#"
+    xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"&gt;
+  &lt;rdf:Description rdf:about="http://www.example.org#p1"&gt;
+    &lt;rdfs:subPropertyOf&gt;
+      &lt;rdf:Description rdf:about="http://www.example.org#p2"&gt;
+        &lt;owl:equivalentProperty rdf:resource="http://www.example.org#q2"/&gt;
+      &lt;/rdf:Description&gt;
+    &lt;/rdfs:subPropertyOf&gt;
+    &lt;owl:equivalentProperty rdf:resource="http://www.example.org#q1"/&gt;
+  &lt;/rdf:Description&gt;
+&lt;/rdf:RDF&gt;</test:rdfXmlPremiseOntology>
+	</test:TestCase>
+	<test:TestCase rdf:about="http://owl.semanticweb.org/id/Rdfbased-2Dsem-2Deqdis-2Deqprop-2Dsym">
+		<rdf:type rdf:resource="&test;ProfileIdentificationTest" />
+		<rdf:type rdf:resource="&test;PositiveEntailmentTest" />
+		<rdf:type rdf:resource="&test;ConsistencyTest" />
+		<test:identifier rdf:datatype="http://www.w3.org/2001/XMLSchema#string">rdfbased-sem-eqdis-eqprop-sym</test:identifier>
+		<test:creator rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Michael Schneider</test:creator>
+		<test:creator rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Kai Mainzer</test:creator>
+		<test:description rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Equivalence of two properties is symmetrical.</test:description>
+		<test:normativeSyntax rdf:resource="&test;RDFXML" />
+		<test:status rdf:resource="&test;Approved" />
+		<test:semantics rdf:resource="&test;DIRECT" />
+		<test:semantics rdf:resource="&test;RDF-BASED" />
+		<test:species rdf:resource="&test;FULL" />
+		<test:rdfXmlConclusionOntology rdf:datatype="http://www.w3.org/2001/XMLSchema#string">&lt;rdf:RDF
+    xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+    xmlns:owl="http://www.w3.org/2002/07/owl#"
+    xmlns:xsd="http://www.w3.org/2001/XMLSchema#"
+    xmlns:ex="http://www.example.org#"
+    xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"&gt;
+  &lt;rdf:Description rdf:about="http://www.example.org#p2"&gt;
+    &lt;owl:equivalentProperty rdf:resource="http://www.example.org#p1"/&gt;
+  &lt;/rdf:Description&gt;
+&lt;/rdf:RDF&gt;</test:rdfXmlConclusionOntology>
+		<test:rdfXmlPremiseOntology rdf:datatype="http://www.w3.org/2001/XMLSchema#string">&lt;rdf:RDF
+    xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+    xmlns:owl="http://www.w3.org/2002/07/owl#"
+    xmlns:xsd="http://www.w3.org/2001/XMLSchema#"
+    xmlns:ex="http://www.example.org#"
+    xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"&gt;
+  &lt;rdf:Description rdf:about="http://www.example.org#p1"&gt;
+    &lt;owl:equivalentProperty rdf:resource="http://www.example.org#p2"/&gt;
+  &lt;/rdf:Description&gt;
+&lt;/rdf:RDF&gt;</test:rdfXmlPremiseOntology>
+	</test:TestCase>
+	<test:TestCase rdf:about="http://owl.semanticweb.org/id/Rdfbased-2Dsem-2Deqdis-2Deqprop-2Dtrans">
+		<rdf:type rdf:resource="&test;ProfileIdentificationTest" />
+		<rdf:type rdf:resource="&test;PositiveEntailmentTest" />
+		<rdf:type rdf:resource="&test;ConsistencyTest" />
+		<test:identifier rdf:datatype="http://www.w3.org/2001/XMLSchema#string">rdfbased-sem-eqdis-eqprop-trans</test:identifier>
+		<test:creator rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Michael Schneider</test:creator>
+		<test:creator rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Kai Mainzer</test:creator>
+		<test:description rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Equivalence of two properties is transitive.</test:description>
+		<test:normativeSyntax rdf:resource="&test;RDFXML" />
+		<test:status rdf:resource="&test;Approved" />
+		<test:semantics rdf:resource="&test;DIRECT" />
+		<test:semantics rdf:resource="&test;RDF-BASED" />
+		<test:species rdf:resource="&test;FULL" />
+		<test:rdfXmlConclusionOntology rdf:datatype="http://www.w3.org/2001/XMLSchema#string">&lt;rdf:RDF
+    xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+    xmlns:owl="http://www.w3.org/2002/07/owl#"
+    xmlns:xsd="http://www.w3.org/2001/XMLSchema#"
+    xmlns:ex="http://www.example.org#"
+    xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"&gt;
+  &lt;rdf:Description rdf:about="http://www.example.org#p1"&gt;
+    &lt;owl:equivalentProperty rdf:resource="http://www.example.org#p3"/&gt;
+  &lt;/rdf:Description&gt;
+&lt;/rdf:RDF&gt;</test:rdfXmlConclusionOntology>
+		<test:rdfXmlPremiseOntology rdf:datatype="http://www.w3.org/2001/XMLSchema#string">&lt;rdf:RDF
+    xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+    xmlns:owl="http://www.w3.org/2002/07/owl#"
+    xmlns:xsd="http://www.w3.org/2001/XMLSchema#"
+    xmlns:ex="http://www.example.org#"
+    xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"&gt;
+  &lt;rdf:Description rdf:about="http://www.example.org#p1"&gt;
+    &lt;owl:equivalentProperty&gt;
+      &lt;rdf:Description rdf:about="http://www.example.org#p2"&gt;
+        &lt;owl:equivalentProperty rdf:resource="http://www.example.org#p3"/&gt;
+      &lt;/rdf:Description&gt;
+    &lt;/owl:equivalentProperty&gt;
+  &lt;/rdf:Description&gt;
+&lt;/rdf:RDF&gt;</test:rdfXmlPremiseOntology>
+	</test:TestCase>
+	<test:TestCase rdf:about="http://owl.semanticweb.org/id/Rdfbased-2Dsem-2Deqdis-2Dsameas-2Drflxv">
+		<rdf:type rdf:resource="&test;ProfileIdentificationTest" />
+		<rdf:type rdf:resource="&test;PositiveEntailmentTest" />
+		<rdf:type rdf:resource="&test;ConsistencyTest" />
+		<test:identifier rdf:datatype="http://www.w3.org/2001/XMLSchema#string">rdfbased-sem-eqdis-sameas-rflxv</test:identifier>
+		<test:creator rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Michael Schneider</test:creator>
+		<test:creator rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Kai Mainzer</test:creator>
+		<test:description rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Equality of two individuals is reflexive.</test:description>
+		<test:normativeSyntax rdf:resource="&test;RDFXML" />
+		<test:status rdf:resource="&test;Approved" />
+		<test:semantics rdf:resource="&test;DIRECT" />
+		<test:semantics rdf:resource="&test;RDF-BASED" />
+		<test:species rdf:resource="&test;FULL" />
+		<test:rdfXmlConclusionOntology rdf:datatype="http://www.w3.org/2001/XMLSchema#string">&lt;rdf:RDF
+    xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+    xmlns:owl="http://www.w3.org/2002/07/owl#"
+    xmlns:xsd="http://www.w3.org/2001/XMLSchema#"
+    xmlns:ex="http://www.example.org#"
+    xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"&gt;
+  &lt;rdf:Description rdf:about="http://www.example.org#s"&gt;
+    &lt;owl:sameAs rdf:resource="http://www.example.org#s"/&gt;
+  &lt;/rdf:Description&gt;
+  &lt;rdf:Description rdf:about="http://www.example.org#o"&gt;
+    &lt;owl:sameAs rdf:resource="http://www.example.org#o"/&gt;
+  &lt;/rdf:Description&gt;
+  &lt;rdf:Description rdf:about="http://www.example.org#p"&gt;
+    &lt;owl:sameAs rdf:resource="http://www.example.org#p"/&gt;
+  &lt;/rdf:Description&gt;
+&lt;/rdf:RDF&gt;</test:rdfXmlConclusionOntology>
+		<test:rdfXmlPremiseOntology rdf:datatype="http://www.w3.org/2001/XMLSchema#string">&lt;rdf:RDF
+    xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+    xmlns:owl="http://www.w3.org/2002/07/owl#"
+    xmlns:xsd="http://www.w3.org/2001/XMLSchema#"
+    xmlns:ex="http://www.example.org#"
+    xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"&gt;
+  &lt;rdf:Description rdf:about="http://www.example.org#s"&gt;
+    &lt;ex:p rdf:resource="http://www.example.org#o"/&gt;
+  &lt;/rdf:Description&gt;
+&lt;/rdf:RDF&gt;</test:rdfXmlPremiseOntology>
+	</test:TestCase>
+	<test:TestCase rdf:about="http://owl.semanticweb.org/id/Rdfbased-2Dsem-2Deqdis-2Dsameas-2Dsubst">
+		<rdf:type rdf:resource="&test;ProfileIdentificationTest" />
+		<rdf:type rdf:resource="&test;PositiveEntailmentTest" />
+		<rdf:type rdf:resource="&test;ConsistencyTest" />
+		<test:identifier rdf:datatype="http://www.w3.org/2001/XMLSchema#string">rdfbased-sem-eqdis-sameas-subst</test:identifier>
+		<test:creator rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Michael Schneider</test:creator>
+		<test:creator rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Kai Mainzer</test:creator>
+		<test:description rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Equality of two individuals allows for substituting the subject, predicate and object of an RDF triple by an equal individual.</test:description>
+		<test:normativeSyntax rdf:resource="&test;RDFXML" />
+		<test:status rdf:resource="&test;Approved" />
+		<test:semantics rdf:resource="&test;DIRECT" />
+		<test:semantics rdf:resource="&test;RDF-BASED" />
+		<test:species rdf:resource="&test;FULL" />
+		<test:rdfXmlConclusionOntology rdf:datatype="http://www.w3.org/2001/XMLSchema#string">&lt;rdf:RDF
+    xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+    xmlns:owl="http://www.w3.org/2002/07/owl#"
+    xmlns:xsd="http://www.w3.org/2001/XMLSchema#"
+    xmlns:ex="http://www.example.org#"
+    xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"&gt;
+  &lt;rdf:Description rdf:about="http://www.example.org#s2"&gt;
+    &lt;ex:p1 rdf:resource="http://www.example.org#o1"/&gt;
+  &lt;/rdf:Description&gt;
+  &lt;rdf:Description rdf:about="http://www.example.org#s1"&gt;
+    &lt;ex:p2 rdf:resource="http://www.example.org#o1"/&gt;
+    &lt;ex:p1 rdf:resource="http://www.example.org#o2"/&gt;
+  &lt;/rdf:Description&gt;
+&lt;/rdf:RDF&gt;</test:rdfXmlConclusionOntology>
+		<test:rdfXmlPremiseOntology rdf:datatype="http://www.w3.org/2001/XMLSchema#string">&lt;rdf:RDF
+    xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+    xmlns:owl="http://www.w3.org/2002/07/owl#"
+    xmlns:xsd="http://www.w3.org/2001/XMLSchema#"
+    xmlns:ex="http://www.example.org#"
+    xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"&gt;
+  &lt;rdf:Description rdf:about="http://www.example.org#s2"&gt;
+    &lt;owl:sameAs&gt;
+      &lt;rdf:Description rdf:about="http://www.example.org#s1"&gt;
+        &lt;ex:p1 rdf:resource="http://www.example.org#o1"/&gt;
+      &lt;/rdf:Description&gt;
+    &lt;/owl:sameAs&gt;
+  &lt;/rdf:Description&gt;
+  &lt;rdf:Description rdf:about="http://www.example.org#o2"&gt;
+    &lt;owl:sameAs rdf:resource="http://www.example.org#o1"/&gt;
+  &lt;/rdf:Description&gt;
+  &lt;rdf:Description rdf:about="http://www.example.org#p2"&gt;
+    &lt;owl:sameAs rdf:resource="http://www.example.org#p1"/&gt;
+  &lt;/rdf:Description&gt;
+&lt;/rdf:RDF&gt;</test:rdfXmlPremiseOntology>
+	</test:TestCase>
+	<test:TestCase rdf:about="http://owl.semanticweb.org/id/Rdfbased-2Dsem-2Deqdis-2Dsameas-2Dsym">
+		<rdf:type rdf:resource="&test;ProfileIdentificationTest" />
+		<rdf:type rdf:resource="&test;PositiveEntailmentTest" />
+		<rdf:type rdf:resource="&test;ConsistencyTest" />
+		<test:identifier rdf:datatype="http://www.w3.org/2001/XMLSchema#string">rdfbased-sem-eqdis-sameas-sym</test:identifier>
+		<test:creator rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Michael Schneider</test:creator>
+		<test:creator rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Kai Mainzer</test:creator>
+		<test:description rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Equality of two individuals is symmetrical.</test:description>
+		<test:normativeSyntax rdf:resource="&test;RDFXML" />
+		<test:status rdf:resource="&test;Approved" />
+		<test:semantics rdf:resource="&test;DIRECT" />
+		<test:semantics rdf:resource="&test;RDF-BASED" />
+		<test:species rdf:resource="&test;FULL" />
+		<test:rdfXmlConclusionOntology rdf:datatype="http://www.w3.org/2001/XMLSchema#string">&lt;rdf:RDF
+    xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+    xmlns:owl="http://www.w3.org/2002/07/owl#"
+    xmlns:xsd="http://www.w3.org/2001/XMLSchema#"
+    xmlns:ex="http://www.example.org#"
+    xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"&gt;
+  &lt;rdf:Description rdf:about="http://www.example.org#y"&gt;
+    &lt;owl:sameAs rdf:resource="http://www.example.org#x"/&gt;
+  &lt;/rdf:Description&gt;
+&lt;/rdf:RDF&gt;</test:rdfXmlConclusionOntology>
+		<test:rdfXmlPremiseOntology rdf:datatype="http://www.w3.org/2001/XMLSchema#string">&lt;rdf:RDF
+    xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+    xmlns:owl="http://www.w3.org/2002/07/owl#"
+    xmlns:xsd="http://www.w3.org/2001/XMLSchema#"
+    xmlns:ex="http://www.example.org#"
+    xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"&gt;
+  &lt;rdf:Description rdf:about="http://www.example.org#x"&gt;
+    &lt;owl:sameAs rdf:resource="http://www.example.org#y"/&gt;
+  &lt;/rdf:Description&gt;
+&lt;/rdf:RDF&gt;</test:rdfXmlPremiseOntology>
+	</test:TestCase>
+	<test:TestCase rdf:about="http://owl.semanticweb.org/id/Rdfbased-2Dsem-2Deqdis-2Dsameas-2Dtrans">
+		<rdf:type rdf:resource="&test;ProfileIdentificationTest" />
+		<rdf:type rdf:resource="&test;PositiveEntailmentTest" />
+		<rdf:type rdf:resource="&test;ConsistencyTest" />
+		<test:identifier rdf:datatype="http://www.w3.org/2001/XMLSchema#string">rdfbased-sem-eqdis-sameas-trans</test:identifier>
+		<test:creator rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Michael Schneider</test:creator>
+		<test:creator rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Kai Mainzer</test:creator>
+		<test:description rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Equality of two individuals is transitive.</test:description>
+		<test:normativeSyntax rdf:resource="&test;RDFXML" />
+		<test:status rdf:resource="&test;Approved" />
+		<test:semantics rdf:resource="&test;DIRECT" />
+		<test:semantics rdf:resource="&test;RDF-BASED" />
+		<test:species rdf:resource="&test;FULL" />
+		<test:rdfXmlConclusionOntology rdf:datatype="http://www.w3.org/2001/XMLSchema#string">&lt;rdf:RDF
+    xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+    xmlns:owl="http://www.w3.org/2002/07/owl#"
+    xmlns:xsd="http://www.w3.org/2001/XMLSchema#"
+    xmlns:ex="http://www.example.org#"
+    xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"&gt;
+  &lt;rdf:Description rdf:about="http://www.example.org#x"&gt;
+    &lt;owl:sameAs rdf:resource="http://www.example.org#z"/&gt;
+  &lt;/rdf:Description&gt;
+&lt;/rdf:RDF&gt;</test:rdfXmlConclusionOntology>
+		<test:rdfXmlPremiseOntology rdf:datatype="http://www.w3.org/2001/XMLSchema#string">&lt;rdf:RDF
+    xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+    xmlns:owl="http://www.w3.org/2002/07/owl#"
+    xmlns:xsd="http://www.w3.org/2001/XMLSchema#"
+    xmlns:ex="http://www.example.org#"
+    xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"&gt;
+  &lt;rdf:Description rdf:about="http://www.example.org#x"&gt;
+    &lt;owl:sameAs&gt;
+      &lt;rdf:Description rdf:about="http://www.example.org#y"&gt;
+        &lt;owl:sameAs rdf:resource="http://www.example.org#z"/&gt;
+      &lt;/rdf:Description&gt;
+    &lt;/owl:sameAs&gt;
+  &lt;/rdf:Description&gt;
+&lt;/rdf:RDF&gt;</test:rdfXmlPremiseOntology>
+	</test:TestCase>
+	<test:TestCase rdf:about="http://owl.semanticweb.org/id/Rdfbased-2Dsem-2Dinv-2Dinst">
+		<rdf:type rdf:resource="&test;ProfileIdentificationTest" />
+		<rdf:type rdf:resource="&test;PositiveEntailmentTest" />
+		<rdf:type rdf:resource="&test;ConsistencyTest" />
+		<test:identifier rdf:datatype="http://www.w3.org/2001/XMLSchema#string">rdfbased-sem-inv-inst</test:identifier>
+		<test:creator rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Michael Schneider</test:creator>
+		<test:creator rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Kai Mainzer</test:creator>
+		<test:description rdf:datatype="http://www.w3.org/2001/XMLSchema#string">The subject and object of a triple are reversed by an inverse property.</test:description>
+		<test:normativeSyntax rdf:resource="&test;RDFXML" />
+		<test:status rdf:resource="&test;Approved" />
+		<test:semantics rdf:resource="&test;DIRECT" />
+		<test:semantics rdf:resource="&test;RDF-BASED" />
+		<test:species rdf:resource="&test;FULL" />
+		<test:rdfXmlConclusionOntology rdf:datatype="http://www.w3.org/2001/XMLSchema#string">&lt;rdf:RDF
+    xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+    xmlns:owl="http://www.w3.org/2002/07/owl#"
+    xmlns:xsd="http://www.w3.org/2001/XMLSchema#"
+    xmlns:ex="http://www.example.org#"
+    xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"&gt;
+  &lt;rdf:Description rdf:about="http://www.example.org#o1"&gt;
+    &lt;ex:q rdf:resource="http://www.example.org#s1"/&gt;
+  &lt;/rdf:Description&gt;
+  &lt;rdf:Description rdf:about="http://www.example.org#o2"&gt;
+    &lt;ex:p rdf:resource="http://www.example.org#s2"/&gt;
+  &lt;/rdf:Description&gt;
+&lt;/rdf:RDF&gt;</test:rdfXmlConclusionOntology>
+		<test:rdfXmlPremiseOntology rdf:datatype="http://www.w3.org/2001/XMLSchema#string">&lt;rdf:RDF
+    xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+    xmlns:owl="http://www.w3.org/2002/07/owl#"
+    xmlns:xsd="http://www.w3.org/2001/XMLSchema#"
+    xmlns:ex="http://www.example.org#"
+    xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"&gt;
+  &lt;rdf:Description rdf:about="http://www.example.org#s2"&gt;
+    &lt;ex:q rdf:resource="http://www.example.org#o2"/&gt;
+  &lt;/rdf:Description&gt;
+  &lt;rdf:Description rdf:about="http://www.example.org#s1"&gt;
+    &lt;ex:p rdf:resource="http://www.example.org#o1"/&gt;
+  &lt;/rdf:Description&gt;
+  &lt;rdf:Description rdf:about="http://www.example.org#q"&gt;
+    &lt;owl:inverseOf rdf:resource="http://www.example.org#p"/&gt;
+  &lt;/rdf:Description&gt;
+&lt;/rdf:RDF&gt;</test:rdfXmlPremiseOntology>
+	</test:TestCase>
+	<test:TestCase rdf:about="http://owl.semanticweb.org/id/Rdfbased-2Dsem-2Dkey-2Ddef">
+		<rdf:type rdf:resource="&test;ProfileIdentificationTest" />
+		<rdf:type rdf:resource="&test;PositiveEntailmentTest" />
+		<rdf:type rdf:resource="&test;ConsistencyTest" />
+		<test:identifier rdf:datatype="http://www.w3.org/2001/XMLSchema#string">rdfbased-sem-key-def</test:identifier>
+		<test:creator rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Michael Schneider</test:creator>
+		<test:creator rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Kai Mainzer</test:creator>
+		<test:description rdf:datatype="http://www.w3.org/2001/XMLSchema#string">For two triples matching the conditions of a key axiom the subjects are identified.</test:description>
+		<test:normativeSyntax rdf:resource="&test;RDFXML" />
+		<test:status rdf:resource="&test;Approved" />
+		<test:semantics rdf:resource="&test;DIRECT" />
+		<test:semantics rdf:resource="&test;RDF-BASED" />
+		<test:species rdf:resource="&test;FULL" />
+		<test:rdfXmlConclusionOntology rdf:datatype="http://www.w3.org/2001/XMLSchema#string">&lt;rdf:RDF
+    xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+    xmlns:owl="http://www.w3.org/2002/07/owl#"
+    xmlns:xsd="http://www.w3.org/2001/XMLSchema#"
+    xmlns:ex="http://www.example.org#"
+    xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"&gt;
+  &lt;rdf:Description rdf:about="http://www.example.org#x"&gt;
+    &lt;owl:sameAs rdf:resource="http://www.example.org#y"/&gt;
+  &lt;/rdf:Description&gt;
+&lt;/rdf:RDF&gt;</test:rdfXmlConclusionOntology>
+		<test:rdfXmlPremiseOntology rdf:datatype="http://www.w3.org/2001/XMLSchema#string">&lt;rdf:RDF
+    xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+    xmlns:owl="http://www.w3.org/2002/07/owl#"
+    xmlns:xsd="http://www.w3.org/2001/XMLSchema#"
+    xmlns:ex="http://www.example.org#"
+    xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"&gt;
+  &lt;ex:c rdf:about="http://www.example.org#x"&gt;
+    &lt;ex:p1 rdf:resource="http://www.example.org#z"/&gt;
+    &lt;ex:p2&gt;data&lt;/ex:p2&gt;
+  &lt;/ex:c&gt;
+  &lt;ex:c rdf:about="http://www.example.org#y"&gt;
+    &lt;ex:p1 rdf:resource="http://www.example.org#z"/&gt;
+    &lt;ex:p2&gt;data&lt;/ex:p2&gt;
+  &lt;/ex:c&gt;
+  &lt;rdf:Description rdf:about="http://www.example.org#c"&gt;
+    &lt;owl:hasKey rdf:parseType="Collection"&gt;
+      &lt;rdf:Description rdf:about="http://www.example.org#p1"/&gt;
+      &lt;rdf:Description rdf:about="http://www.example.org#p2"/&gt;
+    &lt;/owl:hasKey&gt;
+  &lt;/rdf:Description&gt;
+&lt;/rdf:RDF&gt;</test:rdfXmlPremiseOntology>
+	</test:TestCase>
+	<test:TestCase rdf:about="http://owl.semanticweb.org/id/Rdfbased-2Dsem-2Dndis-2Dalldifferent-2Dfw">
+		<rdf:type rdf:resource="&test;ProfileIdentificationTest" />
+		<rdf:type rdf:resource="&test;InconsistencyTest" />
+		<test:identifier rdf:datatype="http://www.w3.org/2001/XMLSchema#string">rdfbased-sem-ndis-alldifferent-fw</test:identifier>
+		<test:creator rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Michael Schneider</test:creator>
+		<test:creator rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Kai Mainzer</test:creator>
+		<test:description rdf:datatype="http://www.w3.org/2001/XMLSchema#string">All the members of an owl:AllDifferent construct are mutually different individuals.</test:description>
+		<test:normativeSyntax rdf:resource="&test;RDFXML" />
+		<test:status rdf:resource="&test;Approved" />
+		<test:semantics rdf:resource="&test;DIRECT" />
+		<test:semantics rdf:resource="&test;RDF-BASED" />
+		<test:species rdf:resource="&test;FULL" />
+		<test:rdfXmlPremiseOntology rdf:datatype="http://www.w3.org/2001/XMLSchema#string">&lt;rdf:RDF
+    xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+    xmlns:owl="http://www.w3.org/2002/07/owl#"
+    xmlns:xsd="http://www.w3.org/2001/XMLSchema#"
+    xmlns:ex="http://www.example.org#"
+    xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"&gt;
+  &lt;owl:AllDifferent rdf:about="http://www.example.org#z"&gt;
+    &lt;owl:members rdf:parseType="Collection"&gt;
+      &lt;rdf:Description rdf:about="http://www.example.org#w1"&gt;
+        &lt;owl:sameAs rdf:resource="http://www.example.org#w2"/&gt;
+      &lt;/rdf:Description&gt;
+      &lt;rdf:Description rdf:about="http://www.example.org#w2"/&gt;
+      &lt;rdf:Description rdf:about="http://www.example.org#w3"/&gt;
+    &lt;/owl:members&gt;
+  &lt;/owl:AllDifferent&gt;
+&lt;/rdf:RDF&gt;</test:rdfXmlPremiseOntology>
+	</test:TestCase>
+	<test:TestCase rdf:about="http://owl.semanticweb.org/id/Rdfbased-2Dsem-2Dndis-2Dalldifferent-2Dfw-2Ddistinctmembers">
+		<rdf:type rdf:resource="&test;ProfileIdentificationTest" />
+		<rdf:type rdf:resource="&test;InconsistencyTest" />
+		<test:identifier rdf:datatype="http://www.w3.org/2001/XMLSchema#string">rdfbased-sem-ndis-alldifferent-fw-distinctmembers</test:identifier>
+		<test:creator rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Michael Schneider</test:creator>
+		<test:creator rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Kai Mainzer</test:creator>
+		<test:description rdf:datatype="http://www.w3.org/2001/XMLSchema#string">All the members of an owl:AllDifferent construct are mutually different from each other. This test applies the legacy property owl:distinctMembers.</test:description>
+		<test:normativeSyntax rdf:resource="&test;RDFXML" />
+		<test:status rdf:resource="&test;Approved" />
+		<test:semantics rdf:resource="&test;DIRECT" />
+		<test:semantics rdf:resource="&test;RDF-BASED" />
+		<test:species rdf:resource="&test;FULL" />
+		<test:rdfXmlPremiseOntology rdf:datatype="http://www.w3.org/2001/XMLSchema#string">&lt;rdf:RDF
+    xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+    xmlns:owl="http://www.w3.org/2002/07/owl#"
+    xmlns:xsd="http://www.w3.org/2001/XMLSchema#"
+    xmlns:ex="http://www.example.org#"
+    xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"&gt;
+  &lt;owl:AllDifferent rdf:about="http://www.example.org#z"&gt;
+    &lt;owl:distinctMembers rdf:parseType="Collection"&gt;
+      &lt;rdf:Description rdf:about="http://www.example.org#w1"&gt;
+        &lt;owl:sameAs rdf:resource="http://www.example.org#w2"/&gt;
+      &lt;/rdf:Description&gt;
+      &lt;rdf:Description rdf:about="http://www.example.org#w2"/&gt;
+      &lt;rdf:Description rdf:about="http://www.example.org#w3"/&gt;
+    &lt;/owl:distinctMembers&gt;
+  &lt;/owl:AllDifferent&gt;
+&lt;/rdf:RDF&gt;</test:rdfXmlPremiseOntology>
+	</test:TestCase>
+	<test:TestCase rdf:about="http://owl.semanticweb.org/id/Rdfbased-2Dsem-2Dndis-2Dalldisjointclasses-2Dfw">
+		<rdf:type rdf:resource="&test;ProfileIdentificationTest" />
+		<rdf:type rdf:resource="&test;InconsistencyTest" />
+		<test:identifier rdf:datatype="http://www.w3.org/2001/XMLSchema#string">rdfbased-sem-ndis-alldisjointclasses-fw</test:identifier>
+		<test:creator rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Michael Schneider</test:creator>
+		<test:creator rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Kai Mainzer</test:creator>
+		<test:description rdf:datatype="http://www.w3.org/2001/XMLSchema#string">All the members of an owl:AllDisjointClasses construct are mutually disjoint classes.</test:description>
+		<test:normativeSyntax rdf:resource="&test;RDFXML" />
+		<test:status rdf:resource="&test;Approved" />
+		<test:semantics rdf:resource="&test;DIRECT" />
+		<test:semantics rdf:resource="&test;RDF-BASED" />
+		<test:species rdf:resource="&test;FULL" />
+		<test:rdfXmlPremiseOntology rdf:datatype="http://www.w3.org/2001/XMLSchema#string">&lt;rdf:RDF
+    xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+    xmlns:owl="http://www.w3.org/2002/07/owl#"
+    xmlns:xsd="http://www.w3.org/2001/XMLSchema#"
+    xmlns:ex="http://www.example.org#"
+    xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"&gt;
+  &lt;owl:AllDisjointClasses rdf:about="http://www.example.org#z"&gt;
+    &lt;owl:members rdf:parseType="Collection"&gt;
+      &lt;rdf:Description rdf:about="http://www.example.org#c1"/&gt;
+      &lt;rdf:Description rdf:about="http://www.example.org#c2"/&gt;
+      &lt;rdf:Description rdf:about="http://www.example.org#c3"/&gt;
+    &lt;/owl:members&gt;
+  &lt;/owl:AllDisjointClasses&gt;
+  &lt;ex:c1 rdf:about="http://www.example.org#w"&gt;
+    &lt;rdf:type rdf:resource="http://www.example.org#c2"/&gt;
+  &lt;/ex:c1&gt;
+&lt;/rdf:RDF&gt;</test:rdfXmlPremiseOntology>
+	</test:TestCase>
+	<test:TestCase rdf:about="http://owl.semanticweb.org/id/Rdfbased-2Dsem-2Dndis-2Dalldisjointproperties-2Dfw">
+		<rdf:type rdf:resource="&test;ProfileIdentificationTest" />
+		<rdf:type rdf:resource="&test;InconsistencyTest" />
+		<test:identifier rdf:datatype="http://www.w3.org/2001/XMLSchema#string">rdfbased-sem-ndis-alldisjointproperties-fw</test:identifier>
+		<test:creator rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Michael Schneider</test:creator>
+		<test:creator rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Kai Mainzer</test:creator>
+		<test:description rdf:datatype="http://www.w3.org/2001/XMLSchema#string">All the members of an owl:AllDisjointProperties construct are mutually disjoint properties.</test:description>
+		<test:normativeSyntax rdf:resource="&test;RDFXML" />
+		<test:status rdf:resource="&test;Approved" />
+		<test:semantics rdf:resource="&test;DIRECT" />
+		<test:semantics rdf:resource="&test;RDF-BASED" />
+		<test:species rdf:resource="&test;FULL" />
+		<test:rdfXmlPremiseOntology rdf:datatype="http://www.w3.org/2001/XMLSchema#string">&lt;rdf:RDF
+    xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+    xmlns:owl="http://www.w3.org/2002/07/owl#"
+    xmlns:xsd="http://www.w3.org/2001/XMLSchema#"
+    xmlns:ex="http://www.example.org#"
+    xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"&gt;
+  &lt;owl:AllDisjointProperties rdf:about="http://www.example.org#z"&gt;
+    &lt;owl:members rdf:parseType="Collection"&gt;
+      &lt;rdf:Description rdf:about="http://www.example.org#p1"/&gt;
+      &lt;rdf:Description rdf:about="http://www.example.org#p2"/&gt;
+      &lt;rdf:Description rdf:about="http://www.example.org#p3"/&gt;
+    &lt;/owl:members&gt;
+  &lt;/owl:AllDisjointProperties&gt;
+  &lt;rdf:Description rdf:about="http://www.example.org#s"&gt;
+    &lt;ex:p1 rdf:resource="http://www.example.org#o"/&gt;
+    &lt;ex:p2 rdf:resource="http://www.example.org#o"/&gt;
+  &lt;/rdf:Description&gt;
+&lt;/rdf:RDF&gt;</test:rdfXmlPremiseOntology>
+	</test:TestCase>
+	<test:TestCase rdf:about="http://owl.semanticweb.org/id/Rdfbased-2Dsem-2Dnpa-2Ddat-2Dfw">
+		<rdf:type rdf:resource="&test;ProfileIdentificationTest" />
+		<rdf:type rdf:resource="&test;InconsistencyTest" />
+		<test:identifier rdf:datatype="http://www.w3.org/2001/XMLSchema#string">rdfbased-sem-npa-dat-fw</test:identifier>
+		<test:creator rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Michael Schneider</test:creator>
+		<test:creator rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Kai Mainzer</test:creator>
+		<test:description rdf:datatype="http://www.w3.org/2001/XMLSchema#string">A negative data property assertion DNPA(s p "data") must not occur together with the corresponding positive data property assertion s p "data".</test:description>
+		<test:normativeSyntax rdf:resource="&test;RDFXML" />
+		<test:status rdf:resource="&test;Approved" />
+		<test:semantics rdf:resource="&test;DIRECT" />
+		<test:semantics rdf:resource="&test;RDF-BASED" />
+		<test:species rdf:resource="&test;FULL" />
+		<test:rdfXmlPremiseOntology rdf:datatype="http://www.w3.org/2001/XMLSchema#string">&lt;rdf:RDF
+    xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+    xmlns:owl="http://www.w3.org/2002/07/owl#"
+    xmlns:xsd="http://www.w3.org/2001/XMLSchema#"
+    xmlns:ex="http://www.example.org#"
+    xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"&gt;
+  &lt;rdf:Description rdf:about="http://www.example.org#z"&gt;
+    &lt;owl:sourceIndividual&gt;
+      &lt;rdf:Description rdf:about="http://www.example.org#s"&gt;
+        &lt;ex:p&gt;data&lt;/ex:p&gt;
+      &lt;/rdf:Description&gt;
+    &lt;/owl:sourceIndividual&gt;
+    &lt;owl:assertionProperty rdf:resource="http://www.example.org#p"/&gt;
+    &lt;owl:targetValue&gt;data&lt;/owl:targetValue&gt;
+  &lt;/rdf:Description&gt;
+&lt;/rdf:RDF&gt;</test:rdfXmlPremiseOntology>
+	</test:TestCase>
+	<test:TestCase rdf:about="http://owl.semanticweb.org/id/Rdfbased-2Dsem-2Dnpa-2Dind-2Dfw">
+		<rdf:type rdf:resource="&test;ProfileIdentificationTest" />
+		<rdf:type rdf:resource="&test;InconsistencyTest" />
+		<test:identifier rdf:datatype="http://www.w3.org/2001/XMLSchema#string">rdfbased-sem-npa-ind-fw</test:identifier>
+		<test:creator rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Michael Schneider</test:creator>
+		<test:creator rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Kai Mainzer</test:creator>
+		<test:description rdf:datatype="http://www.w3.org/2001/XMLSchema#string">A negative property assertion NPA(s p o) must not occur together with the corresponding positive property assertion s p o.</test:description>
+		<test:normativeSyntax rdf:resource="&test;RDFXML" />
+		<test:status rdf:resource="&test;Approved" />
+		<test:semantics rdf:resource="&test;DIRECT" />
+		<test:semantics rdf:resource="&test;RDF-BASED" />
+		<test:species rdf:resource="&test;FULL" />
+		<test:rdfXmlPremiseOntology rdf:datatype="http://www.w3.org/2001/XMLSchema#string">&lt;rdf:RDF
+    xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+    xmlns:owl="http://www.w3.org/2002/07/owl#"
+    xmlns:xsd="http://www.w3.org/2001/XMLSchema#"
+    xmlns:ex="http://www.example.org#"
+    xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"&gt;
+  &lt;rdf:Description rdf:about="http://www.example.org#z"&gt;
+    &lt;owl:sourceIndividual&gt;
+      &lt;rdf:Description rdf:about="http://www.example.org#s"&gt;
+        &lt;ex:p rdf:resource="http://www.example.org#o"/&gt;
+      &lt;/rdf:Description&gt;
+    &lt;/owl:sourceIndividual&gt;
+    &lt;owl:assertionProperty rdf:resource="http://www.example.org#p"/&gt;
+    &lt;owl:targetIndividual rdf:resource="http://www.example.org#o"/&gt;
+  &lt;/rdf:Description&gt;
+&lt;/rdf:RDF&gt;</test:rdfXmlPremiseOntology>
+	</test:TestCase>
+	<test:TestCase rdf:about="http://owl.semanticweb.org/id/Rdfbased-2Dsem-2Dprop-2Dbackwardcompatiblewith-2Dtype-2Dannot">
+		<rdf:type rdf:resource="&test;ProfileIdentificationTest" />
+		<rdf:type rdf:resource="&test;PositiveEntailmentTest" />
+		<rdf:type rdf:resource="&test;ConsistencyTest" />
+		<test:identifier rdf:datatype="http://www.w3.org/2001/XMLSchema#string">rdfbased-sem-prop-backwardcompatiblewith-type-annot</test:identifier>
+		<test:creator rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Michael Schneider</test:creator>
+		<test:creator rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Kai Mainzer</test:creator>
+		<test:description rdf:datatype="http://www.w3.org/2001/XMLSchema#string">The type of the vocabulary property owl:backwardCompatibleWith is the class of annotation properties.</test:description>
+		<test:normativeSyntax rdf:resource="&test;RDFXML" />
+		<test:status rdf:resource="&test;Approved" />
+		<test:semantics rdf:resource="&test;DIRECT" />
+		<test:semantics rdf:resource="&test;RDF-BASED" />
+		<test:species rdf:resource="&test;FULL" />
+		<test:rdfXmlConclusionOntology rdf:datatype="http://www.w3.org/2001/XMLSchema#string">&lt;rdf:RDF
+    xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+    xmlns:owl="http://www.w3.org/2002/07/owl#"
+    xmlns:xsd="http://www.w3.org/2001/XMLSchema#"
+    xmlns:ex="http://www.example.org#"
+    xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"&gt;
+  &lt;owl:AnnotationProperty rdf:about="http://www.w3.org/2002/07/owl#backwardCompatibleWith"/&gt;
+&lt;/rdf:RDF&gt;</test:rdfXmlConclusionOntology>
+		<test:rdfXmlPremiseOntology rdf:datatype="http://www.w3.org/2001/XMLSchema#string">&lt;rdf:RDF
+    xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+    xmlns:owl="http://www.w3.org/2002/07/owl#"
+    xmlns:xsd="http://www.w3.org/2001/XMLSchema#"
+    xmlns:ex="http://www.example.org#"
+    xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"&gt;
+&lt;/rdf:RDF&gt;</test:rdfXmlPremiseOntology>
+	</test:TestCase>
+	<test:TestCase rdf:about="http://owl.semanticweb.org/id/Rdfbased-2Dsem-2Dprop-2Dcomment-2Dtype">
+		<rdf:type rdf:resource="&test;ProfileIdentificationTest" />
+		<rdf:type rdf:resource="&test;PositiveEntailmentTest" />
+		<rdf:type rdf:resource="&test;ConsistencyTest" />
+		<test:identifier rdf:datatype="http://www.w3.org/2001/XMLSchema#string">rdfbased-sem-prop-comment-type</test:identifier>
+		<test:creator rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Michael Schneider</test:creator>
+		<test:creator rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Kai Mainzer</test:creator>
+		<test:description rdf:datatype="http://www.w3.org/2001/XMLSchema#string">The type of the vocabulary property rdfs:comment is the class of annotation properties.</test:description>
+		<test:normativeSyntax rdf:resource="&test;RDFXML" />
+		<test:status rdf:resource="&test;Approved" />
+		<test:semantics rdf:resource="&test;DIRECT" />
+		<test:semantics rdf:resource="&test;RDF-BASED" />
+		<test:species rdf:resource="&test;FULL" />
+		<test:rdfXmlConclusionOntology rdf:datatype="http://www.w3.org/2001/XMLSchema#string">&lt;rdf:RDF
+    xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+    xmlns:owl="http://www.w3.org/2002/07/owl#"
+    xmlns:xsd="http://www.w3.org/2001/XMLSchema#"
+    xmlns:ex="http://www.example.org#"
+    xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"&gt;
+  &lt;owl:AnnotationProperty rdf:about="http://www.w3.org/2000/01/rdf-schema#comment"/&gt;
+&lt;/rdf:RDF&gt;</test:rdfXmlConclusionOntology>
+		<test:rdfXmlPremiseOntology rdf:datatype="http://www.w3.org/2001/XMLSchema#string">&lt;rdf:RDF
+    xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+    xmlns:owl="http://www.w3.org/2002/07/owl#"
+    xmlns:xsd="http://www.w3.org/2001/XMLSchema#"
+    xmlns:ex="http://www.example.org#"
+    xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"&gt;
+&lt;/rdf:RDF&gt;</test:rdfXmlPremiseOntology>
+	</test:TestCase>
+	<test:TestCase rdf:about="http://owl.semanticweb.org/id/Rdfbased-2Dsem-2Dprop-2Ddeprecated-2Dtype">
+		<rdf:type rdf:resource="&test;ProfileIdentificationTest" />
+		<rdf:type rdf:resource="&test;PositiveEntailmentTest" />
+		<rdf:type rdf:resource="&test;ConsistencyTest" />
+		<test:identifier rdf:datatype="http://www.w3.org/2001/XMLSchema#string">rdfbased-sem-prop-deprecated-type</test:identifier>
+		<test:creator rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Michael Schneider</test:creator>
+		<test:creator rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Kai Mainzer</test:creator>
+		<test:description rdf:datatype="http://www.w3.org/2001/XMLSchema#string">The type of the vocabulary property owl:deprecated is the class of annotation properties.</test:description>
+		<test:normativeSyntax rdf:resource="&test;RDFXML" />
+		<test:status rdf:resource="&test;Approved" />
+		<test:semantics rdf:resource="&test;DIRECT" />
+		<test:semantics rdf:resource="&test;RDF-BASED" />
+		<test:species rdf:resource="&test;FULL" />
+		<test:rdfXmlConclusionOntology rdf:datatype="http://www.w3.org/2001/XMLSchema#string">&lt;rdf:RDF
+    xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+    xmlns:owl="http://www.w3.org/2002/07/owl#"
+    xmlns:xsd="http://www.w3.org/2001/XMLSchema#"
+    xmlns:ex="http://www.example.org#"
+    xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"&gt;
+  &lt;owl:AnnotationProperty rdf:about="http://www.w3.org/2002/07/owl#deprecated"/&gt;
+&lt;/rdf:RDF&gt;</test:rdfXmlConclusionOntology>
+		<test:rdfXmlPremiseOntology rdf:datatype="http://www.w3.org/2001/XMLSchema#string">&lt;rdf:RDF
+    xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+    xmlns:owl="http://www.w3.org/2002/07/owl#"
+    xmlns:xsd="http://www.w3.org/2001/XMLSchema#"
+    xmlns:ex="http://www.example.org#"
+    xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"&gt;
+&lt;/rdf:RDF&gt;</test:rdfXmlPremiseOntology>
+	</test:TestCase>
+	<test:TestCase rdf:about="http://owl.semanticweb.org/id/Rdfbased-2Dsem-2Dprop-2Dincompatiblewith-2Dtype-2Dannot">
+		<rdf:type rdf:resource="&test;ProfileIdentificationTest" />
+		<rdf:type rdf:resource="&test;PositiveEntailmentTest" />
+		<rdf:type rdf:resource="&test;ConsistencyTest" />
+		<test:identifier rdf:datatype="http://www.w3.org/2001/XMLSchema#string">rdfbased-sem-prop-incompatiblewith-type-annot</test:identifier>
+		<test:creator rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Michael Schneider</test:creator>
+		<test:creator rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Kai Mainzer</test:creator>
+		<test:description rdf:datatype="http://www.w3.org/2001/XMLSchema#string">The type of the vocabulary property owl:incompatibleWith is the class of annotation properties.</test:description>
+		<test:normativeSyntax rdf:resource="&test;RDFXML" />
+		<test:status rdf:resource="&test;Approved" />
+		<test:semantics rdf:resource="&test;DIRECT" />
+		<test:semantics rdf:resource="&test;RDF-BASED" />
+		<test:species rdf:resource="&test;FULL" />
+		<test:rdfXmlConclusionOntology rdf:datatype="http://www.w3.org/2001/XMLSchema#string">&lt;rdf:RDF
+    xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+    xmlns:owl="http://www.w3.org/2002/07/owl#"
+    xmlns:xsd="http://www.w3.org/2001/XMLSchema#"
+    xmlns:ex="http://www.example.org#"
+    xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"&gt;
+  &lt;owl:AnnotationProperty rdf:about="http://www.w3.org/2002/07/owl#incompatibleWith"/&gt;
+&lt;/rdf:RDF&gt;</test:rdfXmlConclusionOntology>
+		<test:rdfXmlPremiseOntology rdf:datatype="http://www.w3.org/2001/XMLSchema#string">&lt;rdf:RDF
+    xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+    xmlns:owl="http://www.w3.org/2002/07/owl#"
+    xmlns:xsd="http://www.w3.org/2001/XMLSchema#"
+    xmlns:ex="http://www.example.org#"
+    xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"&gt;
+&lt;/rdf:RDF&gt;</test:rdfXmlPremiseOntology>
+	</test:TestCase>
+	<test:TestCase rdf:about="http://owl.semanticweb.org/id/Rdfbased-2Dsem-2Dprop-2Disdefinedby-2Dtype">
+		<rdf:type rdf:resource="&test;ProfileIdentificationTest" />
+		<rdf:type rdf:resource="&test;PositiveEntailmentTest" />
+		<rdf:type rdf:resource="&test;ConsistencyTest" />
+		<test:identifier rdf:datatype="http://www.w3.org/2001/XMLSchema#string">rdfbased-sem-prop-isdefinedby-type</test:identifier>
+		<test:creator rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Michael Schneider</test:creator>
+		<test:creator rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Kai Mainzer</test:creator>
+		<test:description rdf:datatype="http://www.w3.org/2001/XMLSchema#string">The type of the vocabulary property rdfs:isDefinedBy is the class of annotation properties.</test:description>
+		<test:normativeSyntax rdf:resource="&test;RDFXML" />
+		<test:status rdf:resource="&test;Approved" />
+		<test:semantics rdf:resource="&test;DIRECT" />
+		<test:semantics rdf:resource="&test;RDF-BASED" />
+		<test:species rdf:resource="&test;FULL" />
+		<test:rdfXmlConclusionOntology rdf:datatype="http://www.w3.org/2001/XMLSchema#string">&lt;rdf:RDF
+    xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+    xmlns:owl="http://www.w3.org/2002/07/owl#"
+    xmlns:xsd="http://www.w3.org/2001/XMLSchema#"
+    xmlns:ex="http://www.example.org#"
+    xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"&gt;
+  &lt;owl:AnnotationProperty rdf:about="http://www.w3.org/2000/01/rdf-schema#isDefinedBy"/&gt;
+&lt;/rdf:RDF&gt;</test:rdfXmlConclusionOntology>
+		<test:rdfXmlPremiseOntology rdf:datatype="http://www.w3.org/2001/XMLSchema#string">&lt;rdf:RDF
+    xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+    xmlns:owl="http://www.w3.org/2002/07/owl#"
+    xmlns:xsd="http://www.w3.org/2001/XMLSchema#"
+    xmlns:ex="http://www.example.org#"
+    xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"&gt;
+&lt;/rdf:RDF&gt;</test:rdfXmlPremiseOntology>
+	</test:TestCase>
+	<test:TestCase rdf:about="http://owl.semanticweb.org/id/Rdfbased-2Dsem-2Dprop-2Dlabel-2Dtype">
+		<rdf:type rdf:resource="&test;ProfileIdentificationTest" />
+		<rdf:type rdf:resource="&test;PositiveEntailmentTest" />
+		<rdf:type rdf:resource="&test;ConsistencyTest" />
+		<test:identifier rdf:datatype="http://www.w3.org/2001/XMLSchema#string">rdfbased-sem-prop-label-type</test:identifier>
+		<test:creator rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Michael Schneider</test:creator>
+		<test:creator rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Kai Mainzer</test:creator>
+		<test:description rdf:datatype="http://www.w3.org/2001/XMLSchema#string">The type of the vocabulary property rdfs:label is the class of annotation properties.</test:description>
+		<test:normativeSyntax rdf:resource="&test;RDFXML" />
+		<test:status rdf:resource="&test;Approved" />
+		<test:semantics rdf:resource="&test;DIRECT" />
+		<test:semantics rdf:resource="&test;RDF-BASED" />
+		<test:species rdf:resource="&test;FULL" />
+		<test:rdfXmlConclusionOntology rdf:datatype="http://www.w3.org/2001/XMLSchema#string">&lt;rdf:RDF
+    xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+    xmlns:owl="http://www.w3.org/2002/07/owl#"
+    xmlns:xsd="http://www.w3.org/2001/XMLSchema#"
+    xmlns:ex="http://www.example.org#"
+    xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"&gt;
+  &lt;owl:AnnotationProperty rdf:about="http://www.w3.org/2000/01/rdf-schema#label"/&gt;
+&lt;/rdf:RDF&gt;</test:rdfXmlConclusionOntology>
+		<test:rdfXmlPremiseOntology rdf:datatype="http://www.w3.org/2001/XMLSchema#string">&lt;rdf:RDF
+    xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+    xmlns:owl="http://www.w3.org/2002/07/owl#"
+    xmlns:xsd="http://www.w3.org/2001/XMLSchema#"
+    xmlns:ex="http://www.example.org#"
+    xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"&gt;
+&lt;/rdf:RDF&gt;</test:rdfXmlPremiseOntology>
+	</test:TestCase>
+	<test:TestCase rdf:about="http://owl.semanticweb.org/id/Rdfbased-2Dsem-2Dprop-2Dpriorversion-2Dtype-2Dannot">
+		<rdf:type rdf:resource="&test;ProfileIdentificationTest" />
+		<rdf:type rdf:resource="&test;PositiveEntailmentTest" />
+		<rdf:type rdf:resource="&test;ConsistencyTest" />
+		<test:identifier rdf:datatype="http://www.w3.org/2001/XMLSchema#string">rdfbased-sem-prop-priorversion-type-annot</test:identifier>
+		<test:creator rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Michael Schneider</test:creator>
+		<test:creator rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Kai Mainzer</test:creator>
+		<test:description rdf:datatype="http://www.w3.org/2001/XMLSchema#string">The type of the vocabulary property owl:priorVersion is the class of annotation properties.</test:description>
+		<test:normativeSyntax rdf:resource="&test;RDFXML" />
+		<test:status rdf:resource="&test;Approved" />
+		<test:semantics rdf:resource="&test;DIRECT" />
+		<test:semantics rdf:resource="&test;RDF-BASED" />
+		<test:species rdf:resource="&test;FULL" />
+		<test:rdfXmlConclusionOntology rdf:datatype="http://www.w3.org/2001/XMLSchema#string">&lt;rdf:RDF
+    xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+    xmlns:owl="http://www.w3.org/2002/07/owl#"
+    xmlns:xsd="http://www.w3.org/2001/XMLSchema#"
+    xmlns:ex="http://www.example.org#"
+    xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"&gt;
+  &lt;owl:AnnotationProperty rdf:about="http://www.w3.org/2002/07/owl#priorVersion"/&gt;
+&lt;/rdf:RDF&gt;</test:rdfXmlConclusionOntology>
+		<test:rdfXmlPremiseOntology rdf:datatype="http://www.w3.org/2001/XMLSchema#string">&lt;rdf:RDF
+    xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+    xmlns:owl="http://www.w3.org/2002/07/owl#"
+    xmlns:xsd="http://www.w3.org/2001/XMLSchema#"
+    xmlns:ex="http://www.example.org#"
+    xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"&gt;
+&lt;/rdf:RDF&gt;</test:rdfXmlPremiseOntology>
+	</test:TestCase>
+	<test:TestCase rdf:about="http://owl.semanticweb.org/id/Rdfbased-2Dsem-2Dprop-2Dseealso-2Dtype">
+		<rdf:type rdf:resource="&test;ProfileIdentificationTest" />
+		<rdf:type rdf:resource="&test;PositiveEntailmentTest" />
+		<rdf:type rdf:resource="&test;ConsistencyTest" />
+		<test:identifier rdf:datatype="http://www.w3.org/2001/XMLSchema#string">rdfbased-sem-prop-seealso-type</test:identifier>
+		<test:creator rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Michael Schneider</test:creator>
+		<test:creator rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Kai Mainzer</test:creator>
+		<test:description rdf:datatype="http://www.w3.org/2001/XMLSchema#string">The type of the vocabulary property rdfs:seeAlso is the class of annotation properties.</test:description>
+		<test:normativeSyntax rdf:resource="&test;RDFXML" />
+		<test:status rdf:resource="&test;Approved" />
+		<test:semantics rdf:resource="&test;DIRECT" />
+		<test:semantics rdf:resource="&test;RDF-BASED" />
+		<test:species rdf:resource="&test;FULL" />
+		<test:rdfXmlConclusionOntology rdf:datatype="http://www.w3.org/2001/XMLSchema#string">&lt;rdf:RDF
+    xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+    xmlns:owl="http://www.w3.org/2002/07/owl#"
+    xmlns:xsd="http://www.w3.org/2001/XMLSchema#"
+    xmlns:ex="http://www.example.org#"
+    xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"&gt;
+  &lt;owl:AnnotationProperty rdf:about="http://www.w3.org/2000/01/rdf-schema#seeAlso"/&gt;
+&lt;/rdf:RDF&gt;</test:rdfXmlConclusionOntology>
+		<test:rdfXmlPremiseOntology rdf:datatype="http://www.w3.org/2001/XMLSchema#string">&lt;rdf:RDF
+    xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+    xmlns:owl="http://www.w3.org/2002/07/owl#"
+    xmlns:xsd="http://www.w3.org/2001/XMLSchema#"
+    xmlns:ex="http://www.example.org#"
+    xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"&gt;
+&lt;/rdf:RDF&gt;</test:rdfXmlPremiseOntology>
+	</test:TestCase>
+	<test:TestCase rdf:about="http://owl.semanticweb.org/id/Rdfbased-2Dsem-2Dprop-2Dversioninfo-2Dtype">
+		<rdf:type rdf:resource="&test;ProfileIdentificationTest" />
+		<rdf:type rdf:resource="&test;PositiveEntailmentTest" />
+		<rdf:type rdf:resource="&test;ConsistencyTest" />
+		<test:identifier rdf:datatype="http://www.w3.org/2001/XMLSchema#string">rdfbased-sem-prop-versioninfo-type</test:identifier>
+		<test:creator rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Michael Schneider</test:creator>
+		<test:creator rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Kai Mainzer</test:creator>
+		<test:description rdf:datatype="http://www.w3.org/2001/XMLSchema#string">The type of the vocabulary property owl:versionInfo is the class of annotation properties.</test:description>
+		<test:normativeSyntax rdf:resource="&test;RDFXML" />
+		<test:status rdf:resource="&test;Approved" />
+		<test:semantics rdf:resource="&test;DIRECT" />
+		<test:semantics rdf:resource="&test;RDF-BASED" />
+		<test:species rdf:resource="&test;FULL" />
+		<test:rdfXmlConclusionOntology rdf:datatype="http://www.w3.org/2001/XMLSchema#string">&lt;rdf:RDF
+    xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+    xmlns:owl="http://www.w3.org/2002/07/owl#"
+    xmlns:xsd="http://www.w3.org/2001/XMLSchema#"
+    xmlns:ex="http://www.example.org#"
+    xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"&gt;
+  &lt;owl:AnnotationProperty rdf:about="http://www.w3.org/2002/07/owl#versionInfo"/&gt;
+&lt;/rdf:RDF&gt;</test:rdfXmlConclusionOntology>
+		<test:rdfXmlPremiseOntology rdf:datatype="http://www.w3.org/2001/XMLSchema#string">&lt;rdf:RDF
+    xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+    xmlns:owl="http://www.w3.org/2002/07/owl#"
+    xmlns:xsd="http://www.w3.org/2001/XMLSchema#"
+    xmlns:ex="http://www.example.org#"
+    xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"&gt;
+&lt;/rdf:RDF&gt;</test:rdfXmlPremiseOntology>
+	</test:TestCase>
+	<test:TestCase rdf:about="http://owl.semanticweb.org/id/Rdfbased-2Dsem-2Drdfs-2Ddomain-2Dcond">
+		<rdf:type rdf:resource="&test;ProfileIdentificationTest" />
+		<rdf:type rdf:resource="&test;PositiveEntailmentTest" />
+		<rdf:type rdf:resource="&test;ConsistencyTest" />
+		<test:identifier rdf:datatype="http://www.w3.org/2001/XMLSchema#string">rdfbased-sem-rdfs-domain-cond</test:identifier>
+		<test:creator rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Michael Schneider</test:creator>
+		<test:creator rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Kai Mainzer</test:creator>
+		<test:description rdf:datatype="http://www.w3.org/2001/XMLSchema#string">The left hand side individual in a given triple is entailed to be an instance of the domain of the predicate.</test:description>
+		<test:normativeSyntax rdf:resource="&test;RDFXML" />
+		<test:status rdf:resource="&test;Approved" />
+		<test:semantics rdf:resource="&test;DIRECT" />
+		<test:semantics rdf:resource="&test;RDF-BASED" />
+		<test:species rdf:resource="&test;FULL" />
+		<test:rdfXmlConclusionOntology rdf:datatype="http://www.w3.org/2001/XMLSchema#string">&lt;rdf:RDF
+    xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+    xmlns:owl="http://www.w3.org/2002/07/owl#"
+    xmlns:xsd="http://www.w3.org/2001/XMLSchema#"
+    xmlns:ex="http://www.example.org#"
+    xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"&gt;
+  &lt;ex:c rdf:about="http://www.example.org#u"/&gt;
+&lt;/rdf:RDF&gt;</test:rdfXmlConclusionOntology>
+		<test:rdfXmlPremiseOntology rdf:datatype="http://www.w3.org/2001/XMLSchema#string">&lt;rdf:RDF
+    xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+    xmlns:owl="http://www.w3.org/2002/07/owl#"
+    xmlns:xsd="http://www.w3.org/2001/XMLSchema#"
+    xmlns:ex="http://www.example.org#"
+    xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"&gt;
+  &lt;rdf:Description rdf:about="http://www.example.org#u"&gt;
+    &lt;ex:p rdf:resource="http://www.example.org#v"/&gt;
+  &lt;/rdf:Description&gt;
+  &lt;rdf:Description rdf:about="http://www.example.org#p"&gt;
+    &lt;rdfs:domain rdf:resource="http://www.example.org#c"/&gt;
+  &lt;/rdf:Description&gt;
+&lt;/rdf:RDF&gt;</test:rdfXmlPremiseOntology>
+	</test:TestCase>
+	<test:TestCase rdf:about="http://owl.semanticweb.org/id/Rdfbased-2Dsem-2Drdfs-2Drange-2Dcond">
+		<rdf:type rdf:resource="&test;ProfileIdentificationTest" />
+		<rdf:type rdf:resource="&test;PositiveEntailmentTest" />
+		<rdf:type rdf:resource="&test;ConsistencyTest" />
+		<test:identifier rdf:datatype="http://www.w3.org/2001/XMLSchema#string">rdfbased-sem-rdfs-range-cond</test:identifier>
+		<test:creator rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Michael Schneider</test:creator>
+		<test:creator rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Kai Mainzer</test:creator>
+		<test:description rdf:datatype="http://www.w3.org/2001/XMLSchema#string">The right hand side individual in a given triple is entailed to be an instance of the range of the predicate.</test:description>
+		<test:normativeSyntax rdf:resource="&test;RDFXML" />
+		<test:status rdf:resource="&test;Approved" />
+		<test:semantics rdf:resource="&test;DIRECT" />
+		<test:semantics rdf:resource="&test;RDF-BASED" />
+		<test:species rdf:resource="&test;FULL" />
+		<test:rdfXmlConclusionOntology rdf:datatype="http://www.w3.org/2001/XMLSchema#string">&lt;rdf:RDF
+    xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+    xmlns:owl="http://www.w3.org/2002/07/owl#"
+    xmlns:xsd="http://www.w3.org/2001/XMLSchema#"
+    xmlns:ex="http://www.example.org#"
+    xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"&gt;
+  &lt;ex:c rdf:about="http://www.example.org#v"/&gt;
+&lt;/rdf:RDF&gt;</test:rdfXmlConclusionOntology>
+		<test:rdfXmlPremiseOntology rdf:datatype="http://www.w3.org/2001/XMLSchema#string">&lt;rdf:RDF
+    xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+    xmlns:owl="http://www.w3.org/2002/07/owl#"
+    xmlns:xsd="http://www.w3.org/2001/XMLSchema#"
+    xmlns:ex="http://www.example.org#"
+    xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"&gt;
+  &lt;rdf:Description rdf:about="http://www.example.org#u"&gt;
+    &lt;ex:p rdf:resource="http://www.example.org#v"/&gt;
+  &lt;/rdf:Description&gt;
+  &lt;rdf:Description rdf:about="http://www.example.org#p"&gt;
+    &lt;rdfs:range rdf:resource="http://www.example.org#c"/&gt;
+  &lt;/rdf:Description&gt;
+&lt;/rdf:RDF&gt;</test:rdfXmlPremiseOntology>
+	</test:TestCase>
+	<test:TestCase rdf:about="http://owl.semanticweb.org/id/Rdfbased-2Dsem-2Drdfs-2Dsubclass-2Dcond">
+		<rdf:type rdf:resource="&test;ProfileIdentificationTest" />
+		<rdf:type rdf:resource="&test;PositiveEntailmentTest" />
+		<rdf:type rdf:resource="&test;ConsistencyTest" />
+		<test:identifier rdf:datatype="http://www.w3.org/2001/XMLSchema#string">rdfbased-sem-rdfs-subclass-cond</test:identifier>
+		<test:creator rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Michael Schneider</test:creator>
+		<test:creator rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Kai Mainzer</test:creator>
+		<test:description rdf:datatype="http://www.w3.org/2001/XMLSchema#string">The extensions of two classes related by rdfs:subClassOf are in a subsumption relationship.</test:description>
+		<test:normativeSyntax rdf:resource="&test;RDFXML" />
+		<test:status rdf:resource="&test;Approved" />
+		<test:semantics rdf:resource="&test;DIRECT" />
+		<test:semantics rdf:resource="&test;RDF-BASED" />
+		<test:species rdf:resource="&test;FULL" />
+		<test:rdfXmlConclusionOntology rdf:datatype="http://www.w3.org/2001/XMLSchema#string">&lt;rdf:RDF
+    xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+    xmlns:owl="http://www.w3.org/2002/07/owl#"
+    xmlns:xsd="http://www.w3.org/2001/XMLSchema#"
+    xmlns:ex="http://www.example.org#"
+    xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"&gt;
+  &lt;ex:c2 rdf:about="http://www.example.org#w"/&gt;
+&lt;/rdf:RDF&gt;</test:rdfXmlConclusionOntology>
+		<test:rdfXmlPremiseOntology rdf:datatype="http://www.w3.org/2001/XMLSchema#string">&lt;rdf:RDF
+    xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+    xmlns:owl="http://www.w3.org/2002/07/owl#"
+    xmlns:xsd="http://www.w3.org/2001/XMLSchema#"
+    xmlns:ex="http://www.example.org#"
+    xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"&gt;
+  &lt;ex:c1 rdf:about="http://www.example.org#w"/&gt;
+  &lt;rdf:Description rdf:about="http://www.example.org#c1"&gt;
+    &lt;rdfs:subClassOf rdf:resource="http://www.example.org#c2"/&gt;
+  &lt;/rdf:Description&gt;
+&lt;/rdf:RDF&gt;</test:rdfXmlPremiseOntology>
+	</test:TestCase>
+	<test:TestCase rdf:about="http://owl.semanticweb.org/id/Rdfbased-2Dsem-2Drdfs-2Dsubclass-2Dtrans">
+		<rdf:type rdf:resource="&test;ProfileIdentificationTest" />
+		<rdf:type rdf:resource="&test;PositiveEntailmentTest" />
+		<rdf:type rdf:resource="&test;ConsistencyTest" />
+		<test:identifier rdf:datatype="http://www.w3.org/2001/XMLSchema#string">rdfbased-sem-rdfs-subclass-trans</test:identifier>
+		<test:creator rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Michael Schneider</test:creator>
+		<test:creator rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Kai Mainzer</test:creator>
+		<test:description rdf:datatype="http://www.w3.org/2001/XMLSchema#string">The property rdfs:subClassOf is transitive.</test:description>
+		<test:normativeSyntax rdf:resource="&test;RDFXML" />
+		<test:status rdf:resource="&test;Approved" />
+		<test:semantics rdf:resource="&test;DIRECT" />
+		<test:semantics rdf:resource="&test;RDF-BASED" />
+		<test:species rdf:resource="&test;FULL" />
+		<test:rdfXmlConclusionOntology rdf:datatype="http://www.w3.org/2001/XMLSchema#string">&lt;rdf:RDF
+    xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+    xmlns:owl="http://www.w3.org/2002/07/owl#"
+    xmlns:xsd="http://www.w3.org/2001/XMLSchema#"
+    xmlns:ex="http://www.example.org#"
+    xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"&gt;
+  &lt;rdf:Description rdf:about="http://www.example.org#c1"&gt;
+    &lt;rdfs:subClassOf rdf:resource="http://www.example.org#c3"/&gt;
+  &lt;/rdf:Description&gt;
+&lt;/rdf:RDF&gt;</test:rdfXmlConclusionOntology>
+		<test:rdfXmlPremiseOntology rdf:datatype="http://www.w3.org/2001/XMLSchema#string">&lt;rdf:RDF
+    xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+    xmlns:owl="http://www.w3.org/2002/07/owl#"
+    xmlns:xsd="http://www.w3.org/2001/XMLSchema#"
+    xmlns:ex="http://www.example.org#"
+    xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"&gt;
+  &lt;rdf:Description rdf:about="http://www.example.org#c1"&gt;
+    &lt;rdfs:subClassOf&gt;
+      &lt;rdf:Description rdf:about="http://www.example.org#c2"&gt;
+        &lt;rdfs:subClassOf rdf:resource="http://www.example.org#c3"/&gt;
+      &lt;/rdf:Description&gt;
+    &lt;/rdfs:subClassOf&gt;
+  &lt;/rdf:Description&gt;
+&lt;/rdf:RDF&gt;</test:rdfXmlPremiseOntology>
+	</test:TestCase>
+	<test:TestCase rdf:about="http://owl.semanticweb.org/id/Rdfbased-2Dsem-2Drdfs-2Dsubprop-2Dcond">
+		<rdf:type rdf:resource="&test;ProfileIdentificationTest" />
+		<rdf:type rdf:resource="&test;PositiveEntailmentTest" />
+		<rdf:type rdf:resource="&test;ConsistencyTest" />
+		<test:identifier rdf:datatype="http://www.w3.org/2001/XMLSchema#string">rdfbased-sem-rdfs-subprop-cond</test:identifier>
+		<test:creator rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Michael Schneider</test:creator>
+		<test:creator rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Kai Mainzer</test:creator>
+		<test:description rdf:datatype="http://www.w3.org/2001/XMLSchema#string">The extensions of two properties related by rdfs:subPropertyOf are in a subsumption relationship.</test:description>
+		<test:normativeSyntax rdf:resource="&test;RDFXML" />
+		<test:status rdf:resource="&test;Approved" />
+		<test:semantics rdf:resource="&test;DIRECT" />
+		<test:semantics rdf:resource="&test;RDF-BASED" />
+		<test:species rdf:resource="&test;FULL" />
+		<test:rdfXmlConclusionOntology rdf:datatype="http://www.w3.org/2001/XMLSchema#string">&lt;rdf:RDF
+    xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+    xmlns:owl="http://www.w3.org/2002/07/owl#"
+    xmlns:xsd="http://www.w3.org/2001/XMLSchema#"
+    xmlns:ex="http://www.example.org#"
+    xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"&gt;
+  &lt;rdf:Description rdf:about="http://www.example.org#s"&gt;
+    &lt;ex:p2 rdf:resource="http://www.example.org#o"/&gt;
+  &lt;/rdf:Description&gt;
+&lt;/rdf:RDF&gt;</test:rdfXmlConclusionOntology>
+		<test:rdfXmlPremiseOntology rdf:datatype="http://www.w3.org/2001/XMLSchema#string">&lt;rdf:RDF
+    xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+    xmlns:owl="http://www.w3.org/2002/07/owl#"
+    xmlns:xsd="http://www.w3.org/2001/XMLSchema#"
+    xmlns:ex="http://www.example.org#"
+    xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"&gt;
+  &lt;rdf:Description rdf:about="http://www.example.org#s"&gt;
+    &lt;ex:p1 rdf:resource="http://www.example.org#o"/&gt;
+  &lt;/rdf:Description&gt;
+  &lt;rdf:Description rdf:about="http://www.example.org#p1"&gt;
+    &lt;rdfs:subPropertyOf rdf:resource="http://www.example.org#p2"/&gt;
+  &lt;/rdf:Description&gt;
+&lt;/rdf:RDF&gt;</test:rdfXmlPremiseOntology>
+	</test:TestCase>
+	<test:TestCase rdf:about="http://owl.semanticweb.org/id/Rdfbased-2Dsem-2Drdfs-2Dsubprop-2Dtrans">
+		<rdf:type rdf:resource="&test;ProfileIdentificationTest" />
+		<rdf:type rdf:resource="&test;PositiveEntailmentTest" />
+		<rdf:type rdf:resource="&test;ConsistencyTest" />
+		<test:identifier rdf:datatype="http://www.w3.org/2001/XMLSchema#string">rdfbased-sem-rdfs-subprop-trans</test:identifier>
+		<test:creator rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Michael Schneider</test:creator>
+		<test:creator rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Kai Mainzer</test:creator>
+		<test:description rdf:datatype="http://www.w3.org/2001/XMLSchema#string">The property rdfs:subPropertyOf is transitive.</test:description>
+		<test:normativeSyntax rdf:resource="&test;RDFXML" />
+		<test:status rdf:resource="&test;Approved" />
+		<test:semantics rdf:resource="&test;DIRECT" />
+		<test:semantics rdf:resource="&test;RDF-BASED" />
+		<test:species rdf:resource="&test;FULL" />
+		<test:rdfXmlConclusionOntology rdf:datatype="http://www.w3.org/2001/XMLSchema#string">&lt;rdf:RDF
+    xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+    xmlns:owl="http://www.w3.org/2002/07/owl#"
+    xmlns:xsd="http://www.w3.org/2001/XMLSchema#"
+    xmlns:ex="http://www.example.org#"
+    xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"&gt;
+  &lt;rdf:Description rdf:about="http://www.example.org#p1"&gt;
+    &lt;rdfs:subPropertyOf rdf:resource="http://www.example.org#p3"/&gt;
+  &lt;/rdf:Description&gt;
+&lt;/rdf:RDF&gt;</test:rdfXmlConclusionOntology>
+		<test:rdfXmlPremiseOntology rdf:datatype="http://www.w3.org/2001/XMLSchema#string">&lt;rdf:RDF
+    xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+    xmlns:owl="http://www.w3.org/2002/07/owl#"
+    xmlns:xsd="http://www.w3.org/2001/XMLSchema#"
+    xmlns:ex="http://www.example.org#"
+    xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"&gt;
+  &lt;rdf:Description rdf:about="http://www.example.org#p1"&gt;
+    &lt;rdfs:subPropertyOf&gt;
+      &lt;rdf:Description rdf:about="http://www.example.org#p2"&gt;
+        &lt;rdfs:subPropertyOf rdf:resource="http://www.example.org#p3"/&gt;
+      &lt;/rdf:Description&gt;
+    &lt;/rdfs:subPropertyOf&gt;
+  &lt;/rdf:Description&gt;
+&lt;/rdf:RDF&gt;</test:rdfXmlPremiseOntology>
+	</test:TestCase>
+	<test:TestCase rdf:about="http://owl.semanticweb.org/id/Rdfbased-2Dsem-2Drdfsext-2Ddomain-2Dsubprop">
+		<rdf:type rdf:resource="&test;ProfileIdentificationTest" />
+		<rdf:type rdf:resource="&test;PositiveEntailmentTest" />
+		<rdf:type rdf:resource="&test;ConsistencyTest" />
+		<test:identifier rdf:datatype="http://www.w3.org/2001/XMLSchema#string">rdfbased-sem-rdfsext-domain-subprop</test:identifier>
+		<test:creator rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Michael Schneider</test:creator>
+		<test:creator rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Kai Mainzer</test:creator>
+		<test:description rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Every sub property of a given property with a given domain also has this domain.</test:description>
+		<test:normativeSyntax rdf:resource="&test;RDFXML" />
+		<test:status rdf:resource="&test;Approved" />
+		<test:semantics rdf:resource="&test;DIRECT" />
+		<test:semantics rdf:resource="&test;RDF-BASED" />
+		<test:species rdf:resource="&test;FULL" />
+		<test:rdfXmlConclusionOntology rdf:datatype="http://www.w3.org/2001/XMLSchema#string">&lt;rdf:RDF
+    xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+    xmlns:owl="http://www.w3.org/2002/07/owl#"
+    xmlns:xsd="http://www.w3.org/2001/XMLSchema#"
+    xmlns:ex="http://www.example.org#"
+    xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"&gt;
+  &lt;rdf:Description rdf:about="http://www.example.org#p1"&gt;
+    &lt;rdfs:domain rdf:resource="http://www.example.org#c"/&gt;
+  &lt;/rdf:Description&gt;
+&lt;/rdf:RDF&gt;</test:rdfXmlConclusionOntology>
+		<test:rdfXmlPremiseOntology rdf:datatype="http://www.w3.org/2001/XMLSchema#string">&lt;rdf:RDF
+    xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+    xmlns:owl="http://www.w3.org/2002/07/owl#"
+    xmlns:xsd="http://www.w3.org/2001/XMLSchema#"
+    xmlns:ex="http://www.example.org#"
+    xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"&gt;
+  &lt;rdf:Description rdf:about="http://www.example.org#p1"&gt;
+    &lt;rdfs:subPropertyOf&gt;
+      &lt;rdf:Description rdf:about="http://www.example.org#p2"&gt;
+        &lt;rdfs:domain rdf:resource="http://www.example.org#c"/&gt;
+      &lt;/rdf:Description&gt;
+    &lt;/rdfs:subPropertyOf&gt;
+  &lt;/rdf:Description&gt;
+&lt;/rdf:RDF&gt;</test:rdfXmlPremiseOntology>
+	</test:TestCase>
+	<test:TestCase rdf:about="http://owl.semanticweb.org/id/Rdfbased-2Dsem-2Drdfsext-2Ddomain-2Dsuperclass">
+		<rdf:type rdf:resource="&test;ProfileIdentificationTest" />
+		<rdf:type rdf:resource="&test;PositiveEntailmentTest" />
+		<rdf:type rdf:resource="&test;ConsistencyTest" />
+		<test:identifier rdf:datatype="http://www.w3.org/2001/XMLSchema#string">rdfbased-sem-rdfsext-domain-superclass</test:identifier>
+		<test:creator rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Michael Schneider</test:creator>
+		<test:creator rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Kai Mainzer</test:creator>
+		<test:description rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Every super class of a domain for a given property is itself a domain for that property.</test:description>
+		<test:normativeSyntax rdf:resource="&test;RDFXML" />
+		<test:status rdf:resource="&test;Approved" />
+		<test:semantics rdf:resource="&test;DIRECT" />
+		<test:semantics rdf:resource="&test;RDF-BASED" />
+		<test:species rdf:resource="&test;FULL" />
+		<test:rdfXmlConclusionOntology rdf:datatype="http://www.w3.org/2001/XMLSchema#string">&lt;rdf:RDF
+    xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+    xmlns:owl="http://www.w3.org/2002/07/owl#"
+    xmlns:xsd="http://www.w3.org/2001/XMLSchema#"
+    xmlns:ex="http://www.example.org#"
+    xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"&gt;
+  &lt;rdf:Description rdf:about="http://www.example.org#p"&gt;
+    &lt;rdfs:domain rdf:resource="http://www.example.org#c2"/&gt;
+  &lt;/rdf:Description&gt;
+&lt;/rdf:RDF&gt;</test:rdfXmlConclusionOntology>
+		<test:rdfXmlPremiseOntology rdf:datatype="http://www.w3.org/2001/XMLSchema#string">&lt;rdf:RDF
+    xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+    xmlns:owl="http://www.w3.org/2002/07/owl#"
+    xmlns:xsd="http://www.w3.org/2001/XMLSchema#"
+    xmlns:ex="http://www.example.org#"
+    xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"&gt;
+  &lt;rdf:Description rdf:about="http://www.example.org#p"&gt;
+    &lt;rdfs:domain&gt;
+      &lt;rdf:Description rdf:about="http://www.example.org#c1"&gt;
+        &lt;rdfs:subClassOf rdf:resource="http://www.example.org#c2"/&gt;
+      &lt;/rdf:Description&gt;
+    &lt;/rdfs:domain&gt;
+  &lt;/rdf:Description&gt;
+&lt;/rdf:RDF&gt;</test:rdfXmlPremiseOntology>
+	</test:TestCase>
+	<test:TestCase rdf:about="http://owl.semanticweb.org/id/Rdfbased-2Dsem-2Drdfsext-2Drange-2Dsubprop">
+		<rdf:type rdf:resource="&test;ProfileIdentificationTest" />
+		<rdf:type rdf:resource="&test;PositiveEntailmentTest" />
+		<rdf:type rdf:resource="&test;ConsistencyTest" />
+		<test:identifier rdf:datatype="http://www.w3.org/2001/XMLSchema#string">rdfbased-sem-rdfsext-range-subprop</test:identifier>
+		<test:creator rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Michael Schneider</test:creator>
+		<test:creator rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Kai Mainzer</test:creator>
+		<test:description rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Every sub property of a given property with a given range also has this range.</test:description>
+		<test:normativeSyntax rdf:resource="&test;RDFXML" />
+		<test:status rdf:resource="&test;Approved" />
+		<test:semantics rdf:resource="&test;DIRECT" />
+		<test:semantics rdf:resource="&test;RDF-BASED" />
+		<test:species rdf:resource="&test;FULL" />
+		<test:rdfXmlConclusionOntology rdf:datatype="http://www.w3.org/2001/XMLSchema#string">&lt;rdf:RDF
+    xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+    xmlns:owl="http://www.w3.org/2002/07/owl#"
+    xmlns:xsd="http://www.w3.org/2001/XMLSchema#"
+    xmlns:ex="http://www.example.org#"
+    xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"&gt;
+  &lt;rdf:Description rdf:about="http://www.example.org#p1"&gt;
+    &lt;rdfs:range rdf:resource="http://www.example.org#c"/&gt;
+  &lt;/rdf:Description&gt;
+&lt;/rdf:RDF&gt;</test:rdfXmlConclusionOntology>
+		<test:rdfXmlPremiseOntology rdf:datatype="http://www.w3.org/2001/XMLSchema#string">&lt;rdf:RDF
+    xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+    xmlns:owl="http://www.w3.org/2002/07/owl#"
+    xmlns:xsd="http://www.w3.org/2001/XMLSchema#"
+    xmlns:ex="http://www.example.org#"
+    xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"&gt;
+  &lt;rdf:Description rdf:about="http://www.example.org#p1"&gt;
+    &lt;rdfs:subPropertyOf&gt;
+      &lt;rdf:Description rdf:about="http://www.example.org#p2"&gt;
+        &lt;rdfs:range rdf:resource="http://www.example.org#c"/&gt;
+      &lt;/rdf:Description&gt;
+    &lt;/rdfs:subPropertyOf&gt;
+  &lt;/rdf:Description&gt;
+&lt;/rdf:RDF&gt;</test:rdfXmlPremiseOntology>
+	</test:TestCase>
+	<test:TestCase rdf:about="http://owl.semanticweb.org/id/Rdfbased-2Dsem-2Drdfsext-2Drange-2Dsuperclass">
+		<rdf:type rdf:resource="&test;ProfileIdentificationTest" />
+		<rdf:type rdf:resource="&test;PositiveEntailmentTest" />
+		<rdf:type rdf:resource="&test;ConsistencyTest" />
+		<test:identifier rdf:datatype="http://www.w3.org/2001/XMLSchema#string">rdfbased-sem-rdfsext-range-superclass</test:identifier>
+		<test:creator rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Michael Schneider</test:creator>
+		<test:creator rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Kai Mainzer</test:creator>
+		<test:description rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Every super class of a range for a given property is itself a range for that property.</test:description>
+		<test:normativeSyntax rdf:resource="&test;RDFXML" />
+		<test:status rdf:resource="&test;Approved" />
+		<test:semantics rdf:resource="&test;DIRECT" />
+		<test:semantics rdf:resource="&test;RDF-BASED" />
+		<test:species rdf:resource="&test;FULL" />
+		<test:rdfXmlConclusionOntology rdf:datatype="http://www.w3.org/2001/XMLSchema#string">&lt;rdf:RDF
+    xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+    xmlns:owl="http://www.w3.org/2002/07/owl#"
+    xmlns:xsd="http://www.w3.org/2001/XMLSchema#"
+    xmlns:ex="http://www.example.org#"
+    xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"&gt;
+  &lt;rdf:Description rdf:about="http://www.example.org#p"&gt;
+    &lt;rdfs:range rdf:resource="http://www.example.org#c2"/&gt;
+  &lt;/rdf:Description&gt;
+&lt;/rdf:RDF&gt;</test:rdfXmlConclusionOntology>
+		<test:rdfXmlPremiseOntology rdf:datatype="http://www.w3.org/2001/XMLSchema#string">&lt;rdf:RDF
+    xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+    xmlns:owl="http://www.w3.org/2002/07/owl#"
+    xmlns:xsd="http://www.w3.org/2001/XMLSchema#"
+    xmlns:ex="http://www.example.org#"
+    xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"&gt;
+  &lt;rdf:Description rdf:about="http://www.example.org#p"&gt;
+    &lt;rdfs:range&gt;
+      &lt;rdf:Description rdf:about="http://www.example.org#c1"&gt;
+        &lt;rdfs:subClassOf rdf:resource="http://www.example.org#c2"/&gt;
+      &lt;/rdf:Description&gt;
+    &lt;/rdfs:range&gt;
+  &lt;/rdf:Description&gt;
+&lt;/rdf:RDF&gt;</test:rdfXmlPremiseOntology>
+	</test:TestCase>
+	<test:TestCase rdf:about="http://owl.semanticweb.org/id/Rdfbased-2Dsem-2Drestrict-2Dallvalues-2Dcmp-2Dclass">
+		<rdf:type rdf:resource="&test;ProfileIdentificationTest" />
+		<rdf:type rdf:resource="&test;PositiveEntailmentTest" />
+		<rdf:type rdf:resource="&test;ConsistencyTest" />
+		<test:identifier rdf:datatype="http://www.w3.org/2001/XMLSchema#string">rdfbased-sem-restrict-allvalues-cmp-class</test:identifier>
+		<test:creator rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Michael Schneider</test:creator>
+		<test:creator rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Kai Mainzer</test:creator>
+		<test:description rdf:datatype="http://www.w3.org/2001/XMLSchema#string">A universal restriction on some property and some class is a sub class of another universal restriction on the same property but on a super class.</test:description>
+		<test:normativeSyntax rdf:resource="&test;RDFXML" />
+		<test:status rdf:resource="&test;Approved" />
+		<test:semantics rdf:resource="&test;DIRECT" />
+		<test:semantics rdf:resource="&test;RDF-BASED" />
+		<test:species rdf:resource="&test;FULL" />
+		<test:rdfXmlConclusionOntology rdf:datatype="http://www.w3.org/2001/XMLSchema#string">&lt;rdf:RDF
+    xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+    xmlns:owl="http://www.w3.org/2002/07/owl#"
+    xmlns:xsd="http://www.w3.org/2001/XMLSchema#"
+    xmlns:ex="http://www.example.org#"
+    xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"&gt;
+  &lt;rdf:Description rdf:about="http://www.example.org#x1"&gt;
+    &lt;rdfs:subClassOf rdf:resource="http://www.example.org#x2"/&gt;
+  &lt;/rdf:Description&gt;
+&lt;/rdf:RDF&gt;</test:rdfXmlConclusionOntology>
+		<test:rdfXmlPremiseOntology rdf:datatype="http://www.w3.org/2001/XMLSchema#string">&lt;rdf:RDF
+    xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+    xmlns:owl="http://www.w3.org/2002/07/owl#"
+    xmlns:xsd="http://www.w3.org/2001/XMLSchema#"
+    xmlns:ex="http://www.example.org#"
+    xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"&gt;
+  &lt;rdf:Description rdf:about="http://www.example.org#x1"&gt;
+    &lt;owl:allValuesFrom&gt;
+      &lt;rdf:Description rdf:about="http://www.example.org#c1"&gt;
+        &lt;rdfs:subClassOf rdf:resource="http://www.example.org#c2"/&gt;
+      &lt;/rdf:Description&gt;
+    &lt;/owl:allValuesFrom&gt;
+    &lt;owl:onProperty rdf:resource="http://www.example.org#p"/&gt;
+  &lt;/rdf:Description&gt;
+  &lt;rdf:Description rdf:about="http://www.example.org#x2"&gt;
+    &lt;owl:allValuesFrom rdf:resource="http://www.example.org#c2"/&gt;
+    &lt;owl:onProperty rdf:resource="http://www.example.org#p"/&gt;
+  &lt;/rdf:Description&gt;
+&lt;/rdf:RDF&gt;</test:rdfXmlPremiseOntology>
+	</test:TestCase>
+	<test:TestCase rdf:about="http://owl.semanticweb.org/id/Rdfbased-2Dsem-2Drestrict-2Dallvalues-2Dcmp-2Dprop">
+		<rdf:type rdf:resource="&test;ProfileIdentificationTest" />
+		<rdf:type rdf:resource="&test;PositiveEntailmentTest" />
+		<rdf:type rdf:resource="&test;ConsistencyTest" />
+		<test:identifier rdf:datatype="http://www.w3.org/2001/XMLSchema#string">rdfbased-sem-restrict-allvalues-cmp-prop</test:identifier>
+		<test:creator rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Michael Schneider</test:creator>
+		<test:creator rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Kai Mainzer</test:creator>
+		<test:description rdf:datatype="http://www.w3.org/2001/XMLSchema#string">A universal restriction on some property and some class is a sub class of another universal restriction on the same class but on a sub property.</test:description>
+		<test:normativeSyntax rdf:resource="&test;RDFXML" />
+		<test:status rdf:resource="&test;Approved" />
+		<test:semantics rdf:resource="&test;DIRECT" />
+		<test:semantics rdf:resource="&test;RDF-BASED" />
+		<test:species rdf:resource="&test;FULL" />
+		<test:rdfXmlConclusionOntology rdf:datatype="http://www.w3.org/2001/XMLSchema#string">&lt;rdf:RDF
+    xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+    xmlns:owl="http://www.w3.org/2002/07/owl#"
+    xmlns:xsd="http://www.w3.org/2001/XMLSchema#"
+    xmlns:ex="http://www.example.org#"
+    xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"&gt;
+  &lt;rdf:Description rdf:about="http://www.example.org#x2"&gt;
+    &lt;rdfs:subClassOf rdf:resource="http://www.example.org#x1"/&gt;
+  &lt;/rdf:Description&gt;
+&lt;/rdf:RDF&gt;</test:rdfXmlConclusionOntology>
+		<test:rdfXmlPremiseOntology rdf:datatype="http://www.w3.org/2001/XMLSchema#string">&lt;rdf:RDF
+    xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+    xmlns:owl="http://www.w3.org/2002/07/owl#"
+    xmlns:xsd="http://www.w3.org/2001/XMLSchema#"
+    xmlns:ex="http://www.example.org#"
+    xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"&gt;
+  &lt;rdf:Description rdf:about="http://www.example.org#x1"&gt;
+    &lt;owl:allValuesFrom rdf:resource="http://www.example.org#c"/&gt;
+    &lt;owl:onProperty&gt;
+      &lt;rdf:Description rdf:about="http://www.example.org#p1"&gt;
+        &lt;rdfs:subPropertyOf rdf:resource="http://www.example.org#p2"/&gt;
+      &lt;/rdf:Description&gt;
+    &lt;/owl:onProperty&gt;
+  &lt;/rdf:Description&gt;
+  &lt;rdf:Description rdf:about="http://www.example.org#x2"&gt;
+    &lt;owl:allValuesFrom rdf:resource="http://www.example.org#c"/&gt;
+    &lt;owl:onProperty rdf:resource="http://www.example.org#p2"/&gt;
+  &lt;/rdf:Description&gt;
+&lt;/rdf:RDF&gt;</test:rdfXmlPremiseOntology>
+	</test:TestCase>
+	<test:TestCase rdf:about="http://owl.semanticweb.org/id/Rdfbased-2Dsem-2Drestrict-2Dallvalues-2Dinst-2Dobj">
+		<rdf:type rdf:resource="&test;ProfileIdentificationTest" />
+		<rdf:type rdf:resource="&test;PositiveEntailmentTest" />
+		<rdf:type rdf:resource="&test;ConsistencyTest" />
+		<test:identifier rdf:datatype="http://www.w3.org/2001/XMLSchema#string">rdfbased-sem-restrict-allvalues-inst-obj</test:identifier>
+		<test:creator rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Michael Schneider</test:creator>
+		<test:creator rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Kai Mainzer</test:creator>
+		<test:description rdf:datatype="http://www.w3.org/2001/XMLSchema#string">If an individual w is an instance of the universal restriction on property p and class c, then for any triple w p x follows that x is an instance of c.</test:description>
+		<test:normativeSyntax rdf:resource="&test;RDFXML" />
+		<test:status rdf:resource="&test;Approved" />
+		<test:semantics rdf:resource="&test;DIRECT" />
+		<test:semantics rdf:resource="&test;RDF-BASED" />
+		<test:species rdf:resource="&test;FULL" />
+		<test:rdfXmlConclusionOntology rdf:datatype="http://www.w3.org/2001/XMLSchema#string">&lt;rdf:RDF
+    xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+    xmlns:owl="http://www.w3.org/2002/07/owl#"
+    xmlns:xsd="http://www.w3.org/2001/XMLSchema#"
+    xmlns:ex="http://www.example.org#"
+    xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"&gt;
+  &lt;ex:c rdf:about="http://www.example.org#x"/&gt;
+&lt;/rdf:RDF&gt;</test:rdfXmlConclusionOntology>
+		<test:rdfXmlPremiseOntology rdf:datatype="http://www.w3.org/2001/XMLSchema#string">&lt;rdf:RDF
+    xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+    xmlns:owl="http://www.w3.org/2002/07/owl#"
+    xmlns:xsd="http://www.w3.org/2001/XMLSchema#"
+    xmlns:ex="http://www.example.org#"
+    xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"&gt;
+  &lt;ex:z rdf:about="http://www.example.org#w"&gt;
+    &lt;ex:p rdf:resource="http://www.example.org#x"/&gt;
+  &lt;/ex:z&gt;
+  &lt;rdf:Description rdf:about="http://www.example.org#z"&gt;
+    &lt;owl:allValuesFrom rdf:resource="http://www.example.org#c"/&gt;
+    &lt;owl:onProperty rdf:resource="http://www.example.org#p"/&gt;
+  &lt;/rdf:Description&gt;
+&lt;/rdf:RDF&gt;</test:rdfXmlPremiseOntology>
+	</test:TestCase>
+	<test:TestCase rdf:about="http://owl.semanticweb.org/id/Rdfbased-2Dsem-2Drestrict-2Dhasvalue-2Dcmp-2Dprop">
+		<rdf:type rdf:resource="&test;ProfileIdentificationTest" />
+		<rdf:type rdf:resource="&test;PositiveEntailmentTest" />
+		<rdf:type rdf:resource="&test;ConsistencyTest" />
+		<test:identifier rdf:datatype="http://www.w3.org/2001/XMLSchema#string">rdfbased-sem-restrict-hasvalue-cmp-prop</test:identifier>
+		<test:creator rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Michael Schneider</test:creator>
+		<test:creator rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Kai Mainzer</test:creator>
+		<test:description rdf:datatype="http://www.w3.org/2001/XMLSchema#string">A has-value restriction on some property and some value is a sub class of another has-value restriction on the same value but on a super property.</test:description>
+		<test:normativeSyntax rdf:resource="&test;RDFXML" />
+		<test:status rdf:resource="&test;Approved" />
+		<test:semantics rdf:resource="&test;DIRECT" />
+		<test:semantics rdf:resource="&test;RDF-BASED" />
+		<test:species rdf:resource="&test;FULL" />
+		<test:rdfXmlConclusionOntology rdf:datatype="http://www.w3.org/2001/XMLSchema#string">&lt;rdf:RDF
+    xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+    xmlns:owl="http://www.w3.org/2002/07/owl#"
+    xmlns:xsd="http://www.w3.org/2001/XMLSchema#"
+    xmlns:ex="http://www.example.org#"
+    xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"&gt;
+  &lt;rdf:Description rdf:about="http://www.example.org#x1"&gt;
+    &lt;rdfs:subClassOf rdf:resource="http://www.example.org#x2"/&gt;
+  &lt;/rdf:Description&gt;
+&lt;/rdf:RDF&gt;</test:rdfXmlConclusionOntology>
+		<test:rdfXmlPremiseOntology rdf:datatype="http://www.w3.org/2001/XMLSchema#string">&lt;rdf:RDF
+    xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+    xmlns:owl="http://www.w3.org/2002/07/owl#"
+    xmlns:xsd="http://www.w3.org/2001/XMLSchema#"
+    xmlns:ex="http://www.example.org#"
+    xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"&gt;
+  &lt;rdf:Description rdf:about="http://www.example.org#x1"&gt;
+    &lt;owl:hasValue rdf:resource="http://www.example.org#v"/&gt;
+    &lt;owl:onProperty&gt;
+      &lt;rdf:Description rdf:about="http://www.example.org#p1"&gt;
+        &lt;rdfs:subPropertyOf rdf:resource="http://www.example.org#p2"/&gt;
+      &lt;/rdf:Description&gt;
+    &lt;/owl:onProperty&gt;
+  &lt;/rdf:Description&gt;
+  &lt;rdf:Description rdf:about="http://www.example.org#x2"&gt;
+    &lt;owl:hasValue rdf:resource="http://www.example.org#v"/&gt;
+    &lt;owl:onProperty rdf:resource="http://www.example.org#p2"/&gt;
+  &lt;/rdf:Description&gt;
+&lt;/rdf:RDF&gt;</test:rdfXmlPremiseOntology>
+	</test:TestCase>
+	<test:TestCase rdf:about="http://owl.semanticweb.org/id/Rdfbased-2Dsem-2Drestrict-2Dhasvalue-2Dinst-2Dobj">
+		<rdf:type rdf:resource="&test;ProfileIdentificationTest" />
+		<rdf:type rdf:resource="&test;PositiveEntailmentTest" />
+		<rdf:type rdf:resource="&test;ConsistencyTest" />
+		<test:identifier rdf:datatype="http://www.w3.org/2001/XMLSchema#string">rdfbased-sem-restrict-hasvalue-inst-obj</test:identifier>
+		<test:creator rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Michael Schneider</test:creator>
+		<test:creator rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Kai Mainzer</test:creator>
+		<test:description rdf:datatype="http://www.w3.org/2001/XMLSchema#string">If an individual w is an instance of the has-value restriction on property p to value u, then the triple w p u can be entailed.</test:description>
+		<test:normativeSyntax rdf:resource="&test;RDFXML" />
+		<test:status rdf:resource="&test;Approved" />
+		<test:semantics rdf:resource="&test;DIRECT" />
+		<test:semantics rdf:resource="&test;RDF-BASED" />
+		<test:species rdf:resource="&test;FULL" />
+		<test:rdfXmlConclusionOntology rdf:datatype="http://www.w3.org/2001/XMLSchema#string">&lt;rdf:RDF
+    xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+    xmlns:owl="http://www.w3.org/2002/07/owl#"
+    xmlns:xsd="http://www.w3.org/2001/XMLSchema#"
+    xmlns:ex="http://www.example.org#"
+    xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"&gt;
+  &lt;rdf:Description rdf:about="http://www.example.org#w"&gt;
+    &lt;ex:p rdf:resource="http://www.example.org#u"/&gt;
+  &lt;/rdf:Description&gt;
+&lt;/rdf:RDF&gt;</test:rdfXmlConclusionOntology>
+		<test:rdfXmlPremiseOntology rdf:datatype="http://www.w3.org/2001/XMLSchema#string">&lt;rdf:RDF
+    xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+    xmlns:owl="http://www.w3.org/2002/07/owl#"
+    xmlns:xsd="http://www.w3.org/2001/XMLSchema#"
+    xmlns:ex="http://www.example.org#"
+    xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"&gt;
+  &lt;ex:z rdf:about="http://www.example.org#w"/&gt;
+  &lt;rdf:Description rdf:about="http://www.example.org#z"&gt;
+    &lt;owl:hasValue rdf:resource="http://www.example.org#u"/&gt;
+    &lt;owl:onProperty rdf:resource="http://www.example.org#p"/&gt;
+  &lt;/rdf:Description&gt;
+&lt;/rdf:RDF&gt;</test:rdfXmlPremiseOntology>
+	</test:TestCase>
+	<test:TestCase rdf:about="http://owl.semanticweb.org/id/Rdfbased-2Dsem-2Drestrict-2Dhasvalue-2Dinst-2Dsubj">
+		<rdf:type rdf:resource="&test;ProfileIdentificationTest" />
+		<rdf:type rdf:resource="&test;PositiveEntailmentTest" />
+		<rdf:type rdf:resource="&test;ConsistencyTest" />
+		<test:identifier rdf:datatype="http://www.w3.org/2001/XMLSchema#string">rdfbased-sem-restrict-hasvalue-inst-subj</test:identifier>
+		<test:creator rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Michael Schneider</test:creator>
+		<test:creator rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Kai Mainzer</test:creator>
+		<test:description rdf:datatype="http://www.w3.org/2001/XMLSchema#string">For a triple w p u, the individual w is an instance of the has-value restriction on p to u.</test:description>
+		<test:normativeSyntax rdf:resource="&test;RDFXML" />
+		<test:status rdf:resource="&test;Approved" />
+		<test:semantics rdf:resource="&test;DIRECT" />
+		<test:semantics rdf:resource="&test;RDF-BASED" />
+		<test:species rdf:resource="&test;FULL" />
+		<test:rdfXmlConclusionOntology rdf:datatype="http://www.w3.org/2001/XMLSchema#string">&lt;rdf:RDF
+    xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+    xmlns:owl="http://www.w3.org/2002/07/owl#"
+    xmlns:xsd="http://www.w3.org/2001/XMLSchema#"
+    xmlns:ex="http://www.example.org#"
+    xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"&gt;
+  &lt;ex:z rdf:about="http://www.example.org#w"/&gt;
+&lt;/rdf:RDF&gt;</test:rdfXmlConclusionOntology>
+		<test:rdfXmlPremiseOntology rdf:datatype="http://www.w3.org/2001/XMLSchema#string">&lt;rdf:RDF
+    xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+    xmlns:owl="http://www.w3.org/2002/07/owl#"
+    xmlns:xsd="http://www.w3.org/2001/XMLSchema#"
+    xmlns:ex="http://www.example.org#"
+    xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"&gt;
+  &lt;rdf:Description rdf:about="http://www.example.org#z"&gt;
+    &lt;owl:hasValue rdf:resource="http://www.example.org#u"/&gt;
+    &lt;owl:onProperty rdf:resource="http://www.example.org#p"/&gt;
+  &lt;/rdf:Description&gt;
+  &lt;rdf:Description rdf:about="http://www.example.org#w"&gt;
+    &lt;ex:p rdf:resource="http://www.example.org#u"/&gt;
+  &lt;/rdf:Description&gt;
+&lt;/rdf:RDF&gt;</test:rdfXmlPremiseOntology>
+	</test:TestCase>
+	<test:TestCase rdf:about="http://owl.semanticweb.org/id/Rdfbased-2Dsem-2Drestrict-2Dmaxcard-2Dinst-2Dobj-2Done">
+		<rdf:type rdf:resource="&test;ProfileIdentificationTest" />
+		<rdf:type rdf:resource="&test;PositiveEntailmentTest" />
+		<rdf:type rdf:resource="&test;ConsistencyTest" />
+		<test:identifier rdf:datatype="http://www.w3.org/2001/XMLSchema#string">rdfbased-sem-restrict-maxcard-inst-obj-one</test:identifier>
+		<test:creator rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Michael Schneider</test:creator>
+		<test:creator rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Kai Mainzer</test:creator>
+		<test:description rdf:datatype="http://www.w3.org/2001/XMLSchema#string">If an individual w is an instance of the max-1-cardinality restriction on property p, and if there are triples w p x1 and w p x2, then x1 equals x2.</test:description>
+		<test:normativeSyntax rdf:resource="&test;RDFXML" />
+		<test:status rdf:resource="&test;Approved" />
+		<test:semantics rdf:resource="&test;DIRECT" />
+		<test:semantics rdf:resource="&test;RDF-BASED" />
+		<test:species rdf:resource="&test;FULL" />
+		<test:rdfXmlConclusionOntology rdf:datatype="http://www.w3.org/2001/XMLSchema#string">&lt;rdf:RDF
+    xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+    xmlns:owl="http://www.w3.org/2002/07/owl#"
+    xmlns:xsd="http://www.w3.org/2001/XMLSchema#"
+    xmlns:ex="http://www.example.org#"
+    xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"&gt;
+  &lt;rdf:Description rdf:about="http://www.example.org#x1"&gt;
+    &lt;owl:sameAs rdf:resource="http://www.example.org#x2"/&gt;
+  &lt;/rdf:Description&gt;
+&lt;/rdf:RDF&gt;</test:rdfXmlConclusionOntology>
+		<test:rdfXmlPremiseOntology rdf:datatype="http://www.w3.org/2001/XMLSchema#string">&lt;rdf:RDF
+    xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+    xmlns:owl="http://www.w3.org/2002/07/owl#"
+    xmlns:xsd="http://www.w3.org/2001/XMLSchema#"
+    xmlns:ex="http://www.example.org#"
+    xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"&gt;
+  &lt;ex:z rdf:about="http://www.example.org#w"&gt;
+    &lt;ex:p rdf:resource="http://www.example.org#x1"/&gt;
+    &lt;ex:p rdf:resource="http://www.example.org#x2"/&gt;
+  &lt;/ex:z&gt;
+  &lt;rdf:Description rdf:about="http://www.example.org#z"&gt;
+    &lt;owl:maxCardinality rdf:datatype="http://www.w3.org/2001/XMLSchema#nonNegativeInteger"
+    &gt;1&lt;/owl:maxCardinality&gt;
+    &lt;owl:onProperty rdf:resource="http://www.example.org#p"/&gt;
+  &lt;/rdf:Description&gt;
+&lt;/rdf:RDF&gt;</test:rdfXmlPremiseOntology>
+	</test:TestCase>
+	<test:TestCase rdf:about="http://owl.semanticweb.org/id/Rdfbased-2Dsem-2Drestrict-2Dmaxcard-2Dinst-2Dobj-2Dzero">
+		<rdf:type rdf:resource="&test;ProfileIdentificationTest" />
+		<rdf:type rdf:resource="&test;InconsistencyTest" />
+		<test:identifier rdf:datatype="http://www.w3.org/2001/XMLSchema#string">rdfbased-sem-restrict-maxcard-inst-obj-zero</test:identifier>
+		<test:creator rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Michael Schneider</test:creator>
+		<test:creator rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Kai Mainzer</test:creator>
+		<test:description rdf:datatype="http://www.w3.org/2001/XMLSchema#string">If an individual w is an instance of the max-0-cardinality restriction on property p, then there cannot be any triple w p x.</test:description>
+		<test:normativeSyntax rdf:resource="&test;RDFXML" />
+		<test:status rdf:resource="&test;Approved" />
+		<test:semantics rdf:resource="&test;DIRECT" />
+		<test:semantics rdf:resource="&test;RDF-BASED" />
+		<test:species rdf:resource="&test;FULL" />
+		<test:rdfXmlPremiseOntology rdf:datatype="http://www.w3.org/2001/XMLSchema#string">&lt;rdf:RDF
+    xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+    xmlns:owl="http://www.w3.org/2002/07/owl#"
+    xmlns:xsd="http://www.w3.org/2001/XMLSchema#"
+    xmlns:ex="http://www.example.org#"
+    xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"&gt;
+  &lt;ex:z rdf:about="http://www.example.org#w"&gt;
+    &lt;ex:p rdf:resource="http://www.example.org#x"/&gt;
+  &lt;/ex:z&gt;
+  &lt;rdf:Description rdf:about="http://www.example.org#z"&gt;
+    &lt;owl:maxCardinality rdf:datatype="http://www.w3.org/2001/XMLSchema#nonNegativeInteger"
+    &gt;0&lt;/owl:maxCardinality&gt;
+    &lt;owl:onProperty rdf:resource="http://www.example.org#p"/&gt;
+  &lt;/rdf:Description&gt;
+&lt;/rdf:RDF&gt;</test:rdfXmlPremiseOntology>
+	</test:TestCase>
+	<test:TestCase rdf:about="http://owl.semanticweb.org/id/Rdfbased-2Dsem-2Drestrict-2Dmaxqcr-2Dinst-2Dobj-2Done">
+		<rdf:type rdf:resource="&test;ProfileIdentificationTest" />
+		<rdf:type rdf:resource="&test;PositiveEntailmentTest" />
+		<rdf:type rdf:resource="&test;ConsistencyTest" />
+		<test:identifier rdf:datatype="http://www.w3.org/2001/XMLSchema#string">rdfbased-sem-restrict-maxqcr-inst-obj-one</test:identifier>
+		<test:creator rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Michael Schneider</test:creator>
+		<test:creator rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Kai Mainzer</test:creator>
+		<test:description rdf:datatype="http://www.w3.org/2001/XMLSchema#string">If an individual w is an instance of the max-1-QCR on property p to class c, and if there are triples w p x1 and w p x2, with x1 and x2 being in c, then x1 equals x2.</test:description>
+		<test:normativeSyntax rdf:resource="&test;RDFXML" />
+		<test:status rdf:resource="&test;Approved" />
+		<test:semantics rdf:resource="&test;DIRECT" />
+		<test:semantics rdf:resource="&test;RDF-BASED" />
+		<test:species rdf:resource="&test;FULL" />
+		<test:rdfXmlConclusionOntology rdf:datatype="http://www.w3.org/2001/XMLSchema#string">&lt;rdf:RDF
+    xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+    xmlns:owl="http://www.w3.org/2002/07/owl#"
+    xmlns:xsd="http://www.w3.org/2001/XMLSchema#"
+    xmlns:ex="http://www.example.org#"
+    xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"&gt;
+  &lt;rdf:Description rdf:about="http://www.example.org#x1"&gt;
+    &lt;owl:sameAs rdf:resource="http://www.example.org#x2"/&gt;
+  &lt;/rdf:Description&gt;
+&lt;/rdf:RDF&gt;</test:rdfXmlConclusionOntology>
+		<test:rdfXmlPremiseOntology rdf:datatype="http://www.w3.org/2001/XMLSchema#string">&lt;rdf:RDF
+    xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+    xmlns:owl="http://www.w3.org/2002/07/owl#"
+    xmlns:xsd="http://www.w3.org/2001/XMLSchema#"
+    xmlns:ex="http://www.example.org#"
+    xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"&gt;
+  &lt;ex:z rdf:about="http://www.example.org#w"&gt;
+    &lt;ex:p&gt;
+      &lt;ex:c rdf:about="http://www.example.org#x1"/&gt;
+    &lt;/ex:p&gt;
+    &lt;ex:p&gt;
+      &lt;ex:c rdf:about="http://www.example.org#x2"/&gt;
+    &lt;/ex:p&gt;
+  &lt;/ex:z&gt;
+  &lt;rdf:Description rdf:about="http://www.example.org#z"&gt;
+    &lt;owl:maxQualifiedCardinality rdf:datatype="http://www.w3.org/2001/XMLSchema#nonNegativeInteger"
+    &gt;1&lt;/owl:maxQualifiedCardinality&gt;
+    &lt;owl:onProperty rdf:resource="http://www.example.org#p"/&gt;
+    &lt;owl:onClass rdf:resource="http://www.example.org#c"/&gt;
+  &lt;/rdf:Description&gt;
+&lt;/rdf:RDF&gt;</test:rdfXmlPremiseOntology>
+	</test:TestCase>
+	<test:TestCase rdf:about="http://owl.semanticweb.org/id/Rdfbased-2Dsem-2Drestrict-2Dmaxqcr-2Dinst-2Dobj-2Dzero">
+		<rdf:type rdf:resource="&test;ProfileIdentificationTest" />
+		<rdf:type rdf:resource="&test;InconsistencyTest" />
+		<test:identifier rdf:datatype="http://www.w3.org/2001/XMLSchema#string">rdfbased-sem-restrict-maxqcr-inst-obj-zero</test:identifier>
+		<test:creator rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Michael Schneider</test:creator>
+		<test:creator rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Kai Mainzer</test:creator>
+		<test:description rdf:datatype="http://www.w3.org/2001/XMLSchema#string">If an individual w is an instance of the max-0-QCR on property p to class c, then there cannot be any triple w p x with x in c.</test:description>
+		<test:normativeSyntax rdf:resource="&test;RDFXML" />
+		<test:status rdf:resource="&test;Approved" />
+		<test:semantics rdf:resource="&test;DIRECT" />
+		<test:semantics rdf:resource="&test;RDF-BASED" />
+		<test:species rdf:resource="&test;FULL" />
+		<test:rdfXmlPremiseOntology rdf:datatype="http://www.w3.org/2001/XMLSchema#string">&lt;rdf:RDF
+    xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+    xmlns:owl="http://www.w3.org/2002/07/owl#"
+    xmlns:xsd="http://www.w3.org/2001/XMLSchema#"
+    xmlns:ex="http://www.example.org#"
+    xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"&gt;
+  &lt;ex:z rdf:about="http://www.example.org#w"&gt;
+    &lt;ex:p&gt;
+      &lt;ex:c rdf:about="http://www.example.org#x"/&gt;
+    &lt;/ex:p&gt;
+  &lt;/ex:z&gt;
+  &lt;rdf:Description rdf:about="http://www.example.org#z"&gt;
+    &lt;owl:maxQualifiedCardinality rdf:datatype="http://www.w3.org/2001/XMLSchema#nonNegativeInteger"
+    &gt;0&lt;/owl:maxQualifiedCardinality&gt;
+    &lt;owl:onProperty rdf:resource="http://www.example.org#p"/&gt;
+    &lt;owl:onClass rdf:resource="http://www.example.org#c"/&gt;
+  &lt;/rdf:Description&gt;
+&lt;/rdf:RDF&gt;</test:rdfXmlPremiseOntology>
+	</test:TestCase>
+	<test:TestCase rdf:about="http://owl.semanticweb.org/id/Rdfbased-2Dsem-2Drestrict-2Dsomevalues-2Dcmp-2Dclass">
+		<rdf:type rdf:resource="&test;ProfileIdentificationTest" />
+		<rdf:type rdf:resource="&test;PositiveEntailmentTest" />
+		<rdf:type rdf:resource="&test;ConsistencyTest" />
+		<test:identifier rdf:datatype="http://www.w3.org/2001/XMLSchema#string">rdfbased-sem-restrict-somevalues-cmp-class</test:identifier>
+		<test:creator rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Michael Schneider</test:creator>
+		<test:creator rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Kai Mainzer</test:creator>
+		<test:description rdf:datatype="http://www.w3.org/2001/XMLSchema#string">An existential restriction on some property and some class is a sub class of another existential restriction on the same property but on a super class.</test:description>
+		<test:normativeSyntax rdf:resource="&test;RDFXML" />
+		<test:status rdf:resource="&test;Approved" />
+		<test:semantics rdf:resource="&test;DIRECT" />
+		<test:semantics rdf:resource="&test;RDF-BASED" />
+		<test:species rdf:resource="&test;FULL" />
+		<test:rdfXmlConclusionOntology rdf:datatype="http://www.w3.org/2001/XMLSchema#string">&lt;rdf:RDF
+    xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+    xmlns:owl="http://www.w3.org/2002/07/owl#"
+    xmlns:xsd="http://www.w3.org/2001/XMLSchema#"
+    xmlns:ex="http://www.example.org#"
+    xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"&gt;
+  &lt;rdf:Description rdf:about="http://www.example.org#x1"&gt;
+    &lt;rdfs:subClassOf rdf:resource="http://www.example.org#x2"/&gt;
+  &lt;/rdf:Description&gt;
+&lt;/rdf:RDF&gt;</test:rdfXmlConclusionOntology>
+		<test:rdfXmlPremiseOntology rdf:datatype="http://www.w3.org/2001/XMLSchema#string">&lt;rdf:RDF
+    xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+    xmlns:owl="http://www.w3.org/2002/07/owl#"
+    xmlns:xsd="http://www.w3.org/2001/XMLSchema#"
+    xmlns:ex="http://www.example.org#"
+    xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"&gt;
+  &lt;rdf:Description rdf:about="http://www.example.org#x1"&gt;
+    &lt;owl:someValuesFrom&gt;
+      &lt;rdf:Description rdf:about="http://www.example.org#c1"&gt;
+        &lt;rdfs:subClassOf rdf:resource="http://www.example.org#c2"/&gt;
+      &lt;/rdf:Description&gt;
+    &lt;/owl:someValuesFrom&gt;
+    &lt;owl:onProperty rdf:resource="http://www.example.org#p"/&gt;
+  &lt;/rdf:Description&gt;
+  &lt;rdf:Description rdf:about="http://www.example.org#x2"&gt;
+    &lt;owl:someValuesFrom rdf:resource="http://www.example.org#c2"/&gt;
+    &lt;owl:onProperty rdf:resource="http://www.example.org#p"/&gt;
+  &lt;/rdf:Description&gt;
+&lt;/rdf:RDF&gt;</test:rdfXmlPremiseOntology>
+	</test:TestCase>
+	<test:TestCase rdf:about="http://owl.semanticweb.org/id/Rdfbased-2Dsem-2Drestrict-2Dsomevalues-2Dcmp-2Dprop">
+		<rdf:type rdf:resource="&test;ProfileIdentificationTest" />
+		<rdf:type rdf:resource="&test;PositiveEntailmentTest" />
+		<rdf:type rdf:resource="&test;ConsistencyTest" />
+		<test:identifier rdf:datatype="http://www.w3.org/2001/XMLSchema#string">rdfbased-sem-restrict-somevalues-cmp-prop</test:identifier>
+		<test:creator rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Michael Schneider</test:creator>
+		<test:creator rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Kai Mainzer</test:creator>
+		<test:description rdf:datatype="http://www.w3.org/2001/XMLSchema#string">An existential restriction on some property and some class is a sub class of another existential restriction on the same class but on a super property.</test:description>
+		<test:normativeSyntax rdf:resource="&test;RDFXML" />
+		<test:status rdf:resource="&test;Approved" />
+		<test:semantics rdf:resource="&test;DIRECT" />
+		<test:semantics rdf:resource="&test;RDF-BASED" />
+		<test:species rdf:resource="&test;FULL" />
+		<test:rdfXmlConclusionOntology rdf:datatype="http://www.w3.org/2001/XMLSchema#string">&lt;rdf:RDF
+    xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+    xmlns:owl="http://www.w3.org/2002/07/owl#"
+    xmlns:xsd="http://www.w3.org/2001/XMLSchema#"
+    xmlns:ex="http://www.example.org#"
+    xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"&gt;
+  &lt;rdf:Description rdf:about="http://www.example.org#x1"&gt;
+    &lt;rdfs:subClassOf rdf:resource="http://www.example.org#x2"/&gt;
+  &lt;/rdf:Description&gt;
+&lt;/rdf:RDF&gt;</test:rdfXmlConclusionOntology>
+		<test:rdfXmlPremiseOntology rdf:datatype="http://www.w3.org/2001/XMLSchema#string">&lt;rdf:RDF
+    xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+    xmlns:owl="http://www.w3.org/2002/07/owl#"
+    xmlns:xsd="http://www.w3.org/2001/XMLSchema#"
+    xmlns:ex="http://www.example.org#"
+    xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"&gt;
+  &lt;rdf:Description rdf:about="http://www.example.org#x1"&gt;
+    &lt;owl:someValuesFrom rdf:resource="http://www.example.org#c"/&gt;
+    &lt;owl:onProperty&gt;
+      &lt;rdf:Description rdf:about="http://www.example.org#p1"&gt;
+        &lt;rdfs:subPropertyOf rdf:resource="http://www.example.org#p2"/&gt;
+      &lt;/rdf:Description&gt;
+    &lt;/owl:onProperty&gt;
+  &lt;/rdf:Description&gt;
+  &lt;rdf:Description rdf:about="http://www.example.org#x2"&gt;
+    &lt;owl:someValuesFrom rdf:resource="http://www.example.org#c"/&gt;
+    &lt;owl:onProperty rdf:resource="http://www.example.org#p2"/&gt;
+  &lt;/rdf:Description&gt;
+&lt;/rdf:RDF&gt;</test:rdfXmlPremiseOntology>
+	</test:TestCase>
+	<test:TestCase rdf:about="http://owl.semanticweb.org/id/Rdfbased-2Dsem-2Drestrict-2Dsomevalues-2Dinst-2Dsubj">
+		<rdf:type rdf:resource="&test;ProfileIdentificationTest" />
+		<rdf:type rdf:resource="&test;PositiveEntailmentTest" />
+		<rdf:type rdf:resource="&test;ConsistencyTest" />
+		<test:identifier rdf:datatype="http://www.w3.org/2001/XMLSchema#string">rdfbased-sem-restrict-somevalues-inst-subj</test:identifier>
+		<test:creator rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Michael Schneider</test:creator>
+		<test:creator rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Kai Mainzer</test:creator>
+		<test:description rdf:datatype="http://www.w3.org/2001/XMLSchema#string">For a triple w p x, with x being an instance of a class c, the individual w is an instance of the existential restriction on p to c.</test:description>
+		<test:normativeSyntax rdf:resource="&test;RDFXML" />
+		<test:status rdf:resource="&test;Approved" />
+		<test:semantics rdf:resource="&test;DIRECT" />
+		<test:semantics rdf:resource="&test;RDF-BASED" />
+		<test:species rdf:resource="&test;FULL" />
+		<test:rdfXmlConclusionOntology rdf:datatype="http://www.w3.org/2001/XMLSchema#string">&lt;rdf:RDF
+    xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+    xmlns:owl="http://www.w3.org/2002/07/owl#"
+    xmlns:xsd="http://www.w3.org/2001/XMLSchema#"
+    xmlns:ex="http://www.example.org#"
+    xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"&gt;
+  &lt;ex:z rdf:about="http://www.example.org#w"/&gt;
+&lt;/rdf:RDF&gt;</test:rdfXmlConclusionOntology>
+		<test:rdfXmlPremiseOntology rdf:datatype="http://www.w3.org/2001/XMLSchema#string">&lt;rdf:RDF
+    xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+    xmlns:owl="http://www.w3.org/2002/07/owl#"
+    xmlns:xsd="http://www.w3.org/2001/XMLSchema#"
+    xmlns:ex="http://www.example.org#"
+    xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"&gt;
+  &lt;rdf:Description rdf:about="http://www.example.org#z"&gt;
+    &lt;owl:someValuesFrom rdf:resource="http://www.example.org#c"/&gt;
+    &lt;owl:onProperty rdf:resource="http://www.example.org#p"/&gt;
+  &lt;/rdf:Description&gt;
+  &lt;rdf:Description rdf:about="http://www.example.org#w"&gt;
+    &lt;ex:p&gt;
+      &lt;ex:c rdf:about="http://www.example.org#x"/&gt;
+    &lt;/ex:p&gt;
+  &lt;/rdf:Description&gt;
+&lt;/rdf:RDF&gt;</test:rdfXmlPremiseOntology>
+	</test:TestCase>
+
+</rdf:RDF>

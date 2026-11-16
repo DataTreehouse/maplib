@@ -12,6 +12,7 @@ use crate::{parse_include_graphs, DEFAULT_DEBUG_NO_RESULTS, DEFAULT_TRIPLES_BATC
 use chrono::Utc;
 use cimxml_export::export::FullModelDetails;
 use datalog::inference::InferenceResult;
+use datalog::reasoning::ReasoningResult;
 use external_sparql::SparqlMethod;
 use maplib::errors::MaplibError;
 use maplib::model::default::generate_default_template;
@@ -971,6 +972,27 @@ pub(crate) fn infer_mutex(
             include_graphs,
             max_rows,
             debug.unwrap_or(DEFAULT_DEBUG_NO_RESULTS),
+        )
+        .map_err(PyMaplibError::MaplibError)
+}
+
+pub(crate) fn reason_mutex(
+    inner: &mut InnerModel,
+    profile: &str,
+    graph: &NamedGraph,
+    target_graph: &NamedGraph,
+    include_graphs: Vec<NamedGraph>,
+    max_rows: Option<usize>,
+    max_violations: usize,
+) -> Result<ReasoningResult, PyMaplibError> {
+    inner
+        .reason(
+            profile,
+            graph,
+            target_graph,
+            include_graphs,
+            max_rows,
+            max_violations,
         )
         .map_err(PyMaplibError::MaplibError)
 }
