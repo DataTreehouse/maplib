@@ -354,6 +354,7 @@ pub fn decode_expr_wrapped(
 }
 
 const DECODE_ROWS_PER_TASK: usize = 16_384;
+const DECODE_VECTOR_ROWS_PER_TASK: usize = 256;
 
 /// Decodes a UInt32 series with in-memory dictionaries (the first that has a code wins), writing
 /// each value once into a string array, in parallel blocks of rows.
@@ -369,11 +370,18 @@ fn decode_codes(
     let empty = PrimitiveArray::<u32>::from_vec(vec![]);
     let arr = ch.downcast_iter().next().unwrap_or(&empty);
     let wrap = !prefix.is_empty() || !suffix.is_empty();
-    let chunks: Vec<Utf8ViewArray> = (0..n.div_ceil(DECODE_ROWS_PER_TASK))
+    // Vector literals are formatted when decoded, which costs much more per row than copying a
+    // string, so they are decoded in smaller blocks to use all threads.
+    let rows_per_task = if maps.iter().any(|m| m.is_vector()) {
+        DECODE_VECTOR_ROWS_PER_TASK
+    } else {
+        DECODE_ROWS_PER_TASK
+    };
+    let chunks: Vec<Utf8ViewArray> = (0..n.div_ceil(rows_per_task))
         .into_par_iter()
         .map(|t| {
-            let from = t * DECODE_ROWS_PER_TASK;
-            let to = (from + DECODE_ROWS_PER_TASK).min(n);
+            let from = t * rows_per_task;
+            let to = (from + rows_per_task).min(n);
             let mut b = MutableBinaryViewArray::<str>::with_capacity(to - from);
             let mut scratch = String::new();
             for i in from..to {

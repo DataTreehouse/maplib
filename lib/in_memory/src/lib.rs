@@ -699,8 +699,10 @@ impl CatMapsInMemory {
 
     pub fn decode_batch(&self, v: &[Option<u32>]) -> Vec<Option<Cow<'_, str>>> {
         // We must tolerate missing values here, as values may be in global instead of local
+        // Vector literals are formatted when decoded, so fewer of them make a task.
+        let min_len = if self.strings.vector { 64 } else { 1024 };
         v.into_par_iter()
-            .with_min_len(1024)
+            .with_min_len(min_len)
             .map(|u| {
                 u.and_then(|u| self.codes.get(u))
                     .map(|slot| self.decode_slot(slot))

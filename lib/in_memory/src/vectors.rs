@@ -17,21 +17,45 @@ pub const PACKED_TAG: char = '\u{1}';
 /// Writes the canonical lexical form of a vector: the shortest representation of each component
 /// that reads back to the same float.
 pub fn format_vector_into(v: &[f32], out: &mut String) {
-    out.reserve(v.len() * 12 + 2);
+    format_floats_into(v.iter().copied(), v.len(), out);
+}
+
+fn format_floats_into(v: impl Iterator<Item = f32>, n: usize, out: &mut String) {
+    out.reserve(n * 12 + 2);
     out.push('[');
     let mut buf = ryu::Buffer::new();
-    for (i, x) in v.iter().enumerate() {
+    for (i, x) in v.enumerate() {
         if i > 0 {
             out.push(',');
         }
         if x.is_finite() {
-            out.push_str(buf.format_finite(*x));
+            out.push_str(buf.format_finite(x));
         } else {
             // Not valid in the lexical space, but keeps the length of the vector.
             write!(out, "{x}").unwrap();
         }
     }
     out.push(']');
+}
+
+/// The floats of a packed vector (see [`is_packed`]).
+fn packed_floats(s: &str) -> (impl Iterator<Item = f32> + '_, usize) {
+    let b = &s.as_bytes()[1..];
+    let n_floats = b.len() * 7 / 32;
+    let mut acc: u64 = 0;
+    let mut bits = 0u32;
+    let mut bytes = b.iter();
+    let it = (0..n_floats).map(move |_| {
+        while bits < 32 {
+            acc |= ((*bytes.next().unwrap() & 0x7f) as u64) << bits;
+            bits += 7;
+        }
+        let x = f32::from_bits(acc as u32);
+        acc >>= 32;
+        bits -= 32;
+        x
+    });
+    (it, n_floats)
 }
 
 /// Parses the lexical form of a vector literal into `out`, which is cleared first.
@@ -107,23 +131,9 @@ pub fn is_packed(s: &str) -> bool {
 /// Unpacks a packed vector (see [`is_packed`]) into `out`, which is cleared first.
 pub fn unpack_vector_into(s: &str, out: &mut Vec<f32>) {
     out.clear();
-    let b = &s.as_bytes()[1..];
-    let n_floats = b.len() * 7 / 32;
-    out.reserve(n_floats);
-    let mut acc: u64 = 0;
-    let mut bits = 0u32;
-    for c in b {
-        acc |= ((*c & 0x7f) as u64) << bits;
-        bits += 7;
-        if bits >= 32 {
-            out.push(f32::from_bits(acc as u32));
-            acc >>= 32;
-            bits -= 32;
-            if out.len() == n_floats {
-                break;
-            }
-        }
-    }
+    let (it, n) = packed_floats(s);
+    out.reserve(n);
+    out.extend(it);
 }
 
 /// The vector of a stored vector literal, whether packed or a lexical form.
@@ -158,9 +168,8 @@ pub fn lexical_to_stored(s: &str) -> Cow<'_, str> {
 /// Writes the lexical form of a stored vector literal.
 pub fn stored_to_lexical_into(s: &str, out: &mut String) {
     if is_packed(s) {
-        let mut v = Vec::new();
-        unpack_vector_into(s, &mut v);
-        format_vector_into(&v, out);
+        let (it, n) = packed_floats(s);
+        format_floats_into(it, n, out);
     } else {
         out.push_str(s);
     }
