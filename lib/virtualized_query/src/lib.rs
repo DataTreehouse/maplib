@@ -479,14 +479,10 @@ impl VirtualizedQuery {
                 for (v, _) in &g.aggregations {
                     expected_columns.insert(v.as_str());
                 }
-                let tsfuncs = g.vq.get_virtualized_functions(&g.context);
+                // The group by variables are the grouping column and the variables that the
+                // virtualized query binds (computed or virtualized values), all in the result.
                 for b in &g.by {
-                    for (v, _) in &tsfuncs {
-                        if b == *v {
-                            expected_columns.insert(v.as_str());
-                            break;
-                        }
-                    }
+                    expected_columns.insert(b.as_str());
                 }
                 let grouping_col = self.get_groupby_columns();
                 expected_columns.extend(grouping_col.iter().map(|x| x.as_str()));
