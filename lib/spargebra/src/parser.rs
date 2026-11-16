@@ -2717,18 +2717,17 @@ parser! {
             }
 
         rule RegexExpression() -> Expression =
-            i("REGEX") _ "(" _ a:Expression() _ "," _ b:Expression() _ "," _ c:Expression() _ ")" { Expression::FunctionCall(Function::Regex, vec![a, b, c]) } /
-            i("REGEX") _ "(" _ a:Expression() _ "," _ b:Expression() _ ")" { Expression::FunctionCall(Function::Regex, vec![a, b]) }
+            // One alternative with an optional last argument: an alternative per arity would parse
+            // the first arguments again, which is exponential in the nesting depth.
+            i("REGEX") _ "(" _ a:Expression() _ "," _ b:Expression() _ c:("," _ c:Expression() _ { c })? ")" { Expression::FunctionCall(Function::Regex, [a, b].into_iter().chain(c).collect()) }
 
 
         rule SubstringExpression() -> Expression =
-            i("SUBSTR") _ "(" _ a:Expression() _ "," _ b:Expression() _ "," _ c:Expression() _ ")" { Expression::FunctionCall(Function::SubStr, vec![a, b, c]) } /
-            i("SUBSTR") _ "(" _ a:Expression() _ "," _ b:Expression() _ ")" { Expression::FunctionCall(Function::SubStr, vec![a, b]) }
+            i("SUBSTR") _ "(" _ a:Expression() _ "," _ b:Expression() _ c:("," _ c:Expression() _ { c })? ")" { Expression::FunctionCall(Function::SubStr, [a, b].into_iter().chain(c).collect()) }
 
 
         rule StrReplaceExpression() -> Expression =
-            i("REPLACE") _ "(" _ a:Expression() _ "," _ b:Expression() _ "," _ c:Expression() _ "," _ d:Expression() _ ")" { Expression::FunctionCall(Function::Replace, vec![a, b, c, d]) } /
-            i("REPLACE") _ "(" _ a:Expression() _ "," _ b:Expression() _ "," _ c:Expression() _ ")" { Expression::FunctionCall(Function::Replace, vec![a, b, c]) }
+            i("REPLACE") _ "(" _ a:Expression() _ "," _ b:Expression() _ "," _ c:Expression() _ d:("," _ d:Expression() _ { d })? ")" { Expression::FunctionCall(Function::Replace, [a, b, c].into_iter().chain(d).collect()) }
 
         rule ExistsFunc() -> Expression = i("EXISTS") _ p:GroupGraphPattern() { Expression::Exists(Box::new(p)) }
 
