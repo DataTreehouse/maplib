@@ -69,7 +69,7 @@ pub fn has_path_search(patterns: &[TriplePattern]) -> bool {
 
 /// One end of a search: a variable, or constant terms.
 #[derive(Debug, Clone)]
-enum Endpoint {
+pub(crate) enum Endpoint {
     Variable(String),
     Constants(Vec<TermPattern>),
 }
@@ -110,7 +110,7 @@ impl PathSearchSpec {
 
 use super::magic_paths::path_error as err;
 
-fn var_name(t: &TermPattern) -> Option<String> {
+pub(crate) fn var_name(t: &TermPattern) -> Option<String> {
     match t {
         TermPattern::Variable(v) => Some(v.as_str().to_string()),
         TermPattern::BlankNode(b) => Some(b.to_string()),
@@ -118,11 +118,11 @@ fn var_name(t: &TermPattern) -> Option<String> {
     }
 }
 
-fn output_var(param: &str, t: &TermPattern) -> Result<String, SparqlError> {
+pub(crate) fn output_var(param: &str, t: &TermPattern) -> Result<String, SparqlError> {
     var_name(t).ok_or_else(|| err(format!("maplib:{param} must be a variable, got {t}")))
 }
 
-fn add_endpoint(
+pub(crate) fn add_endpoint(
     param: &str,
     current: &mut Option<Endpoint>,
     t: &TermPattern,
@@ -311,7 +311,7 @@ impl Clone for PathGraphCache {
     }
 }
 
-fn u32_state() -> RDFNodeState {
+pub(crate) fn u32_state() -> RDFNodeState {
     BaseRDFNodeType::Literal(xsd::UNSIGNED_INT.into_owned(), None)
         .into_default_stored_rdf_node_state()
 }
@@ -528,7 +528,7 @@ impl Triplestore {
 
     /// The predicates of the dataset with resources (IRIs or blank nodes) as objects, but
     /// rdf:type, sorted.
-    fn resource_predicates(&self, dataset: &QueryGraph) -> Vec<NamedNode> {
+    pub(crate) fn resource_predicates(&self, dataset: &QueryGraph) -> Vec<NamedNode> {
         let graphs: Vec<NamedGraph> = match dataset {
             QueryGraph::NamedGraph(g) => vec![g.clone()],
             QueryGraph::QueryDataset(qd) => qd
@@ -559,7 +559,7 @@ impl Triplestore {
 
     /// The search graph of the predicates in the dataset, from the cache if their triples have
     /// not changed.
-    fn path_search_graph(
+    pub(crate) fn path_search_graph(
         &self,
         forward: &[NamedNode],
         inverse: &[NamedNode],
@@ -658,7 +658,7 @@ impl Triplestore {
 
     /// The distinct values of `vars` in the solutions with their node keys, in the columns
     /// `vars` and `key_col(var)`. Values that are not nodes of the graph are left out.
-    fn keys_of(
+    pub(crate) fn keys_of(
         &self,
         sm: SolutionMappings,
         vars: &[&String],
@@ -700,7 +700,7 @@ impl Triplestore {
         Ok(sm.mappings.collect().unwrap())
     }
 
-    fn key_vec(
+    pub(crate) fn key_vec(
         &self,
         sm: SolutionMappings,
         var: &String,
@@ -719,7 +719,7 @@ impl Triplestore {
         Ok(keys)
     }
 
-    fn constant_keys(
+    pub(crate) fn constant_keys(
         &self,
         constants: &[TermPattern],
         built: &BuiltGraph,
@@ -951,11 +951,11 @@ impl Triplestore {
     }
 }
 
-fn key_col(v: &str) -> String {
+pub(crate) fn key_col(v: &str) -> String {
     format!("{v}__path_key")
 }
 
-fn pattern_vars(tp: &TriplePattern) -> HashSet<String> {
+pub(crate) fn pattern_vars(tp: &TriplePattern) -> HashSet<String> {
     let mut vars = HashSet::new();
     if let Some(v) = var_name(&tp.subject) {
         vars.insert(v);
@@ -971,7 +971,7 @@ fn pattern_vars(tp: &TriplePattern) -> HashSet<String> {
 
 /// The groups of items that are connected through shared variables. Items without variables
 /// are groups of their own.
-fn connected_groups(items: &[HashSet<String>]) -> Vec<Vec<usize>> {
+pub(crate) fn connected_groups(items: &[HashSet<String>]) -> Vec<Vec<usize>> {
     let mut parent: Vec<usize> = (0..items.len()).collect();
     fn find(parent: &mut [usize], i: usize) -> usize {
         let mut r = i;
@@ -1011,7 +1011,7 @@ fn connected_groups(items: &[HashSet<String>]) -> Vec<Vec<usize>> {
 }
 
 /// Solution mappings with the constants as the values of `var`.
-fn constant_mappings(
+pub(crate) fn constant_mappings(
     constants: &[TermPattern],
     var: &str,
     global_cats: &LockedCats,

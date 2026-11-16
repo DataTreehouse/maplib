@@ -124,7 +124,7 @@ Features marked **EE** need [maplib Enterprise Edition](#open-source-and-enterpr
 
 Beyond standard SPARQL 1.1, maplib supports:
 - length-constrained paths (`ex:p{2,4}`);
-- the magic predicates `maplib:path` (hop counts and path enumeration) and `maplib:shortestPath` (shortest routes with costs and nodes to avoid);
+- the magic predicates `maplib:path` (hop counts and path enumeration), `maplib:shortestPath` (shortest routes with costs and nodes to avoid), and `maplib:component`, `maplib:bridge` and `maplib:articulationPoint` (islands, single points of failure and what-ifs, over stored or derived edges);
 - arithmetic on durations, dates and times;
 - full-text search with `maplib:fts` **EE**;
 - **GeoSPARQL** **EE**. Enable it with `IndexingOptions(geo=True)`; `m.read(..., format="cim/xml", geo=True)` also turns CIM position points into geometries. WKT, WKB and GeoJSON geometry literals are then indexed spatially, and the GeoSPARQL functions work across coordinate reference systems: simple features, Egenhofer and RCC8 relations, distances and areas with units of measure, and constructions such as buffers and intersections. Spatial filters and spatial joins use the index.

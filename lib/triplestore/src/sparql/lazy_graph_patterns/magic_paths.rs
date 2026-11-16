@@ -13,6 +13,10 @@ use spargebra::term::{NamedNodePattern, TermPattern, TriplePattern};
 pub const PATH: &str = "path";
 /// The local name of `maplib:shortestPath`.
 pub const SHORTEST_PATH: &str = "shortestPath";
+/// The local names of the graph algorithm predicates ([super::graph_algorithms]).
+pub const COMPONENT: &str = "component";
+pub const BRIDGE: &str = "bridge";
+pub const ARTICULATION_POINT: &str = "articulationPoint";
 
 /// The local name of a `maplib:` IRI.
 pub fn maplib_local_name(nn: &NamedNode) -> Option<&str> {
@@ -24,13 +28,15 @@ pub fn has_maplib_predicate(tp: &TriplePattern, local: &str) -> bool {
     matches!(&tp.predicate, NamedNodePattern::NamedNode(nn) if maplib_local_name(nn) == Some(local))
 }
 
-/// Whether a graph pattern is a basic graph pattern with `maplib:path` or `maplib:shortestPath`.
-/// Their start nodes (and the targets of `maplib:shortestPath`) come from the other patterns of
-/// the group, so they are joined after them.
+/// Whether a graph pattern is a basic graph pattern with `maplib:path`, `maplib:shortestPath` or
+/// a graph algorithm predicate. Their start nodes (and targets, avoided nodes and edges) come from
+/// the other patterns of the group, so they are joined after them.
 pub fn is_magic_path_bgp(gp: &GraphPattern) -> bool {
-    matches!(gp, GraphPattern::Bgp { patterns } if patterns
-        .iter()
-        .any(|tp| has_maplib_predicate(tp, PATH) || has_maplib_predicate(tp, SHORTEST_PATH)))
+    matches!(gp, GraphPattern::Bgp { patterns } if patterns.iter().any(|tp| {
+        [PATH, SHORTEST_PATH, COMPONENT, BRIDGE, ARTICULATION_POINT]
+            .iter()
+            .any(|p| has_maplib_predicate(tp, p))
+    }))
 }
 
 /// An error in the use of a magic path predicate or its options.

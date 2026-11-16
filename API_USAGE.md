@@ -1194,6 +1194,65 @@ Outputs: `maplib:length`, `maplib:cost`, `maplib:pathIndex`, `maplib:pathNodes` 
 the nodes), and, for one row per node, `maplib:pathNode`, `maplib:nodeIndex`,
 `maplib:stepPredicate` and `maplib:stepInverse`.
 
+### Graph algorithms: maplib:component, maplib:bridge, maplib:articulationPoint
+
+Connected components, bridges and articulation points are magic predicates too, so islands,
+switch-bounded areas, single points of failure and what-ifs are plain SPARQL. The edges are
+predicates (followed both ways), or the rows of other patterns of the group:
+
+```python
+m = Model()
+m.reads("""
+@prefix ex: <http://example.org/> .
+ex:a ex:next ex:b . ex:b ex:next ex:c . ex:c ex:next ex:d .
+ex:x ex:next ex:y .
+ex:c ex:open true .
+""")
+print(m.query("""
+PREFIX ex: <http://example.org/>
+PREFIX maplib: <https://datatreehouse.github.io/maplib/vocab#>
+SELECT ?node ?island ?size WHERE {
+    ?node maplib:component ?c .
+    ?c maplib:predicate ex:next ;
+       maplib:avoid ?open ;            # left out of the graph, with their edges
+       maplib:componentId ?island ;    # 1 is the largest
+       maplib:componentSize ?size .
+    ?open ex:open true .
+} ORDER BY ?island ?node"""))   # {a, b}, {x, y} and {d}
+```
+
+Edges derived by a query: `maplib:edgeSource ?a ; maplib:edgeTarget ?b` make one edge of every
+distinct solution of the patterns that bind `?a` and `?b` (put them in a subquery), e.g. the
+substations at the two ends of every line:
+
+```python
+print(m.query("""
+PREFIX ex: <http://example.org/>
+PREFIX maplib: <https://datatreehouse.github.io/maplib/vocab#>
+SELECT ?line ?a ?b ?cut WHERE {
+    { SELECT ?line ?a ?b WHERE { ?line ex:from ?a ; ex:to ?b } }
+    ?a maplib:bridge ?o .
+    ?o maplib:object ?b ; maplib:edgeSource ?a ; maplib:edgeTarget ?b ; maplib:cutOff ?cut .
+}"""))
+```
+
+| Predicate | Rows | Outputs |
+|---|---|---|
+| `?n maplib:component ?o` | one per node | `maplib:componentId`, `maplib:componentSize`; `maplib:strong true` gives strongly connected components of the directed edges |
+| `?a maplib:bridge ?o` | one per bridge (an edge whose loss splits its component), `maplib:object ?b` binds the other end | `maplib:cutOff` (the nodes on the smaller side), `maplib:edgePredicate`, `maplib:componentId`, `maplib:componentSize` |
+| `?n maplib:articulationPoint ?o` | one per node whose loss splits its component | `maplib:cutOff` (the nodes no longer connected to the largest remaining part), `maplib:componentId`, `maplib:componentSize` |
+
+The edge options are those of `maplib:shortestPath` (`maplib:predicate`, `maplib:inversePredicate`,
+`maplib:anyPredicate`, `maplib:excludePredicate`) or `maplib:edgeSource`/`maplib:edgeTarget`, and
+`maplib:avoid` takes a variable bound by the group (or a subquery before it) or constants, and so
+does `maplib:countNodes`: only those nodes count in `componentSize` and `cutOff` (e.g. the
+substations or the customers cut off, not every node of the graph). A
+subject bound by the other patterns restricts the rows to those nodes; nodes without edges are
+then components of their own; write those patterns in the same block as the predicate, after
+a subquery of avoided nodes, since a separate block before the subquery is joined with it first
+(a cross product). Parallel edges are not bridges. The algorithms run on the cached
+integer graph of `maplib:shortestPath` (union-find, Tarjan's algorithms, without recursion).
+
 ### Full-text search: maplib:fts **EE**
 
 Enable the index with `IndexingOptions(fts=True)` (or `create_index`), then search with the magic

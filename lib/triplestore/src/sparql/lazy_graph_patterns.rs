@@ -7,6 +7,7 @@ mod group;
 mod join;
 pub(crate) mod lateral;
 mod left_join;
+pub mod graph_algorithms;
 pub mod length_path;
 pub mod magic_paths;
 mod minus;
@@ -170,6 +171,17 @@ impl Triplestore {
                     patterns.clone()
                 };
 
+                if graph_algorithms::has_graph_algorithm(&patterns) {
+                    return self.lazy_graph_algorithm(
+                        &patterns,
+                        solution_mappings,
+                        context,
+                        parameters,
+                        &pushdowns,
+                        query_settings,
+                        dataset,
+                    );
+                }
                 if path_search::has_path_search(&patterns) {
                     return self.lazy_path_search(
                         &patterns,
@@ -544,7 +556,8 @@ const MAPLIB_DATA_PREDICATES: [&str; 6] = [
 ];
 
 impl Triplestore {
-    /// The magic predicates this build supports (maplib:path, maplib:shortestPath, maplib:fts
+    /// The magic predicates this build supports (maplib:path, maplib:shortestPath,
+    /// maplib:component, maplib:bridge, maplib:articulationPoint, maplib:fts
     /// with an index, maplib:vectorSearch) have been taken out of the patterns before this is
     /// called. A remaining predicate in the maplib namespace that no triples use is a magic
     /// predicate that this build does not have, a misspelt one, or maplib:fts without an
