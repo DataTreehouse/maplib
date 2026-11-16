@@ -261,7 +261,7 @@ impl Triplestore {
             })
             .collect();
         let nt = self
-            .insert_construct_result(r_unpacked, &NamedGraph::transient())
+            .insert_constructed_triples(r_unpacked, &NamedGraph::transient())
             .map_err(|x| TriplestoreError::SparqlQueryError(x.to_string()))?;
         let c = nt
             .into_iter()

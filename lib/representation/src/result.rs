@@ -31,10 +31,16 @@ pub struct QueryResult {
     pub pushdown_paths: Vec<Context>,
 }
 
+/// Triples constructed by one part of a CONSTRUCT template: the subject, (predicate) and object
+/// columns, the predicate if it is the same for all triples, and the graph of the triples.
+/// The triples of the template outside of GRAPH blocks are in the default graph, which is the
+/// graph that is inserted into when the result is inserted.
+pub type ConstructedTriples = (EagerSolutionMappings, Option<NamedNode>, NamedGraph);
+
 #[derive(Debug, Clone)]
 pub enum QueryResultKind {
     Select(EagerSolutionMappings),
-    Construct(Vec<(EagerSolutionMappings, Option<NamedNode>)>),
+    Construct(Vec<ConstructedTriples>),
     Ask(bool),
 }
 
@@ -72,7 +78,7 @@ impl QueryResultKind {
             }
             QueryResultKind::Construct(c) => {
                 let mut ser = TurtleSerializer::new().for_writer(vec![]);
-                for (sm, predicate) in c {
+                for (sm, predicate, _) in c {
                     let mut sm = sm.clone();
                     if let Some(predicate) = predicate {
                         sm.mappings = sm
@@ -133,30 +139,47 @@ impl QueryResultKind {
     }
 }
 
+/// Constructs the triples of a template from the solutions, in the order of the template. A
+/// quad pattern with a graph name variable gives triples for each IRI that the variable is bound
+/// to.
 pub fn template_to_solution_mappings(
     mut df: DataFrame,
     mut rdf_node_types: HashMap<String, RDFNodeState>,
     template: &Vec<QuadPattern>,
     global_cats: LockedCats,
-) -> Result<HashMap<NamedGraph, Vec<(EagerSolutionMappings, Option<NamedNode>)>>, RepresentationError>
-{
+) -> Result<Vec<ConstructedTriples>, RepresentationError> {
     df = mint_blank_nodes(df, &mut rdf_node_types, template);
-    let mut solutions_map: HashMap<_, Vec<_>> = HashMap::new();
+    // The solutions are partitioned once for each graph name variable, and the partitions are
+    // shared by the quad patterns with that variable.
+    let mut partitions: HashMap<&Variable, Vec<(NamedNode, DataFrame)>> = HashMap::new();
+    let mut solutions = vec![];
     for qp in template {
-        for (df, qp) in expand_graph_variable(&df, &rdf_node_types, qp, global_cats.clone()) {
-            let cats = global_cats.read()?;
+        let parts: Vec<(&DataFrame, QuadPattern)> =
+            if let GraphNamePattern::Variable(v) = &qp.graph_name {
+                let parts = partitions.entry(v).or_insert_with(|| {
+                    partition_by_graph_variable(&df, &rdf_node_types, v, global_cats.clone())
+                });
+                parts
+                    .iter()
+                    .map(|(g, part)| {
+                        let mut qp = qp.clone();
+                        qp.graph_name = GraphNamePattern::NamedNode(g.clone());
+                        (part, qp)
+                    })
+                    .collect()
+            } else {
+                vec![(&df, qp.clone())]
+            };
+        let cats = global_cats.read()?;
+        for (df, qp) in parts {
             if let Some((sm, predicate, graph)) =
-                quad_patterns_to_solution_mappings(&df, &rdf_node_types, &qp, None, true, &cats)?
+                quad_patterns_to_solution_mappings(df, &rdf_node_types, &qp, None, true, &cats)?
             {
-                if let Some(solutions) = solutions_map.get_mut(&graph) {
-                    solutions.push((sm, predicate));
-                } else {
-                    solutions_map.insert(graph, vec![(sm, predicate)]);
-                }
+                solutions.push((sm, predicate, graph));
             }
         }
     }
-    Ok(solutions_map)
+    Ok(solutions)
 }
 
 /// Replaces a graph name variable in the quad pattern with each IRI that it is bound to,

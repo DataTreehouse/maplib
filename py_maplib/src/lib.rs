@@ -73,7 +73,8 @@ use representation::python_df_to_rust::polars_df_to_rust_df;
 use representation::rdf_to_polars::rdf_named_node_to_polars_literal_value;
 use representation::response_format::SparqlResponseFormat;
 use representation::{
-    BaseRDFNodeType, RDFNodeState, OBJECT_COL_NAME, PREDICATE_COL_NAME, SUBJECT_COL_NAME,
+    BaseRDFNodeType, RDFNodeState, GRAPH_COL_NAME, OBJECT_COL_NAME, PREDICATE_COL_NAME,
+    SUBJECT_COL_NAME,
 };
 use spargebra::term::GroundTerm;
 use templates::python::owl::PyOWL;
@@ -288,11 +289,13 @@ fn query_to_result(
             SparqlResponseFormat::JSON
         } else if response_format.to_lowercase() == "turtle" {
             SparqlResponseFormat::Turtle
+        } else if response_format.to_lowercase() == "trig" {
+            SparqlResponseFormat::TriG
         } else if response_format.to_lowercase() == "dataframe" {
             SparqlResponseFormat::DataFrame
         } else {
             return Err(PyMaplibError::FunctionArgumentError(format!(
-                "Response format should be one of turtle, json, dataframe, not {}",
+                "Response format should be one of turtle, trig, json, dataframe, not {}",
                 response_format
             ))
             .into());
@@ -315,45 +318,54 @@ fn query_to_result(
             let json = res.kind.json(global_cats.clone());
             return Ok(PyString::new(py, &json).into());
         }
-        SparqlResponseFormat::Turtle => {
-            if !matches!(res.kind, QueryResultKind::Construct(..)) {
+        SparqlResponseFormat::Turtle | SparqlResponseFormat::TriG => {
+            let trig = matches!(use_response_format, SparqlResponseFormat::TriG);
+            let QueryResultKind::Construct(mut sms) = res.kind else {
                 return Err(PyMaplibError::FunctionArgumentError(format!(
-                    "turtle response format can only be used with construct and describe"
+                    "{} response format can only be used with construct and describe",
+                    if trig { "trig" } else { "turtle" }
                 ))
                 .into());
+            };
+            if !trig
+                && sms
+                    .iter()
+                    .any(|(_, _, g)| !matches!(g, NamedGraph::DefaultGraph))
+            {
+                return Err(PyMaplibError::FunctionArgumentError(
+                    "The CONSTRUCT result has triples in named graphs (GRAPH blocks in the template), use the trig response format"
+                        .to_string(),
+                )
+                .into());
             }
-            if let QueryResultKind::Construct(mut sms) = res.kind {
-                if sms.is_empty() {
-                    return Ok(PyString::new(py, "").into());
-                } else {
-                    // We have a cat problem otherwise..
-                    for (sm, _) in &mut sms {
-                        let lf = format_native_columns(
-                            sm.mappings.clone().lazy(),
-                            &mut sm.rdf_node_types,
-                            global_cats.clone(),
-                        );
-                        sm.mappings = lf
-                            .collect()
-                            .map_err(|e| PyMaplibError::RuntimeError(e.to_string()))?;
-                    }
-                    let mut ts = Triplestore::new(StorageOptions::memory(), None).map_err(|x| {
-                        PyMaplibError::MaplibError(MaplibError::TriplestoreError(x))
-                    })?;
-                    ts.insert_construct_result(sms, &NamedGraph::DefaultGraph)
-                        .map_err(|x| PyMaplibError::MaplibError(MaplibError::SparqlError(x)))?;
-                    let mut out_bytes = vec![];
-                    ts.write_pretty_turtle(&mut out_bytes, &NamedGraph::DefaultGraph, prefixes)
-                        .map_err(|x| {
-                            PyMaplibError::MaplibError(MaplibError::TriplestoreError(x))
-                        })?;
-                    let s = String::from_utf8(out_bytes)
-                        .map_err(|e| PyMaplibError::RuntimeError(e.to_string()))?;
-                    return Ok(PyString::new(py, &s).into());
-                }
+            if sms.is_empty() {
+                return Ok(PyString::new(py, "").into());
+            }
+            // We have a cat problem otherwise..
+            for (sm, _, _) in &mut sms {
+                let lf = format_native_columns(
+                    sm.mappings.clone().lazy(),
+                    &mut sm.rdf_node_types,
+                    global_cats.clone(),
+                );
+                sm.mappings = lf
+                    .collect()
+                    .map_err(|e| PyMaplibError::RuntimeError(e.to_string()))?;
+            }
+            let mut ts = Triplestore::new(StorageOptions::memory(), None)
+                .map_err(|x| PyMaplibError::MaplibError(MaplibError::TriplestoreError(x)))?;
+            ts.insert_constructed_triples(sms, &NamedGraph::DefaultGraph)
+                .map_err(|x| PyMaplibError::MaplibError(MaplibError::SparqlError(x)))?;
+            let mut out_bytes = vec![];
+            if trig {
+                ts.write_quads(&mut out_bytes, RdfFormat::TriG, None, prefixes)
             } else {
-                unreachable!()
+                ts.write_pretty_turtle(&mut out_bytes, &NamedGraph::DefaultGraph, prefixes)
             }
+            .map_err(|x| PyMaplibError::MaplibError(MaplibError::TriplestoreError(x)))?;
+            let s = String::from_utf8(out_bytes)
+                .map_err(|e| PyMaplibError::RuntimeError(e.to_string()))?;
+            return Ok(PyString::new(py, &s).into());
         }
         SparqlResponseFormat::DataFrame => {
             let QueryResult {
@@ -391,6 +403,7 @@ fn query_to_result(
                             mut rdf_node_types,
                         },
                         predicate,
+                        graph,
                     ) in dfs
                     {
                         if let Some(predicate) = predicate {
@@ -409,6 +422,21 @@ fn query_to_result(
                                 .map_err(|e| PyMaplibError::RuntimeError(e.to_string()))?;
                             rdf_node_types.insert(
                                 PREDICATE_COL_NAME.to_string(),
+                                BaseRDFNodeType::IRI.into_default_input_rdf_node_state(),
+                            );
+                        }
+                        // Triples from GRAPH blocks of the template get a graph column.
+                        if let NamedGraph::NamedGraph(g) = &graph {
+                            mappings = mappings
+                                .lazy()
+                                .with_column(
+                                    lit(rdf_named_node_to_polars_literal_value(g))
+                                        .alias(GRAPH_COL_NAME),
+                                )
+                                .collect()
+                                .map_err(|e| PyMaplibError::RuntimeError(e.to_string()))?;
+                            rdf_node_types.insert(
+                                GRAPH_COL_NAME.to_string(),
                                 BaseRDFNodeType::IRI.into_default_input_rdf_node_state(),
                             );
                         }

@@ -7,6 +7,7 @@ use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use representation::dataset::NamedGraph;
 use representation::multitype::split_df_multicols;
 use representation::null::non_multi_col_is_null_workaround;
+use representation::result::ConstructedTriples;
 use representation::solution_mapping::EagerSolutionMappings;
 use representation::{OBJECT_COL_NAME, PREDICATE_COL_NAME, SUBJECT_COL_NAME};
 use std::collections::HashMap;
@@ -17,7 +18,23 @@ impl Triplestore {
         sms: Vec<(EagerSolutionMappings, Option<NamedNode>)>,
         graph: &NamedGraph,
     ) -> Result<Vec<NewTriples>, SparqlError> {
-        let all_triples_to_add = construct_result_as_triples_to_add(sms, graph);
+        self.insert_constructed_triples(
+            sms.into_iter()
+                .map(|(sm, p)| (sm, p, NamedGraph::DefaultGraph))
+                .collect(),
+            graph,
+        )
+    }
+
+    /// Inserts the triples of a CONSTRUCT result, each into its graph. Triples of the default
+    /// graph of the result are inserted into the given default graph. All graphs are added in one
+    /// go, so the triples are deduplicated and indexed once per graph.
+    pub fn insert_constructed_triples(
+        &mut self,
+        sms: Vec<ConstructedTriples>,
+        default_graph: &NamedGraph,
+    ) -> Result<Vec<NewTriples>, SparqlError> {
+        let all_triples_to_add = construct_result_as_triples_to_add(sms, default_graph);
         let new_triples = if !all_triples_to_add.is_empty() {
             self.add_triples_vec(all_triples_to_add)
                 .map_err(SparqlError::TriplestoreError)?
@@ -29,8 +46,8 @@ impl Triplestore {
 }
 
 fn construct_result_as_triples_to_add(
-    sms: Vec<(EagerSolutionMappings, Option<NamedNode>)>,
-    graph: &NamedGraph,
+    sms: Vec<ConstructedTriples>,
+    default_graph: &NamedGraph,
 ) -> Vec<TriplesToAdd> {
     let tta: Vec<Vec<_>> = sms
         .into_par_iter()
@@ -41,7 +58,13 @@ fn construct_result_as_triples_to_add(
                     mut rdf_node_types,
                 },
                 predicate,
+                graph,
             )| {
+                let graph = if graph == NamedGraph::DefaultGraph {
+                    default_graph.clone()
+                } else {
+                    graph
+                };
                 if mappings.height() == 0 {
                     vec![]
                 } else {

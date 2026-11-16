@@ -144,6 +144,7 @@ impl Triplestore {
             }
             Query::Construct {
                 template,
+                graph_template,
                 dataset,
                 pattern,
                 base_iri: _,
@@ -174,18 +175,16 @@ impl Triplestore {
                                 object: x.object.clone(),
                                 graph_name: GraphNamePattern::DefaultGraph,
                             })
+                            .chain(graph_template.iter().cloned())
                             .collect();
 
-                        let mut solutions_map = template_to_solution_mappings(
+                        let solutions = template_to_solution_mappings(
                             df,
                             rdf_node_types,
                             &quad_template,
                             self.global_cats.clone(),
                         )
                         .map_err(|x| SparqlError::QuadPatternsError(x.to_string()))?;
-                        let solutions = solutions_map
-                            .remove(&NamedGraph::DefaultGraph)
-                            .unwrap_or(Vec::new());
                         QueryResultKind::Construct(solutions)
                     }
                     Err(InterruptableCollectError::Cancelled(c)) => {
@@ -297,7 +296,9 @@ impl Triplestore {
                         "Got SELECT or ASK query when CONSTRUCT was expected".to_string(),
                     ))
                 }
-                QueryResultKind::Construct(dfs) => self.insert_construct_result(dfs, target_graph),
+                QueryResultKind::Construct(dfs) => {
+                    self.insert_constructed_triples(dfs, target_graph)
+                }
             };
             Ok(InsertResult {
                 new_triples: new_triples?,
@@ -550,9 +551,7 @@ impl Triplestore {
                         self.global_cats.clone(),
                     )
                     .map_err(|x| SparqlError::QuadPatternsError(x.to_string()))?;
-                    for (g, s) in insert_solutions {
-                        self.insert_construct_result(s, &g)?;
-                    }
+                    self.insert_constructed_triples(insert_solutions, &NamedGraph::DefaultGraph)?;
                     self.maybe_garbage_collect()?;
                 }
                 GraphUpdateOperation::Load {

@@ -91,7 +91,7 @@ struct CachedQueryResult {
 fn result_bytes(kind: &QueryResultKind) -> usize {
     match kind {
         QueryResultKind::Select(sm) => sm.mappings.estimated_size(false),
-        QueryResultKind::Construct(v) => v.iter().map(|(sm, _)| sm.mappings.estimated_size(false)).sum(),
+        QueryResultKind::Construct(v) => v.iter().map(|(sm, _, _)| sm.mappings.estimated_size(false)).sum(),
         QueryResultKind::Ask(_) => 1,
     }
 }

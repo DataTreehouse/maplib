@@ -1477,7 +1477,7 @@ class Model:
             solution_mappings: bool = False,
             graph: str = None,
             return_json: bool = False,
-            return_format: LiteralType["turtle", "json", "dataframe"] = "dataframe",
+            return_format: LiteralType["turtle", "trig", "json", "dataframe"] = "dataframe",
             include_graphs: Optional[List[str]] = None,
             max_rows: int = None,
             debug: bool = False,
@@ -1504,7 +1504,9 @@ class Model:
         :param solution_mappings: Returns SolutionMappings with maplib-native formatting and with RDF typing. Useful for round-trips.
         :param graph: The IRI of the graph to query.
         :param return_json: Return JSON string.
-        :param return_format: One of "dataframe" (default), "json" (SELECT and ASK only) or "turtle" (CONSTRUCT only). Ignored when return_json is set.
+        :param return_format: One of "dataframe" (default), "json" (SELECT and ASK only), "turtle" or "trig" (CONSTRUCT only).
+            "turtle" raises an error when the CONSTRUCT result has triples in named graphs (from GRAPH blocks in the template).
+            Ignored when return_json is set.
         :param include_graphs: IRIs of graphs whose triples are merged into the queried graph, as with FROM.
             None includes the transient graph (TRANSIENT_GRAPH), use [] to query only the graph itself.
         :param max_rows: Maximum estimated rows in result, helps avoid out-of-memory errors.
@@ -1524,6 +1526,9 @@ class Model:
                         no timeout. With endpoint, the server stops the query, and a timeout of the server itself
                         (Model.serve(query_timeout=)) also applies.
         :return: DataFrame (Select), list of DataFrames (Construct) containing results or SolutionMappings when solution_mappings is set, or a bool (Ask).
+            CONSTRUCT templates can have GRAPH blocks, e.g. CONSTRUCT { ?s ex:p ?o GRAPH ex:g { ?s ex:q ?o } GRAPH ?g { ?o ex:q ?s } } WHERE { ... }.
+            The DataFrames of the triples in GRAPH blocks have an extra column, graph, with the IRI of the graph.
+            When the graph is a variable, there is one DataFrame per graph that it is bound to.
 
         """
 
@@ -1702,6 +1707,8 @@ class Model:
         :param source_graph: The IRI of the source graph to execute the construct query.
         :param target_graph: The IRI of the target graph to insert into. Use TRANSIENT_GRAPH for triples that should
             be available for querying, validation and reasoning, but not written.
+            The triples of GRAPH blocks in the CONSTRUCT template, e.g. CONSTRUCT { GRAPH ex:g { ?s ex:q ?o } GRAPH ?g { ?o ex:q ?s } },
+            are inserted into the graph of the block instead.
         :param include_graphs: IRIs of graphs whose triples are merged into the queried graph, as with FROM.
             None includes the transient graph (TRANSIENT_GRAPH), use [] to query only the graph itself.
         :param max_rows: Maximum estimated rows in result, helps avoid out-of-memory errors.

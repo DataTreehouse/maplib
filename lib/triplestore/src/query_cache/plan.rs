@@ -7,7 +7,7 @@ use spargebra::algebra::{
     AggregateExpression, AggregateFunction, Expression, Function, GraphPattern, OrderExpression,
     PropertyPathExpression, QueryDataset,
 };
-use spargebra::term::{GroundTerm, NamedNodePattern, TermPattern, TriplePattern};
+use spargebra::term::{GraphNamePattern, GroundTerm, NamedNodePattern, TermPattern, TriplePattern};
 use spargebra::Query;
 use std::collections::HashSet;
 
@@ -81,9 +81,23 @@ pub fn cache_plan(query: &Query, ctx: &PlanContext) -> CachePlan {
     p.reads.insert(ReadItem::Prefixes);
     p.pattern(pattern, &default);
     match query {
-        Query::Construct { template, .. } => {
+        Query::Construct {
+            template,
+            graph_template,
+            ..
+        } => {
             for t in template {
                 p.collect_triple_iris(t);
+            }
+            for q in graph_template {
+                p.term(&q.subject);
+                p.term(&q.object);
+                if let NamedNodePattern::NamedNode(nn) = &q.predicate {
+                    p.iris.insert(nn.clone());
+                }
+                if let GraphNamePattern::NamedNode(nn) = &q.graph_name {
+                    p.iris.insert(nn.clone());
+                }
             }
         }
         // DESCRIBE fetches all triples of the described resources.

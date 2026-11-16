@@ -44,6 +44,8 @@ use oxrdf::{BlankNode, NamedNode, NamedNodeRef, NamedOrBlankNode, Term};
 pub const PREDICATE_COL_NAME: &str = "predicate";
 pub const OBJECT_COL_NAME: &str = "object";
 pub const SUBJECT_COL_NAME: &str = "subject";
+/// The graph column of the DataFrames of CONSTRUCT results from GRAPH blocks of the template.
+pub const GRAPH_COL_NAME: &str = "graph";
 pub const LANG_STRING_VALUE_FIELD: &str = "<http://www.w3.org/1999/02/22-rdf-syntax-ns#langString>";
 pub const LANG_STRING_LANG_FIELD: &str = "l";
 

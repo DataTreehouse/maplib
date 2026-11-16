@@ -636,6 +636,51 @@ enum PartialGraphPattern {
     Other(GraphPattern),
 }
 
+/// Splits a CONSTRUCT template into the triples of the default graph and the quads of GRAPH blocks.
+fn split_construct_template(quads: Vec<QuadPattern>) -> (Vec<TriplePattern>, Vec<QuadPattern>) {
+    let mut template = Vec::new();
+    let mut graph_template = Vec::new();
+    for q in quads {
+        if q.graph_name == GraphNamePattern::DefaultGraph {
+            template.push(TriplePattern::new(q.subject, q.predicate, q.object));
+        } else {
+            graph_template.push(q);
+        }
+    }
+    (template, graph_template)
+}
+
+/// The WHERE pattern of the short form CONSTRUCT WHERE, where the template is also the pattern.
+fn construct_where_pattern(template: &[TriplePattern], graph_template: &[QuadPattern]) -> GraphPattern {
+    let mut pattern = GraphPattern::Bgp {
+        patterns: template.to_vec(),
+    };
+    let mut graphs: Vec<(GraphNamePattern, Vec<TriplePattern>)> = Vec::new();
+    for q in graph_template {
+        let tp = TriplePattern::new(q.subject.clone(), q.predicate.clone(), q.object.clone());
+        if let Some((_, tps)) = graphs.iter_mut().find(|(g, _)| g == &q.graph_name) {
+            tps.push(tp);
+        } else {
+            graphs.push((q.graph_name.clone(), vec![tp]));
+        }
+    }
+    for (g, patterns) in graphs {
+        let name = match g {
+            GraphNamePattern::NamedNode(nn) => NamedNodePattern::NamedNode(nn),
+            GraphNamePattern::Variable(v) => NamedNodePattern::Variable(v),
+            GraphNamePattern::DefaultGraph => unreachable!(),
+        };
+        pattern = new_join(
+            pattern,
+            GraphPattern::Graph {
+                name,
+                inner: Box::new(GraphPattern::Bgp { patterns }),
+            },
+        );
+    }
+    pattern
+}
+
 fn new_join(l: GraphPattern, r: GraphPattern) -> GraphPattern {
     // Avoid to output empty BGPs
     if let GraphPattern::Bgp { patterns: pl } = &l {
@@ -1413,20 +1458,25 @@ parser! {
 
         rule ConstructQuery() -> Query =
             i("CONSTRUCT") _ c:ConstructTemplate() _ d:DatasetClauses() _ w:WhereClause() _ g:GroupClause()? _ h:HavingClause()? _ o:OrderClause()? _ l:LimitOffsetClauses()? _ v:ValuesClause() _ p:PValuesClause() {?
+                let (template, graph_template) = split_construct_template(c);
                 Ok(Query::Construct {
-                    template: c,
+                    template,
+                    graph_template,
                     dataset: d,
                     pattern: build_select(Selection::no_op(), w, g, h, o, l, v, p, state)?,
                     base_iri: state.base_iri.clone()
                 })
             } /
-            i("CONSTRUCT") _ d:DatasetClauses() _ i("WHERE") _ "{" _ c:ConstructQuery_optional_triple_template() _ "}" _ g:GroupClause()? _ h:HavingClause()? _ o:OrderClause()? _ l:LimitOffsetClauses()? _ v:ValuesClause() _ p:PValuesClause() {?
+            i("CONSTRUCT") _ d:DatasetClauses() _ i("WHERE") _ "{" _ c:Quads() _ "}" _ g:GroupClause()? _ h:HavingClause()? _ o:OrderClause()? _ l:LimitOffsetClauses()? _ v:ValuesClause() _ p:PValuesClause() {?
+                let (template, graph_template) = split_construct_template(c);
+                let where_pattern = construct_where_pattern(&template, &graph_template);
                 Ok(Query::Construct {
-                    template: c.clone(),
+                    template,
+                    graph_template,
                     dataset: d,
                     pattern: build_select(
                         Selection::no_op(),
-                        GraphPattern::Bgp { patterns: c },
+                        where_pattern,
                         g, h, o, l, v, p, state
                     )?,
                     base_iri: state.base_iri.clone()
@@ -1436,7 +1486,6 @@ parser! {
             state.currently_used_bnodes.clear();
         }
 
-        rule ConstructQuery_optional_triple_template() -> Vec<TriplePattern> = TriplesTemplate() / { Vec::new() }
 
         rule DescribeQuery() -> Query =
             i("DESCRIBE") _ "*" _ d:DatasetClauses() w:WhereClause()? _ g:GroupClause()? _ h:HavingClause()? _ o:OrderClause()? _ l:LimitOffsetClauses()? _ v:ValuesClause() _ p:PValuesClause() {?
@@ -1974,12 +2023,8 @@ parser! {
             NIL() { Vec::new() }
         rule ExpressionList_item() -> Expression = e:Expression() _ { e }
 
-        rule ConstructTemplate() -> Vec<TriplePattern> = "{" _ t:ConstructTriples() _ "}" { t }
-
-        rule ConstructTriples() -> Vec<TriplePattern> = p:ConstructTriples_item() ** ("." _) "."? {
-            p.into_iter().flatten().collect()
-        }
-        rule ConstructTriples_item() -> Vec<TriplePattern> = t:TriplesSameSubject() _ { t }
+        // Extended with GRAPH blocks, as in INSERT/DELETE templates (w3c/sparql-dev#31).
+        rule ConstructTemplate() -> Vec<QuadPattern> = "{" _ q:Quads() _ "}" { q }
 
         rule TriplesSameSubject() -> Vec<TriplePattern> =
             ReifiedTripleBlock() /

@@ -5,7 +5,6 @@ use polars::frame::DataFrame;
 use polars::prelude::{col, Column, IntoLazy};
 use query_processing::bindings::maybe_replace_bindings;
 use representation::cats::{Cats, LockedCats};
-use representation::dataset::NamedGraph;
 use representation::errors::RepresentationError;
 use representation::result::{template_to_solution_mappings, QueryResult, QueryResultKind};
 use representation::solution_mapping::EagerSolutionMappings;
@@ -103,19 +102,31 @@ impl SparqlEndpoint {
             Query::Select { .. } => query.clone(),
             Query::Construct {
                 template,
+                graph_template,
                 dataset,
                 pattern,
                 base_iri,
             } => {
                 let mut used_variables = HashSet::new();
-                for p in template {
-                    if let TermPattern::Variable(v) = &p.subject {
+                let parts = template
+                    .iter()
+                    .map(|p| (&p.subject, &p.predicate, &p.object, None))
+                    .chain(
+                        graph_template
+                            .iter()
+                            .map(|q| (&q.subject, &q.predicate, &q.object, Some(&q.graph_name))),
+                    );
+                for (subject, predicate, object, graph_name) in parts {
+                    if let TermPattern::Variable(v) = subject {
                         used_variables.insert(v);
                     }
-                    if let TermPattern::Variable(v) = &p.object {
+                    if let TermPattern::Variable(v) = object {
                         used_variables.insert(v);
                     }
-                    if let NamedNodePattern::Variable(v) = &p.predicate {
+                    if let NamedNodePattern::Variable(v) = predicate {
+                        used_variables.insert(v);
+                    }
+                    if let Some(GraphNamePattern::Variable(v)) = graph_name {
                         used_variables.insert(v);
                     }
                 }
@@ -223,7 +234,11 @@ impl SparqlEndpoint {
                 debug: None,
                 pushdown_paths: vec![],
             }),
-            Query::Construct { template, .. } => {
+            Query::Construct {
+                template,
+                graph_template,
+                ..
+            } => {
                 let quad_template: Vec<_> = template
                     .iter()
                     .map(|x| QuadPattern {
@@ -232,19 +247,15 @@ impl SparqlEndpoint {
                         object: x.object.clone(),
                         graph_name: GraphNamePattern::DefaultGraph,
                     })
+                    .chain(graph_template.iter().cloned())
                     .collect();
-                let mut m = template_to_solution_mappings(
+                let sms = template_to_solution_mappings(
                     sm.mappings,
                     sm.rdf_node_types,
                     &quad_template,
                     LockedCats::new(Cats::new_empty(None, None)),
                 )
                 .map_err(|x| SparqlEndpointQueryError::CreateQuadsFromPatternError(x))?;
-                let sms = if let Some(sms) = m.remove(&NamedGraph::DefaultGraph) {
-                    sms
-                } else {
-                    vec![]
-                };
                 Ok(QueryResult {
                     kind: QueryResultKind::Construct(sms),
                     debug: None,

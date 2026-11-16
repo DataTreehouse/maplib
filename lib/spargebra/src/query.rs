@@ -34,8 +34,12 @@ pub enum Query {
     },
     /// [CONSTRUCT](https://www.w3.org/TR/sparql11-query/#construct).
     Construct {
-        /// The query construction template.
+        /// The query construction template, the triples that are constructed in the default graph.
         template: Vec<TriplePattern>,
+        /// The triples of the construction template that are inside `GRAPH` blocks, with the graph
+        /// that they are constructed in (an IRI or a variable). This is an extension of SPARQL 1.1,
+        /// see <https://github.com/w3c/sparql-dev/issues/31>.
+        graph_template: Vec<QuadPattern>,
         /// The [query dataset specification](https://www.w3.org/TR/sparql11-query/#specifyingDataset).
         dataset: Option<QueryDataset>,
         /// The query selection graph pattern.
@@ -153,6 +157,7 @@ impl Query {
             }
             Self::Construct {
                 template,
+                graph_template,
                 dataset,
                 pattern,
                 base_iri,
@@ -166,6 +171,12 @@ impl Query {
                         f.write_str(" ")?;
                     }
                     t.fmt_sse(f)?;
+                }
+                for (i, q) in graph_template.iter().enumerate() {
+                    if i > 0 || !template.is_empty() {
+                        f.write_str(" ")?;
+                    }
+                    q.fmt_sse(f)?;
                 }
                 f.write_str(") ")?;
                 if let Some(dataset) = dataset {
@@ -254,6 +265,7 @@ impl fmt::Display for Query {
             }
             Self::Construct {
                 template,
+                graph_template,
                 dataset,
                 pattern,
                 base_iri,
@@ -264,6 +276,13 @@ impl fmt::Display for Query {
                 f.write_str("CONSTRUCT { ")?;
                 for triple in template {
                     write!(f, "{triple} . ")?;
+                }
+                for q in graph_template {
+                    write!(
+                        f,
+                        "GRAPH {} {{ {} {} {} }} ",
+                        q.graph_name, q.subject, q.predicate, q.object
+                    )?;
                 }
                 f.write_str("}")?;
                 if let Some(dataset) = dataset {

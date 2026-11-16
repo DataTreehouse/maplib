@@ -31,3 +31,5 @@ aggregates/agg-min-distinct  # Results differ: a numeric literal of the data is 
 functions/plus-1-corrected  # Results differ: a numeric literal of the data is returned in canonical form ("1.0"^^xsd:decimal -> "1", "3.0E4" -> "30000.0")
 functions/plus-2-corrected  # Results differ: a numeric literal of the data is returned in canonical form ("1.0"^^xsd:decimal -> "1", "3.0E4" -> "30000.0")
 aggregates/agg-err-02  # Results differ: AVG gives 2.5 for "2.5E0"; the harness compares lexically because "2.5E0" is in the data
+
+construct/constructwhere06  # query is accepted but should be rejected: GRAPH in CONSTRUCT templates is supported as an extension (w3c/sparql-dev#31, as in Jena)

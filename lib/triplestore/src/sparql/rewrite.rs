@@ -23,11 +23,13 @@ pub fn rewrite(q: Query) -> Query {
         },
         Query::Construct {
             template,
+            graph_template,
             dataset,
             pattern,
             base_iri,
         } => Query::Construct {
             template,
+            graph_template,
             dataset,
             pattern: rewrite_gp(pattern),
             base_iri,

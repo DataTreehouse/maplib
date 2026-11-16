@@ -25,7 +25,8 @@ use arrow::array::{make_array, ArrayRef, BooleanArray, RecordBatch, RecordBatchO
 use arrow::datatypes::{DataType as ArrowType, Field, Schema, SchemaRef};
 use arrow::ffi::{from_ffi, to_ffi, FFI_ArrowArray, FFI_ArrowSchema};
 use arrow::ipc::writer::{IpcWriteOptions, StreamWriter};
-use oxrdf::NamedNode;
+use crate::dataset::NamedGraph;
+use oxrdf::{BlankNode, NamedNode};
 use polars::prelude::{
     as_struct, col, CompatLevel, DataFrame, IntoColumn, IntoLazy, LazyFrame, PlSmallStr, Series,
 };
@@ -40,6 +41,7 @@ pub const SOLUTION_MAPPINGS_MEDIA_TYPE: &str = "application/vnd.maplib.solution-
 const KIND: &str = "maplib.kind";
 const PREDICATE: &str = "maplib.predicate";
 const EMPTY: &str = "maplib.empty";
+const GRAPH: &str = "maplib.graph";
 const RDF_TYPES: &str = "maplib.rdf_types";
 
 #[derive(Debug)]
@@ -349,10 +351,19 @@ pub fn encode_query_result(
                 let schema = Schema::new_with_metadata(Vec::<Field>::new(), meta);
                 frame(&mut out, ipc_stream(&schema, &[], compress)?);
             }
-            for (sm, predicate) in sms {
+            for (sm, predicate, graph) in sms {
                 let mut meta = kind("construct");
                 if let Some(p) = predicate {
                     meta.insert(PREDICATE.to_string(), p.into_string());
+                }
+                match graph {
+                    NamedGraph::DefaultGraph => {}
+                    NamedGraph::NamedGraph(nn) => {
+                        meta.insert(GRAPH.to_string(), nn.into_string());
+                    }
+                    NamedGraph::BlankNode(b) => {
+                        meta.insert(GRAPH.to_string(), format!("_:{}", b.as_str()));
+                    }
                 }
                 encode_mappings(&mut out, sm, meta, cats.clone(), compress, batch_rows)?;
             }
@@ -435,7 +446,17 @@ pub fn decode_query_result(bytes: &[u8]) -> Result<QueryResultKind, ArrowWireErr
                     .map(|p| NamedNode::new(p.as_str()))
                     .transpose()
                     .map_err(err)?;
-                sms.push((decode_mappings(schema, batches)?, predicate));
+                let graph = match schema.metadata().get(GRAPH) {
+                    None => NamedGraph::DefaultGraph,
+                    Some(g) => {
+                        if let Some(b) = g.strip_prefix("_:") {
+                            NamedGraph::BlankNode(BlankNode::new(b).map_err(err)?)
+                        } else {
+                            NamedGraph::NamedGraph(NamedNode::new(g.as_str()).map_err(err)?)
+                        }
+                    }
+                };
+                sms.push((decode_mappings(schema, batches)?, predicate, graph));
             }
             Ok(QueryResultKind::Construct(sms))
         }

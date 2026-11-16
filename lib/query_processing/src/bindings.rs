@@ -2,7 +2,9 @@ use oxrdf::vocab::xsd;
 use oxrdf::Literal;
 use representation::errors::RepresentationError;
 use spargebra::algebra::{AggregateExpression, Expression, GraphPattern, OrderExpression};
-use spargebra::term::{GroundTerm, NamedNodePattern, TermPattern, TriplePattern};
+use spargebra::term::{
+    GraphNamePattern, GroundTerm, NamedNodePattern, QuadPattern, TermPattern, TriplePattern,
+};
 use spargebra::Query;
 use std::collections::HashMap;
 
@@ -23,11 +25,13 @@ pub fn maybe_replace_bindings(
             }),
             Query::Construct {
                 template,
+                graph_template,
                 dataset,
                 pattern,
                 base_iri,
             } => Ok(Query::Construct {
                 template: replace_bindings_template(template, bindings)?,
+                graph_template: replace_bindings_quad_template(graph_template, bindings)?,
                 dataset,
                 pattern: replace_bindings_graph_pattern(pattern, bindings)?,
                 base_iri,
@@ -74,6 +78,31 @@ pub fn replace_bindings_template(
             subject,
             predicate,
             object,
+        });
+    }
+    Ok(rep_template)
+}
+
+pub fn replace_bindings_quad_template(
+    template: Vec<QuadPattern>,
+    bindings: &HashMap<String, GroundTerm>,
+) -> Result<Vec<QuadPattern>, RepresentationError> {
+    let mut rep_template = Vec::with_capacity(template.len());
+    for q in template {
+        let graph_name = match q.graph_name {
+            GraphNamePattern::Variable(v) => {
+                match maybe_replace_named_node_pattern(NamedNodePattern::Variable(v), bindings)? {
+                    NamedNodePattern::NamedNode(nn) => GraphNamePattern::NamedNode(nn),
+                    NamedNodePattern::Variable(v) => GraphNamePattern::Variable(v),
+                }
+            }
+            g => g,
+        };
+        rep_template.push(QuadPattern {
+            subject: maybe_replace_term_pattern(q.subject, bindings),
+            predicate: maybe_replace_named_node_pattern(q.predicate, bindings)?,
+            object: maybe_replace_term_pattern(q.object, bindings),
+            graph_name,
         });
     }
     Ok(rep_template)
