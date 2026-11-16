@@ -1480,6 +1480,7 @@ impl PyModel {
             timeout=None,
             return_triples=None,
             solution_mappings=None,
+            bindings=None,
     ))]
     #[instrument(skip_all)]
     fn update(
@@ -1494,8 +1495,10 @@ impl PyModel {
         timeout: Option<f64>,
         return_triples: Option<bool>,
         solution_mappings: Option<bool>,
+        bindings: Option<HashMap<String, Py<PyAny>>>,
     ) -> PyResult<HashMap<String, Py<PyAny>>> {
         let mapped_parameters = map_parameters(parameters, py)?;
+        let parsed_bindings = maybe_parse_bindings(bindings, py)?;
         let timeout = parse_timeout(timeout)?;
         let (res, cats) = py.detach(|| -> PyResult<_> {
             let mut inner = self.write_inner();
@@ -1512,6 +1515,7 @@ impl PyModel {
                     max_rows,
                     debug,
                     return_triples.unwrap_or(false),
+                    parsed_bindings,
                 )
             })
             .map_err(|e| timeout_error(e, token.as_ref()))?;
@@ -2218,12 +2222,18 @@ impl PyModel {
         let source_graph = NamedGraph::from_maybe_named_node(source_graph.as_ref());
         let target_graph = NamedGraph::from_maybe_named_node(target_graph.as_ref());
         let other = other.get();
-        if std::ptr::eq(self, other) {
-            return Err(PyMaplibError::FunctionArgumentError(
-                "add_graph needs another Model, use insert to copy triples within a Model"
-                    .to_string(),
-            )
-            .into());
+        if std::ptr::eq(self, other) || Arc::ptr_eq(&self.inner, &other.inner) {
+            // Copying a graph within the Model. Locking it twice would deadlock.
+            return py.detach(move || -> PyResult<()> {
+                if source_graph == target_graph {
+                    return Ok(());
+                }
+                let mut inner = self.write_inner();
+                inner
+                    .add_triples(None, &source_graph, &target_graph)
+                    .map_err(PyMaplibError::from)?;
+                Ok(())
+            });
         }
         py.detach(move || -> PyResult<()> {
             // Lock the two models in a fixed order, so that a.add_graph(b) and b.add_graph(a)

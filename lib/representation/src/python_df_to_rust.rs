@@ -70,7 +70,29 @@ pub fn polars_df_to_rust_df(df: &Bound<'_, PyAny>) -> PyResult<DataFrame> {
         let batch = batches.call_method1("__getitem__", (i,))?;
         batches_vec.push(batch);
     }
-    array_to_rust_df(batches_vec.as_slice())
+    let mut df = array_to_rust_df(batches_vec.as_slice())?;
+    // Categorical and Enum columns (e.g. tag columns from a time series database) hold strings
+    // that maplib has no type for: they are read as String columns.
+    let categorical: Vec<usize> = df
+        .columns()
+        .iter()
+        .enumerate()
+        .filter(|(_, c)| c.dtype().is_categorical() || c.dtype().is_enum())
+        .map(|(i, _)| i)
+        .collect();
+    for i in categorical {
+        let c = df.columns()[i].cast(&DataType::String).map_err(|e| {
+            PyRepresentationError::ImportArrayError(format!(
+                "Could not read a Categorical column as strings: {e}"
+            ))
+        })?;
+        df.replace_column(i, c).map_err(|e| {
+            PyRepresentationError::ImportArrayError(format!(
+                "Could not read a Categorical column as strings: {e}"
+            ))
+        })?;
+    }
+    Ok(df)
 }
 
 pub fn array_to_rust_df(rb: &[Bound<'_, PyAny>]) -> PyResult<DataFrame> {

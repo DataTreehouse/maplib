@@ -31,6 +31,7 @@ use polars::prelude::{col, int_range, len, lit, DataType, IntoLazy, JoinType};
 use polars_core::frame::DataFrame;
 use query_processing::graph_patterns::join;
 use query_processing::pushdowns::Pushdowns;
+use representation::constants::MAPLIB_PREFIX_IRI;
 use representation::dataset::QueryGraph;
 use representation::query_context::{Context, PathEntry};
 use representation::solution_mapping::{EagerSolutionMappings, SolutionMappings};
@@ -184,6 +185,7 @@ impl Triplestore {
                 // so that the values it binds restrict where the paths start.
                 let (patterns, length_paths) =
                     length_path::extract_length_path_patterns(&patterns)?;
+                self.check_maplib_predicates(&patterns)?;
                 pushdowns.add_patterns_pushdowns(&patterns);
                 let mut updated_solution_mappings = solution_mappings;
                 let bgp_context = context.extension_with(PathEntry::BGP);
@@ -530,6 +532,46 @@ fn is_ordered(gp: &GraphPattern) -> bool {
 const FTS_PREDICATE_PREFIX: &str = "https://datatreehouse.github.io/maplib/vocab#fts";
 
 /// Whether any of the triple patterns uses a full text search predicate.
+/// Predicates in the maplib namespace that are ordinary data, e.g. time series links, which may
+/// be absent from a model without that being an error.
+const MAPLIB_DATA_PREDICATES: [&str; 6] = [
+    "hasTimeseries",
+    "hasDataPoint",
+    "hasTimestamp",
+    "hasValue",
+    "hasResource",
+    "hasExternalId",
+];
+
+impl Triplestore {
+    /// The magic predicates this build supports (maplib:path, maplib:shortestPath, maplib:fts
+    /// with an index, maplib:vectorSearch) have been taken out of the patterns before this is
+    /// called. A remaining predicate in the maplib namespace that no triples use is a magic
+    /// predicate that this build does not have, a misspelt one, or maplib:fts without an
+    /// index. It would silently give no solutions, so it is an error.
+    fn check_maplib_predicates(&self, patterns: &[TriplePattern]) -> Result<(), SparqlError> {
+        for tp in patterns {
+            let NamedNodePattern::NamedNode(nn) = &tp.predicate else {
+                continue;
+            };
+            let Some(local) = nn.as_str().strip_prefix(MAPLIB_PREFIX_IRI) else {
+                continue;
+            };
+            if MAPLIB_DATA_PREDICATES.contains(&local) {
+                continue;
+            }
+            let used = self.graph_triples_map.values().any(|m| {
+                m.get(nn)
+                    .is_some_and(|t| t.values().any(|x| x.get_height() > 0))
+            });
+            if !used {
+                return Err(SparqlError::UnknownMaplibPredicate(nn.as_str().to_string()));
+            }
+        }
+        Ok(())
+    }
+}
+
 fn uses_fts(patterns: &[TriplePattern]) -> bool {
     patterns.iter().any(|tp| {
         matches!(&tp.predicate, NamedNodePattern::NamedNode(p) if p.as_str().starts_with(FTS_PREDICATE_PREFIX))

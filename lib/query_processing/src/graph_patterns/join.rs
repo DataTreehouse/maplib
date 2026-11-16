@@ -9,7 +9,7 @@ use polars::prelude::{
 use representation::cats::LockedCats;
 use representation::multitype::{
     all_multi_cols, all_multi_main_cols, force_convert_multicol_to_single_col, nest_multicolumns,
-    unnest_multicols,
+    unnest_multicols, unnested_field_col_name,
 };
 use representation::null::expr_is_null_workaround;
 use representation::solution_mapping::SolutionMappings;
@@ -91,7 +91,7 @@ pub fn join_workaround(
                 if !sl.is_multi() {
                     let lbt = sl.get_base_type().unwrap();
                     let fcn = lbt.field_col_name();
-                    let colname = format!("{c}{}", &fcn);
+                    let colname = unnested_field_col_name(c, &fcn);
                     left_mappings = left_mappings.rename([c], [&colname], true);
                     left_exploded.insert(c.clone(), (vec![fcn], vec![colname]));
                 }
@@ -109,7 +109,7 @@ pub fn join_workaround(
                 if !sr.is_multi() && !sr.is_none() {
                     let rbt = sr.get_base_type().unwrap();
                     let fcn = rbt.field_col_name();
-                    let colname = format!("{c}{}", &fcn);
+                    let colname = unnested_field_col_name(c, &fcn);
                     right_mappings = right_mappings.rename([c], [&colname], true);
                     right_exploded.insert(c.clone(), (vec![fcn], vec![colname]));
                 }

@@ -95,11 +95,19 @@ impl Triplestore {
                     }
                     AggregateFunction::Min => {
                         (out_expr, out_rdf_node_type) =
-                            min(&output_solution_mappings, column_context.as_ref().unwrap());
+                            min(
+                                &output_solution_mappings,
+                                column_context.as_ref().unwrap(),
+                                self.global_cats.clone(),
+                            );
                     }
                     AggregateFunction::Max => {
                         (out_expr, out_rdf_node_type) =
-                            max(&output_solution_mappings, column_context.as_ref().unwrap());
+                            max(
+                                &output_solution_mappings,
+                                column_context.as_ref().unwrap(),
+                                self.global_cats.clone(),
+                            );
                     }
                     AggregateFunction::GroupConcat { separator } => {
                         (out_expr, out_rdf_node_type) = group_concat_sorted(

@@ -277,11 +277,11 @@ def test_many_readers_and_a_writer():
     assert m.query(PLAIN_QUERY).height == 3 + n_writes
 
 
-def test_add_graph_from_itself_raises():
+def test_add_graph_from_itself_copies_the_graph():
     m = Model()
     m.reads(DATA, format="turtle")
-    with pytest.raises(Exception, match="another Model"):
-        m.add_graph(m, target_graph="http://example.net/g")
+    m.add_graph(m, target_graph="http://example.net/g")
+    assert m.size("http://example.net/g") == m.size()
 
 
 def test_add_graph_both_ways_does_not_deadlock():

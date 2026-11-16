@@ -88,8 +88,9 @@ def test_map_blank_node_default_with_nulls():
 def test_add_graph_from_itself_does_not_deadlock():
     m = Model()
     m.reads("<http://a> <http://b> <http://c> .", format="ntriples")
-    with pytest.raises(Exception, match="needs another Model"):
-        m.add_graph(m)
+    m.add_graph(m)
+    m.add_graph(m, target_graph="urn:g")
+    assert m.size("urn:g") == 1
 
 
 @pytest.mark.parametrize(

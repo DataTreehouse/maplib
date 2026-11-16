@@ -36,11 +36,27 @@ pub fn starts_ends_contains(
         .rdf_node_types
         .get(second_context.as_str())
         .unwrap();
-    let second_expr = &args[1];
     if !second_t.is_lit_type(xsd::STRING) {
-        return Err(QueryProcessingError::ExpectedConstantLiteralStringArgument(
-            second_expr.clone(),
-        ));
+        let second_expr = &args[1];
+        if matches!(second_expr, Expression::Literal(_) | Expression::NamedNode(_)) {
+            // A constant of the wrong type is a mistake in the query.
+            return Err(QueryProcessingError::ExpectedConstantLiteralStringArgument(
+                second_expr.clone(),
+            ));
+        }
+        // A value from the data that is not argument compatible (e.g. an IRI, a number or an
+        // unbound value) is an error in SPARQL: the result is unbound, the query goes on.
+        solution_mappings.mappings = solution_mappings.mappings.with_column(
+            lit(LiteralValue::untyped_null())
+                .cast(DataType::Boolean)
+                .alias(outer_context.as_str()),
+        );
+        solution_mappings.rdf_node_types.insert(
+            outer_context.as_str().to_string(),
+            BaseRDFNodeType::Literal(xsd::BOOLEAN.into_owned(), None)
+                .into_default_input_rdf_node_state(),
+        );
+        return Ok(solution_mappings);
     }
     let second_bt = second_t.get_base_type().unwrap();
     let second_bs = second_t.get_base_state().unwrap();

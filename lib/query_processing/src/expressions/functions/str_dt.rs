@@ -1,6 +1,5 @@
 use crate::errors::QueryProcessingError;
 use oxrdf::vocab::xsd;
-use polars::error::PolarsError;
 use polars::prelude::{as_struct, col, lit, Expr, IntoColumn, LiteralValue};
 use representation::cats::{maybe_decode_expr, LockedCats};
 use representation::multitype::set_struct_all_null_to_null_row;
@@ -38,11 +37,11 @@ fn parse_expr(
                     (None, _, _) => false,
                 };
                 if let (true, Some(v)) = (keep, v) {
+                    // A lexical form that is not valid for the datatype is an error in SPARQL,
+                    // which leaves this solution unbound rather than failing the query.
                     if let Err(e) = builder.parse_literal(v, None) {
-                        warn!("Could not parse literal {}", e);
-                        return Err(PolarsError::InvalidOperation(
-                            "Error parsing literal to target type in STRDT function".into(),
-                        ));
+                        warn!("STRDT leaves a value unbound: {}", e);
+                        builder.push_none();
                     }
                 } else {
                     builder.push_none();

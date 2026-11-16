@@ -12,6 +12,17 @@ pub const MULTI_IRI_DT: &str = "I";
 pub const MULTI_BLANK_DT: &str = "B";
 pub const MULTI_NONE_DT: &str = "N";
 
+/// Separates a column name from the name of one of its fields in the columns of unnested
+/// multitype columns. It cannot occur in a SPARQL variable name, so `?o`'s language tag column
+/// is not confused with a variable `?ol`.
+const UNNESTED_FIELD_SEPARATOR: &str = "|";
+
+/// The name of the column that holds the field `inner` of the multitype column `c` when it is
+/// unnested.
+pub fn unnested_field_col_name(c: &str, inner: &str) -> String {
+    format!("{c}{UNNESTED_FIELD_SEPARATOR}{inner}")
+}
+
 pub fn convert_lf_col_to_multitype(expr: Expr, dt: &RDFNodeState) -> Expr {
     if !dt.is_multi() {
         let base_type = dt.get_base_type().unwrap();
@@ -266,7 +277,7 @@ pub fn unnest_multicols(
             let inner_cols = all_multi_cols(t.get_sorted_types());
             let mut prefixed_inner_cols = vec![];
             for inner in &inner_cols {
-                let prefixed_inner = format!("{c}{inner}");
+                let prefixed_inner = unnested_field_col_name(c, inner);
                 exprs.push(col(c).struct_().field_by_name(inner).alias(&prefixed_inner));
                 prefixed_inner_cols.push(prefixed_inner);
             }

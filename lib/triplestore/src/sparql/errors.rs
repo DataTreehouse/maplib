@@ -17,6 +17,14 @@ pub enum SparqlError {
     ParseError(SparqlSyntaxError),
     #[error("Query type not supported")]
     QueryTypeNotSupported,
+    #[error(
+        "Unknown predicate <{0}> in the maplib namespace: no triples use it, and it is not a \
+         magic predicate of this build of maplib. maplib:fts needs a full text index \
+         (create_index(IndexingOptions(fts=True))) on the queried graph, and some magic \
+         predicates are only in newer builds. Check the spelling, or use another namespace \
+         for your own predicates"
+    )]
+    UnknownMaplibPredicate(String),
     #[error(transparent)]
     ServiceError(#[from] external_sparql::federation::ServiceError),
     #[error("SERVICE error: {0}")]

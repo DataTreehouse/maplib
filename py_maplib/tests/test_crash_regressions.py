@@ -18,7 +18,7 @@ def test_syntax_error_near_multibyte_chars_is_an_error_and_model_keeps_working()
     m.query("SELECT * WHERE { ?s ?p ?o }")
 
 
-def test_add_graph_from_itself_raises_instead_of_deadlocking():
+def test_add_graph_from_itself_does_not_deadlock():
     m = Model()
     m.insert("CONSTRUCT { <http://a/s> <http://a/p> <http://a/o> } WHERE {}")
     done = []
@@ -26,15 +26,17 @@ def test_add_graph_from_itself_raises_instead_of_deadlocking():
     def run():
         try:
             m.add_graph(m, target_graph="http://g")
-        except Exception as e:
+            done.append(None)
+        except BaseException as e:
             done.append(e)
 
     t = threading.Thread(target=run, daemon=True)
     t.start()
     t.join(60)
     assert done, "add_graph(self) did not return"
-    assert "Panic" not in type(done[0]).__name__
+    assert done[0] is None, done[0]
     assert m.query("SELECT * WHERE { ?s ?p ?o }").height == 1
+    assert m.query("SELECT * WHERE { ?s ?p ?o }", graph="http://g").height == 1
 
 
 def test_construct_skips_non_iri_predicates():

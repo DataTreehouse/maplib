@@ -1065,6 +1065,7 @@ SELECT ?loc ?crs ?seq ?x ?y ?z WHERE {{
             debug_no_results,
             federation,
             false,
+            None,
         )
     }
 
@@ -1080,6 +1081,7 @@ SELECT ?loc ?crs ?seq ?x ?y ?z WHERE {{
         max_rows: Option<usize>,
         debug_no_results: bool,
         keep_triples: bool,
+        bindings: Option<&HashMap<String, GroundTerm>>,
     ) -> Result<UpdateResult, MaplibError> {
         self.update_with_federation_keep_triples(
             update,
@@ -1090,6 +1092,7 @@ SELECT ?loc ?crs ?seq ?x ?y ?z WHERE {{
             debug_no_results,
             None,
             keep_triples,
+            bindings,
         )
     }
 
@@ -1106,6 +1109,7 @@ SELECT ?loc ?crs ?seq ?x ?y ?z WHERE {{
         debug_no_results: bool,
         federation: Option<Arc<FederationSettings>>,
         keep_triples: bool,
+        bindings: Option<&HashMap<String, GroundTerm>>,
     ) -> Result<UpdateResult, MaplibError> {
         let query_settings = QuerySettings {
             include_graphs,
@@ -1124,6 +1128,7 @@ SELECT ?loc ?crs ?seq ?x ?y ?z WHERE {{
                     Some(&self.prefixes),
                     debug_no_results,
                     keep_triples,
+                    bindings,
                 )
                 .map_err(|x| x.into())
         })

@@ -435,8 +435,8 @@ fn aggregate(
         AggregateFunction::Count => count_with_expression(solution_mappings, arg, *distinct),
         AggregateFunction::Sum => sum(solution_mappings, arg, *distinct),
         AggregateFunction::Avg => avg(solution_mappings, arg, *distinct),
-        AggregateFunction::Min => min(solution_mappings, arg),
-        AggregateFunction::Max => max(solution_mappings, arg),
+        AggregateFunction::Min => min(solution_mappings, arg, global_cats.clone()),
+        AggregateFunction::Max => max(solution_mappings, arg, global_cats.clone()),
         AggregateFunction::Sample => sample(solution_mappings, arg),
         AggregateFunction::GroupConcat { separator } => group_concat(
             solution_mappings,

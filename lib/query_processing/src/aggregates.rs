@@ -6,11 +6,11 @@ use polars::prelude::{
     any_horizontal, as_struct, coalesce, col, len, lit, when, Expr, LiteralValue,
     SortMultipleOptions,
 };
-use representation::cats::LockedCats;
+use representation::cats::{optional_maybe_decode_expr, LockedCats};
 use representation::multitype::all_multi_cols;
 use representation::null::expr_is_null_workaround;
 use representation::query_context::Context;
-use representation::solution_mapping::SolutionMappings;
+use representation::solution_mapping::{BaseCatState, SolutionMappings};
 use representation::{BaseRDFNodeType, RDFNodeState};
 use spargebra::statistics::StatisticalAggregate;
 use std::collections::{BTreeMap, HashMap};
@@ -155,10 +155,31 @@ pub fn avg(
     (out_expr, out_type.into_default_input_rdf_node_state())
 }
 
-pub fn min(solution_mappings: &SolutionMappings, column_context: &Context) -> (Expr, RDFNodeState) {
+pub fn min(
+    solution_mappings: &SolutionMappings,
+    column_context: &Context,
+    global_cats: LockedCats,
+) -> (Expr, RDFNodeState) {
+    min_max(solution_mappings, column_context, global_cats, false)
+}
+
+pub fn max(
+    solution_mappings: &SolutionMappings,
+    column_context: &Context,
+    global_cats: LockedCats,
+) -> (Expr, RDFNodeState) {
+    min_max(solution_mappings, column_context, global_cats, true)
+}
+
+fn min_max(
+    solution_mappings: &SolutionMappings,
+    column_context: &Context,
+    global_cats: LockedCats,
+    max: bool,
+) -> (Expr, RDFNodeState) {
     let expr_rdf_node_type = rdf_node_type_from_context(column_context, solution_mappings);
     if expr_rdf_node_type.is_multi() {
-        return multi_min_max(column_context, expr_rdf_node_type, false);
+        return multi_min_max(column_context, expr_rdf_node_type, max, global_cats);
     }
     let out_rdf_node_type = if expr_rdf_node_type.is_bool() {
         BaseRDFNodeType::Literal(xsd::UNSIGNED_LONG.into_owned(), None)
@@ -166,26 +187,42 @@ pub fn min(solution_mappings: &SolutionMappings, column_context: &Context) -> (E
     } else {
         expr_rdf_node_type.clone()
     };
-    let out_expr = col(column_context.as_str()).min();
+    let c = col(column_context.as_str());
+    // Dictionary encoded values (strings, IRIs) are ordered by their decoded value, not by
+    // their codes, which are in insertion order. The code of the smallest value is kept.
+    let key = match (
+        expr_rdf_node_type.get_base_type(),
+        expr_rdf_node_type.get_base_state(),
+    ) {
+        (Some(bt), Some(bs)) => sort_key(c.clone(), bt, bs, global_cats),
+        _ => None,
+    };
+    let out_expr = if let Some(key) = key {
+        let options = SortMultipleOptions::default()
+            .with_order_descending(max)
+            .with_nulls_last(true)
+            .with_maintain_order(true);
+        c.sort_by([key], options).first()
+    } else if max {
+        c.max()
+    } else {
+        c.min()
+    };
 
     (out_expr, out_rdf_node_type)
 }
 
-pub fn max(solution_mappings: &SolutionMappings, column_context: &Context) -> (Expr, RDFNodeState) {
-    let expr_rdf_node_type = rdf_node_type_from_context(column_context, solution_mappings);
-    if expr_rdf_node_type.is_multi() {
-        return multi_min_max(column_context, expr_rdf_node_type, true);
+/// The decoded values of a dictionary encoded (non language-tagged) column, to order it by.
+fn sort_key(
+    e: Expr,
+    t: &BaseRDFNodeType,
+    s: &BaseCatState,
+    global_cats: LockedCats,
+) -> Option<Expr> {
+    if t.is_lang_string() {
+        return None;
     }
-    let out_rdf_node_type = if expr_rdf_node_type.is_bool() {
-        BaseRDFNodeType::Literal(xsd::UNSIGNED_LONG.into_owned(), None)
-            .into_default_input_rdf_node_state()
-    } else {
-        expr_rdf_node_type.clone()
-    };
-
-    let out_expr = col(column_context.as_str()).max();
-
-    (out_expr, out_rdf_node_type)
+    optional_maybe_decode_expr(e, t, s, global_cats)
 }
 
 /// GROUP_CONCAT: joins the string values of the group (as with STR()) with the separator,
@@ -542,6 +579,7 @@ fn multi_min_max(
     column_context: &Context,
     state: &RDFNodeState,
     max: bool,
+    global_cats: LockedCats,
 ) -> (Expr, RDFNodeState) {
     let multi = col(column_context.as_str());
     let types: Vec<_> = state.get_sorted_types();
@@ -570,6 +608,10 @@ fn multi_min_max(
         );
         if numeric_level(t).is_some() {
             numeric_keys.push(f.cast(DataType::Float64));
+        } else if let Some(key) =
+            sort_key(f.clone(), t, state.map.get(t).unwrap(), global_cats.clone())
+        {
+            other_keys.push(key);
         } else {
             other_keys.push(f);
         }

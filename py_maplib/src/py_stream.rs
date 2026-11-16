@@ -852,6 +852,7 @@ fn run_step(
                     *max_rows,
                     *debug,
                     false,
+                    None,
                 )?;
                 print_debug_if_exists(res.debug.as_ref());
             }

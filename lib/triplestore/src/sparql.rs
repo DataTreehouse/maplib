@@ -26,7 +26,7 @@ use crate::triples_read::{
 use external_sparql::federation::FederationSettings;
 use oxrdf::NamedNode;
 use oxrdf::{Term, Triple};
-use query_processing::bindings::maybe_replace_bindings;
+use query_processing::bindings::{maybe_replace_bindings, maybe_replace_bindings_update};
 use query_processing::pushdowns::Pushdowns;
 use representation::constants::DEFAULT_GRAPH_IRI;
 use representation::dataset::{NamedGraph, QueryGraph};
@@ -38,10 +38,10 @@ use representation::result::{
 };
 use representation::solution_mapping::{EagerSolutionMappings, SolutionMappings};
 use representation::{RDFNodeState, OBJECT_COL_NAME, SUBJECT_COL_NAME};
-use spargebra::algebra::{GraphPattern, GraphTarget, QueryDataset};
+use spargebra::algebra::{Expression, Function, GraphPattern, GraphTarget, QueryDataset};
 use spargebra::term::{
     GraphName, GraphNamePattern, GroundQuadPattern, GroundTerm, GroundTermPattern,
-    NamedNodePattern, QuadPattern, TermPattern,
+    NamedNodePattern, QuadPattern, TermPattern, TriplePattern, Variable,
 };
 use spargebra::{GraphUpdateOperation, Query, Update};
 use std::collections::{HashMap, HashSet};
@@ -99,6 +99,15 @@ impl Triplestore {
         graph: Option<&NamedGraph>,
         debug_no_results: bool,
     ) -> Result<QueryResult, SparqlError> {
+        if let Some(construct) = describe_as_construct(query) {
+            return self.query_parsed(
+                &construct,
+                parameters,
+                query_settings,
+                graph,
+                debug_no_results,
+            );
+        }
         // A hook addresses graph patterns by their position in the query as given, so a query
         // evaluated with a hook is not rewritten (its static parts are rewritten when the hook
         // evaluates them as queries of their own).
@@ -331,6 +340,7 @@ impl Triplestore {
             prefixes,
             debug_no_results,
             false,
+            None,
         )
     }
 
@@ -346,8 +356,11 @@ impl Triplestore {
         prefixes: Option<&HashMap<String, NamedNode>>,
         debug_no_results: bool,
         keep_triples: bool,
+        bindings: Option<&HashMap<String, GroundTerm>>,
     ) -> Result<UpdateResult, SparqlError> {
         let update = Update::parse(update, None, prefixes).map_err(SparqlError::ParseError)?;
+        let update = maybe_replace_bindings_update(update, bindings)
+            .map_err(SparqlError::ReplaceBindingsError)?;
         self.update_parsed_keep_triples(
             &update,
             parameters,
@@ -416,6 +429,17 @@ impl Triplestore {
     ) -> Result<UpdateResult, SparqlError> {
         let mut debug_output = if debug_no_results { Some(vec![]) } else { None };
         let mut changes = Changes::new(keep_triples);
+        // `graph` is the default graph of the update: triples without a GRAPH in INSERT DATA,
+        // DELETE DATA and the INSERT and DELETE templates are inserted into and deleted from
+        // it, as the WHERE clause is evaluated on it (as with WITH).
+        let default_target = graph.cloned().unwrap_or(NamedGraph::DefaultGraph);
+        let target = |g: NamedGraph| -> NamedGraph {
+            if g == NamedGraph::DefaultGraph {
+                default_target.clone()
+            } else {
+                g
+            }
+        };
         for u in &update.operations {
             if let Some(t) = &token {
                 t.check()?;
@@ -427,7 +451,7 @@ impl Triplestore {
                     self.parser_call += 1;
                     let mut triples_by_graph: HashMap<NamedGraph, Vec<Triple>> = HashMap::new();
                     for q in data {
-                        let g = graph_name_to_named_graph(&q.graph_name);
+                        let g = target(graph_name_to_named_graph(&q.graph_name));
                         triples_by_graph.entry(g).or_default().push(Triple::new(
                             subject_to_oxrdf_subject(q.subject.clone(), &parser_call),
                             q.predicate.clone(),
@@ -447,7 +471,7 @@ impl Triplestore {
                     let mut triples_by_graph: HashMap<NamedGraph, Vec<Triple>> = HashMap::new();
                     for q in data {
                         triples_by_graph
-                            .entry(graph_name_to_named_graph(&q.graph_name))
+                            .entry(target(graph_name_to_named_graph(&q.graph_name)))
                             .or_default()
                             .push(Triple::new(
                                 q.subject.clone(),
@@ -508,7 +532,7 @@ impl Triplestore {
                             keep_triples,
                         )? {
                             self.n_triples_deleted += deleted.count;
-                            changes.add_deleted(&NamedGraph::DefaultGraph, deleted);
+                            changes.add_deleted(&default_target, deleted);
                             self.maybe_garbage_collect()?;
                             continue;
                         }
@@ -616,6 +640,7 @@ impl Triplestore {
                         }
                     }
                     for (g, delete_solutions) in delete_solutions {
+                        let g = target(g);
                         let deleted =
                             self.delete_construct_result(delete_solutions, &g, keep_triples)?;
                         changes.add_deleted(&g, deleted);
@@ -628,10 +653,10 @@ impl Triplestore {
                     )
                     .map_err(|x| SparqlError::QuadPatternsError(x.to_string()))?;
                     for (_, _, g) in &insert_solutions {
-                        changes.touch(g);
+                        changes.touch(&target(g.clone()));
                     }
-                    let new_triples = self
-                        .insert_constructed_triples(insert_solutions, &NamedGraph::DefaultGraph)?;
+                    let new_triples =
+                        self.insert_constructed_triples(insert_solutions, &default_target)?;
                     changes.add_inserted(new_triples);
                     self.maybe_garbage_collect()?;
                 }
@@ -676,7 +701,7 @@ impl Triplestore {
                 GraphUpdateOperation::Clear { graph: target, .. }
                 | GraphUpdateOperation::Drop { graph: target, .. } => {
                     // Graphs are kept as empty graphs, so that they can still be referenced.
-                    let default_graph = graph.cloned().unwrap_or(NamedGraph::DefaultGraph);
+                    let default_graph = default_target.clone();
                     let to_clear: Vec<NamedGraph> = match target {
                         GraphTarget::NamedNode(nn) => {
                             vec![NamedGraph::from_maybe_named_node(Some(nn))]
@@ -759,9 +784,9 @@ impl Triplestore {
                 return none;
             }
         }
-        // The triples are deleted from the default graph of the update, so the pattern must be
-        // matched in exactly that graph.
-        let target = NamedGraph::DefaultGraph;
+        // The triples are deleted from the default graph of the update (`graph`), so the
+        // pattern must be matched in exactly that graph.
+        let target = graph.cloned().unwrap_or(NamedGraph::DefaultGraph);
         match self.query_graph(&None, graph, query_settings) {
             QueryGraph::NamedGraph(g) if g == target => {}
             _ => return none,
@@ -820,6 +845,87 @@ impl Triplestore {
             }
         }
         Ok(deleted)
+    }
+}
+
+/// DESCRIBE as a CONSTRUCT of the triples that have a described resource as their subject:
+/// the IRIs that the pattern binds to the described variables (blank nodes are skipped, as
+/// their labels can not be used to find them again).
+fn describe_as_construct(query: &Query) -> Option<Query> {
+    let Query::Describe {
+        dataset,
+        pattern,
+        base_iri,
+    } = query
+    else {
+        return None;
+    };
+    let described = Variable::new_unchecked("__maplib_described");
+    let p = Variable::new_unchecked("__maplib_described_p");
+    let o = Variable::new_unchecked("__maplib_described_o");
+    let mut resources: Option<GraphPattern> = None;
+    for v in described_variables(pattern) {
+        let branch = GraphPattern::Project {
+            inner: Box::new(GraphPattern::Extend {
+                inner: Box::new(pattern.clone()),
+                variable: described.clone(),
+                expression: Expression::Variable(v),
+            }),
+            variables: vec![described.clone()],
+        };
+        resources = Some(match resources {
+            None => branch,
+            Some(left) => GraphPattern::Union {
+                left: Box::new(left),
+                right: Box::new(branch),
+            },
+        });
+    }
+    let resources = GraphPattern::Filter {
+        expr: Expression::FunctionCall(
+            Function::IsIri,
+            vec![Expression::Variable(described.clone())],
+        ),
+        inner: Box::new(GraphPattern::Distinct {
+            inner: Box::new(resources.unwrap_or(GraphPattern::Bgp { patterns: vec![] })),
+        }),
+    };
+    let triple = TriplePattern {
+        subject: TermPattern::Variable(described.clone()),
+        predicate: NamedNodePattern::Variable(p),
+        object: TermPattern::Variable(o),
+    };
+    Some(Query::Construct {
+        template: vec![triple.clone()],
+        graph_template: vec![],
+        dataset: dataset.clone(),
+        pattern: GraphPattern::Join {
+            left: Box::new(resources),
+            right: Box::new(GraphPattern::Bgp {
+                patterns: vec![triple],
+            }),
+        },
+        base_iri: base_iri.clone(),
+    })
+}
+
+/// The variables of a DESCRIBE: those of its projection, or all variables in scope.
+fn described_variables(pattern: &GraphPattern) -> Vec<Variable> {
+    match pattern {
+        GraphPattern::Project { variables, .. } => variables.clone(),
+        GraphPattern::Distinct { inner }
+        | GraphPattern::Reduced { inner }
+        | GraphPattern::Slice { inner, .. }
+        | GraphPattern::OrderBy { inner, .. } => described_variables(inner),
+        _ => {
+            let mut vs = vec![];
+            pattern.on_in_scope_variable(|v| {
+                if !vs.contains(v) {
+                    vs.push(v.clone())
+                }
+            });
+            vs
+        }
     }
 }
 

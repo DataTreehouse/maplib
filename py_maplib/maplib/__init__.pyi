@@ -1666,7 +1666,7 @@ class Model:
             include_graphs: Optional[List[str]] = None,
             max_rows: Optional[int] = None,
             debug: bool = False,
-            bindings: Optional[Dict[str, Union[str, IRI, Literal]]] = None,
+            bindings: Optional[Dict[str, Union[str, IRI, Literal, bool, int, float]]] = None,
             endpoint: Optional[str] = None,
             endpoint_token: Optional[str] = None,
             cache: bool = True,
@@ -1685,7 +1685,7 @@ class Model:
             include_graphs: Optional[List[str]] = None,
             max_rows: Optional[int] = None,
             debug: bool = False,
-            bindings: Optional[Dict[str, Union[str, IRI, Literal]]] = None,
+            bindings: Optional[Dict[str, Union[str, IRI, Literal, bool, int, float]]] = None,
             endpoint: Optional[str] = None,
             endpoint_token: Optional[str] = None,
             cache: bool = True,
@@ -1704,7 +1704,7 @@ class Model:
             include_graphs: Optional[List[str]] = None,
             max_rows: Optional[int] = None,
             debug: bool = False,
-            bindings: Optional[Dict[str, Union[str, IRI, Literal]]] = None,
+            bindings: Optional[Dict[str, Union[str, IRI, Literal, bool, int, float]]] = None,
             endpoint: Optional[str] = None,
             endpoint_token: Optional[str] = None,
             cache: bool = True,
@@ -1723,7 +1723,7 @@ class Model:
             include_graphs: Optional[List[str]] = None,
             max_rows: Optional[int] = None,
             debug: bool = False,
-            bindings: Optional[Dict[str, Union[str, IRI, Literal]]] = None,
+            bindings: Optional[Dict[str, Union[str, IRI, Literal, bool, int, float]]] = None,
             endpoint: Optional[str] = None,
             endpoint_token: Optional[str] = None,
             cache: bool = True,
@@ -1741,7 +1741,7 @@ class Model:
             include_graphs: Optional[List[str]] = None,
             max_rows: Optional[int] = None,
             debug: bool = False,
-            bindings: Optional[Dict[str, Union[str, IRI, Literal]]] = None,
+            bindings: Optional[Dict[str, Union[str, IRI, Literal, bool, int, float]]] = None,
             endpoint: Optional[str] = None,
             endpoint_token: Optional[str] = None,
             cache: bool = True,
@@ -1749,7 +1749,9 @@ class Model:
     ) -> DataFrame | SolutionMappings | list[DataFrame] | list[SolutionMappings] | list[DataFrame | SolutionMappings] | bool | str | None:
         """
         Query the contained knowledge graph using SPARQL
-        Currently, SELECT, CONSTRUCT and ASK are supported.
+        SELECT, CONSTRUCT, ASK and DESCRIBE are supported. DESCRIBE gives the triples whose subject is a
+        described IRI, as CONSTRUCT results (blank nodes are not described).
+        A SELECT without variables that matches gives one row with no columns.
         Usage:
 
         >>> df = model.query('''
@@ -1772,6 +1774,7 @@ class Model:
         :param max_rows: Maximum estimated rows in result, helps avoid out-of-memory errors.
         :param debug: Why does my query have no results?
         :param bindings: Bind the variables (keys) to the following ground terms. Use IRI, Literal classes or strings (e.g. "<urn:id:abc>") as values.
+            A Python bool, int or float is an xsd:boolean, xsd:integer or xsd:double literal; values of other types raise.
         :param endpoint: Query a maplib server started with Model.serve() instead of this Model, e.g. server.url or
                          "http://host:7878". The results are the same as from Model.query() on the served Model: they
                          are sent as Arrow over plain HTTP, with maplib's own types, and zstd compressed when the
@@ -1943,7 +1946,7 @@ class Model:
             solution_mappings: LiteralType[False] = False,
             return_json: LiteralType[False] = False,
             return_format: Optional[LiteralType["dataframe"]] = "dataframe",
-            bindings: Optional[Dict[str, Union[str, IRI, Literal]]] = None,
+            bindings: Optional[Dict[str, Union[str, IRI, Literal, bool, int, float]]] = None,
             headers: Optional[List[Tuple[str, str]]] = None
     ) -> DataFrame | list[DataFrame] | None: ...
     @overload
@@ -1956,7 +1959,7 @@ class Model:
             return_json: bool = False,
             *,
             return_format: LiteralType["turtle", "json"],
-            bindings: Optional[Dict[str, Union[str, IRI, Literal]]] = None,
+            bindings: Optional[Dict[str, Union[str, IRI, Literal, bool, int, float]]] = None,
             headers: Optional[List[Tuple[str, str]]] = None
     ) -> str: ...
     @overload
@@ -1969,7 +1972,7 @@ class Model:
             *,
             return_json: LiteralType[True],
             return_format: Optional[LiteralType["turtle", "json", "dataframe"]] = "dataframe",
-            bindings: Optional[Dict[str, Union[str, IRI, Literal]]] = None,
+            bindings: Optional[Dict[str, Union[str, IRI, Literal, bool, int, float]]] = None,
             headers: Optional[List[Tuple[str, str]]] = None
     ) -> str: ...
     @overload
@@ -1982,7 +1985,7 @@ class Model:
             solution_mappings: LiteralType[True],
             return_json: LiteralType[False] = False,
             return_format: Optional[LiteralType["dataframe"]] = "dataframe",
-            bindings: Optional[Dict[str, Union[str, IRI, Literal]]] = None,
+            bindings: Optional[Dict[str, Union[str, IRI, Literal, bool, int, float]]] = None,
             headers: Optional[List[Tuple[str, str]]] = None
     ) -> SolutionMappings | list[SolutionMappings] | None: ...
     @overload
@@ -1994,7 +1997,7 @@ class Model:
             solution_mappings: bool = False,
             return_json: bool = False,
             return_format: Optional[LiteralType["turtle", "json", "dataframe"]] = "dataframe",
-            bindings: Optional[Dict[str, Union[str, IRI, Literal]]] = None,
+            bindings: Optional[Dict[str, Union[str, IRI, Literal, bool, int, float]]] = None,
             headers: Optional[List[Tuple[str, str]]] = None
     ) -> DataFrame | SolutionMappings | list[DataFrame] | list[SolutionMappings] | list[DataFrame | SolutionMappings] | str | None:
         """
@@ -2018,6 +2021,7 @@ class Model:
         :param return_json: Return JSON string.
         :param return_format: One of "dataframe" (default), "json" (SELECT and ASK only) or "turtle" (CONSTRUCT only). Ignored when return_json is set.
         :param bindings: Bind the variables (keys) to the following ground terms. Use IRI, Literal classes or strings (e.g. "<urn:id:abc>") as values.
+            A Python bool, int or float is an xsd:boolean, xsd:integer or xsd:double literal; values of other types raise.
         :param headers: Additional headers to include in the request
         :return: DataFrame (Select), list of DataFrames (Construct) containing results or SolutionMappings when solution_mappings is set.
         """
@@ -2033,6 +2037,7 @@ class Model:
             timeout: Optional[float] = None,
             return_triples: bool = False,
             solution_mappings: bool = False,
+            bindings: Optional[Dict[str, Union[str, IRI, Literal, bool, int, float]]] = None,
     ) -> Dict[str, Dict[str, Any]]:
         """
         Execute a SPARQL Update (e.g. INSERT/DELETE ... WHERE) against the graph.
@@ -2050,11 +2055,15 @@ class Model:
 
         :param update: The SPARQL Update string
         :param parameters: PVALUES Parameters, for each parameter, the SolutionMappings containing corresponding mappings and types.
-        :param graph: The IRI of the graph to update.
+        :param graph: The IRI of the graph to update: the default graph of the update, as with WITH <graph>.
+            The WHERE clause is evaluated on it, and triples without a GRAPH in the INSERT and DELETE templates,
+            INSERT DATA and DELETE DATA are inserted into and deleted from it.
         :param include_graphs: IRIs of graphs whose triples are merged into the queried graph, as with FROM.
             None includes the transient graph (TRANSIENT_GRAPH), use [] to query only the graph itself.
         :param max_rows: Maximum estimated rows in result, helps avoid out-of-memory errors.
         :param debug: Why does my query have no results?
+        :param bindings: Bind variables of the WHERE clauses and the INSERT and DELETE templates (keys) to ground
+            terms, as for query(), e.g. bindings={"limit": 10, "s": IRI("urn:x")}.
         :param timeout: Seconds the update may spend evaluating its WHERE clauses, counted from when it has the
                         model to itself. When they have passed, QueryTimeoutError is raised. Each operation is
                         checked before it starts and while its WHERE clause is evaluated, and writes are never
@@ -2473,11 +2482,13 @@ class Model:
     ) -> None:
         """
         Copy the triples of a graph in another Model into this Model.
+        With this Model as other, the source graph is copied into the target graph of this Model.
 
         Usage:
         >>> m.add_graph(other_model, source_graph="urn:graph:a", target_graph="urn:graph:b")
+        >>> m.add_graph(m, source_graph="urn:graph:a", target_graph="urn:graph:b")
 
-        :param other: The Model to copy triples from.
+        :param other: The Model to copy triples from, which may be this Model.
         :param source_graph: The IRI of the graph in other to copy from. None means the default graph.
         :param target_graph: The IRI of the graph in this Model to copy into. None means the default graph.
         """

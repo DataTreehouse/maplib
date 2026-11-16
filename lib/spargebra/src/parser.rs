@@ -784,7 +784,12 @@ fn build_select(
         group = Some((vec![], vec![]));
     }
 
+    // GROUP BY expressions without AS, e.g. GROUP BY (YEAR(?d)), are bound to hidden variables.
+    // The same expression in the SELECT clause is the value of the group, as in other SPARQL
+    // engines: SELECT (YEAR(?d) AS ?y) ... GROUP BY (YEAR(?d)).
+    let mut group_expressions: Vec<(Expression, Variable)> = vec![];
     if let Some((clauses, binds)) = group {
+        group_expressions = binds.clone();
         for (expression, variable) in binds {
             p = GraphPattern::Extend {
                 inner: Box::new(p),
@@ -808,6 +813,19 @@ fn build_select(
     //PVALUES
     if let Some(data) = pvalues {
         p = new_join(p, data);
+    }
+
+    let mut select = select;
+    if !group_expressions.is_empty() {
+        if let SelectionVariables::Explicit(sel_items) = &mut select.variables {
+            for sel_item in sel_items.iter_mut() {
+                if let SelectionMember::Expression(expression, _) = sel_item {
+                    if let Some((_, v)) = group_expressions.iter().find(|(e, _)| e == expression) {
+                        *expression = Expression::Variable(v.clone());
+                    }
+                }
+            }
+        }
     }
 
     // SELECT THOSE VARIABLES THAT NEED TO BE VISIBLE FOR THE HAVING

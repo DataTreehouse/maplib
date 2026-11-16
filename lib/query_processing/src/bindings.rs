@@ -3,9 +3,10 @@ use oxrdf::Literal;
 use representation::errors::RepresentationError;
 use spargebra::algebra::{AggregateExpression, Expression, GraphPattern, OrderExpression};
 use spargebra::term::{
-    GraphNamePattern, GroundTerm, NamedNodePattern, QuadPattern, TermPattern, TriplePattern,
+    GraphNamePattern, GroundQuadPattern, GroundTerm, GroundTermPattern, NamedNodePattern,
+    QuadPattern, TermPattern, TriplePattern,
 };
-use spargebra::Query;
+use spargebra::{GraphUpdateOperation, Query, Update};
 use std::collections::HashMap;
 
 pub fn maybe_replace_bindings(
@@ -493,4 +494,76 @@ fn maybe_replace_named_node_pattern(
     } else {
         Ok(named_node_pattern)
     }
+}
+
+/// Replaces the variables of `bindings` in the WHERE clauses and the INSERT and DELETE
+/// templates of the operations of an update.
+pub fn maybe_replace_bindings_update(
+    update: Update,
+    bindings: Option<&HashMap<String, GroundTerm>>,
+) -> Result<Update, RepresentationError> {
+    let Some(bindings) = bindings else {
+        return Ok(update);
+    };
+    let Update {
+        base_iri,
+        operations,
+    } = update;
+    let mut new_operations = Vec::with_capacity(operations.len());
+    for op in operations {
+        new_operations.push(match op {
+            GraphUpdateOperation::DeleteInsert {
+                delete,
+                insert,
+                using,
+                pattern,
+            } => {
+                let mut new_delete = Vec::with_capacity(delete.len());
+                for d in delete {
+                    let graph_name = match d.graph_name {
+                        GraphNamePattern::Variable(v) => match maybe_replace_named_node_pattern(
+                            NamedNodePattern::Variable(v),
+                            bindings,
+                        )? {
+                            NamedNodePattern::NamedNode(nn) => GraphNamePattern::NamedNode(nn),
+                            NamedNodePattern::Variable(v) => GraphNamePattern::Variable(v),
+                        },
+                        g => g,
+                    };
+                    new_delete.push(GroundQuadPattern {
+                        subject: maybe_replace_ground_term_pattern(d.subject, bindings),
+                        predicate: maybe_replace_named_node_pattern(d.predicate, bindings)?,
+                        object: maybe_replace_ground_term_pattern(d.object, bindings),
+                        graph_name,
+                    });
+                }
+                GraphUpdateOperation::DeleteInsert {
+                    delete: new_delete,
+                    insert: replace_bindings_quad_template(insert, bindings)?,
+                    using,
+                    pattern: Box::new(replace_bindings_graph_pattern(*pattern, bindings)?),
+                }
+            }
+            op => op,
+        });
+    }
+    Ok(Update {
+        base_iri,
+        operations: new_operations,
+    })
+}
+
+fn maybe_replace_ground_term_pattern(
+    term_pattern: GroundTermPattern,
+    bindings: &HashMap<String, GroundTerm>,
+) -> GroundTermPattern {
+    if let GroundTermPattern::Variable(v) = &term_pattern {
+        if let Some(t) = bindings.get(v.as_str()) {
+            return match t {
+                GroundTerm::NamedNode(n) => GroundTermPattern::NamedNode(n.clone()),
+                GroundTerm::Literal(l) => GroundTermPattern::Literal(l.clone()),
+            };
+        }
+    }
+    term_pattern
 }

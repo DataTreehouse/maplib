@@ -410,6 +410,7 @@ pub(crate) fn update_mutex(
     max_rows: Option<usize>,
     debug: Option<bool>,
     keep_triples: bool,
+    bindings: Option<HashMap<String, GroundTerm>>,
 ) -> PyResult<UpdateResult> {
     let graph = parse_optional_named_node(graph)?;
     let named_graph = graph.map(|graph| NamedGraph::from_maybe_named_node(Some(&graph)));
@@ -423,6 +424,7 @@ pub(crate) fn update_mutex(
             max_rows,
             debug.unwrap_or(DEFAULT_DEBUG_NO_RESULTS),
             keep_triples,
+            bindings.as_ref(),
         )
         .map_err(PyMaplibError::from)?;
     Ok(res)

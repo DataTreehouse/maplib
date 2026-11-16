@@ -54,7 +54,7 @@ use std::str::FromStr;
 use oxrdf::{NamedNode, Term};
 use oxrdfio::RdfFormat;
 use polars::prelude::{col, lit, IntoLazy};
-use pyo3::types::{PyList, PyString};
+use pyo3::types::{PyBool, PyFloat, PyInt, PyList, PyString};
 use pyo3::IntoPyObjectExt;
 use representation::python::{
     PyBlankNode, PyIRI, PyLiteral, PyPrefix, PyRDFType, PySolutionMappings, PyVariable,
@@ -885,6 +885,24 @@ fn resolve_rdf_node_type(obj: &Bound<'_, PyAny>) -> PyResult<BaseRDFNodeType> {
     Err(PyTypeError::new_err("Expected RDFType or IRI"))
 }
 
+/// A Python bool, int or float as an xsd:boolean, xsd:integer or xsd:double literal.
+fn python_scalar_literal(v: &Bound<'_, PyAny>) -> PyResult<Option<oxrdf::Literal>> {
+    // bool is a subclass of int, so it is checked first.
+    if v.is_instance_of::<PyBool>() {
+        Ok(Some(oxrdf::Literal::from(v.extract::<bool>()?)))
+    } else if v.is_instance_of::<PyInt>() {
+        let i: i128 = v.extract()?;
+        Ok(Some(oxrdf::Literal::new_typed_literal(
+            i.to_string(),
+            oxrdf::vocab::xsd::INTEGER,
+        )))
+    } else if v.is_instance_of::<PyFloat>() {
+        Ok(Some(oxrdf::Literal::from(v.extract::<f64>()?)))
+    } else {
+        Ok(None)
+    }
+}
+
 fn maybe_parse_bindings(
     bindings: Option<HashMap<String, Py<PyAny>>>,
     py: Python<'_>,
@@ -896,6 +914,8 @@ fn maybe_parse_bindings(
                 use_bindings.insert(k, GroundTerm::NamedNode(v.into_inner()));
             } else if let Ok(v) = v.extract::<PyLiteral>(py) {
                 use_bindings.insert(k, GroundTerm::Literal(v.literal));
+            } else if let Some(lit) = python_scalar_literal(v.bind(py))? {
+                use_bindings.insert(k, GroundTerm::Literal(lit));
             } else if let Ok(v) = v.extract::<String>(py) {
                 match Term::from_str(v.as_str()) {
                     Ok(term) => {
@@ -928,6 +948,18 @@ fn maybe_parse_bindings(
                         .into());
                     }
                 }
+            } else {
+                let type_name = v
+                    .bind(py)
+                    .get_type()
+                    .name()
+                    .map(|n| n.to_string())
+                    .unwrap_or_default();
+                return Err(PyMaplibError::FunctionArgumentError(format!(
+                    "Binding for variable {k} has type {type_name}: use an IRI, a Literal, a str \
+                     with an N-Triples term, or a bool, int or float"
+                ))
+                .into());
             }
         }
         Ok(Some(use_bindings))

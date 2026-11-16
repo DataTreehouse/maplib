@@ -4,8 +4,8 @@ use crate::expressions::operations::{compatible_operation, literal_parts};
 use oxrdf::NamedNodeRef;
 use polars::datatypes::DataType;
 use polars::prelude::{coalesce, col, lit, Expr, LiteralValue};
-use representation::cats::LockedCats;
-use representation::{literal_is_datetime, BaseRDFNodeType, RDFNodeState};
+use representation::cats::{maybe_decode_expr, LockedCats};
+use representation::{literal_is_datetime, literal_is_string, BaseRDFNodeType, RDFNodeState};
 use spargebra::algebra::Expression;
 
 /// RDF term equality (sameTerm): only values of the same type can be equal.
@@ -163,9 +163,21 @@ pub fn typed_comparison_expr(
             ) {
                 comps.push(e);
             } else {
+                // Dictionary encoded strings are compared by value, not by their codes, which
+                // are in insertion order (and local and global codes are not comparable).
+                let (le, re) = if literal_is_string(lt_nn.as_ref())
+                    && literal_is_string(rt_nn.as_ref())
+                {
+                    (
+                        maybe_decode_expr(le.clone(), &lt, &ls, global_cats.clone()),
+                        maybe_decode_expr(re.clone(), rt, rs, global_cats.clone()),
+                    )
+                } else {
+                    (le.clone(), re.clone())
+                };
                 comps.push(comp(
-                    le.clone(),
-                    re.clone(),
+                    le,
+                    re,
                     lt_nn.as_ref(),
                     rt_nn.as_ref(),
                     expression,

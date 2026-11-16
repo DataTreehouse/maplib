@@ -253,8 +253,15 @@ pub fn df_to_py_df(
     let pyarrow = PyModule::import(py, "pyarrow")?;
     let polars = PyModule::import(py, "polars")?;
     let py_df = if df.width() == 0 {
-        // A result without variables (e.g. SELECT * { :a :b :c }) has no record batches
-        polars.call_method0("DataFrame")?.into_py_any(py)?
+        // A result without variables (e.g. SELECT * { :a :b :c }) has no record batches, but
+        // keeps its number of solutions: one row when the pattern matches, none when it does not.
+        let kwargs = pyo3::types::PyDict::new(py);
+        kwargs.set_item("height", df.height())?;
+        match polars.call_method("DataFrame", (), Some(&kwargs)) {
+            Ok(d) => d.into_py_any(py)?,
+            // Polars versions without the height argument
+            Err(_) => polars.call_method0("DataFrame")?.into_py_any(py)?,
+        }
     } else {
         let chunk = df
             .rechunk_mut()
@@ -285,6 +292,10 @@ pub fn fix_cats_and_multicolumns(
     native_dataframe: bool,
     global_cats: LockedCats,
 ) -> (DataFrame, HashMap<String, RDFNodeState>) {
+    if df.width() == 0 {
+        // Nothing to format, and selecting no columns would lose the number of solutions.
+        return (df, dts);
+    }
     let column_ordering: Vec<_> = df
         .get_column_names()
         .iter()

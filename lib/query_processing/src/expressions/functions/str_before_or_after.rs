@@ -15,12 +15,18 @@ use representation::{
 use spargebra::algebra::{Expression, Function};
 use std::collections::HashMap;
 
+enum SecondArg {
+    Constant(String),
+    Column(Expr),
+}
+
 fn null_string() -> Expr {
     lit(LiteralValue::untyped_null()).cast(DataType::String)
 }
 
 /// STRBEFORE and STRAFTER (SPARQL 1.1 17.4.3.9 and 17.4.3.10).
-/// The second argument must be a constant string literal, possibly with a language tag.
+/// The second argument is a constant string literal, possibly with a language tag, or an
+/// expression whose xsd:string value differs per solution.
 /// The arguments must be argument compatible (17.4.3.1.1), otherwise the result is an error (unbound).
 /// If there is no match, the result is the simple literal "", otherwise the result has the language tag of the first argument.
 pub fn str_before_or_after(
@@ -40,7 +46,7 @@ pub fn str_before_or_after(
     }
     let first_context = args_contexts.get(&0).unwrap();
     let second = args.get(1).unwrap();
-    let (second_string, second_lang) = match second {
+    let (second_value, second_lang) = match second {
         Expression::Literal(l) => {
             if l.datatype() != xsd::STRING && l.datatype() != rdf::LANG_STRING {
                 return Err(QueryProcessingError::ExpectedConstantLiteralStringArgument(
@@ -48,24 +54,69 @@ pub fn str_before_or_after(
                 ));
             }
             (
-                l.value().to_string(),
+                SecondArg::Constant(l.value().to_string()),
                 l.language().map(|x| x.to_lowercase()),
             )
         }
-        e => (eval_expression_to_string(e, true)?, None),
+        e => match eval_expression_to_string(e, true) {
+            Ok(s) => (SecondArg::Constant(s), None),
+            Err(_) => {
+                // Differs per solution: only xsd:string values are argument compatible with
+                // every first argument, other types leave the result unbound.
+                let second_context = args_contexts.get(&1).unwrap();
+                let st = solution_mappings
+                    .rdf_node_types
+                    .get(second_context.as_str())
+                    .unwrap();
+                if st.is_lit_type(xsd::STRING) {
+                    (
+                        SecondArg::Column(maybe_decode_expr(
+                            col(second_context.as_str()),
+                            st.get_base_type().unwrap(),
+                            st.get_base_state().unwrap(),
+                            global_cats.clone(),
+                        )),
+                        None,
+                    )
+                } else {
+                    (SecondArg::Column(null_string()), None)
+                }
+            }
+        },
     };
     let is_before = match func {
         Function::StrBefore => true,
         Function::StrAfter => false,
         _ => unreachable!("Should never happen"),
     };
-    let apply_func = |e: Expr| {
-        let ss = second_string.clone();
-        if is_before {
-            e.apply(move |x| str_before(x, ss.clone()), keep_field)
-        } else {
-            e.apply(move |x| str_after(x, ss.clone()), keep_field)
+    let apply_func = |e: Expr| match &second_value {
+        SecondArg::Constant(ss) => {
+            let ss = ss.clone();
+            if is_before {
+                e.apply(move |x| str_before(x, ss.clone()), keep_field)
+            } else {
+                e.apply(move |x| str_after(x, ss.clone()), keep_field)
+            }
         }
+        SecondArg::Column(sep) => {
+            // The part before or after the first occurrence, "" when there is none. The empty
+            // separator occurs at the start.
+            let parts = e.clone().str().splitn(sep.clone(), 2).struct_();
+            let (at_empty, found) = if is_before {
+                (lit(""), parts.field_by_index(0))
+            } else {
+                (e.clone(), parts.field_by_index(1))
+            };
+            when(sep.clone().eq(lit("")))
+                .then(at_empty)
+                .when(e.str().contains_literal(sep.clone()))
+                .then(found)
+                .otherwise(lit(""))
+        }
+    };
+    let second_expr = match &second_value {
+        SecondArg::Constant(s) => lit(s.clone()),
+        SecondArg::Column(e) => e.clone(),
     };
 
     let t = solution_mappings
@@ -116,10 +167,7 @@ pub fn str_before_or_after(
             } else {
                 lit(true)
             };
-            let matched = value
-                .clone()
-                .str()
-                .contains_literal(lit(second_string.clone()));
+            let matched = value.clone().str().contains_literal(second_expr.clone());
             string_exprs.push(
                 when(compatible.clone().and(matched.clone().not()))
                     .then(lit(""))
