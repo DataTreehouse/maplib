@@ -452,7 +452,11 @@ impl Model {
             metadata: metadata_iri,
             graph: graph.clone(),
         };
-        let res = csvw::csvw_to_rdf(&mut self.triplestore, &source_iri, &loader, &options)?;
+        // The generated SPARQL update nests expressions deeply (percent-decoding is about 20
+        // nested REPLACEs), which overflows the main thread's stack in a debug build.
+        let res = on_big_stack(|| {
+            csvw::csvw_to_rdf(&mut self.triplestore, &source_iri, &loader, &options)
+        })?;
         Ok(res)
     }
 
