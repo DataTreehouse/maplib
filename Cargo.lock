@@ -2610,6 +2610,7 @@ name = "opc_ua"
 version = "0.1.0"
 dependencies = [
  "maplib",
+ "oxrdf",
  "representation",
 ]
 

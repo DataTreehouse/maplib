@@ -34,6 +34,7 @@ use external_sparql::SparqlMethod;
 use maplib::model::Model as InnerModel;
 use cdf::map_cdf;
 use opc_ua::mappings::map_opc_ua;
+use opc_ua::typing_shapes::{add_typing_shapes as add_opcua_typing_shapes, TypeNamespaces};
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use pyo3::types::{PyBytes, PyDict};
@@ -482,6 +483,47 @@ impl PyModel {
             map_opc_ua(&mut inner, &folder, &graph);
         });
 
+        Ok(())
+    }
+
+    /// See maplib.opcua.OPCUA.add_typing_shapes.
+    #[pyo3(signature = (shapes_graph=None, type_namespaces=None, instance_namespaces=None))]
+    #[instrument(skip_all)]
+    fn _add_opcua_typing_shapes(
+        &self,
+        py: Python<'_>,
+        shapes_graph: Option<String>,
+        type_namespaces: Option<Vec<String>>,
+        instance_namespaces: Option<Vec<String>>,
+    ) -> PyResult<()> {
+        let shapes_graph = parse_optional_named_node(shapes_graph)?;
+        let shapes_graph = NamedGraph::from_maybe_named_node(shapes_graph.as_ref());
+        let parse = |nss: Vec<String>| -> PyResult<Vec<NamedNode>> {
+            nss.into_iter()
+                .map(|ns| {
+                    NamedNode::new(&ns).map_err(|e| {
+                        PyValueError::new_err(format!("Invalid namespace IRI {ns}: {e}"))
+                    })
+                })
+                .collect()
+        };
+        let type_namespaces = type_namespaces.map(parse).transpose()?;
+        let instance_namespaces = instance_namespaces.map(parse).transpose()?;
+        let namespaces = match (&type_namespaces, &instance_namespaces) {
+            (Some(_), Some(_)) => {
+                return Err(PyValueError::new_err(
+                    "Only one of type_namespaces and instance_namespaces may be given",
+                ))
+            }
+            (Some(t), None) => TypeNamespaces::Types(t),
+            (None, Some(i)) => TypeNamespaces::Instances(i),
+            (None, None) => TypeNamespaces::Derived,
+        };
+        py.detach(|| {
+            let mut inner = self.inner.write().unwrap_or_else(|e| e.into_inner());
+            add_opcua_typing_shapes(&mut inner, &shapes_graph, namespaces)
+                .map_err(PyMaplibError::from)
+        })?;
         Ok(())
     }
 

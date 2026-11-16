@@ -17,6 +17,9 @@ if TYPE_CHECKING:
 #: The helper vocabulary of the inferences and generated shapes (uamapper:typeNamespace, uamapper:path, ...).
 UAMAPPER = "https://github.com/DataTreehouse/uamapper#"
 
+#: The maplib:shapeCategory of the generated typing shapes.
+TYPING_CONCEPT = UAMAPPER + "OPCUATypingValidation"
+
 
 class OPCUA:
     """OPC UA functionality of a Model, available as ``m.opcua``."""
@@ -61,16 +64,13 @@ class OPCUA:
         :param instance_namespaces: The namespace URIs holding instances, all others hold types.
             If neither is given, a namespace holds types when it has type nodes.
         """
-        from .typing_shapes import add_typing_shapes
-
         if type_namespaces is not None and instance_namespaces is not None:
             raise ValueError("Only one of type_namespaces and instance_namespaces may be given")
-        add_typing_shapes(
-            self._model,
+        self._model._add_opcua_typing_shapes(
             shapes_graph=shapes_graph,
             type_namespaces=type_namespaces,
             instance_namespaces=instance_namespaces,
         )
 
 
-__all__ = ["OPCUA", "OPCUAHistoryDatabase", "UAMAPPER"]
+__all__ = ["OPCUA", "OPCUAHistoryDatabase", "TYPING_CONCEPT", "UAMAPPER"]
