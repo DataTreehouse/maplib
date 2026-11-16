@@ -60,13 +60,38 @@ def _listing(prefix, opts):
         ("uploads/m1/nodesets.zip", 3),
     ]
     assert listed[1].url == f"{prefix}/manifest.json"
-    # On GCS listings have no generation, so their version is the ETag only.
-    assert storage.head(listed[1].url, storage_options=opts).version.startswith(listed[1].version)
+    assert storage.head(listed[1].url, storage_options=opts).version == listed[1].version
     assert storage.list(prefix + "/", storage_options=opts) == listed
     for o in listed:
         storage.delete(o.url, storage_options=opts)
     assert storage.list(prefix, storage_options=opts) == []
     assert storage.list(f"{prefix}/nothing/here", storage_options=opts) == []
+
+
+def _token_round_trip(prefix, opts):
+    """put, get, head and list give the same version token, and put(if_match=...) accepts each."""
+    url = f"{prefix}/manifest.json"
+    token = storage.put(url, b"0", storage_options=opts)
+    for i, read in enumerate(["get", "head", "list"], start=1):
+        tokens = {
+            "put": token,
+            "get": storage.get(url, storage_options=opts)[1],
+            "head": storage.head(url, storage_options=opts).version,
+            "list": storage.list(prefix, storage_options=opts)[0].version,
+        }
+        assert set(tokens.values()) == {token}, tokens
+        assert '"' not in token
+        new = storage.put(url, str(i).encode(), if_match=tokens[read], storage_options=opts)
+        assert new != token
+        with pytest.raises(storage.PreconditionFailed):
+            storage.put(url, b"stale", if_match=token, storage_options=opts)
+        token = new
+    assert storage.get(url, storage_options=opts) == (b"3", token)
+    storage.delete(url, storage_options=opts)
+
+
+def test_version_token_round_trip(backend: Backend):
+    _token_round_trip(backend.unique("model"), backend.storage_options)
 
 
 def test_conditional_puts(backend: Backend):
@@ -159,8 +184,9 @@ def gcs_mock():
 
 
 def test_gcs_generation_preconditions(gcs_mock):
-    """On GCS, if_match and if_none_match are generation preconditions, and the version
-    tokens of put, get and head carry the generation."""
+    """On GCS, if_match and if_none_match are generation preconditions. The version tokens
+    are ETags like on the other stores (listings give no generations): if_match puts read the
+    generation of the object at that ETag."""
     opts = gcs_mock.storage_options
     _publish_cycle("gs://bucket/model/manifest.json", opts)
     sent = [m for (method, key, m) in gcs_mock.requests if key == "model/manifest.json"]
@@ -171,13 +197,17 @@ def test_gcs_generation_preconditions(gcs_mock):
 
     url = "gs://bucket/model/manifest.json"
     t1 = storage.put(url, b"a", storage_options=opts)
-    assert ";version=" in t1
+    assert '"' not in t1
     assert storage.get(url, storage_options=opts)[1] == t1
     assert storage.head(url, storage_options=opts).version == t1
     # The same token until the object changes, a new one afterwards.
     assert storage.get(url, storage_options=opts)[1] == t1
-    t2 = storage.put(url, b"a", if_match=t1, storage_options=opts)
+    t2 = storage.put(url, b"b", if_match=t1, storage_options=opts)
     assert t2 != t1
+
+
+def test_gcs_version_token_round_trip(gcs_mock):
+    _token_round_trip("gs://bucket/model", gcs_mock.storage_options)
 
 
 def test_gcs_list(gcs_mock):

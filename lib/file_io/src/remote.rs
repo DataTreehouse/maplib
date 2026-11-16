@@ -500,34 +500,26 @@ pub enum PutCondition {
     IfNoneMatch,
 }
 
-/// Separates the ETag from the store's object version (the GCS generation, the S3 version id)
-/// in a version token.
-const VERSION_SEPARATOR: &str = ";version=";
-
-/// An opaque token for the version of an object, used for conditional puts: the ETag, followed
-/// by the object version where the store has one. Google Cloud Storage makes conditional updates
-/// against the object generation, not the ETag, so both are kept.
+/// An opaque token for the version of an object, used for conditional puts: the ETag without
+/// the quotes of the HTTP header, so that heads, gets, puts and listings give the same token on
+/// every store (Azure and S3 give quoted ETags in headers, Azure unquoted ones in listings).
+/// Only where a store gives no ETag, its object version. The token is the ETag even where the
+/// store makes conditional puts against an object version (the GCS generation), since
+/// listings do not give versions: [`RemoteLocation::put_with`] reads the version to use.
 pub fn version_token(e_tag: Option<&str>, version: Option<&str>) -> Option<String> {
-    match (e_tag, version) {
-        (Some(e), Some(v)) => Some(format!("{e}{VERSION_SEPARATOR}{v}")),
-        (Some(e), None) => Some(e.to_string()),
-        (None, Some(v)) => Some(format!("{VERSION_SEPARATOR}{v}")),
-        (None, None) => None,
-    }
+    e_tag
+        .map(unquote_e_tag)
+        .or(version)
+        .map(|t| t.to_string())
 }
 
-/// The inverse of [`version_token`]. Any other string is taken to be an ETag.
-pub fn parse_version_token(token: &str) -> UpdateVersion {
-    match token.rsplit_once(VERSION_SEPARATOR) {
-        Some((e, v)) => UpdateVersion {
-            e_tag: (!e.is_empty()).then(|| e.to_string()),
-            version: Some(v.to_string()),
-        },
-        None => UpdateVersion {
-            e_tag: Some(token.to_string()),
-            version: None,
-        },
-    }
+/// The ETag without the quotes (and weak marker) of an HTTP entity tag.
+fn unquote_e_tag(e_tag: &str) -> &str {
+    let e = e_tag.trim();
+    let e = e.strip_prefix("W/").unwrap_or(e);
+    e.strip_prefix('"')
+        .and_then(|e| e.strip_suffix('"'))
+        .unwrap_or(e)
 }
 
 impl RemoteLocation {
@@ -605,7 +597,7 @@ impl RemoteLocation {
             PutCondition::IfMatch(token) if self.is_local() => {
                 return self.put_if_match_local(bytes, token);
             }
-            PutCondition::IfMatch(token) => PutMode::Update(parse_version_token(token)),
+            PutCondition::IfMatch(token) => PutMode::Update(self.update_version(token)?),
         };
         let opts = PutOptions {
             mode,
@@ -617,6 +609,38 @@ impl RemoteLocation {
         )
         .map_err(|e| self.err(e))?;
         Ok(version_token(res.e_tag.as_deref(), res.version.as_deref()))
+    }
+
+    /// The version of the object as the store gave it, for a conditional put against it, if
+    /// the object is still at `token` (a `Precondition` error otherwise). The put itself is
+    /// conditional on the store's own ETag or version, so a writer that changes the object
+    /// between this head and the put still makes the put fail.
+    fn update_version(&self, token: &str) -> Result<UpdateVersion, RemoteError> {
+        let precondition = |source: String| {
+            self.err(object_store::Error::Precondition {
+                path: self.path.to_string(),
+                source: source.into(),
+            })
+        };
+        let meta = match block_on(self.store.head(&self.path)) {
+            Ok(meta) => meta,
+            Err(object_store::Error::NotFound { .. }) => {
+                return Err(precondition("the object does not exist".to_string()));
+            }
+            Err(e) => return Err(self.err(e)),
+        };
+        match version_token(meta.e_tag.as_deref(), meta.version.as_deref()) {
+            Some(current) if current == token => Ok(UpdateVersion {
+                e_tag: meta.e_tag,
+                version: meta.version,
+            }),
+            Some(current) => Err(precondition(format!(
+                "the object is at {current}, not {token}"
+            ))),
+            None => Err(precondition(
+                "the store gave no version of the object to compare with".to_string(),
+            )),
+        }
     }
 
     fn put_if_match_local(&self, bytes: Bytes, token: &str) -> Result<Option<String>, RemoteError> {
@@ -973,6 +997,15 @@ mod tests {
             .map(|i| (i.name, i.size))
             .collect();
         assert_eq!(names, vec![("manifest.json".to_string(), 3)]);
+        // Listings give the same token as heads, gets and puts, and it is accepted by puts.
+        let listed = root.child("folder").list_info().unwrap().remove(0).version_token;
+        assert_eq!(listed.as_deref(), Some(t2.as_str()));
+        let t3 = loc
+            .put_with(Bytes::from_static(b"two"), &PutCondition::IfMatch(t2.clone()))
+            .unwrap()
+            .unwrap();
+        assert_eq!(&loc.get_with_version().unwrap().0[..], b"two");
+        let t2 = t3;
         loc.delete().unwrap();
         assert!(loc.info().unwrap().is_none());
         // An update of a deleted object fails.
@@ -1019,15 +1052,14 @@ mod tests {
     }
 
     #[test]
-    fn version_tokens_round_trip() {
-        let t = version_token(Some("\"abc\""), Some("123")).unwrap();
-        let v = parse_version_token(&t);
-        assert_eq!(v.e_tag.as_deref(), Some("\"abc\""));
-        assert_eq!(v.version.as_deref(), Some("123"));
-        let v = parse_version_token("\"abc\"");
-        assert_eq!(v.e_tag.as_deref(), Some("\"abc\""));
-        assert_eq!(v.version, None);
-        let v = parse_version_token(&version_token(None, Some("7")).unwrap());
-        assert_eq!((v.e_tag, v.version.as_deref()), (None, Some("7")));
+    fn version_tokens_are_unquoted_etags() {
+        // Azure and S3 give quoted ETags in headers, Azure unquoted ones in listings.
+        assert_eq!(version_token(Some("\"0x8D\""), None).as_deref(), Some("0x8D"));
+        assert_eq!(version_token(Some("0x8D"), None).as_deref(), Some("0x8D"));
+        assert_eq!(version_token(Some("W/\"abc\""), None).as_deref(), Some("abc"));
+        // The ETag, not the GCS generation, which listings do not give.
+        assert_eq!(version_token(Some("\"abc\""), Some("123")).as_deref(), Some("abc"));
+        assert_eq!(version_token(None, Some("7")).as_deref(), Some("7"));
+        assert_eq!(version_token(None, None), None);
     }
 }

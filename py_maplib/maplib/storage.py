@@ -11,9 +11,9 @@ option names of the object_store crate (and of Polars' ``storage_options``), e.g
 ``{"azure_storage_account_name": ..., "azure_storage_account_key": ...}``.
 
 Every object has a version token, returned by ``put``, ``get``, ``head`` and ``list``. It is
-an opaque string: the object's ETag, followed by the store's object version where it has one
-(the generation on Google Cloud Storage, which makes conditional updates against it). Pass it
-back as ``if_match`` to replace an object only if nobody changed it since::
+an opaque string, the same from all four on every backend: the object's ETag without quotes
+(the store's object version only where there is no ETag). Pass it back as ``if_match`` to
+replace an object only if nobody changed it since::
 
     from maplib import storage
 
@@ -26,8 +26,10 @@ back as ``if_match`` to replace an object only if nobody changed it since::
 Conditional puts on each backend:
 
 - S3, Google Cloud Storage, Azure Blob Storage: made by the store. On Google Cloud Storage
-  they are generation preconditions (``x-goog-if-generation-match``, 0 for ``if_none_match``),
-  so the token carries the generation; tokens from ``list`` do not, see ``ObjectInfo.version``. For S3-compatible stores
+  they are generation preconditions (``x-goog-if-generation-match``, 0 for ``if_none_match``):
+  an ``if_match`` put reads the generation of the object at the token's ETag and makes the put
+  conditional on it. Where the ETag is a hash of the contents (S3, GCS), an object rewritten
+  with the same bytes keeps its token. For S3-compatible stores
   this needs support for ``If-Match`` / ``If-None-Match`` on puts (AWS S3, R2 and MinIO have
   it); ``{"aws_conditional_put": "disabled"}`` turns conditional puts off, and they then raise
   ``NotSupported``.
@@ -108,10 +110,8 @@ class ObjectInfo:
     """When the object was last written, in UTC."""
     version: Optional[str]
     """The version token, for ``put(..., if_match=...)``. None only for stores with neither
-    ETags nor object versions (some plain HTTP servers). Listings on Google Cloud Storage do
-    not give the generation, so there the version from ``list`` is the ETag only: it tells
-    whether an object changed, but ``if_match`` needs the token of ``get``, ``head`` or
-    ``put``."""
+    ETags nor object versions (some plain HTTP servers). The same token as ``get``, ``head``
+    and ``put`` give."""
 
 
 def _info(url: str, t: Tuple[str, int, int, Optional[str]]) -> ObjectInfo:
