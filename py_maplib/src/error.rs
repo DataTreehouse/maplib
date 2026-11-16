@@ -71,10 +71,14 @@ pub fn parse_timeout(timeout: Option<f64>) -> PyResult<Option<std::time::Duratio
     }
 }
 
-/// A QueryTimeoutError when the query stopped because its token timed out, otherwise `err`.
+/// A QueryTimeoutError when the query stopped because its token timed out, a MemoryError when it
+/// stopped because the process used more memory than queries may, otherwise `err`.
 pub fn timeout_error(err: PyErr, token: Option<&utils::cancel::CancelToken>) -> PyErr {
     match token.and_then(|t| t.stopped()) {
         Some(c @ utils::cancel::Cancelled::Timeout(_)) => QueryTimeoutError::new_err(c.to_string()),
+        Some(c @ utils::cancel::Cancelled::MemoryLimit(_)) => {
+            pyo3::exceptions::PyMemoryError::new_err(c.to_string())
+        }
         _ => err,
     }
 }

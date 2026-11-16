@@ -85,3 +85,15 @@ pub fn memory_usage() -> u64 {
 pub fn memory_budget() -> u64 {
     polars_config::config().ooc_memory_budget_bytes()
 }
+
+/// The memory in bytes above which a query is stopped with an error: 90% of the threshold at
+/// which Polars aborts the process (`abort_above_mb`), so that a query that grows too large fails
+/// on its own instead of taking the process down. None when no such threshold is set.
+pub fn query_memory_limit() -> Option<u64> {
+    let abort_above = polars_config::get_oomkill_threshold_bytes();
+    if abort_above > i64::MAX as u64 {
+        None
+    } else {
+        Some(abort_above / 10 * 9)
+    }
+}

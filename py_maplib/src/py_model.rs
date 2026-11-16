@@ -1199,8 +1199,10 @@ impl PyModel {
                 py,
             );
         }
-        // The timeout counts from here, and covers formatting the result.
-        let token = timeout_duration.map(|t| CancelToken::new(Some(t)));
+        // The timeout counts from here, and covers formatting the result. With a memory limit, a
+        // token also lets a large join run on the streaming engine, where it can be stopped.
+        let token = (timeout_duration.is_some() || utils::memory::query_memory_limit().is_some())
+            .then(|| CancelToken::new(timeout_duration));
         let use_cache = cache
             && parameters.is_none()
             && !debug.unwrap_or(false)
@@ -1315,6 +1317,9 @@ impl PyModel {
         match token.as_ref().and_then(|t| t.stopped()) {
             Some(c @ utils::cancel::Cancelled::Timeout(_)) => {
                 Err(QueryTimeoutError::new_err(c.to_string()))
+            }
+            Some(c @ utils::cancel::Cancelled::MemoryLimit(_)) => {
+                Err(pyo3::exceptions::PyMemoryError::new_err(c.to_string()))
             }
             _ => out,
         }

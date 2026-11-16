@@ -3,8 +3,9 @@
 //! A [CancelToken] is made current on the thread that evaluates a query with [with_token].
 //! Evaluation checks it between operators ([check]), in loops such as path search, while waiting
 //! for Polars collects, and once per batch after each join (see [cancel_check_node]), and stops
-//! with [Cancelled] when the deadline has passed or the token was cancelled, e.g. because the
-//! client of a server went away.
+//! with [Cancelled] when the deadline has passed, the token was cancelled, e.g. because the
+//! client of a server went away, or the process uses more memory than queries may
+//! ([crate::memory::query_memory_limit]).
 //!
 //! Polars' own abort mechanism (used for KeyboardInterrupt) aborts every query in the process,
 //! so it is not used here: a timeout stops only its own query.
@@ -19,6 +20,7 @@ use std::time::{Duration, Instant};
 const RUNNING: u8 = 0;
 const TIMED_OUT: u8 = 1;
 const CANCELLED: u8 = 2;
+const MEMORY_LIMIT: u8 = 3;
 
 /// The message of the Polars error raised by a cancellation check inside a Polars plan.
 pub const CANCELLED_POLARS_MESSAGE: &str = "maplib query cancelled";
@@ -30,6 +32,8 @@ pub enum Cancelled {
     Timeout(Duration),
     /// The query was cancelled, e.g. because the client disconnected.
     Cancelled,
+    /// The process used more than this many bytes, the memory allowed for queries.
+    MemoryLimit(u64),
 }
 
 impl fmt::Display for Cancelled {
@@ -37,6 +41,12 @@ impl fmt::Display for Cancelled {
         match self {
             Cancelled::Timeout(d) => write!(f, "The query timed out after {}", fmt_duration(*d)),
             Cancelled::Cancelled => write!(f, "The query was cancelled"),
+            Cancelled::MemoryLimit(limit) => write!(
+                f,
+                "The query was stopped as the process used more than {} MB, 90% of the memory \
+                 limit abort_above_mb",
+                limit / 1_000_000
+            ),
         }
     }
 }
@@ -115,9 +125,23 @@ impl CancelToken {
                         return self.stopped();
                     }
                 }
+                if let Some(limit) = crate::memory::query_memory_limit() {
+                    if crate::memory::memory_usage() > limit {
+                        let _ = self.0.state.compare_exchange(
+                            RUNNING,
+                            MEMORY_LIMIT,
+                            Ordering::Relaxed,
+                            Ordering::Relaxed,
+                        );
+                        return self.stopped();
+                    }
+                }
                 None
             }
             TIMED_OUT => Some(Cancelled::Timeout(self.0.timeout.unwrap_or_default())),
+            MEMORY_LIMIT => Some(Cancelled::MemoryLimit(
+                crate::memory::query_memory_limit().unwrap_or_default(),
+            )),
             _ => Some(Cancelled::Cancelled),
         }
     }
@@ -207,8 +231,8 @@ pub fn has_large_join() -> bool {
 }
 
 /// Adds a check of the current token to `lf`, run on every batch that passes, so a long join
-/// stops soon after its query was cancelled, also on the streaming engine. The plan is unchanged
-/// when this thread has no token.
+/// stops soon after its query was cancelled, timed out or went over the memory allowed for
+/// queries, also on the streaming engine. The plan is unchanged when this thread has no token.
 pub fn cancel_check_node(lf: LazyFrame) -> LazyFrame {
     let Some(token) = current() else {
         return lf;

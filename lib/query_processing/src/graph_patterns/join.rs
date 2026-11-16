@@ -273,7 +273,12 @@ pub fn join_workaround(
     left_mappings = utils::cancel::cancel_check_node(left_mappings);
     // Keeps the join order chosen from the graph patterns (see keep_join_order).
     left_mappings = utils::polars::keep_join_order(left_mappings);
-    if height_upper_bound > utils::polars::SMALL_COLLECT_HEIGHT {
+    // The height estimate assumes joins on keys with few matches each. A join on a key that many
+    // rows share gives up to the product of the input heights, e.g. `?s :kind ?k . ?t :kind ?k`.
+    if height_upper_bound > utils::polars::SMALL_COLLECT_HEIGHT
+        || (!no_join
+            && left_height.saturating_mul(right_height) > utils::polars::LARGE_JOIN_PRODUCT)
+    {
         utils::cancel::note_large_join();
     }
 

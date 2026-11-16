@@ -1,6 +1,6 @@
 use crate::cancel::{self, Cancelled, CANCELLED_POLARS_MESSAGE};
 use polars::error::abort::catch_polars_abort;
-use polars::prelude::{Engine, OptFlags};
+use polars::prelude::{Engine, InProcessQuery, OptFlags};
 use polars::{error::PolarsError, frame::DataFrame, prelude::LazyFrame};
 use std::panic::AssertUnwindSafe;
 use thiserror::Error;
@@ -27,6 +27,11 @@ pub enum InterruptableCollectError {
 /// engine. The streaming engine has a fixed cost of a few milliseconds per collect, which
 /// dominates small queries such as lookups of one subject.
 pub const SMALL_COLLECT_HEIGHT: usize = 65_536;
+
+/// A join whose inputs have more rows than this multiplied together may give that many rows, so
+/// a query that can be cancelled collects it with the streaming engine (see
+/// [cancel::note_large_join]): the in-memory engine can not stop a join that is running.
+pub const LARGE_JOIN_PRODUCT: usize = 1 << 24;
 
 /// What is known about a query result before it is collected, for choosing the engine.
 #[derive(Debug, Clone, Copy)]
@@ -191,8 +196,7 @@ fn pl_interruptable_collect_in_memory(
                 match future.fetch() {
                     None => {
                         if let Some(c) = token.as_ref().and_then(|t| t.stopped()) {
-                            future.cancel();
-                            sleep(Duration::from_millis(50));
+                            abandon(future);
                             break Err(c.into());
                         }
                         let check = last_check.elapsed() >= SIGNAL_CHECK_INTERVAL;
@@ -200,11 +204,7 @@ fn pl_interruptable_collect_in_memory(
                             last_check = Instant::now();
                         }
                         if check && Python::attach(|py| py.check_signals()).is_err() {
-                            // Polars has some kind of race condition and panics as it tries to tx on our dropped rx
-                            // We've already decided to bail out, so waiting a few ms for rayon to clean up or whatever should be fine
-                            // TODO: https://github.com/pola-rs/polars/issues/22515
-                            future.cancel();
-                            sleep(Duration::from_millis(50));
+                            abandon(future);
                             break Err(InterruptableCollectError::Interrupted);
                         }
                         sleeptime = std::cmp::min(sleeptime * 2, MAX_POLL_SLEEP);
@@ -226,7 +226,7 @@ fn pl_interruptable_collect_in_memory(
                 Some(dfr) => break Ok(dfr?),
                 None => {
                     if let Some(c) = token.stopped() {
-                        future.cancel();
+                        abandon(future);
                         break Err(c.into());
                     }
                     std::thread::sleep(sleeptime);
@@ -235,4 +235,18 @@ fn pl_interruptable_collect_in_memory(
             }
         }
     }
+}
+
+/// Stops waiting for a query of the in-memory engine that was cancelled or interrupted.
+///
+/// The in-memory engine only stops between operators, so the operator that is running (e.g. a
+/// large join) runs to its end. Polars then sends the result to the receiver of the query and
+/// panics if the receiver is gone, which aborts the process from its Rayon thread
+/// (<https://github.com/pola-rs/polars/issues/22515>). A thread keeps the receiver until then and
+/// drops the result, so the query returns at once and its memory is freed when it stops.
+fn abandon(future: InProcessQuery) {
+    future.cancel();
+    std::thread::spawn(move || {
+        let _ = future.fetch_blocking();
+    });
 }

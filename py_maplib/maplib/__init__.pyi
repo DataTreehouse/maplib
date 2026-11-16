@@ -3166,7 +3166,7 @@ def set_memory_limit(
     :param max_memory_mb: Spill to disk when maplib uses more than this many megabytes (10^6 bytes).
     :param spill_dir: The folder for spill files. Defaults to the system temporary folder. Set it before running any query: it is fixed at the first spill.
     :param max_spill_mb: The most megabytes to spill to disk. Defaults to 64 GB.
-    :param abort_above_mb: Stop the process (with a message on stderr) when maplib uses more than this many megabytes even after spilling. Off by default. This stops the process before the operating system kills it, and is not an exception that can be caught.
+    :param abort_above_mb: Stop the process (with a message on stderr) when maplib uses more than this many megabytes even after spilling. Off by default. This stops the process before the operating system kills it, and is not an exception that can be caught. Before that, a query raises a MemoryError when the process uses more than 90% of this, which is checked as the solutions of its joins are produced and between the steps of the query.
     """
 
 def memory_usage() -> int:

@@ -145,8 +145,9 @@ maplib.set_memory_limit()       # back to the defaults
 
 `set_memory_limit` also takes `spill_dir` (set it before the first query: it is fixed at the
 first spill), `max_spill_mb` (default 64 GB) and `abort_above_mb`, which stops the process with a
-message on stderr before the operating system would kill it. Each call sets all four; arguments
-left as `None` get their defaults.
+message on stderr before the operating system would kill it. Before that, a query raises a
+`MemoryError` when the process uses more than 90% of `abort_above_mb`, which is checked as the
+solutions of its joins are produced and between the steps of the query. Each call sets all four; arguments left as `None` get their defaults.
 
 ## 3. Templates
 
