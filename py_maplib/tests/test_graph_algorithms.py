@@ -392,3 +392,44 @@ SELECT DISTINCT ?size WHERE {
 }"""
     )
     assert df.rows() == [(3,)]
+
+
+@pytest.mark.parametrize("with_data", [False, True])
+def test_pattern_edges_with_iris_not_in_the_model(with_data):
+    # a - b - c given in VALUES, and the same path made with BIND(IRI(...)): b is the articulation
+    # point, both edges are bridges; with and without other data in the model
+    m = Model()
+    if with_data:
+        m.reads(f"<{ex('x')}> <{ex('p')}> <{ex('y')}> .", format="ntriples")
+    values = "VALUES (?a ?b) { (<urn:t:a> <urn:t:b>) (<urn:t:b> <urn:t:c>) }"
+    bind = """{ SELECT ?a ?b WHERE { VALUES ?s { "a" "b" }
+        BIND(IRI(CONCAT("urn:t:", ?s)) AS ?a)
+        BIND(IRI(CONCAT("urn:t:", IF(?s = "a", "b", "c"))) AS ?b) } }"""
+    for edges in [values, bind]:
+        ap = m.query(
+            PREFIXES
+            + f"""
+SELECT ?n ?cut WHERE {{ {edges}
+  ?n maplib:articulationPoint ?o .
+  ?o maplib:edgeSource ?a ; maplib:edgeTarget ?b ; maplib:cutOff ?cut .
+}}"""
+        )
+        assert strip(ap).rows() == [("urn:t:b", 1)]
+        bridges = m.query(
+            PREFIXES
+            + f"""
+SELECT ?a ?b WHERE {{ {edges}
+  ?a maplib:bridge ?o .
+  ?o maplib:object ?b ; maplib:edgeSource ?a ; maplib:edgeTarget ?b .
+}} ORDER BY ?a"""
+        )
+        assert strip(bridges).rows() == [("urn:t:a", "urn:t:b"), ("urn:t:b", "urn:t:c")]
+        comps = m.query(
+            PREFIXES
+            + f"""
+SELECT DISTINCT ?i ?size WHERE {{ {edges}
+  ?n maplib:component ?o .
+  ?o maplib:edgeSource ?a ; maplib:edgeTarget ?b ; maplib:componentId ?i ; maplib:componentSize ?size .
+}}"""
+        )
+        assert comps.rows() == [(1, 3)]

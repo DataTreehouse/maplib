@@ -86,7 +86,9 @@ pub fn create_compatible_cats(
                     Some(CatOperation::ReEnc(re_enc)),
                 )
             }
-            BaseCatState::String | BaseCatState::NonString => {
+            // as with the global dictionary: the categorical side is decoded
+            BaseCatState::String => (BaseCatState::String, Some(CatOperation::Decode), None),
+            BaseCatState::NonString => {
                 unreachable!("Should never happen")
             }
         },

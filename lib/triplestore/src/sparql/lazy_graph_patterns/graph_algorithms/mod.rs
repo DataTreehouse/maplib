@@ -43,7 +43,7 @@ use crate::Triplestore;
 use algo::{connected_components, cuts, strongly_connected_components, Components, NONE};
 use oxrdf::vocab::xsd;
 use oxrdf::NamedNode;
-use polars::prelude::{by_name, col, DataType, IdxCa, IntoLazy, JoinType};
+use polars::prelude::{by_name, col, DataType, IdxCa, IntoLazy, JoinArgs, JoinType, UniqueKeepStrategy};
 use polars_core::frame::DataFrame;
 use polars_core::prelude::Column;
 use query_processing::graph_patterns::{distinct, join, union};
@@ -62,6 +62,8 @@ use tracing::debug;
 use super::magic_paths::path_error as err;
 
 const VALUE_VAR: &str = "graph_algorithm_value";
+const EDGE_ROW: &str = "graph_algorithm_edge";
+const EDGE_END: &str = "graph_algorithm_end";
 
 /// Whether a basic graph pattern uses one of the graph algorithm predicates.
 pub fn has_graph_algorithm(patterns: &[TriplePattern]) -> bool {
@@ -256,6 +258,9 @@ struct EdgeList {
     to: Vec<u32>,
     /// The index (in `built.predicates`) of the predicate of each edge, for predicate edges.
     predicate: Option<Vec<u32>>,
+    /// For edges from patterns: their solutions, with a row number (EDGE_ROW), and the row of
+    /// each edge.
+    rows: Option<(SolutionMappings, Vec<u32>)>,
 }
 
 impl Triplestore {
@@ -315,6 +320,9 @@ impl Triplestore {
 
         // The graph.
         let mut consumed: Vec<usize> = vec![];
+        // the component of the edge patterns, when the output already holds its solutions
+        let mut edge_component: Option<usize> = None;
+        let mut edges_joined = false;
         let edges = if let (Some(a), Some(b)) = (&spec.edge_source, &spec.edge_target) {
             let ca = component_of(a);
             let cb = component_of(b);
@@ -327,6 +335,7 @@ impl Triplestore {
                 }
             };
             consumed.push(c);
+            edge_component = Some(c);
             self.pattern_edges(components[c].1.clone(), a, b, spec.strong)?
         } else {
             self.predicate_edges(&spec, dataset)?
@@ -430,9 +439,59 @@ impl Triplestore {
                 utils::cancel::check()?;
                 let mut bridges = c.bridges.clone();
                 bridges.sort_unstable();
+                let object_var = spec.object_var.clone().unwrap();
+                // bridges between the edge variables themselves: the solutions of the edges that
+                // are bridges, picked by their row, so their values are those of the patterns
+                let picked_rows = match (&edges.rows, &spec.edge_source, &spec.edge_target) {
+                    (Some((rows_sm, edge_rows)), Some(source), Some(target))
+                        if &out_var == source && &object_var == target =>
+                    {
+                        let from: Vec<u32> =
+                            bridges.iter().map(|(e, _)| edges.from[*e as usize]).collect();
+                        let mut numbers = vec![(
+                            spec.cut_off_var.clone(),
+                            bridges.iter().map(|b| b.1 as i64).collect::<Vec<i64>>(),
+                        )];
+                        numbers.extend(component_numbers(&spec, &c.components, &from));
+                        let mut cols = vec![Column::new(
+                            EDGE_ROW.into(),
+                            bridges
+                                .iter()
+                                .map(|(e, _)| edge_rows[*e as usize])
+                                .collect::<Vec<u32>>(),
+                        )];
+                        let integer = BaseRDFNodeType::Literal(xsd::INTEGER.into_owned(), None)
+                            .into_default_stored_rdf_node_state();
+                        let mut types = rows_sm.rdf_node_types.clone();
+                        for (name, values) in numbers {
+                            if let Some(name) = name {
+                                types.insert(name.clone(), integer.clone());
+                                cols.push(Column::new(name.into(), values));
+                            }
+                        }
+                        let picked = DataFrame::new(bridges.len(), cols).unwrap();
+                        let mappings = rows_sm
+                            .mappings
+                            .clone()
+                            .join(
+                                picked.lazy(),
+                                [col(EDGE_ROW)],
+                                [col(EDGE_ROW)],
+                                JoinArgs::new(JoinType::Inner),
+                            )
+                            .map_err(|e| err(format!("picking the bridges: {e}")))?
+                            .drop(by_name([EDGE_ROW], true, false));
+                        types.remove(EDGE_ROW);
+                        edges_joined = true;
+                        Some(SolutionMappings::new(mappings, types, bridges.len()))
+                    }
+                    _ => None,
+                };
+                if let Some(picked) = picked_rows {
+                    picked
+                } else {
                 let from: Vec<u32> = bridges.iter().map(|(e, _)| edges.from[*e as usize]).collect();
                 let to: Vec<u32> = bridges.iter().map(|(e, _)| edges.to[*e as usize]).collect();
-                let object_var = spec.object_var.clone().unwrap();
                 let mut columns = vec![
                     self.node_column(&out_var, &edges.built, &from),
                     self.node_column(&object_var, &edges.built, &to),
@@ -455,6 +514,7 @@ impl Triplestore {
                 let mut numbers = vec![(spec.cut_off_var.clone(), cut_off)];
                 numbers.extend(component_numbers(&spec, &c.components, &from));
                 self.output(&mut columns, &edges.built, numbers, bridges.len())?
+                }
             }
         };
         let mut out = out;
@@ -480,6 +540,10 @@ impl Triplestore {
         for c in order {
             let (vars, sm) = components[c].take().unwrap();
             if consumed.contains(&c) && vars.is_disjoint(&out_vars) {
+                continue;
+            }
+            // the bridges picked from the edge solutions hold them already
+            if edges_joined && Some(c) == edge_component {
                 continue;
             }
             out_vars.extend(vars);
@@ -550,6 +614,7 @@ impl Triplestore {
             from,
             to,
             predicate: Some(predicate),
+            rows: None,
         })
     }
 
@@ -567,39 +632,82 @@ impl Triplestore {
             rdf_node_types,
             height_estimate,
         } = sm;
-        let edges = mappings
-            .select([col(a), col(b)])
+        // Both ends of every edge in one column, with the edge's row and the end (0 or 1). The
+        // union gives the two ends one encoding, so the node numbers are given within that
+        // column, not by joining each end with the nodes (whose encodings may differ, e.g. for
+        // IRIs from VALUES or BIND that are not in the model).
+        // collected once: the row numbers must name the same solutions in the edges and when
+        // bridges are picked by row (the order of DISTINCT is not fixed between evaluations)
+        let indexed = mappings
+            .with_row_index(EDGE_ROW, None)
+            .with_column(col(EDGE_ROW).cast(DataType::UInt32))
             .collect()
-            .map_err(|e| err(format!("collecting the edges of a graph algorithm: {e}")))?;
-        let one_end = |v: &str| {
+            .map_err(|e| err(format!("collecting the edges of a graph algorithm: {e}")))?
+            .lazy();
+        let edges = indexed.clone().select([col(a), col(b), col(EDGE_ROW)]);
+        let end = |v: &str, side: u32| {
             SolutionMappings::new(
-                edges.clone().lazy().select([col(v).alias(VALUE_VAR)]),
-                HashMap::from([(
-                    VALUE_VAR.to_string(),
-                    rdf_node_types.get(v).unwrap().clone(),
-                )]),
+                edges.clone().select([
+                    col(v).alias(VALUE_VAR),
+                    col(EDGE_ROW),
+                    polars::prelude::lit(side).cast(DataType::UInt32).alias(EDGE_END),
+                ]),
+                HashMap::from([
+                    (VALUE_VAR.to_string(), rdf_node_types.get(v).unwrap().clone()),
+                    (EDGE_ROW.to_string(), u32_state()),
+                    (EDGE_END.to_string(), u32_state()),
+                ]),
                 height_estimate,
             )
         };
-        let values = distinct(union(
-            vec![one_end(a), one_end(b)],
-            false,
-            self.global_cats.clone(),
-        )?)?;
-        let value_state = values.rdf_node_types.get(VALUE_VAR).unwrap().clone();
-        let lookup = values
+        let ends = union(vec![end(a, 0), end(b, 1)], false, self.global_cats.clone())?;
+        let value_state = ends.rdf_node_types.get(VALUE_VAR).unwrap().clone();
+        let ends = ends
             .mappings
             .filter(col(VALUE_VAR).is_not_null())
-            .select([col(VALUE_VAR).alias(VALUE_COLUMN)])
             .collect()
-            .map_err(|e| err(format!("collecting the nodes of a graph algorithm: {e}")))?
-            .with_row_index(LOOKUP_COLUMN.into(), None)
-            .unwrap()
+            .map_err(|e| err(format!("collecting the edges of a graph algorithm: {e}")))?;
+        let lookup = ends
+            .clone()
             .lazy()
-            .with_column(col(LOOKUP_COLUMN).cast(DataType::UInt32))
-            .select([col(VALUE_COLUMN), col(LOOKUP_COLUMN)])
+            .select([col(VALUE_VAR)])
+            .unique_stable(None, UniqueKeepStrategy::First)
+            .with_row_index(LOOKUP_COLUMN, None)
+            .select([
+                col(VALUE_VAR).alias(VALUE_COLUMN),
+                col(LOOKUP_COLUMN).cast(DataType::UInt32),
+            ])
             .collect()
-            .unwrap();
+            .map_err(|e| err(format!("collecting the nodes of a graph algorithm: {e}")))?;
+        let keyed = ends
+            .lazy()
+            .join(
+                lookup.clone().lazy(),
+                [col(VALUE_VAR)],
+                [col(VALUE_COLUMN)],
+                JoinArgs::new(JoinType::Inner),
+            )
+            .map_err(|e| err(format!("numbering the nodes of a graph algorithm: {e}")))?
+            .select([col(EDGE_ROW), col(EDGE_END), col(LOOKUP_COLUMN)])
+            .sort([EDGE_ROW, EDGE_END], Default::default())
+            .collect()
+            .map_err(|e| err(format!("collecting the edges of a graph algorithm: {e}")))?;
+        // pairs of ends of the same edge, in order: an edge with an unbound end has one
+        let rows = keyed.column(EDGE_ROW).unwrap().u32().unwrap();
+        let sides = keyed.column(EDGE_END).unwrap().u32().unwrap();
+        let keys = keyed.column(LOOKUP_COLUMN).unwrap().u32().unwrap();
+        let (mut from, mut to, mut edge_rows) = (vec![], vec![], vec![]);
+        let mut i = 0;
+        while i + 1 < keyed.height() {
+            if rows.get(i) == rows.get(i + 1) && sides.get(i) == Some(0) && sides.get(i + 1) == Some(1) {
+                from.push(keys.get(i).unwrap());
+                to.push(keys.get(i + 1).unwrap());
+                edge_rows.push(rows.get(i).unwrap());
+                i += 2;
+            } else {
+                i += 1;
+            }
+        }
         let n = lookup.height();
         let built = Arc::new(BuiltGraph {
             graph: SearchGraph::default(),
@@ -607,48 +715,18 @@ impl Triplestore {
             value_state,
             predicates: vec![],
         });
-        // the keys of both ends, without removing parallel edges
-        let mut sm = SolutionMappings::new(
-            edges.lazy(),
-            HashMap::from([
-                (a.to_string(), rdf_node_types.get(a).unwrap().clone()),
-                (b.to_string(), rdf_node_types.get(b).unwrap().clone()),
-            ]),
-            height_estimate,
-        );
-        for v in [a, b] {
-            let k = key_col(v);
-            let lookup = SolutionMappings::new(
-                built.lookup.clone().lazy().select([
-                    col(VALUE_COLUMN).alias(v),
-                    col(LOOKUP_COLUMN).alias(&k),
-                ]),
-                HashMap::from([
-                    (v.to_string(), built.value_state.clone()),
-                    (k.clone(), u32_state()),
-                ]),
-                n,
-            );
-            sm = join(sm, lookup, JoinType::Inner, self.global_cats.clone(), None)?;
-        }
-        let df = sm
-            .mappings
-            .collect()
-            .map_err(|e| err(format!("collecting the edges of a graph algorithm: {e}")))?;
-        let keys = |v: &str| -> Vec<u32> {
-            df.column(&key_col(v))
-                .unwrap()
-                .u32()
-                .unwrap()
-                .into_no_null_iter()
-                .collect()
-        };
+        let mut row_types = rdf_node_types.clone();
+        row_types.insert(EDGE_ROW.to_string(), u32_state());
         Ok(EdgeList {
             n,
-            from: keys(a),
-            to: keys(b),
+            from,
+            to,
             built,
             predicate: None,
+            rows: Some((
+                SolutionMappings::new(indexed, row_types, height_estimate),
+                edge_rows,
+            )),
         })
     }
 
