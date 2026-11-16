@@ -164,3 +164,12 @@ def test_cors_exposes_the_token_header(server):
     with urllib.request.urlopen(req, timeout=30) as r:
         exposed = (r.headers.get("Access-Control-Expose-Headers") or "").lower()
         assert "next-page-token" in exposed
+
+
+def test_ask_with_limit_and_offset(server):
+    # ASK has solution modifiers: it is true when a solution is left after OFFSET.
+    ask = f"ASK {{ ?s <{EX}v> ?v }}"
+    for offset, expected in [(0, True), (N - 1, True), (N, False)]:
+        status, _, body = get(server, query=ask, offset=offset, limit=1)
+        assert status == 200, body
+        assert json.loads(body)["boolean"] is expected, offset

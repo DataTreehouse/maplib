@@ -16,6 +16,8 @@ uv.lock
 # Nix
 **/result
 **/result-*
+# ...but not the expected results of the vendored W3C sort tests
+!py_maplib/tests/testdata/w3c_sparql10_sort/result-*
 
 # Reference HDT files, fetched by py_maplib/tests/fetch_hdt_reference.py
 /py_maplib/tests/testdata/hdt_reference/
