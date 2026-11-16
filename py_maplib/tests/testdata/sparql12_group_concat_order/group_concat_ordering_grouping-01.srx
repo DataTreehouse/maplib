@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<sparql xmlns="http://www.w3.org/2005/sparql-results#">
+<head>
+	<variable name="first"/>
+	<variable name="names_by_number"/>
+	<variable name="names_by_name"/>
+</head>
+<results>
+		<result>
+			<binding name="first"><literal>o</literal></binding>
+			<binding name="names_by_number"><literal>one</literal></binding>
+			<binding name="names_by_name"><literal>one</literal></binding>
+		</result>
+		<result>
+			<binding name="first"><literal>t</literal></binding>
+			<binding name="names_by_number"><literal>two three</literal></binding>
+			<binding name="names_by_name"><literal>three two</literal></binding>
+		</result>
+		<result>
+			<binding name="first"><literal>f</literal></binding>
+			<binding name="names_by_number"><literal>four</literal></binding>
+			<binding name="names_by_name"><literal>four</literal></binding>
+		</result>
+</results>
+</sparql>

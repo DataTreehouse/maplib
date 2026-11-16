@@ -16,6 +16,7 @@ use crate::query::*;
 use crate::srl::*;
 use crate::term::*;
 use crate::update::*;
+use crate::window::{ordered_aggregate_argument, WindowCall, WindowFrame, WindowFunction};
 use oxilangtag::LanguageTag;
 use oxiri::{Iri, IriParseError};
 use oxrdf::vocab::{rdf, xsd};
@@ -1177,6 +1178,21 @@ impl ParserState {
                 new_var
             }))
     }
+}
+
+fn window_frame(
+    (start, start_following): (Option<i64>, bool),
+    (end, end_following): (Option<i64>, bool),
+) -> Result<WindowFrame, &'static str> {
+    if (start.is_none() && start_following) || (end.is_none() && !end_following) {
+        return Err("A window frame starts at UNBOUNDED PRECEDING and ends at UNBOUNDED FOLLOWING");
+    }
+    if let (Some(s), Some(e)) = (start, end) {
+        if s > e {
+            return Err("A window frame must not start after it ends");
+        }
+    }
+    Ok(WindowFrame { start, end })
 }
 
 fn unescape_iriref(mut input: &str) -> Result<String, &'static str> {
@@ -2595,6 +2611,7 @@ parser! {
         rule BrackettedExpression() -> Expression = "(" _ e:Expression() _ ")" { e }
 
         rule BuiltInCall() -> Expression =
+            w:WindowCall() { w } /
             a:Aggregate() {? state.new_aggregation(a).map(Into::into) } /
             i("STR") _ "(" _ e:Expression() _ ")" { Expression::FunctionCall(Function::Str, vec![e]) } /
             i("LANG") _ "(" _ e:Expression() _ ")" { Expression::FunctionCall(Function::Lang, vec![e]) } /
@@ -2721,26 +2738,74 @@ parser! {
             i("MAX") _ "(" _ expr:Expression() _ ")" { AggregateExpression::FunctionCall { name: AggregateFunction::Max, expr, distinct: false } } /
             i("AVG") _ "(" _ i("DISTINCT") _ expr:Expression() _ ")" { AggregateExpression::FunctionCall { name: AggregateFunction::Avg, expr, distinct: true } } /
             i("AVG") _ "(" _ expr:Expression() _ ")" { AggregateExpression::FunctionCall { name: AggregateFunction::Avg, expr, distinct: false } } /
-            i("SAMPLE") _ "(" _ i("DISTINCT") _ expr:Expression() _ ")" { AggregateExpression::FunctionCall { name: AggregateFunction::Sample, expr, distinct: true } } /
-            i("SAMPLE") _ "(" _ expr:Expression() _ ")" { AggregateExpression::FunctionCall { name: AggregateFunction::Sample, expr, distinct: false } } /
-            i("GROUP_CONCAT") _ "(" _ i("DISTINCT") _ expr:Expression() _ ";" _ i("SEPARATOR") _ "=" _ s:String() _ ")" { AggregateExpression::FunctionCall { name: AggregateFunction::GroupConcat { separator: Some(s) }, expr, distinct: true } } /
-            i("GROUP_CONCAT") _ "(" _ i("DISTINCT") _ expr:Expression() _ ")" { AggregateExpression::FunctionCall { name: AggregateFunction::GroupConcat { separator: None }, expr, distinct: true } } /
-            i("GROUP_CONCAT") _ "(" _ expr:Expression() _ ";" _ i("SEPARATOR") _ "=" _ s:String() _ ")" { AggregateExpression::FunctionCall { name: AggregateFunction::GroupConcat { separator: Some(s) }, expr, distinct: false } } /
-            i("GROUP_CONCAT") _ "(" _ expr:Expression() _ ")" { AggregateExpression::FunctionCall { name: AggregateFunction::GroupConcat { separator: None }, expr, distinct: false } } /
-            name:iri() _ "(" _ i("DISTINCT") _ expr:Expression() _ ")" {?
-                if state.custom_aggregate_functions.contains(&name) {
-                    Ok(AggregateExpression::FunctionCall { name: AggregateFunction::Custom(name), expr, distinct: true })
+            i("SAMPLE") _ "(" _ distinct:AggregateDistinct() expr:Expression() _ o:AggregateOrderBy()? ")" { AggregateExpression::FunctionCall { name: AggregateFunction::Sample, expr: ordered_aggregate_argument(o, expr), distinct } } /
+            i("GROUP_CONCAT") _ "(" _ distinct:AggregateDistinct() expr:Expression() _ s1:GroupConcatSeparator()? o:AggregateOrderBy()? s2:GroupConcatSeparator()? ")" {?
+                if s1.is_some() && s2.is_some() {
+                    Err("GROUP_CONCAT has more than one SEPARATOR")
                 } else {
-                    Err("This custom function is a regular function and not an aggregate function")
+                    Ok(AggregateExpression::FunctionCall { name: AggregateFunction::GroupConcat { separator: s1.or(s2) }, expr: ordered_aggregate_argument(o, expr), distinct })
                 }
             } /
-            name:iri() _ "(" _ expr:Expression() _ ")" {?
+            name:iri() _ "(" _ distinct:AggregateDistinct() expr:Expression() _ o:AggregateOrderBy()? ")" {?
                 if state.custom_aggregate_functions.contains(&name) {
-                    Ok(AggregateExpression::FunctionCall { name: AggregateFunction::Custom(name), expr, distinct: false })
+                    Ok(AggregateExpression::FunctionCall { name: AggregateFunction::Custom(name), expr: ordered_aggregate_argument(o, expr), distinct })
                 } else {
                     Err("This custom function is a regular function and not an aggregate function")
                 }
             }
+
+        // maplib extension: ORDER BY in aggregates and window functions, see window.rs
+        rule AggregateDistinct() -> bool = d:(i("DISTINCT") _)? { d.is_some() }
+        rule GroupConcatSeparator() -> String = ";" _ i("SEPARATOR") _ "=" _ s:String() _ { s }
+        rule AggregateOrderBy() -> Vec<OrderExpression> = (";" _)? c:WindowOrderBy() { c }
+        rule WindowOrderBy() -> Vec<OrderExpression> = i("ORDER") _ i("BY") _ c:WindowOrderBy_item()+ { c }
+        rule WindowOrderBy_item() -> OrderExpression = c:OrderCondition() _ ("," _)? { c }
+
+        rule WindowCall() -> Expression = f:WindowFunctionCall() _ i("OVER") _ "(" _ p:WindowPartitionBy()? o:WindowOrderBy()? frame:WindowFrame()? ")" {?
+            let (function, arg) = f;
+            if frame.is_some() && function.is_ranking() {
+                Err("ROW_NUMBER, RANK and DENSE_RANK do not take a window frame")
+            } else {
+                Ok(WindowCall { function, arg, partition_by: p.unwrap_or_default(), order_by: o.unwrap_or_default(), frame }.into_expression())
+            }
+        }
+        rule WindowFunctionCall() -> (WindowFunction, Option<Expression>) =
+            i("ROW_NUMBER") _ NIL() { (WindowFunction::RowNumber, None) } /
+            i("DENSE_RANK") _ NIL() { (WindowFunction::DenseRank, None) } /
+            i("RANK") _ NIL() { (WindowFunction::Rank, None) } /
+            i("COUNT") _ "(" _ "*" _ ")" { (WindowFunction::CountSolutions, None) } /
+            name:WindowAggregateName() _ "(" _ distinct:AggregateDistinct() expr:Expression() _ separator:GroupConcatSeparator()? ")" {?
+                match (name, separator) {
+                    (AggregateFunction::GroupConcat { .. }, separator) => Ok(AggregateFunction::GroupConcat { separator }),
+                    (name, None) => Ok(name),
+                    _ => Err("Only GROUP_CONCAT takes a SEPARATOR"),
+                }.map(|name| (WindowFunction::Aggregate { name, distinct }, Some(expr)))
+            }
+        rule WindowAggregateName() -> AggregateFunction =
+            i("COUNT") { AggregateFunction::Count } /
+            i("SUM") { AggregateFunction::Sum } /
+            i("AVG") { AggregateFunction::Avg } /
+            i("MIN") { AggregateFunction::Min } /
+            i("MAX") { AggregateFunction::Max } /
+            i("SAMPLE") { AggregateFunction::Sample } /
+            i("GROUP_CONCAT") { AggregateFunction::GroupConcat { separator: None } }
+        rule WindowPartitionBy() -> Vec<Expression> = i("PARTITION") _ i("BY") _ p:WindowPartitionBy_item()+ { p }
+        rule WindowPartitionBy_item() -> Expression = e:WindowPartitionBy_expr() _ ("," _)? { e }
+        rule WindowPartitionBy_expr() -> Expression =
+            BuiltInCall() /
+            FunctionCall() /
+            "(" _ e:Expression() _ ")" { e } /
+            v:Var() { v.into() }
+        rule WindowFrame() -> WindowFrame =
+            i("ROWS") _ i("BETWEEN") _ s:WindowFrameBound() _ i("AND") _ e:WindowFrameBound() _ {? window_frame(s, e) } /
+            i("ROWS") _ s:WindowFrameBound() _ {? window_frame(s, (Some(0), false)) }
+        // The offset from the current row, None for UNBOUNDED, and whether it is UNBOUNDED FOLLOWING
+        rule WindowFrameBound() -> (Option<i64>, bool) =
+            i("UNBOUNDED") _ i("PRECEDING") { (None, false) } /
+            i("UNBOUNDED") _ i("FOLLOWING") { (None, true) } /
+            i("CURRENT") _ i("ROW") { (Some(0), false) } /
+            n:$(INTEGER()) _ i("PRECEDING") {? i64::from_str(n).map(|n| (Some(-n), false)).map_err(|_| "Invalid window frame offset") } /
+            n:$(INTEGER()) _ i("FOLLOWING") {? i64::from_str(n).map(|n| (Some(n), false)).map_err(|_| "Invalid window frame offset") }
 
         rule iriOrFunction() -> Expression = i: iri() _ a: ArgList()? {?
             if let Some(a) = a {

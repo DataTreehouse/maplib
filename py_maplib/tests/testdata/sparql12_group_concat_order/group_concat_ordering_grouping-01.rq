@@ -1,0 +1,14 @@
+SELECT
+	?first
+	(GROUP_CONCAT(?name; ORDER BY ?number) AS ?names_by_number)
+	(GROUP_CONCAT(?name; ORDER BY ?name) AS ?names_by_name)
+WHERE {
+	VALUES (?name ?number) {
+		("four" 4)
+		("two" 2)
+		("one" 1)
+		("three" 3)
+	}
+	BIND(SUBSTR(?name, 1, 1) AS ?first)
+}
+GROUP BY ?first

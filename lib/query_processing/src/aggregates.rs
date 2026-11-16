@@ -176,11 +176,41 @@ pub fn group_concat(
     distinct: bool,
     global_cats: LockedCats,
 ) -> (Expr, RDFNodeState) {
+    group_concat_sorted(
+        solution_mappings,
+        column_context,
+        separator,
+        distinct,
+        global_cats,
+        None,
+    )
+}
+
+/// Sort keys for the values of a group, as in `GROUP_CONCAT(?x ORDER BY ?y)`.
+pub type AggregateOrder = Option<(Vec<Expr>, SortMultipleOptions)>;
+
+fn sorted(e: Expr, order: AggregateOrder) -> Expr {
+    match order {
+        Some((by, options)) => e.sort_by(by, options),
+        None => e,
+    }
+}
+
+/// GROUP_CONCAT with the values in the given order. With DISTINCT, the first occurrence of each
+/// value is kept.
+pub fn group_concat_sorted(
+    solution_mappings: &SolutionMappings,
+    column_context: &Context,
+    separator: &Option<String>,
+    distinct: bool,
+    global_cats: LockedCats,
+    order: AggregateOrder,
+) -> (Expr, RDFNodeState) {
     let out_rdf_node_type = BaseRDFNodeType::Literal(xsd::STRING.into_owned(), None)
         .into_default_input_rdf_node_state();
     let use_sep = separator.as_deref().unwrap_or(" ");
     let t = rdf_node_type_from_context(column_context, solution_mappings);
-    let mut strings = str_function(column_context.as_str(), t, global_cats);
+    let mut strings = sorted(str_function(column_context.as_str(), t, global_cats), order);
     if distinct {
         strings = strings.unique_stable();
     }
@@ -192,9 +222,18 @@ pub fn sample(
     solution_mappings: &SolutionMappings,
     column_context: &Context,
 ) -> (Expr, RDFNodeState) {
+    sample_sorted(solution_mappings, column_context, None)
+}
+
+/// SAMPLE, choosing the first value in the given order (any value without an order).
+pub fn sample_sorted(
+    solution_mappings: &SolutionMappings,
+    column_context: &Context,
+    order: AggregateOrder,
+) -> (Expr, RDFNodeState) {
     let out_rdf_node_type = rdf_node_type_from_context(column_context, solution_mappings).clone();
 
-    let out_expr = col(column_context.as_str()).first();
+    let out_expr = sorted(col(column_context.as_str()), order).first();
     (out_expr, out_rdf_node_type)
 }
 
@@ -213,9 +252,17 @@ pub fn list_aggregation(
     solution_mappings: &SolutionMappings,
     column_context: &Context,
 ) -> (Expr, RDFNodeState) {
+    list_aggregation_sorted(solution_mappings, column_context, None)
+}
+
+pub fn list_aggregation_sorted(
+    solution_mappings: &SolutionMappings,
+    column_context: &Context,
+    order: AggregateOrder,
+) -> (Expr, RDFNodeState) {
     //Todo: add list types..
     let out_rdf_node_type = rdf_node_type_from_context(column_context, solution_mappings).clone();
-    let out_expr = col(column_context.as_str());
+    let out_expr = sorted(col(column_context.as_str()), order);
     (out_expr, out_rdf_node_type)
 }
 

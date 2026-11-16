@@ -313,6 +313,9 @@ impl fmt::Display for Expression {
                 e => write!(f, "!{e}"),
             },
             Self::FunctionCall(function, parameters) => {
+                if let Some(w) = crate::window::WindowCall::from_expression(self) {
+                    return write!(f, "{w}");
+                }
                 write!(f, "{function}")?;
                 write_arg_list(parameters, f)
             }
@@ -1405,6 +1408,24 @@ impl AggregateExpression {
 
 impl fmt::Display for AggregateExpression {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if let Self::FunctionCall {
+            name,
+            expr,
+            distinct,
+        } = self
+        {
+            if let Some(o) = crate::window::OrderedAggregate::from_expression(expr) {
+                write!(f, "{name}({}{}", if *distinct { "DISTINCT " } else { "" }, o.expr)?;
+                if let AggregateFunction::GroupConcat {
+                    separator: Some(separator),
+                } = name
+                {
+                    write!(f, "; SEPARATOR = {}", LiteralRef::new_simple_literal(separator))?;
+                }
+                o.fmt_order_by(f)?;
+                return f.write_str(")");
+            }
+        }
         match self {
             Self::CountSolutions { distinct } => {
                 if *distinct {

@@ -1,0 +1,9 @@
+SELECT (GROUP_CONCAT(?name; ORDER BY (-?number)) AS ?names)
+WHERE {
+	VALUES (?name ?number) {
+		("four" 4)
+		("two" 2)
+		("one" 1)
+		("three" 3)
+	}
+}

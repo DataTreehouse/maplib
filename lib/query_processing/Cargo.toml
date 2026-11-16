@@ -38,6 +38,8 @@ polars = { workspace = true, features = [
     "diagonal_concat",
     "cross_join",
     "cum_agg",
+    "rank",
+    "dynamic_group_by",
     "coalesce"] }
 tracing.workspace = true
 uuid.workspace = true

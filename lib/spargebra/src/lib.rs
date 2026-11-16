@@ -11,6 +11,7 @@ mod query;
 pub mod srl;
 pub mod term;
 mod update;
+pub mod window;
 
 pub use parser::{SparqlParser, SparqlSyntaxError};
 pub use query::*;

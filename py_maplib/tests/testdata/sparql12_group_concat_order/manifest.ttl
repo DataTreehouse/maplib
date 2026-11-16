@@ -1,0 +1,62 @@
+@prefix rdf:    <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix :       <http://www.w3.org/2009/sparql/docs/tests/data-sparql11/functions/manifest#> .
+@prefix rdfs:   <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix mf:     <http://www.w3.org/2001/sw/DataAccess/tests/test-manifest#> .
+@prefix qt:     <http://www.w3.org/2001/sw/DataAccess/tests/test-query#> .
+@prefix dawgt:  <http://www.w3.org/2001/sw/DataAccess/tests/test-dawg#> .
+@prefix sparql: <http://www.w3.org/ns/sparql#> .
+
+<>	a mf:Manifest ;
+	rdfs:label "SPARQL Aggregation" ;
+	mf:entries (
+		:group_concat_ordering01
+		:group_concat_ordering02
+		:group_concat_ordering03
+		:group_concat_ordering_grouping01
+		:group_concat_ordering_separator01
+	) .
+
+:group_concat_ordering01 a mf:QueryEvaluationTest ;
+	mf:name "ordering of GROUP_CONCAT inputs 01" ;
+	rdfs:comment "Order the aggregation inputs by an integer variable" ;
+	dawgt:approval dawgt:Proposed ;
+	mf:action
+		[ qt:query <group_concat_order-01.rq> ] ;
+	mf:result  <group_concat_order-01.srx> ;
+	.
+
+:group_concat_ordering02 a mf:QueryEvaluationTest ;
+	mf:name "ordering of GROUP_CONCAT inputs 02" ;
+	rdfs:comment "Order the aggregation inputs by a string variable" ;
+	dawgt:approval dawgt:Proposed ;
+	mf:action
+		[ qt:query <group_concat_order-02.rq> ] ;
+	mf:result  <group_concat_order-02.srx> ;
+	.
+
+:group_concat_ordering03 a mf:QueryEvaluationTest ;
+	mf:name "ordering of GROUP_CONCAT inputs 03" ;
+	rdfs:comment "Order the aggregation inputs by a negated integer variable" ;
+	dawgt:approval dawgt:Proposed ;
+	mf:action
+		[ qt:query <group_concat_order-03.rq> ] ;
+	mf:result  <group_concat_order-03.srx> ;
+	.
+
+:group_concat_ordering_grouping01 a mf:QueryEvaluationTest ;
+	mf:name "ordering of GROUP_CONCAT inputs within a groups" ;
+	rdfs:comment "Order the aggregation inputs by an integer variable PER group" ;
+	dawgt:approval dawgt:Proposed ;
+	mf:action
+		[ qt:query <group_concat_ordering_grouping-01.rq> ] ;
+	mf:result  <group_concat_ordering_grouping-01.srx> ;
+	.
+
+:group_concat_ordering_separator01 a mf:QueryEvaluationTest ;
+	mf:name "ordering of GROUP_CONCAT inputs with separator 01" ;
+	rdfs:comment "this test includes both GROUP_CONCAT scalarvals: ORDER BY and SEPARATOR" ;
+	dawgt:approval dawgt:Proposed ;
+	mf:action
+		[ qt:query <group_concat_ordering_separator-01.rq> ] ;
+	mf:result  <group_concat_ordering_separator-01.srx> ;
+	.

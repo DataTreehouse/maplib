@@ -7,6 +7,7 @@ pub(crate) mod lazy_aggregate;
 mod lazy_expressions;
 pub(crate) mod lazy_graph_patterns;
 mod lazy_order;
+mod lazy_window;
 mod load;
 mod rewrite;
 

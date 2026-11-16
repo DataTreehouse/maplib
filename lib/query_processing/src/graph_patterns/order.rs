@@ -22,7 +22,31 @@ pub fn order_by(
     if columns.is_empty() {
         return Ok(solution_mappings);
     }
+    let (order_exprs, asc_bools) =
+        ordering_exprs(&solution_mappings, columns, asc_ordering, global_cats);
+    solution_mappings.mappings = solution_mappings.mappings.sort_by_exprs(
+        order_exprs,
+        sort_options(&asc_bools).with_maintain_order(false),
+    );
+    Ok(solution_mappings)
+}
 
+/// Sort options for keys from `ordering_exprs`: unbound values are lowest, so first in
+/// ascending order and last in descending order.
+pub fn sort_options(asc_bools: &[bool]) -> SortMultipleOptions {
+    SortMultipleOptions::default()
+        .with_order_descending_multi(asc_bools.iter().map(|asc| !asc).collect::<Vec<bool>>())
+        .with_nulls_last_multi(asc_bools.iter().map(|asc| !asc).collect::<Vec<bool>>())
+}
+
+/// The sort keys that order the columns as SPARQL ORDER BY does, with whether each key is
+/// ascending. A column with several types gives several keys.
+pub fn ordering_exprs(
+    solution_mappings: &SolutionMappings,
+    columns: &[String],
+    asc_ordering: Vec<bool>,
+    global_cats: LockedCats,
+) -> (Vec<Expr>, Vec<bool>) {
     let mut order_exprs = vec![];
     let mut asc_bools = vec![];
     for (c, a) in columns.iter().zip(asc_ordering) {
@@ -117,15 +141,7 @@ pub fn order_by(
         }
     }
 
-    solution_mappings.mappings = solution_mappings.mappings.sort_by_exprs(
-        order_exprs,
-        SortMultipleOptions::default()
-            .with_order_descending_multi(asc_bools.iter().map(|asc| !asc).collect::<Vec<bool>>())
-            .with_nulls_last_multi(asc_bools.iter().map(|asc| !asc).collect::<Vec<bool>>())
-            .with_maintain_order(false),
-    );
-
-    Ok(solution_mappings)
+    (order_exprs, asc_bools)
 }
 
 fn is_date_time(t: &BaseRDFNodeType) -> bool {

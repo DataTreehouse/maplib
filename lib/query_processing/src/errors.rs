@@ -31,6 +31,8 @@ pub enum QueryProcessingError {
     ExpectedIntegerArgument(Function),
     #[error("Error parsing literal {0}")]
     ParseLiteralError(RepresentationError),
+    #[error("Unsupported window function: {0}")]
+    UnsupportedWindowFunction(String),
     #[error("UDF function error: {0}")]
     UDFError(String),
     #[error(

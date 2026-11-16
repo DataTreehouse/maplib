@@ -1,6 +1,7 @@
 use oxrdf::Variable;
 use query_processing::find_query_variables::find_all_used_variables_in_expression;
 use spargebra::algebra::{Expression, GraphPattern};
+use spargebra::window::contains_window_function;
 use spargebra::term::NamedNodePattern;
 use std::collections::HashSet;
 
@@ -62,6 +63,15 @@ pub fn rewrite_gp_pushdown(
             } else {
                 GraphPattern::Bgp { patterns }
             }
+        }
+        GraphPattern::Filter { inner, expr } if contains_window_function(&expr) => {
+            // A window function depends on all solutions of the inner pattern, so no filters
+            // are moved below or out of it.
+            let outer = GraphPattern::Filter {
+                inner: Box::new(rewrite_gp_pushdown(*inner, vec![], seen_vars)),
+                expr,
+            };
+            create_filter_gps(outer, filters)
         }
         GraphPattern::Filter { inner, expr } => {
             if contains_variable_predicate(&inner) {

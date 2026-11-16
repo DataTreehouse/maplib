@@ -9,3 +9,4 @@ pub mod graph_patterns;
 pub mod pushdowns;
 pub mod type_constraints;
 pub mod udf;
+pub mod window;

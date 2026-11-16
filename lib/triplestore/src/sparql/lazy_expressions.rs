@@ -613,6 +613,25 @@ impl Triplestore {
                     self.global_cats.clone(),
                 )?
             }
+            Expression::FunctionCall(Function::Custom(nn), _)
+                if spargebra::window::is_window_function(nn.as_ref()) =>
+            {
+                let window = spargebra::window::WindowCall::from_expression(expr).ok_or_else(|| {
+                    query_processing::errors::QueryProcessingError::UnsupportedWindowFunction(
+                        expr.to_string(),
+                    )
+                })?;
+                drop(cats);
+                return self.lazy_window(
+                    &window,
+                    solution_mappings,
+                    context,
+                    parameters,
+                    pushdowns,
+                    query_settings,
+                    dataset,
+                );
+            }
             Expression::FunctionCall(func, args) => {
                 let mut args_contexts: HashMap<usize, Context> = HashMap::new();
                 let mut output_solution_mappings = solution_mappings;

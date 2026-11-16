@@ -13,6 +13,7 @@ use representation::dataset::QueryGraph;
 use representation::query_context::{Context, PathEntry};
 use representation::solution_mapping::{EagerSolutionMappings, SolutionMappings};
 use spargebra::algebra::{Expression, GraphPattern};
+use spargebra::window::contains_window_function;
 use std::collections::{HashMap, HashSet};
 
 impl Triplestore {
@@ -34,6 +35,12 @@ impl Triplestore {
         let inner_context = context.extension_with(PathEntry::ExtendInner);
         let expression_context = context.extension_with(PathEntry::ExtendExpression);
         pushdowns.remove_variable(variable);
+        // A window function is evaluated over the solutions of the inner pattern alone, so
+        // the incoming solutions and pushdowns must not restrict them.
+        let window = contains_window_function(expression);
+        if window {
+            pushdowns = Pushdowns::new();
+        }
         let expression_pushdowns = if contains_graph_pattern(expression) {
             Some(pushdowns.clone())
         } else {
@@ -43,7 +50,7 @@ impl Triplestore {
         // so it must not see variables that only the incoming solution mappings bind. When it
         // uses such a variable, the group is evaluated on its own and joined afterwards.
         let (input_solution_mappings, join_afterwards) = if let Some(sm) = input_solution_mappings {
-            if uses_outer_variables(expression, inner, &sm) {
+            if window || uses_outer_variables(expression, inner, &sm) {
                 (None, Some(sm))
             } else {
                 (Some(sm), None)
