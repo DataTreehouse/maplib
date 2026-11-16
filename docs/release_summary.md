@@ -10,6 +10,8 @@ A short guide for deciding whether to upgrade from v0.20.32 to v0.22.0. It cover
 - **One-file models, in the open-source core.** `m.serialize()` writes a single Parquet-based `.maplib` file, locally or to `s3://`, `gs://` or `az://`.
 - **More SPARQL.** Federated `SERVICE` and `LOAD`, length-constrained and shortest paths, `ASK`, date and duration arithmetic, `INSERT DATA`/`DELETE DATA`, and many W3C compliance fixes.
 - **Serve and stream.** `m.serve()` **EE** exposes a model over the SPARQL 1.1 Protocol and Arrow Flight, and `stream=True` maps unbounded inputs batch by batch.
+- **Timeouts.** `query` and `update` take `timeout=` and stop long queries; `serve` **EE** stops queries at a timeout and when their client disconnects.
+- **Models kept in object storage.** `serve` **EE** snapshots a served model after changes, and the writable Model portal **EE** keeps one file per graph, shared by several writers.
 
 ## Major features
 
@@ -44,6 +46,16 @@ A short guide for deciding whether to upgrade from v0.20.32 to v0.22.0. It cover
 **Time series virtualization (EE).** One model can use several virtualized databases together. New connectors: SQL databases through `maplib.virtualization` (DuckDB, Snowflake, BigQuery, Databricks, TimescaleDB, Microsoft Fabric warehouses and lakehouses, SQL Server), InfluxDB 1.8/2/3, Azure Data Explorer and Fabric Eventhouses (KQL), OPC UA History Access, AspenTech IP.21, OSIsoft PI (`map_osipi`, `map_pi_points`), Siemens Insights Hub (`map_insights_hub`) and Cognite Data Fusion (`map_cdf`). Queries over virtualized models now use the same SPARQL evaluation as the rest of maplib. `ASK` and `CONSTRUCT` work instead of panicking, and several wrong results are fixed, in `MINUS`, `LIMIT`/`OFFSET`, `FILTER NOT EXISTS` and `VALUES`. One known limitation: inside `MINUS`, a data point pattern that is not linked to a time series (with `?ts chrontext:hasDataPoint ?dp`) is not virtualized, so it matches nothing.
 
 **SHACL rules and SHACL fixes (EE).** Rules no longer loop when they re-assert existing triples (#76), and they run for focus nodes that become targets later (#77). Shapes with several `sh:message` values no longer lose results (#86). `sh:not` gives correct results. Reports include `sh:sourceConstraint`. RDFS inference follows `subClassOf` chains of any length.
+
+**Query timeouts and cancellation.** `m.query(q, timeout=30)` and `m.update(u, timeout=30)` stop the query when its time is up and raise `maplib.QueryTimeoutError`. Queries are checked between operators, inside joins, in path searches and while results are formatted. **EE**: `m.serve(query_timeout=..., max_query_timeout=...)` sets a default and a ceiling for its endpoints' queries, and stops a query when its client disconnects.
+
+**Raw bytes in object storage.** `maplib.storage` puts and gets bytes at the same URLs and with the same credentials as `read` and `write`: `put(url, data, if_match=..., if_none_match=...)` writes only if the object is unchanged, and returns its version token. `get`, `head`, `exists`, `delete` and `list` complete it. Conditional puts make it safe for several writers.
+
+**Snapshots of served models (EE).** `m.serve(snapshot_url=..., snapshot_interval=900)` serializes the model to object storage when it changed, and when the server stops; an unchanged model is never written. `python -m maplib.serve` serves a serialized model configured with environment variables, as the deploy recipes in maplib Enterprise Edition do. `maplib.GraphSnapshots` keeps a model as one HDT file per named graph with a manifest: only changed graphs are written, and writers that conflict merge their changes per graph. `m.portal(writable=True)` uses it to keep the Model portal's uploads.
+
+**Default templates.** `m.map_default(data, primary_key_column)` maps a DataFrame with a template generated from its columns, as before. The new `m.generate_template(data, primary_key_column)` is its dry run: it returns that template as stOTTR text to review or edit. `maplib.generate_templates(m)`, which generates templates from an OWL/RDFS ontology, now runs in Rust, in about 60% of the time, with the same output.
+
+**OPC UA typing shapes (EE).** `m.opcua.add_typing_shapes()`, after `m.map_opc_ua(...)`, generates SHACL shapes that check OPC UA instances against their ObjectTypes and VariableTypes, including mandatory children. It runs in Rust, with memory linear in the number of instances.
 
 **Thread-safe concurrent reads.** A `Model` shared between threads runs reads such as `query` and `write` at the same time, and writes wait for exclusive access. Ctrl-C stops a running query.
 
@@ -87,6 +99,8 @@ v0.22.0 adds more on top of v0.21.0: reading N-Triples is up to 81% faster, RDF/
 - `VALUES` joins with large tables are about 80% faster.
 - `ORDER BY ... LIMIT` over millions of strings is up to 90% faster.
 - `COUNT(*)` over all triples is answered immediately, from the table sizes.
+- `maplib.add_triples` copies triple tables in Rust: 1.8× faster for a few predicates, 15× for thousands.
+- Joins on two variables where many rows share one value no longer use memory quadratic in the rows (100 000 OPC UA instances: 0.15 GB instead of over 134 GB).
 
 ## Breaking changes
 
@@ -103,4 +117,6 @@ v0.22.0 adds more on top of v0.21.0: reading N-Triples is up to 81% faster, RDF/
 | RDF/XML output is laid out differently (same triples) | No code change; diff-based tests may need new baselines |
 | `write_cim_xml` uses `rdf:ID="_<mRID>"` as CGMES requires | Read the output with the same `base_iri` as the source data |
 | `explore()`: `page`, `graph` and `fts_path` are ignored; `flight_port` and `cors_origins` are removed **EE** | Drop the arguments |
+| `xsd:dateTime` values are stored as UTC instants; naive dateTimes come back UTC-aware (`datetime[μs, UTC]`) | Compare with aware datetimes, or drop the time zone in Python. Values serialize as before, and older models load the same |
+| `add_triples` from another model gives the copied blank nodes new labels (same-label blank nodes in two models were merged before) | Copy within one model, or give the nodes IRIs, to keep them the same |
 | SPARQL fixes change some results: `COUNT` is `xsd:integer`, `5 / 2` is `2.5`, `8 - 3 - 2` is `3` | Check queries that relied on the old behaviour |
