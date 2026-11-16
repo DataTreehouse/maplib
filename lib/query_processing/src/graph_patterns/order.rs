@@ -79,9 +79,20 @@ pub fn ordering_exprs(
                     }
                 } else if let BaseRDFNodeType::Literal(x_l, _) = x {
                     if let BaseRDFNodeType::Literal(y_l, _) = y {
+                        // Numbers of all datatypes are ordered together, where xsd:decimal is.
                         // Types of the same datatype differ only in the time zone, which gives a
                         // deterministic order to the fields of the datatype.
-                        x_l.cmp(y_l).then_with(|| x.cmp(y))
+                        let group = |t: &BaseRDFNodeType, l| {
+                            if t.is_numeric() {
+                                xsd::DECIMAL.into_owned()
+                            } else {
+                                l
+                            }
+                        };
+                        group(x, x_l.clone())
+                            .cmp(&group(y, y_l.clone()))
+                            .then_with(|| x_l.cmp(y_l))
+                            .then_with(|| x.cmp(y))
                     } else {
                         Ordering::Greater
                     }
@@ -102,6 +113,27 @@ pub fn ordering_exprs(
                     .iter()
                     .take_while(|(u, _)| is_date_time(u) && same_datatype(t, u))
                     .count();
+                // Numbers of different datatypes are ordered by value, then by datatype and
+                // exact value (a double may not hold every integer and decimal).
+                let numeric_run = ts[i..].iter().take_while(|(u, _)| u.is_numeric()).count();
+                if numeric_run > 1 {
+                    order_exprs.push(numeric_value_expr(
+                        c,
+                        &ts[i..i + numeric_run].iter().map(|(u, _)| *u).collect::<Vec<_>>(),
+                    ));
+                    asc_bools.push(a);
+                    for (u, us) in &ts[i..i + numeric_run] {
+                        order_exprs.push(make_ordering_expr(
+                            col(c).struct_().field_by_name(&u.field_col_name()),
+                            global_cats.clone(),
+                            (*u).clone(),
+                            (*us).clone(),
+                        ));
+                        asc_bools.push(a);
+                    }
+                    i += numeric_run;
+                    continue;
+                }
                 if run > 1 {
                     let mut run_types: Vec<_> = ts[i..i + run].iter().map(|(u, _)| *u).collect();
                     run_types.sort();
@@ -150,6 +182,21 @@ fn is_date_time(t: &BaseRDFNodeType) -> bool {
 
 fn same_datatype(x: &BaseRDFNodeType, y: &BaseRDFNodeType) -> bool {
     matches!((x, y), (BaseRDFNodeType::Literal(x, _), BaseRDFNodeType::Literal(y, _)) if x == y)
+}
+
+/// The value as a double of the number in any of the fields of `types`, null for other rows.
+fn numeric_value_expr(c: &str, types: &[&BaseRDFNodeType]) -> Expr {
+    coalesce(
+        &types
+            .iter()
+            .map(|t| {
+                col(c)
+                    .struct_()
+                    .field_by_name(&t.field_col_name())
+                    .cast(DataType::Float64)
+            })
+            .collect::<Vec<_>>(),
+    )
 }
 
 /// The UTC instant of the dateTime in any of the fields of `types`, null for other rows.
