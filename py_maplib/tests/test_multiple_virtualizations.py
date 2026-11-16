@@ -476,3 +476,164 @@ def test_resource_template_with_variable_predicate_is_an_error():
     q = PREFIXES + "SELECT ?v WHERE { ?ts maplib:hasDataPoint ?dp . ?dp maplib:hasValue ?v }"
     with pytest.raises(Exception, match="predicate of each triple must be a constant IRI"):
         m.query(q)
+
+
+def assert_aggregated_in_database(db: RecordingDuckDB, *functions: str):
+    """The database got a query with a GROUP BY that computes the aggregates."""
+    grouped = [q for q in db.queries if "GROUP BY" in q.upper()]
+    assert grouped, db.queries
+    for f in functions:
+        assert any(f"{f}(" in q.lower() for q in grouped), (f, grouped)
+
+
+ALL = pl.concat(
+    [
+        TS_A.with_columns(w=pl.lit(widget(1))),
+        TS_B.with_columns(w=pl.lit(widget(2))),
+    ]
+)
+
+
+def test_avg_is_pushed_down_as_sum_and_count_into_each_virtualization(dbs):
+    # Both widgets are in one group, so the average is combined from the partial
+    # sums and counts of the two databases.
+    m, db_a, db_b = dbs
+    q = (
+        PREFIXES
+        + """
+    SELECT (AVG(?v) as ?avg_v) (COUNT(?v) as ?n) (SUM(?v) as ?sum_v) (MIN(?v) as ?min_v) (MAX(?v) as ?max_v) (COUNT(*) as ?rows) WHERE {
+        ?w types:hasSensor ?s .
+        ?s maplib:hasTimeseries ?ts .
+        ?ts maplib:hasDataPoint ?dp .
+        ?dp maplib:hasValue ?v .
+    }
+    """
+    )
+    df = m.query(q)
+    values = ALL.get_column("value")
+    assert df.height == 1
+    assert df.get_column("avg_v")[0] == pytest.approx(values.mean())
+    assert df.get_column("n")[0] == values.len()
+    assert int(df.get_column("sum_v")[0]) == values.sum()
+    assert int(df.get_column("min_v")[0]) == values.min()
+    assert int(df.get_column("max_v")[0]) == values.max()
+    assert df.get_column("rows")[0] == values.len()
+    for db in [db_a, db_b]:
+        assert_aggregated_in_database(db, "sum", "count", "min", "max")
+        # The raw data points are not read
+        assert all("GROUP BY" in q.upper() for q in db.queries)
+
+
+def test_group_by_type_is_pushed_down_into_each_virtualization(dbs):
+    m, db_a, db_b = dbs
+    q = (
+        PREFIXES
+        + """
+    SELECT ?type (AVG(?v) as ?avg_v) (COUNT(?v) as ?n) WHERE {
+        ?w a ?type .
+        ?w types:hasSensor ?s .
+        ?s maplib:hasTimeseries ?ts .
+        ?ts maplib:hasDataPoint ?dp .
+        ?dp maplib:hasValue ?v .
+        FILTER(?v > 5)
+    } GROUP BY ?type
+    """
+    )
+    df = m.query(q).sort("type")
+    big = TS_A.filter(pl.col("value") > 5).get_column("value")
+    small = TS_B.filter(pl.col("value") > 5).get_column("value")
+    assert df.get_column("type").to_list() == [
+        "<http://example.org/types#BigWidget>",
+        "<http://example.org/types#SmallWidget>",
+    ]
+    assert df.get_column("avg_v").to_list() == pytest.approx([big.mean(), small.mean()])
+    assert df.get_column("n").to_list() == [big.len(), small.len()]
+    for db in [db_a, db_b]:
+        assert_aggregated_in_database(db, "sum", "count")
+
+
+def test_buckets_are_pushed_down_into_each_virtualization(dbs):
+    m, db_a, db_b = dbs
+    q = (
+        PREFIXES
+        + """
+    SELECT ?w ?b (AVG(?v) as ?avg_v) (MAX(?v) as ?max_v) WHERE {
+        ?w types:hasSensor ?s .
+        ?s maplib:hasTimeseries ?ts .
+        ?ts maplib:hasDataPoint ?dp .
+        ?dp maplib:hasTimestamp ?t .
+        ?dp maplib:hasValue ?v .
+        BIND(maplib:FloorDateTimeToSecondsInterval(?t, 2) AS ?b)
+    } GROUP BY ?w ?b
+    """
+    )
+    df = m.query(q).sort(["w", "b"])
+    expected = (
+        ALL.with_columns(b=pl.col("timestamp").dt.truncate("2s"))
+        .group_by(["w", "b"])
+        .agg(avg_v=pl.col("value").mean(), max_v=pl.col("value").max())
+        .sort(["w", "b"])
+    )
+    assert df.height == expected.height
+    assert df.get_column("w").to_list() == expected.get_column("w").to_list()
+    assert df.get_column("b").dt.convert_time_zone("UTC").to_list() == expected.get_column(
+        "b"
+    ).dt.convert_time_zone("UTC").to_list()
+    assert df.get_column("avg_v").to_list() == pytest.approx(
+        expected.get_column("avg_v").to_list()
+    )
+    assert [int(x) for x in df.get_column("max_v").to_list()] == expected.get_column(
+        "max_v"
+    ).to_list()
+    for db in [db_a, db_b]:
+        assert_aggregated_in_database(db, "sum", "count", "max")
+
+
+def test_having_and_order_by_over_partial_aggregates(dbs):
+    # The filter on the aggregates and the ordering are evaluated after the partial
+    # aggregates of the databases are combined.
+    m, db_a, db_b = dbs
+    q = (
+        PREFIXES
+        + """
+    SELECT ?b (SUM(?v) as ?sum_v) WHERE {
+        ?w types:hasSensor ?s .
+        ?s maplib:hasTimeseries ?ts .
+        ?ts maplib:hasDataPoint ?dp .
+        ?dp maplib:hasTimestamp ?t .
+        ?dp maplib:hasValue ?v .
+        BIND(maplib:FloorDateTimeToSecondsInterval(?t, 2) AS ?b)
+    } GROUP BY ?b HAVING (SUM(?v) > 300) ORDER BY DESC(?sum_v)
+    """
+    )
+    df = m.query(q)
+    expected = (
+        ALL.with_columns(b=pl.col("timestamp").dt.truncate("2s"))
+        .group_by("b")
+        .agg(sum_v=pl.col("value").sum())
+        .filter(pl.col("sum_v") > 300)
+        .sort("sum_v", descending=True)
+    )
+    assert [int(x) for x in df.get_column("sum_v").to_list()] == expected.get_column(
+        "sum_v"
+    ).to_list()
+    for db in [db_a, db_b]:
+        assert_aggregated_in_database(db, "sum")
+
+
+def test_count_distinct_over_two_virtualizations_is_not_split(dbs):
+    # COUNT(DISTINCT) cannot be combined from counts per database.
+    m, _, _ = dbs
+    q = (
+        PREFIXES
+        + """
+    SELECT (COUNT(DISTINCT ?t) as ?n) WHERE {
+        ?w types:hasSensor ?s .
+        ?s maplib:hasTimeseries ?ts .
+        ?ts maplib:hasDataPoint ?dp .
+        ?dp maplib:hasTimestamp ?t .
+    }
+    """
+    )
+    df = m.query(q)
+    assert df.get_column("n").to_list() == [ALL.get_column("timestamp").n_unique()]
