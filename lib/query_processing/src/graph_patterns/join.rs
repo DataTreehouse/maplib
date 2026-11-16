@@ -256,6 +256,8 @@ pub fn join_workaround(
 
     // Stops a long join soon after its query times out or is cancelled.
     left_mappings = utils::cancel::cancel_check_node(left_mappings);
+    // Keeps the join order chosen from the graph patterns (see keep_join_order).
+    left_mappings = utils::polars::keep_join_order(left_mappings);
     if height_upper_bound > utils::polars::SMALL_COLLECT_HEIGHT {
         utils::cancel::note_large_join();
     }

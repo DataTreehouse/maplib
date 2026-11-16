@@ -1,6 +1,6 @@
 use crate::cancel::{self, Cancelled, CANCELLED_POLARS_MESSAGE};
 use polars::error::abort::catch_polars_abort;
-use polars::prelude::Engine;
+use polars::prelude::{Engine, OptFlags};
 use polars::{error::PolarsError, frame::DataFrame, prelude::LazyFrame};
 use std::panic::AssertUnwindSafe;
 use thiserror::Error;
@@ -44,6 +44,18 @@ fn query_engine(height_estimate: Option<usize>) -> Engine {
     }
 }
 
+/// Turns off Polars' join reordering for `lf`. maplib orders the joins of a query itself, from
+/// what the patterns share. Polars reorders them from row counts alone and does not see how
+/// skewed the join keys are, so it can move a join on one of two shared variables first: in a
+/// basic graph pattern where many solutions share a literal, e.g. `?a :name ?n . ?b :name ?n`
+/// before `?a` is bound, that join is quadratic in the number of solutions. A plan takes its
+/// optimizations from its leftmost input, so this is applied before every collect and to the
+/// output of every join.
+pub fn keep_join_order(lf: LazyFrame) -> LazyFrame {
+    let flags = lf.get_current_optimizations();
+    lf.with_optimizations(flags & !OptFlags::JOIN_ORDER)
+}
+
 /// Collects a lazy frame over data that is already in memory (or in storage files) with the
 /// in-memory engine. Used for the storage work of adding, compacting and deleting triples, which
 /// runs one item per table in parallel with Rayon. The in-memory engine is plain Rayon
@@ -52,7 +64,8 @@ fn query_engine(height_estimate: Option<usize>) -> Engine {
 /// queries nest until no thread is left to drive them and the add deadlocks. It also has a
 /// fixed cost of a few milliseconds per collect, paid once or more per table.
 pub fn collect_in_memory(lf: LazyFrame) -> Result<DataFrame, PolarsError> {
-    lf.collect_with_engine(Engine::InMemory)
+    keep_join_order(lf)
+        .collect_with_engine(Engine::InMemory)
         .map(|r| r.unwrap_single())
 }
 
@@ -68,7 +81,9 @@ pub fn collect_sized(lf: LazyFrame, height: usize) -> Result<DataFrame, PolarsEr
         _ if height <= SMALL_COLLECT_HEIGHT => Engine::InMemory,
         _ => Engine::Auto,
     };
-    lf.collect_with_engine(engine).map(|r| r.unwrap_single())
+    keep_join_order(lf)
+        .collect_with_engine(engine)
+        .map(|r| r.unwrap_single())
 }
 
 /// Collects a sort followed by a slice (ORDER BY with LIMIT) with the in-memory engine, many
@@ -106,7 +121,7 @@ fn collect_with_engine(
     engine: Engine,
 ) -> Result<DataFrame, InterruptableCollectError> {
     cancel::check()?;
-    let lf = cancel::cancel_check_node(lf);
+    let lf = keep_join_order(cancel::cancel_check_node(lf));
     let result = collect_with_engine_unchecked(lf, engine);
     // A cancellation check in the plan fails the collect with a Polars error: report why.
     match result {
