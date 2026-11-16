@@ -328,7 +328,7 @@ fn plan_paging(query: &Query) -> Result<PagingPlan, SparqlError> {
 
 impl PagingPlan {
     /// The query of a page of at most `length` solutions after `after`.
-    fn page_query(&self, after: Option<&PageCursor>, length: usize) -> Query {
+    fn page_query(&self, after: Option<&PageCursor>, start: usize, length: usize) -> Query {
         let mut expression = vec![];
         if let Some(after) = after {
             expression.push(
@@ -364,7 +364,6 @@ impl PagingPlan {
                 inner: Box::new(pattern),
             };
         }
-        let start = if after.is_some() { 0 } else { self.offset };
         pattern = GraphPattern::Slice {
             inner: Box::new(pattern),
             start,
@@ -464,11 +463,23 @@ impl Triplestore {
             _ => 0,
         };
         let fetch = ties + if last_by_limit { length } else { length + 1 };
-        let page_query = plan.page_query(after, fetch);
+        // The first page of a query with an OFFSET also fetches the solutions that the OFFSET
+        // skips, when there may be duplicates: those equal to the last solution of the page are
+        // counted as ties, so that the next page does not return them.
+        let lead = if after.is_none() && !plan.distinct {
+            plan.offset
+        } else {
+            0
+        };
+        let start = if after.is_none() { plan.offset - lead } else { 0 };
+        let page_query = plan.page_query(after, start, fetch + lead);
         let res = self.query_parsed(&page_query, parameters, query_settings, graph, false)?;
         let QueryResultKind::Select(mut sm) = res.kind else {
             unreachable!("a SELECT query gives solutions")
         };
+        let lead = lead.min(sm.mappings.height());
+        let with_lead = sm.clone();
+        sm.mappings = sm.mappings.slice(lead as i64, sm.mappings.height() - lead);
         if ties > 0 {
             let after = after.unwrap();
             let head = ties.min(sm.mappings.height());
@@ -487,7 +498,15 @@ impl Triplestore {
             sm.mappings = sm.mappings.slice(0, length);
         }
         let next = if has_more {
-            Some(self.next_cursor(&plan, &sm, after, fingerprint, returned)?)
+            let page_rows = sm.mappings.height();
+            let returned = returned + page_rows as u64;
+            if lead > 0 {
+                let mut head = with_lead;
+                head.mappings = head.mappings.slice(0, lead + page_rows);
+                Some(self.next_cursor(&plan, &head, after, fingerprint, returned)?)
+            } else {
+                Some(self.next_cursor(&plan, &sm, after, fingerprint, returned)?)
+            }
         } else {
             None
         };
@@ -504,12 +523,7 @@ impl Triplestore {
         query_settings: &QuerySettings,
         graph: Option<&NamedGraph>,
     ) -> Result<EagerSolutionMappings, SparqlError> {
-        let mut q = plan.page_query(None, 0);
-        if let Query::Select { pattern, .. } = &mut q {
-            if let GraphPattern::Slice { start, .. } = pattern {
-                *start = 0;
-            }
-        }
+        let q = plan.page_query(None, 0, 0);
         let res = self.query_parsed(&q, parameters, query_settings, graph, false)?;
         let QueryResultKind::Select(sm) = res.kind else {
             unreachable!("a SELECT query gives solutions")
@@ -546,7 +560,7 @@ impl Triplestore {
                     fingerprint,
                     keys: last,
                     ties,
-                    returned: returned + height as u64,
+                    returned,
                 });
             }
             tail = (tail * 4).min(height);
