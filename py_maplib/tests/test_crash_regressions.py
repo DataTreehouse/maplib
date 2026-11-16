@@ -77,7 +77,9 @@ def test_date_to_native():
 
 LONG_QUERIES = {
     "union": "' UNION '.join(f'{{ ?s <http://p/{i}> ?o }}' for i in range(3000))",
-    "or": "' || '.join(f'?o = <http://e/{i}>' for i in range(10000))",
+    # 2000 terms overflowed Polars' 2 MB thread stacks before RUST_MIN_STACK was raised. They need
+    # about 0.7 GB at peak. Memory grows quadratically with the number of terms (about 12 GB at 10000).
+    "or": "' || '.join(f'?o = <http://e/{i}>' for i in range(2000))",
     "nested": "'(' * 5000 + '?o' + ')' * 5000",
 }
 
