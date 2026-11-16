@@ -300,7 +300,10 @@ fn get_gp_vars(graph_pattern: &GraphPattern) -> HashSet<Variable> {
 
 fn get_expr_vars(expression: &Expression) -> HashSet<Variable> {
     let mut vars = HashSet::new();
-    find_all_used_variables_in_expression(expression, &mut vars, false, true);
+    // Variables inside EXISTS / NOT EXISTS count: the filter is correlated with them, so it must
+    // stay above the patterns that bind them. Without them a NOT EXISTS looked variable-free
+    // and was pushed below the pattern binding its variables, where it filtered nothing.
+    find_all_used_variables_in_expression(expression, &mut vars, true, true);
     vars
 }
 
