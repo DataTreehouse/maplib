@@ -7,7 +7,6 @@
 //! building them ([`triples::write_bitmap_triples`]).
 //#![warn(missing_docs)] //TODO: comment again after refactoring
 #![warn(clippy::pedantic)]
-#![warn(clippy::cargo)]
 #![warn(clippy::str_to_string)]
 #![warn(clippy::print_stdout)]
 #![warn(clippy::print_stderr)]

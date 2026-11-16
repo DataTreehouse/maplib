@@ -84,16 +84,14 @@ pub fn str_dt(
             col(first_context.as_str()),
         ))
     } else if first_type.is_multi() {
-        if let Some(base_state) = first_type.map.get(&base_string) {
-            Some((
+        first_type.map.get(&base_string).map(|base_state| {
+            (
                 base_state,
                 col(first_context.as_str())
                     .struct_()
                     .field_by_name(&base_string.field_col_name()),
-            ))
-        } else {
-            None
-        }
+            )
+        })
     } else {
         None
     };
@@ -102,9 +100,9 @@ pub fn str_dt(
         let dt_iri = if let Expression::NamedNode(nn) = &dt_arg {
             nn.clone()
         } else {
-            return Err(QueryProcessingError::BadArgument(format!(
-                "STRDT second argument should be IRI"
-            )));
+            return Err(QueryProcessingError::BadArgument(
+                "STRDT second argument should be IRI".to_string(),
+            ));
         };
         let decoded_col =
             maybe_decode_expr(use_base_col, &base_string, use_base_state, global_cats);

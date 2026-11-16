@@ -353,10 +353,7 @@ impl Triplestore {
             let mut type_u32s_map: HashMap<BaseRDFNodeType, HashSet<u32>> = HashMap::new();
             for gr in graphs {
                 if let Some(m) = self.graph_triples_map.get(*gr) {
-                    let type_u32s: Result<
-                        Vec<Vec<(BaseRDFNodeType, HashSet<u32>)>>,
-                        TriplestoreError,
-                    > = m
+                    let type_u32s: Result<Vec<Vec<_>>, TriplestoreError> = m
                         .par_iter()
                         .map(|(_, type_map)| {
                             let out_vec: Result<Vec<Vec<_>>, TriplestoreError> = type_map
@@ -1421,6 +1418,7 @@ fn create_rank_expr(
     Ok(rank_expr)
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn partition_unpartitioned_predicate(
     df: DataFrame,
     subject_type: &BaseRDFNodeType,

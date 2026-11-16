@@ -166,6 +166,12 @@ impl UdfRegistry {
     }
 
     pub fn list_udfs(&self) -> Vec<NamedNode> {
-        self.udfs.keys().map(|x| x.clone()).collect()
+        self.udfs.keys().cloned().collect()
+    }
+}
+
+impl Default for UdfRegistry {
+    fn default() -> Self {
+        Self::new()
     }
 }

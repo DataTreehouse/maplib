@@ -107,7 +107,7 @@ impl SeriesBuilder {
 
     pub fn push_str(&mut self, s: &str) {
         if let SeriesBuilder::String(v, l) = self {
-            *l = *l + 1;
+            *l += 1;
             v.append_value(s);
         } else {
             panic!("Should never be used for non string builder")
@@ -224,12 +224,12 @@ impl SeriesBuilder {
     ) -> Result<(), RepresentationError> {
         match self {
             SeriesBuilder::String(v, l) => {
-                *l = *l + 1;
+                *l += 1;
                 v.append_value(lex);
             }
             SeriesBuilder::Bool(v) => {
                 // The xsd:boolean lexical space is {true, false, 1, 0}
-                let b = match lex.as_ref() {
+                let b = match lex {
                     "true" | "1" => true,
                     "false" | "0" => false,
                     _ => {
@@ -241,72 +241,72 @@ impl SeriesBuilder {
                 v.push(Some(b));
             }
             SeriesBuilder::U8(v) => {
-                let u = u8::from_str(&lex)
+                let u = u8::from_str(lex)
                     .map_err(|x| RepresentationError::LiteralParseError(x.to_string()))?;
                 v.push(Some(u));
             }
             SeriesBuilder::U16(v) => {
-                let u = u16::from_str(&lex)
+                let u = u16::from_str(lex)
                     .map_err(|x| RepresentationError::LiteralParseError(x.to_string()))?;
                 v.push(Some(u));
             }
             SeriesBuilder::U32(v) => {
-                let u = u32::from_str(&lex)
+                let u = u32::from_str(lex)
                     .map_err(|x| RepresentationError::LiteralParseError(x.to_string()))?;
                 v.push(Some(u));
             }
             SeriesBuilder::U64(v) => {
-                let u = u64::from_str(&lex)
+                let u = u64::from_str(lex)
                     .map_err(|x| RepresentationError::LiteralParseError(x.to_string()))?;
                 v.push(Some(u));
             }
             SeriesBuilder::I8(v) => {
-                let i = i8::from_str(&lex)
+                let i = i8::from_str(lex)
                     .map_err(|x| RepresentationError::LiteralParseError(x.to_string()))?;
                 v.push(Some(i));
             }
             SeriesBuilder::I16(v) => {
-                let i = i16::from_str(&lex)
+                let i = i16::from_str(lex)
                     .map_err(|x| RepresentationError::LiteralParseError(x.to_string()))?;
                 v.push(Some(i));
             }
             SeriesBuilder::I32(v) => {
-                let i = i32::from_str(&lex)
+                let i = i32::from_str(lex)
                     .map_err(|x| RepresentationError::LiteralParseError(x.to_string()))?;
                 v.push(Some(i));
             }
             SeriesBuilder::I64(v) => {
-                let i = i64::from_str(&lex)
+                let i = i64::from_str(lex)
                     .map_err(|x| RepresentationError::LiteralParseError(x.to_string()))?;
                 v.push(Some(i));
             }
             SeriesBuilder::F32(v) => {
-                let f = f32::from_str(&lex)
+                let f = f32::from_str(lex)
                     .map_err(|x| RepresentationError::LiteralParseError(x.to_string()))?;
                 v.push(Some(f));
             }
             SeriesBuilder::F64(v) => {
-                let f = f64::from_str(&lex)
+                let f = f64::from_str(lex)
                     .map_err(|x| RepresentationError::LiteralParseError(x.to_string()))?;
                 v.push(Some(f));
             }
             SeriesBuilder::Date(v) => {
-                let d = parse_xsd_date(&lex)?;
+                let d = parse_xsd_date(lex)?;
                 v.push(Some(d));
             }
             SeriesBuilder::Datetime(v) => {
-                let i = parse_xsd_datetime_micros(&lex)?;
+                let i = parse_xsd_datetime_micros(lex)?;
                 v.push(Some(i));
             }
             SeriesBuilder::Decimal(v) => {
-                let i = parse_xsd_decimal(&lex)?;
+                let i = parse_xsd_decimal(lex)?;
                 v.push(Some(i));
             }
             SeriesBuilder::LangString { values, langs, len } => {
                 if let Some(lang) = lang {
-                    values.append_value(lex.to_string());
-                    langs.append_value(lang.to_string());
-                    *len = *len + 1;
+                    values.append_value(lex);
+                    langs.append_value(lang);
+                    *len += 1;
                 } else {
                     return Err(RepresentationError::LiteralParseError(
                         "Lang string missing language tag".to_string(),

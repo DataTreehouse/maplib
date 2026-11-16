@@ -13,9 +13,9 @@ use representation::{
 use std::collections::HashMap;
 use std::io::Write;
 
-const LINE_TERMINATOR: [u8; 2] = [b'.', b'\n'];
+const LINE_TERMINATOR: [u8; 2] = *b".\n";
 const SEPARATOR: u8 = b' ';
-const DATA_TYPE_SEP_CHARS: [u8; 2] = [b'^', b'^'];
+const DATA_TYPE_SEP_CHARS: [u8; 2] = *b"^^";
 
 pub(crate) fn write_triples_in_df<W: Write>(
     writer: &mut W,

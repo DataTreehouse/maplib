@@ -29,6 +29,7 @@ impl FtsIndex {
         unimplemented!("Contact Data Treehouse to enable full text search")
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn add_literal_string(
         &mut self,
         _df: &DataFrame,

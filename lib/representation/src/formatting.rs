@@ -174,14 +174,14 @@ pub fn expression_to_native(
             if t.is_lang_string() {
                 exprs.extend(base_expression_to_native(
                     expr.clone(),
-                    *t,
+                    t,
                     s,
                     global_cats.clone(),
                 ));
             } else {
                 exprs.extend(base_expression_to_native(
                     expr.clone().struct_().field_by_name(&t.field_col_name()),
-                    *t,
+                    t,
                     s,
                     global_cats.clone(),
                 ));

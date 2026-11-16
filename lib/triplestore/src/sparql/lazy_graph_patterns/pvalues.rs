@@ -11,6 +11,7 @@ use representation::solution_mapping::{EagerSolutionMappings, SolutionMappings};
 use std::collections::{HashMap, HashSet};
 
 impl Triplestore {
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn lazy_pvalues(
         &self,
         solution_mappings: Option<SolutionMappings>,

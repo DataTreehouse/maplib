@@ -19,12 +19,13 @@ use virtualization::insights_hub::InsightsHubError;
 pub enum MaplibError {
     #[error(transparent)]
     TemplateError(#[from] TemplateError),
+    // The larger errors are boxed so that results with a MaplibError stay small
     #[error(transparent)]
-    MappingError(#[from] MappingError),
+    MappingError(Box<MappingError>),
     #[error("Datalog syntax error: `{0}`")]
     DatalogSyntaxError(String),
     #[error(transparent)]
-    DatalogError(DatalogError),
+    DatalogError(Box<DatalogError>),
     #[error(transparent)]
     CIMXMLError(CIMXMLError),
     #[error("Error mapping CIM geometries to GeoSPARQL: {0}")]
@@ -44,19 +45,19 @@ pub enum MaplibError {
     #[error(transparent)]
     TriplestoreError(#[from] TriplestoreError),
     #[error(transparent)]
-    SparqlError(#[from] SparqlError),
+    SparqlError(Box<SparqlError>),
     #[error(transparent)]
-    ShaclError(#[from] ShaclError),
+    ShaclError(Box<ShaclError>),
     #[error(transparent)]
     IRIParseError(#[from] IriParseError),
     #[error("Datalog ruleset missing")]
     MissingDatalogRuleset,
     #[error(transparent)]
-    ChrontextError(#[from] ChrontextError),
+    ChrontextError(Box<ChrontextError>),
     #[error(transparent)]
     TripleSerializationError(#[from] TripleSerializationError),
     #[error(transparent)]
-    SparqlEndpointQueryError(#[from] SparqlEndpointQueryError),
+    SparqlEndpointQueryError(Box<SparqlEndpointQueryError>),
     #[error(transparent)]
     CsvwError(#[from] csvw::errors::CsvwError),
     #[error(transparent)]
@@ -65,4 +66,40 @@ pub enum MaplibError {
     OSIPIError(#[from] OSIPIError),
     #[error(transparent)]
     InsightsHubError(#[from] InsightsHubError),
+}
+
+impl From<MappingError> for MaplibError {
+    fn from(e: MappingError) -> Self {
+        MaplibError::MappingError(Box::new(e))
+    }
+}
+
+impl From<ShaclError> for MaplibError {
+    fn from(e: ShaclError) -> Self {
+        MaplibError::ShaclError(Box::new(e))
+    }
+}
+
+impl From<ChrontextError> for MaplibError {
+    fn from(e: ChrontextError) -> Self {
+        MaplibError::ChrontextError(Box::new(e))
+    }
+}
+
+impl From<DatalogError> for MaplibError {
+    fn from(e: DatalogError) -> Self {
+        MaplibError::DatalogError(Box::new(e))
+    }
+}
+
+impl From<SparqlError> for MaplibError {
+    fn from(e: SparqlError) -> Self {
+        MaplibError::SparqlError(Box::new(e))
+    }
+}
+
+impl From<SparqlEndpointQueryError> for MaplibError {
+    fn from(e: SparqlEndpointQueryError) -> Self {
+        MaplibError::SparqlEndpointQueryError(Box::new(e))
+    }
 }

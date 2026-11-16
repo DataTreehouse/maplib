@@ -273,14 +273,10 @@ fn find_enforced_variable_type_constraints(
         Expression::And(left, right) => {
             let left = find_enforced_variable_type_constraints(left);
             let right = find_enforced_variable_type_constraints(right);
-            return if left.is_some() && right.is_some() {
-                let mut left = left.unwrap();
-                let right = right.unwrap();
-                Some(conjunction_variable_type(&mut left, right))
-            } else if left.is_some() {
-                left
-            } else {
-                right
+            return match (left, right) {
+                (Some(mut left), Some(right)) => Some(conjunction_variable_type(&mut left, right)),
+                (Some(left), None) => Some(left),
+                (None, right) => right,
             };
         }
         Expression::Equal(left, right) => {
@@ -311,16 +307,14 @@ fn find_enforced_variable_type_constraints(
                     }
                 }
             }
-            Function::IsLiteral => {
-                if args.len() == 1 {
-                    if let Expression::Variable(v) = args.first().unwrap() {
-                        return Some(HashMap::from([(
-                            v.as_str().to_string(),
-                            PossibleTypes::singular(ConstraintBaseRDFNodeType::Literal(
-                                rdfs::LITERAL.into_owned(),
-                            )),
-                        )]));
-                    }
+            Function::IsLiteral if args.len() == 1 => {
+                if let Expression::Variable(v) = args.first().unwrap() {
+                    return Some(HashMap::from([(
+                        v.as_str().to_string(),
+                        PossibleTypes::singular(ConstraintBaseRDFNodeType::Literal(
+                            rdfs::LITERAL.into_owned(),
+                        )),
+                    )]));
                 }
             }
             _ => {}

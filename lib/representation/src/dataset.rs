@@ -4,8 +4,9 @@ use serde::{Deserialize, Serialize};
 use spargebra::algebra::QueryDataset;
 use std::fmt::{Display, Formatter};
 
-#[derive(Debug, Clone, Hash, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Hash, Eq, PartialEq, Serialize, Deserialize, Default)]
 pub enum NamedGraph {
+    #[default]
     DefaultGraph,
     NamedGraph(NamedNode),
     BlankNode(BlankNode),
@@ -33,7 +34,7 @@ impl NamedGraph {
 impl From<&GraphName> for NamedGraph {
     fn from(graph: &GraphName) -> Self {
         match graph {
-            GraphName::NamedNode(nn) => NamedGraph::from_maybe_named_node(Some(&nn)),
+            GraphName::NamedNode(nn) => NamedGraph::from_maybe_named_node(Some(nn)),
             GraphName::BlankNode(bn) => NamedGraph::BlankNode(bn.clone()),
             GraphName::DefaultGraph => NamedGraph::DefaultGraph,
         }
@@ -47,12 +48,6 @@ impl From<&NamedGraph> for GraphName {
             NamedGraph::NamedGraph(nn) => GraphName::NamedNode(nn.clone()),
             NamedGraph::BlankNode(bn) => GraphName::BlankNode(bn.clone()),
         }
-    }
-}
-
-impl Default for NamedGraph {
-    fn default() -> Self {
-        NamedGraph::DefaultGraph
     }
 }
 

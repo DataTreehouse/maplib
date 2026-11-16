@@ -20,6 +20,7 @@ use spargebra::statistics::StatisticalAggregate;
 use std::collections::HashMap;
 
 impl Triplestore {
+    #[allow(clippy::too_many_arguments)]
     pub fn sparql_aggregate_expression_as_lazy_column_and_expression(
         &self,
         variable: &Variable,

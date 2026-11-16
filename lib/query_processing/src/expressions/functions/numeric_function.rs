@@ -81,7 +81,7 @@ pub fn numeric_function(
                             .field_by_name(&t.field_col_name()),
                         t,
                     )
-                    .alias(&t.field_col_name()),
+                    .alias(t.field_col_name()),
                 );
                 rounded_types.push(t.clone());
             }

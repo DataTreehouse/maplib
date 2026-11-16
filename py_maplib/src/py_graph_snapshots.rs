@@ -46,7 +46,7 @@ fn write_lock(lock: Py<PyAny>) -> WriteLock {
                     Ok(false) => return false,
                     Err(e) => return report(e),
                 }
-                py.detach(|| f());
+                py.detach(&mut *f);
                 if let Err(e) = l.call_method0("release") {
                     e.print(py);
                 }
@@ -55,7 +55,7 @@ fn write_lock(lock: Py<PyAny>) -> WriteLock {
                 if let Err(e) = l.call_method0("__enter__") {
                     return report(e);
                 }
-                py.detach(|| f());
+                py.detach(&mut *f);
                 if let Err(e) = l.call_method1("__exit__", (py.None(), py.None(), py.None())) {
                     e.print(py);
                 }

@@ -189,6 +189,7 @@ impl PyModel {
 
     #[pyo3(signature = (template, data=None, graph=None, validate_iris=None, stream=None, in_place=false, compact_every=None))]
     #[instrument(skip_all)]
+    #[allow(clippy::too_many_arguments)]
     fn map(
         slf: &Bound<'_, Self>,
         py: Python<'_>,
@@ -277,6 +278,7 @@ impl PyModel {
 
     #[pyo3(signature = (path_or_string, graph=None, uuid_namespace=None, stream=None, documents_per_batch=None, in_place=false, compact_every=None))]
     #[instrument(skip_all)]
+    #[allow(clippy::too_many_arguments)]
     fn map_json(
         slf: &Bound<'_, Self>,
         py: Python<'_>,
@@ -304,6 +306,7 @@ impl PyModel {
 
     #[pyo3(signature = (path_or_string, graph=None, uuid_namespace=None, stream=None, documents_per_batch=None, in_place=false, compact_every=None))]
     #[instrument(skip_all)]
+    #[allow(clippy::too_many_arguments)]
     fn map_xml(
         slf: &Bound<'_, Self>,
         py: Python<'_>,
@@ -331,6 +334,7 @@ impl PyModel {
 
     #[pyo3(signature = (data, predicate=None, graph=None, validate_iris=None, stream=None, in_place=false, compact_every=None))]
     #[instrument(skip_all)]
+    #[allow(clippy::too_many_arguments)]
     fn map_triples(
         slf: &Bound<'_, Self>,
         py: Python<'_>,
@@ -405,6 +409,7 @@ impl PyModel {
     /// is set.
     #[pyo3(signature = (data, primary_key_column, graph=None, validate_iris=None, stream=None, in_place=false, compact_every=None))]
     #[instrument(skip_all)]
+    #[allow(clippy::too_many_arguments)]
     fn map_default(
         slf: &Bound<'_, Self>,
         py: Python<'_>,
@@ -1550,6 +1555,7 @@ impl PyModel {
         debug_rules=None,
     ))]
     #[instrument(skip_all)]
+    #[allow(clippy::too_many_arguments)]
     fn validate(
         &self,
         py: Python<'_>,
@@ -1600,6 +1606,7 @@ impl PyModel {
             debug=None,
     ))]
     #[instrument(skip_all)]
+    #[allow(clippy::too_many_arguments)]
     fn insert(
         &self,
         py: Python<'_>,
@@ -1838,6 +1845,7 @@ impl PyModel {
         scenario_time=None, modeling_authority_set=None, prefixes=None, graph=None,
         storage_options=None))]
     #[instrument(skip_all)]
+    #[allow(clippy::too_many_arguments)]
     fn write_cim_xml(
         &self,
         py: Python<'_>,
@@ -1941,6 +1949,7 @@ impl PyModel {
         max_rows=100_000_000,
         debug=None))]
     #[instrument(skip_all)]
+    #[allow(clippy::too_many_arguments)]
     fn infer(
         &self,
         py: Python<'_>,
@@ -1991,6 +2000,7 @@ impl PyModel {
         max_violations=1000,
         max_rows=100_000_000))]
     #[instrument(skip_all)]
+    #[allow(clippy::too_many_arguments)]
     fn reason(
         &self,
         py: Python<'_>,
@@ -2114,7 +2124,7 @@ impl PyModel {
         } else {
             None
         };
-        let _ = py.detach(|| -> PyResult<()> {
+        py.detach(|| -> PyResult<()> {
             let mut inner = self.write_inner();
             add_udf_mutex(&mut inner, iri, func, output, inputs)?;
             Ok(())

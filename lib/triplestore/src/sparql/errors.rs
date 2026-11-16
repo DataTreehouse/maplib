@@ -26,7 +26,7 @@ pub enum SparqlError {
     #[error("LOAD error: {0}")]
     LoadError(String),
     #[error("Inconsistent datatypes for {}, {:?}, {:?} in context {}", .0, .1, .2, .3)]
-    InconsistentDatatypes(String, RDFNodeState, RDFNodeState, String),
+    InconsistentDatatypes(String, Box<RDFNodeState>, Box<RDFNodeState>, String),
     #[error(transparent)]
     QueryProcessingError(#[from] QueryProcessingError),
     #[error(transparent)]
@@ -44,7 +44,7 @@ pub enum SparqlError {
     #[error("A lock was open when a thread crashed, cannot guarantee data constitency")]
     PoisonedLockError,
     #[error("Tried grouping on a variable `{0}` that is not defined in the inner query: `{1}`")]
-    GroupByWithUndefinedVariable(Variable, GraphPattern),
+    GroupByWithUndefinedVariable(Variable, Box<GraphPattern>),
     #[error("Functionality not supported: `{0}`")]
     NotSupportedYet(String),
     #[error("SPARQL execution error: `{0}`")]

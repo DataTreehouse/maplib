@@ -328,7 +328,7 @@ pub fn decode_expr_wrapped(
                     let ser = global_cats.decode_of_type_wrapped(
                         x.as_series(),
                         &base_rdf_node_type,
-                        local_cats.as_ref().map(|x| x.clone()),
+                        local_cats.clone(),
                         prefix,
                         suffix,
                     )?;
@@ -338,7 +338,7 @@ pub fn decode_expr_wrapped(
                     let s = global_cats.decode_of_type_wrapped(
                         &s.as_single_value_series(),
                         &base_rdf_node_type,
-                        local_cats.as_ref().map(|x| x.clone()),
+                        local_cats.clone(),
                         prefix,
                         suffix,
                     )?;

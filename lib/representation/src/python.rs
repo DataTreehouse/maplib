@@ -113,7 +113,7 @@ impl Display for PyRDFType {
                 let sorted_types = flat.get_sorted_types();
                 let n_types = sorted_types.len();
                 for (i, t) in sorted_types.iter().enumerate() {
-                    write_base(f, *t)?;
+                    write_base(f, t)?;
                     if i != n_types - 1 {
                         write!(f, ", ").unwrap();
                     }
@@ -620,11 +620,7 @@ impl PySolutionMappings {
 
     #[getter]
     fn debug(&self) -> Option<String> {
-        if let Some(debug) = &self.debug {
-            Some(debug.to_string())
-        } else {
-            None
-        }
+        self.debug.as_ref().map(|debug| debug.to_string())
     }
 }
 

@@ -69,7 +69,7 @@ impl Triplestore {
                     let name_bytes = name.as_ref();
                     let name_path = std::str::from_utf8(name_bytes)
                         .map_err(|e| TriplestoreError::XMLError(e.to_string()))?;
-                    path.push(format!("{}_{}", &name_path, &current_counter));
+                    path.push(format!("{}_{}", name_path, current_counter));
                     current_counter += 1;
                     counter_stack.push(current_counter);
                     current_counter = 0;
@@ -160,6 +160,10 @@ impl Triplestore {
     }
 }
 
+/// An element's subject, its property and the (subject, property) pairs of its attributes.
+type OpenedElement = (String, Option<NamedNode>, Vec<(String, Option<NamedNode>)>);
+
+#[allow(clippy::too_many_arguments)]
 fn open_element(
     name: &[u8],
     attrs: quick_xml::events::attributes::Attributes,
@@ -170,7 +174,7 @@ fn open_element(
     base_prefix: &NamedNode,
     uuid_namespace: &Uuid,
     path: &mut Vec<String>,
-) -> Result<(String, Option<NamedNode>, Vec<(String, Option<NamedNode>)>), TriplestoreError> {
+) -> Result<OpenedElement, TriplestoreError> {
     let name = std::str::from_utf8(name).map_err(|e| TriplestoreError::XMLError(e.to_string()))?;
     let subject = new_iri_subject(uuid_namespace, path.join(".").as_bytes());
     if let Some(parent) = stack.last_mut() {

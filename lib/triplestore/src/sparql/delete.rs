@@ -1,6 +1,6 @@
 use crate::errors::TriplestoreError;
 use crate::sparql::errors::SparqlError;
-use crate::storage::Triples;
+use crate::storage::{PredicateTriples, Triples};
 use crate::changes::{concat_lfs, Deleted};
 use crate::{add_rank_sort_triples, NewTriples, Triplestore};
 use oxrdf::NamedNode;
@@ -18,7 +18,6 @@ use representation::solution_mapping::EagerSolutionMappings;
 use representation::{
     BaseRDFNodeType, RDFNodeState, OBJECT_COL_NAME, PREDICATE_COL_NAME, SUBJECT_COL_NAME,
 };
-use std::collections::HashMap;
 use std::time::Instant;
 use tracing::trace;
 use utils::polars::collect_in_memory;
@@ -268,7 +267,7 @@ fn triples_solution_mappings_to_global_cat_triples(
 
 fn get_triples_after_deletion(
     gct: &CatTriples,
-    map: &HashMap<NamedNode, HashMap<(BaseRDFNodeType, BaseRDFNodeType), Triples>>,
+    map: &PredicateTriples,
 ) -> Result<Option<CatTriples>, TriplestoreError> {
     if let Some(m) = map.get(&gct.predicate) {
         let type_ = (gct.subject_type.clone(), gct.object_type.clone());

@@ -60,7 +60,7 @@ fn is_literal_where(
     } else {
         let b = t.get_base_type().unwrap();
         match b {
-            BaseRDFNodeType::Literal(_, _) if accept(&b) => {
+            BaseRDFNodeType::Literal(_, _) if accept(b) => {
                 col(first_context.as_str()).is_null().not()
             }
             _ => lit(false),

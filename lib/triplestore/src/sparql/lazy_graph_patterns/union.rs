@@ -13,6 +13,7 @@ use std::collections::HashMap;
 
 impl Triplestore {
     #[instrument(skip_all)]
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn lazy_union(
         &self,
         left: &GraphPattern,

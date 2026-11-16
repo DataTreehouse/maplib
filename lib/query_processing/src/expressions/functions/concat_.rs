@@ -61,16 +61,14 @@ pub fn concat_(
         } else {
             None
         };
-        let value_col = if let Some(s) = t.map.get(&lang_string) {
-            Some(maybe_decode_expr(
+        let value_col = t.map.get(&lang_string).map(|s| {
+            maybe_decode_expr(
                 col(c).struct_().field_by_name(LANG_STRING_VALUE_FIELD),
                 &lang_string,
                 s,
                 global_cats.clone(),
-            ))
-        } else {
-            None
-        };
+            )
+        });
 
         // Arguments that are not string literals (or unbound) are errors, giving an unbound result
         let use_col = match (string_col, value_col) {

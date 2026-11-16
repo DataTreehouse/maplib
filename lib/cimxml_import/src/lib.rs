@@ -17,6 +17,12 @@ impl Remapper {
     }
 }
 
+impl Default for Remapper {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 pub fn fix_cim_quad(_quad: Quad, _base_iri: Option<&String>) -> Quad {
     unimplemented!("Contact Data Treehouse to try!")
 }

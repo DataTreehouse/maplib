@@ -357,6 +357,7 @@ pub fn map_df_mutex(
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn query_mutex(
     inner: &InnerModel,
     query: String,
@@ -401,6 +402,7 @@ pub(crate) fn query_external_mutex(
     Ok(res)
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn update_mutex(
     inner: &mut InnerModel,
     update: String,
@@ -443,6 +445,7 @@ pub(crate) fn create_index_mutex(
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn validate_mutex(
     inner: &mut InnerModel,
     shape_graph: Option<String>,
@@ -522,6 +525,7 @@ pub(crate) fn validate_mutex(
     Ok(py_report)
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn insert_mutex(
     inner: &mut InnerModel,
     query: String,
@@ -547,6 +551,7 @@ pub(crate) fn insert_mutex(
     Ok(insert_result)
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn read_mutex(
     inner: &mut InnerModel,
     source: ReadSource,
@@ -648,6 +653,7 @@ pub(crate) fn read_template_mutex(
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn reads_mutex(
     inner: &mut InnerModel,
     s: &str,
@@ -848,6 +854,7 @@ fn write_to<W: Write>(
 /// CIM/XML header times are UTC with whole seconds, e.g. 2021-02-02T22:28:41Z.
 const CIM_XML_DATETIME_FORMAT: &str = "%Y-%m-%dT%H:%M:%SZ";
 
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn write_cim_xml_mutex(
     inner: &mut InnerModel,
     target: WriteTarget,

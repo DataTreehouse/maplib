@@ -1,7 +1,7 @@
 use super::Triplestore;
 use crate::errors::TriplestoreError;
 use crate::sparql::QuerySettings;
-use crate::storage::Triples;
+use crate::storage::{PredicateTriples, Triples};
 use aho_corasick::{AhoCorasick, MatchKind};
 use oxrdf::vocab::{rdf, xsd};
 use oxrdf::{BlankNode, NamedNode, NamedNodeRef, Term, TermRef, Variable};
@@ -424,7 +424,7 @@ impl Triplestore {
     /// by the graphs of a document, so these must be written with their label.
     fn blanks_in_several_graphs(
         &self,
-        maps: &[&HashMap<NamedNode, HashMap<(BaseRDFNodeType, BaseRDFNodeType), Triples>>],
+        maps: &[&PredicateTriples],
     ) -> Result<HashSet<u32>, TriplestoreError> {
         let mut shared = HashSet::new();
         if maps.len() < 2 {
@@ -553,7 +553,7 @@ impl Triplestore {
     /// in the graph, but never drops one that is.
     fn possibly_used_prefixes<'a>(
         &self,
-        map: &HashMap<NamedNode, HashMap<(BaseRDFNodeType, BaseRDFNodeType), Triples>>,
+        map: &PredicateTriples,
         prefixes: &'a HashMap<String, NamedNode>,
     ) -> Result<Vec<(&'a String, &'a NamedNode)>, TriplestoreError> {
         let mut datatypes = HashSet::new();
@@ -632,7 +632,7 @@ impl Triplestore {
         &self,
         writer: &mut W,
         graph: &NamedGraph,
-        map: &HashMap<NamedNode, HashMap<(BaseRDFNodeType, BaseRDFNodeType), Triples>>,
+        map: &PredicateTriples,
         prefixes: &HashMap<String, NamedNode>,
         syntax: PrettySyntax,
         // Blank nodes that must be written with their label (not as [ ... ], inlined or as part
@@ -851,10 +851,11 @@ impl Triplestore {
         Ok(wrote_any)
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn create_block_segment(
         &self,
         is_iri: bool,
-        map: &HashMap<NamedNode, HashMap<(BaseRDFNodeType, BaseRDFNodeType), Triples>>,
+        map: &PredicateTriples,
         string_start: &str,
         string_ends: &str,
         used_subjects: &HashSet<u32>,
@@ -916,7 +917,7 @@ impl Triplestore {
     /// node that is referred to twice) are written as any other triples.
     fn create_lists_map(
         &self,
-        map: &HashMap<NamedNode, HashMap<(BaseRDFNodeType, BaseRDFNodeType), Triples>>,
+        map: &PredicateTriples,
         graph: &NamedGraph,
         blank_in_degree_one_set: &HashSet<u32>,
         list_members: &mut HashSet<u32>,
@@ -1147,7 +1148,7 @@ impl Triplestore {
     /// Blank nodes that are subjects of rdf:first and also subjects of other predicates.
     fn list_nodes_with_other_properties(
         &self,
-        map: &HashMap<NamedNode, HashMap<(BaseRDFNodeType, BaseRDFNodeType), Triples>>,
+        map: &PredicateTriples,
     ) -> Result<HashSet<u32>, TriplestoreError> {
         let blank_subjects = |t: &Triples| -> Result<Vec<u32>, TriplestoreError> {
             let mut out = vec![];
@@ -1197,7 +1198,7 @@ impl Triplestore {
 
     fn create_blank_in_degree_zero_and_one_sets(
         &self,
-        map: &HashMap<NamedNode, HashMap<(BaseRDFNodeType, BaseRDFNodeType), Triples>>,
+        map: &PredicateTriples,
     ) -> Result<(HashSet<u32>, HashSet<u32>), TriplestoreError> {
         let mut out_map: HashMap<u32, u8> = HashMap::new();
         // The blank node subject of the last edge into each blank node. For blank nodes with
@@ -1314,6 +1315,7 @@ fn find_parent_cycles(nodes: &HashSet<u32>, parent: &HashMap<u32, u32>) -> Vec<u
     on_cycle
 }
 
+#[allow(clippy::too_many_arguments)]
 fn update_blocks_map(
     map: &mut HashMap<u32, TurtleBlock>,
     df: &DataFrame,
@@ -1405,6 +1407,7 @@ fn update_blocks_map(
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 fn write_blocks<W: Write>(
     writer: &mut W,
     blocks_map: HashMap<u32, TurtleBlock>,

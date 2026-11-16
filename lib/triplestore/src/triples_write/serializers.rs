@@ -245,7 +245,7 @@ pub(super) fn blank_node_serializer<'a, Iter: Send + 'a>(
     mut update: impl FnMut(&'a dyn Array) -> Iter + Send + 'a,
     array: &'a dyn Array,
 ) -> Box<dyn Serializer<'a> + 'a + Send> {
-    const BLANK_NODE_PREFIX: [u8; 2] = [b'_', b':'];
+    const BLANK_NODE_PREFIX: [u8; 2] = *b"_:";
 
     struct StringSerializer<F, Iter, Update> {
         serialize: F,

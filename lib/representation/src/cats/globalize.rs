@@ -11,13 +11,12 @@ impl Cats {
     pub fn globalize(&mut self, mut cat_triples: Vec<CatTriples>) -> Vec<CatTriples> {
         let local_cats: Vec<_> = cat_triples
             .iter_mut()
-            .map(|x| x.local_cats.drain(..))
-            .flatten()
+            .flat_map(|x| x.local_cats.drain(..))
             .collect();
         let re_enc_map = self.merge(local_cats);
         let mut global_cat_triples = re_encode(cat_triples, re_enc_map);
         for c in &mut global_cat_triples {
-            c.local_cats.truncate(0);
+            c.local_cats.clear();
             c.encoded_triples.subject_local_cat_uuid = None;
             c.encoded_triples.object_local_cat_uuid = None;
         }
@@ -56,6 +55,7 @@ impl Cats {
 }
 
 #[instrument(skip_all)]
+#[allow(clippy::too_many_arguments)]
 pub fn cat_encode_triples(
     df: DataFrame,
     subject_type: BaseRDFNodeType,

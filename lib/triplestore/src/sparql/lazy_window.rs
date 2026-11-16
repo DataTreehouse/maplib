@@ -90,8 +90,8 @@ impl Triplestore {
                 context,
                 self.global_cats.clone(),
             ) {
-                Ok(sm) => (sm, true),
-                Err(sm) => (self.window_of_inputs(window, sm, &inputs, context)?, false),
+                (sm, true) => (sm, true),
+                (sm, false) => (self.window_of_inputs(window, sm, &inputs, context)?, false),
             }
         } else {
             (self.window_of_inputs(window, sm, &inputs, context)?, false)

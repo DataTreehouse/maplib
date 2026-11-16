@@ -87,12 +87,15 @@ pub fn helper(local: &str) -> String {
     format!("{MAPLIB_CSVW_NS}{local}")
 }
 
+/// Subjects and objects, in the same order.
+type Pairs<T> = (Vec<String>, Vec<T>);
+
 /// Collects (subject, object) pairs per (predicate, object type, graph).
 #[derive(Default)]
 struct Collector {
-    strings: HashMap<(String, String, bool), (Vec<String>, Vec<String>)>,
-    ints: HashMap<(String, String), (Vec<String>, Vec<i64>)>,
-    typed: HashMap<(String, String, BaseRDFNodeType), (Vec<String>, Vec<String>)>,
+    strings: HashMap<(String, String, bool), Pairs<String>>,
+    ints: HashMap<(String, String), Pairs<i64>>,
+    typed: HashMap<(String, String, BaseRDFNodeType), Pairs<String>>,
 }
 
 impl Collector {

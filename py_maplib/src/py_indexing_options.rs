@@ -28,6 +28,7 @@ impl PyIndexingOptions {
         vectors=None,
         vector_ann=None,
     ))]
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         object_sort_all: Option<bool>,
         object_sort_some: Option<Vec<PyIRI>>,

@@ -148,10 +148,8 @@ pub fn generate_templates(
         .into_iter()
         .filter_map(|mut r| r.remove(0))
         .collect();
-    let subclass_edges: BTreeSet<(String, String)> = q(SUBCLASS_QUERY)?
-        .into_iter()
-        .filter_map(|r| pair(r))
-        .collect();
+    let subclass_edges: BTreeSet<(String, String)> =
+        q(SUBCLASS_QUERY)?.into_iter().filter_map(pair).collect();
 
     let is_datatype = |iri: &str| {
         iri.starts_with(XSD) || NON_XSD_DATATYPES.contains(&iri) || datatypes.contains(iri)

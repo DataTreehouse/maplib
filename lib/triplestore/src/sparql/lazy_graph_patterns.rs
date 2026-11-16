@@ -43,6 +43,7 @@ use utils::polars::{pl_interruptable_collect_sorted_slice, InterruptableCollectE
 
 impl Triplestore {
     #[instrument(skip_all)]
+    #[allow(clippy::too_many_arguments)]
     pub fn lazy_graph_pattern(
         &self,
         graph_pattern: &GraphPattern,
@@ -419,7 +420,7 @@ impl Triplestore {
                     .collect();
                 if !keys.is_empty() {
                     let row = int_range(lit(0), len(), 1, DataType::Int64)
-                        .over(keys.iter().map(|k| col(k)).collect::<Vec<_>>())
+                        .over(keys.iter().map(col).collect::<Vec<_>>())
                         .unwrap();
                     let mut keep = row.clone().gt_eq(lit(*start as i64));
                     if let Some(length) = length {

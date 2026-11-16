@@ -166,7 +166,6 @@ impl Triplestore {
             None,
             &prefix,
             v,
-            &rdf_type,
             &root_elem_property,
             &mut path,
             &use_uuid_namespace,
@@ -204,12 +203,12 @@ impl Triplestore {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn process_value(
     subject: &str,
     property: Option<&NamedNode>,
     prefix: &NamedNode,
     value: Value,
-    rdf_type: &NamedNode,
     root_elem_property: &NamedNode,
     path: &mut Vec<String>,
     uuid_namespace: &Uuid,
@@ -257,7 +256,6 @@ fn process_value(
                     Some(&property),
                     prefix,
                     val,
-                    rdf_type,
                     root_elem_property,
                     path,
                     uuid_namespace,
@@ -285,7 +283,6 @@ fn process_value(
                     Some(&ch),
                     prefix,
                     v,
-                    rdf_type,
                     root_elem_property,
                     path,
                     uuid_namespace,

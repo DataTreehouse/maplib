@@ -22,6 +22,7 @@ use std::collections::HashMap;
 
 impl Triplestore {
     #[instrument(skip_all)]
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn lazy_filter(
         &self,
         inner: &GraphPattern,

@@ -55,6 +55,7 @@ impl PathLeaf {
 }
 
 impl Triplestore {
+    #[allow(clippy::too_many_arguments)]
     pub fn lazy_path(
         &self,
         subject: &TermPattern,
@@ -1121,7 +1122,7 @@ impl U32DataFrameCreator {
             .zip(obj_ca.u32().unwrap().iter())
         {
             let pos = s.or(o).unwrap() as usize;
-            keys[pos] = k.unwrap() as u32;
+            keys[pos] = k.unwrap();
         }
         let object_keys = keys.split_off(df_height);
         let df = DataFrame::new(

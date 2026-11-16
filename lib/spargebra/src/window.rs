@@ -151,7 +151,8 @@ impl WindowFunction {
             None => (iri, false),
         };
         let agg = |name| Some((WindowFunction::Aggregate { name, distinct }, true));
-        let f = match base {
+
+        match base {
             ROW_NUMBER if !distinct => Some((WindowFunction::RowNumber, false)),
             RANK if !distinct => Some((WindowFunction::Rank, false)),
             DENSE_RANK if !distinct => Some((WindowFunction::DenseRank, false)),
@@ -166,8 +167,7 @@ impl WindowFunction {
             // The name is replaced by the first argument in `WindowCall::from_expression`
             CUSTOM => agg(AggregateFunction::Custom(NamedNode::new_unchecked(CUSTOM))),
             _ => None,
-        };
-        f
+        }
     }
 
     /// Whether the value depends on the order of the rows in the partition (and not only on the

@@ -283,13 +283,13 @@ impl Display for TemplateDataset {
                 }
             }
             if !found {
-                let f = nn.as_str().rfind(|x| x == '#' || x == '/' || x == ':');
+                let f = nn.as_str().rfind(['#', '/', ':']);
                 if let Some(f) = f {
                     let s = nn.as_str()[0..f + 1].to_string();
                     let possible_prefix_value = NamedNode::new(s);
                     if let Ok(poss) = possible_prefix_value {
                         let prefix = format!("p{}", p);
-                        p = p + 1;
+                        p += 1;
                         new_prefixes.insert(prefix, poss);
                     }
                 }
@@ -302,7 +302,7 @@ impl Display for TemplateDataset {
             writeln!(f, "@prefix {}: {} .", p, nn)?;
         }
         if !new_prefixes.is_empty() {
-            writeln!(f, "")?;
+            writeln!(f)?;
         }
         for func in &functions {
             func.fmt_prefixes(f, &new_prefixes)?;

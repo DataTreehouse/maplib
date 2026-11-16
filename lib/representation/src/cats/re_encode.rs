@@ -73,7 +73,7 @@ impl CatReEnc {
                             },
                             |_, f| Ok(f.clone()),
                         )
-                        .alias(&bt.field_col_name())])
+                        .alias(bt.field_col_name())])
                     .alias(c),
             );
         } else {
@@ -195,23 +195,19 @@ impl Cats {
         let rencs: Vec<_> = left
             .cat_map
             .iter()
-            .map(|(t, left_enc)| {
-                if let Some(right_enc) = right.cat_map.get(t) {
-                    let renc = left_enc.inner_join_re_enc(right_enc);
-                    Some(renc)
-                } else {
-                    None
-                }
+            .filter_map(|(t, left_enc)| {
+                right
+                    .cat_map
+                    .get(t)
+                    .map(|right_enc| left_enc.inner_join_re_enc(right_enc))
             })
-            .filter(|x| x.is_some())
-            .map(|x| x.unwrap())
             .collect();
         let renc_map: HashMap<_, _, BuildHasherDefault<NoHashHasher<u32>>> =
-            rencs.into_iter().flatten().map(|x| x).collect();
-        let cat_re_enc = CatReEnc {
+            rencs.into_iter().flatten().collect();
+
+        CatReEnc {
             cat_map: Arc::new(renc_map),
-        };
-        cat_re_enc
+        }
     }
 
     pub fn merge(
@@ -357,6 +353,6 @@ pub fn reencode_solution_mappings(
             }
         }
     }
-    let sm = EagerSolutionMappings::new(mappings.collect().unwrap(), rdf_node_types);
-    sm
+
+    EagerSolutionMappings::new(mappings.collect().unwrap(), rdf_node_types)
 }

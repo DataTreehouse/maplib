@@ -277,7 +277,7 @@ pub fn df_to_py_df(
                 mappings: py_df.into_any(),
                 debug: debug_outputs,
                 rdf_node_states,
-                pushdown_paths: pushdown_paths.unwrap_or(Vec::new()),
+                pushdown_paths: pushdown_paths.unwrap_or_default(),
             },
         )?
         .into_py_any(py)

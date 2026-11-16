@@ -10,6 +10,9 @@ use regex::Regex;
 use serde_json::{Map, Value};
 use std::sync::LazyLock;
 
+/// An object property's object, its context, and whether it was loaded from a linked document.
+type ObjectProp = (Map<String, Value>, Ctx, bool);
+
 /// The context a description object is interpreted in.
 #[derive(Debug, Clone)]
 pub struct Ctx {
@@ -629,7 +632,7 @@ impl MetadataParser<'_> {
         obj: &Map<String, Value>,
         k: &str,
         ctx: &Ctx,
-    ) -> Result<Option<(Map<String, Value>, Ctx, bool)>, CsvwError> {
+    ) -> Result<Option<ObjectProp>, CsvwError> {
         match obj.get(k) {
             None => Ok(None),
             Some(Value::Object(o)) => Ok(Some((o.clone(), ctx.clone(), false))),

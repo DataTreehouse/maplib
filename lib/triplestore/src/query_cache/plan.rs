@@ -487,7 +487,7 @@ mod tests {
     #[test]
     fn include_graphs_are_part_of_the_default_graph() {
         let t = NamedGraph::transient();
-        match plan_with("SELECT * WHERE { ?s :p ?o }", &[t.clone()], &[]) {
+        match plan_with("SELECT * WHERE { ?s :p ?o }", std::slice::from_ref(&t), &[]) {
             CachePlan::Cache { reads, .. } => {
                 assert!(reads.contains(&cell(D, "p")));
                 assert!(reads.contains(&cell(t, "p")));

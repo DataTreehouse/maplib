@@ -5,9 +5,7 @@ use crate::datatypes::{parse_cell, CellParsing, CellValue};
 use crate::errors::{meta_err, CsvwError};
 use crate::jsonld::AnnotationTriple;
 use crate::loader::{normalize_url, Loader};
-use crate::metadata::{
-    ColumnDesc, Datatype, Dialect, ForeignKey, Inherited, TableDesc, TableGroupDesc,
-};
+use crate::metadata::{ColumnDesc, Datatype, ForeignKey, Inherited, TableDesc, TableGroupDesc};
 use crate::parse::{parse_tabular, ParsedTable};
 use crate::Warnings;
 use std::collections::HashSet;
@@ -181,7 +179,7 @@ pub fn annotate_table(
     warnings: &mut Warnings,
 ) -> Result<AnnTable, CsvwError> {
     let bytes = loader.load_required(&desc.url)?;
-    let dialect = desc.dialect.clone().unwrap_or(Dialect::default());
+    let dialect = desc.dialect.clone().unwrap_or_default();
     let parsed = parse_tabular(&bytes, &dialect, &desc.url)?;
     let mut columns = vec![];
     let schema_columns: Vec<ColumnDesc> = desc

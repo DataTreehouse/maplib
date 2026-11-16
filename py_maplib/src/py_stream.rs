@@ -572,7 +572,7 @@ impl PyModelStream {
                 input,
             )?;
             if let Some(n) = self.compact_every {
-                if state.batches % n == 0 {
+                if state.batches.is_multiple_of(n) {
                     compact_and_collect(&mut inner)?;
                 }
             }

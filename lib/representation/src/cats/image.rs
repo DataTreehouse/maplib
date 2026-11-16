@@ -5,9 +5,10 @@ use crate::{BaseRDFNodeType, LANG_STRING_LANG_FIELD, LANG_STRING_VALUE_FIELD};
 use nohash_hasher::NoHashHasher;
 use std::collections::{HashMap, HashSet};
 use std::hash::BuildHasherDefault;
-use std::ops::Deref;
 use std::path::Path;
 use std::sync::Arc;
+
+type U32Map = HashMap<u32, u32, BuildHasherDefault<NoHashHasher<u32>>>;
 
 impl Cats {
     pub fn mappings_cat_image(
@@ -67,21 +68,12 @@ impl Cats {
                             s.insert(bt.clone(), HashSet::new());
                         }
                         let local_read = local.as_ref().map(|x| x.read().unwrap());
-                        let local_read_ref = local_read.as_ref().map(|x| x.deref());
+                        let local_read_ref = local_read.as_deref();
 
-                        let local_rev_map = if let Some(local) = local_read_ref {
-                            Some(local.get_cat_encs(bt))
-                        } else {
-                            None
-                        };
+                        let local_rev_map = local_read_ref.map(|local| local.get_cat_encs(bt));
                         let ss = s.get_mut(bt).unwrap();
                         for ser in sers {
-                            let new_ss = ser
-                                .u32()
-                                .unwrap()
-                                .iter()
-                                .filter(|x| x.is_some())
-                                .map(|x| x.unwrap());
+                            let new_ss = ser.u32().unwrap().iter().flatten();
                             if let Some(local_rev_map) = local_rev_map {
                                 ss.extend(new_ss.filter(|x| !local_rev_map.maps.contains_u32(x)));
                             } else {
@@ -92,8 +84,8 @@ impl Cats {
                 }
             }
         }
-        let cats = self.image(&s, path);
-        cats
+
+        self.image(&s, path)
     }
 
     pub fn merge_solution_mappings_locals(
@@ -116,10 +108,7 @@ impl Cats {
             }
         }
         let remap = self.merge(local_cats);
-        let mut concat_reenc: HashMap<
-            String,
-            HashMap<BaseRDFNodeType, HashMap<u32, u32, BuildHasherDefault<NoHashHasher<u32>>>>,
-        > = HashMap::new();
+        let mut concat_reenc: HashMap<String, HashMap<BaseRDFNodeType, U32Map>> = HashMap::new();
         for (uuid, reenc) in remap {
             for (ct, cat_reenc) in reenc {
                 let bt = ct.as_base_rdf_node_type();
@@ -179,11 +168,7 @@ impl CatEncs {
         dt: &BaseRDFNodeType,
         path: Option<&Path>,
     ) -> Option<CatEncs> {
-        if let Some(maps) = self.maps.image(path, s, dt) {
-            Some(CatEncs { maps })
-        } else {
-            None
-        }
+        self.maps.image(path, s, dt).map(|maps| CatEncs { maps })
     }
 }
 

@@ -167,7 +167,7 @@ impl RDFNodeState {
 impl Display for RDFNodeState {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         if self.is_multi() {
-            let type_strings: Vec<_> = self.map.iter().map(|(x, _)| x.to_string()).collect();
+            let type_strings: Vec<_> = self.map.keys().map(|x| x.to_string()).collect();
             write!(f, "Multiple({})", type_strings.join(", "))
         } else {
             self.get_base_type().unwrap().fmt(f)

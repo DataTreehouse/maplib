@@ -1,5 +1,4 @@
 #![feature(pattern)]
-#![feature(str_as_str)]
 
 //! In-memory dictionaries ("cat maps") from strings to u32 codes.
 //!

@@ -558,20 +558,20 @@ fn blank_node_to_oxrdf_blank_node(bn: BlankNode, parser_call: &str) -> BlankNode
     BlankNode::new_unchecked(format!("{}_{}", bn.as_str(), parser_call))
 }
 
+/// The reader to continue with, the triples by graph and predicate, and the dropped values.
+type PredicateMaps<'a> = (
+    Option<MyFromSliceQuadReader<'a>>,
+    HashMap<GraphName, PredMap>,
+    DroppedValues,
+);
+
 fn create_predicate_map<'a>(
     mut r: MyFromSliceQuadReader<'a>,
     rdf_format: &ExtendedRdfFormat,
     parser_call: &str,
     max_iterations: usize,
     strict: bool,
-) -> Result<
-    (
-        Option<MyFromSliceQuadReader<'a>>,
-        HashMap<GraphName, PredMap>,
-        DroppedValues,
-    ),
-    TriplestoreError,
-> {
+) -> Result<PredicateMaps<'a>, TriplestoreError> {
     let cim_remapper = if matches!(rdf_format, ExtendedRdfFormat::CIMXML) {
         Some(Remapper::new())
     } else {

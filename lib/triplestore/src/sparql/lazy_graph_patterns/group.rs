@@ -88,7 +88,7 @@ impl Triplestore {
             } else {
                 return Err(SparqlError::GroupByWithUndefinedVariable(
                     v.clone(),
-                    inner.clone(),
+                    Box::new(inner.clone()),
                 ));
             }
         }
@@ -164,10 +164,10 @@ impl Triplestore {
                     .mappings
                     .clone()
                     .lazy()
-                    .select(lateral_keys.iter().map(|k| col(k)).collect::<Vec<_>>())
+                    .select(lateral_keys.iter().map(col).collect::<Vec<_>>())
                     .unique(None, UniqueKeepStrategy::Any)
                     .with_column(lit(0u32).alias(&dummy_col_name));
-                let mut on: Vec<_> = lateral_keys.iter().map(|k| col(k)).collect();
+                let mut on: Vec<_> = lateral_keys.iter().map(col).collect();
                 on.push(col(&*dummy_col_name));
                 lf_rhs
                     .join(lf_lhs, on.clone(), on, JoinArgs::new(JoinType::Left))

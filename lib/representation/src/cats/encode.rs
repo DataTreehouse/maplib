@@ -27,7 +27,7 @@ impl CatEncs {
     pub fn new_local_singular(value: &str, u: u32, bt: &BaseRDFNodeType) -> CatEncs {
         let maps = CatMapsInMemory::new_singular(value, u, bt.is_iri());
         CatEncs {
-            maps: CatMaps::InMemory(maps),
+            maps: CatMaps::in_memory(maps),
         }
     }
 
@@ -49,22 +49,20 @@ impl Cats {
         let mut to_encode = vec![];
         for (c, s) in &rdf_node_types {
             for (t, bs) in &s.map {
-                if t.stored_cat() {
-                    if matches!(bs, BaseCatState::String) {
-                        let ser = if t.is_lang_string() || !s.is_multi() {
-                            mappings.column(c).unwrap().as_materialized_series().clone()
-                        } else {
-                            mappings
-                                .column(c)
-                                .unwrap()
-                                .as_materialized_series()
-                                .struct_()
-                                .unwrap()
-                                .field_by_name(&t.field_col_name())
-                                .unwrap()
-                        };
-                        to_encode.push((c.clone(), t.clone(), ser));
-                    }
+                if t.stored_cat() && matches!(bs, BaseCatState::String) {
+                    let ser = if t.is_lang_string() || !s.is_multi() {
+                        mappings.column(c).unwrap().as_materialized_series().clone()
+                    } else {
+                        mappings
+                            .column(c)
+                            .unwrap()
+                            .as_materialized_series()
+                            .struct_()
+                            .unwrap()
+                            .field_by_name(&t.field_col_name())
+                            .unwrap()
+                    };
+                    to_encode.push((c.clone(), t.clone(), ser));
                 }
             }
         }
@@ -106,7 +104,7 @@ impl Cats {
             }
             s.map.insert(
                 t,
-                BaseCatState::CategoricalNative(local.map(|x| LockedCats::new(x))),
+                BaseCatState::CategoricalNative(local.map(LockedCats::new)),
             );
         }
         EagerSolutionMappings::new(collect_sized(mappings, height).unwrap(), rdf_node_types)
@@ -117,9 +115,7 @@ impl Cats {
         let mut use_height = match t {
             BaseRDFNodeType::IRI => self.iri_counter,
             BaseRDFNodeType::BlankNode => self.blank_counter,
-            BaseRDFNodeType::Literal(l, _) => {
-                self.literal_counter_map.get(l).map(|x| *x).unwrap_or(0)
-            }
+            BaseRDFNodeType::Literal(l, _) => self.literal_counter_map.get(l).copied().unwrap_or(0),
             BaseRDFNodeType::None => {
                 unreachable!("Should never happen")
             }
@@ -243,7 +239,7 @@ impl Cats {
         if let Some(encs) = self.cat_map.get(&CatType::Blank) {
             encs.maybe_encode_strs(blanks)
         } else {
-            vec![None].repeat(blanks.len())
+            [None].repeat(blanks.len())
         }
     }
 
@@ -255,7 +251,7 @@ impl Cats {
         if let Some(encs) = self.cat_map.get(&CatType::Literal(data_type)) {
             encs.maybe_encode_strs(literals)
         } else {
-            vec![None].repeat(literals.len())
+            [None].repeat(literals.len())
         }
     }
 
@@ -264,7 +260,7 @@ impl Cats {
         if let Some(encs) = encs {
             encs.maybe_encode_strs(iris)
         } else {
-            vec![None].repeat(iris.len())
+            [None].repeat(iris.len())
         }
     }
 
@@ -368,8 +364,8 @@ fn encode_single_string_series(
         };
         encoded_global_local.push(Some(u));
     }
-    let ser = Series::from_iter(encoded_global_local);
-    ser
+
+    Series::from_iter(encoded_global_local)
 }
 
 pub fn encode_triples(

@@ -70,6 +70,7 @@ impl ValidationReport {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn validate(
     _data_triplestore: &mut Triplestore,
     _data_graph: &NamedGraph,
@@ -91,6 +92,7 @@ pub fn validate(
     unimplemented!("Contact Data Treehouse to try")
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn infer_shacl(
     _triplestore: &mut Triplestore,
     _data_graph: &NamedGraph,

@@ -5,7 +5,7 @@ use super::{
 use crate::graph_map::GraphTriplesMap;
 use crate::query_cache::QueryCache;
 use crate::errors::TriplestoreError;
-use crate::storage::{Triples, DISK_ROW_GROUP_SIZE};
+use crate::storage::{PredicateTriples, Triples, DISK_ROW_GROUP_SIZE};
 use external_sparql::federation::FederationSettings;
 use file_io::remote::{RemoteLocation, RemoteOptions, TempFile};
 use file_io::FileIOError;
@@ -383,10 +383,7 @@ impl Triplestore {
             },
         );
         let cats = cats?;
-        let mut graph_triples_map: HashMap<
-            NamedGraph,
-            HashMap<NamedNode, HashMap<(BaseRDFNodeType, BaseRDFNodeType), Triples>>,
-        > = HashMap::new();
+        let mut graph_triples_map: HashMap<NamedGraph, PredicateTriples> = HashMap::new();
         for (graph, pred, subject_type, object_type, triples) in triples_vec? {
             // Stored predicates in the former chrontext namespace are read as the predicates of
             // the maplib vocabulary, unless a stored table already has that predicate.

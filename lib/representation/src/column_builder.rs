@@ -152,3 +152,9 @@ impl SolutionMappingsColumnBuilder {
         })
     }
 }
+
+impl Default for SolutionMappingsColumnBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
+}

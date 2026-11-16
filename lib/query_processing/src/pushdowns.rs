@@ -372,7 +372,7 @@ fn find_variable_pushdowns(e: &Expression) -> Option<HashMap<String, HashSet<Ter
                 let mut new_map = HashMap::new();
                 for (k, mut v) in left {
                     if let Some(vr) = right.remove(&k) {
-                        v.extend(vr.into_iter());
+                        v.extend(vr);
                         new_map.insert(k, v);
                     }
                 }
@@ -487,16 +487,14 @@ fn find_variable_type_constraints(e: &Expression) -> Option<HashMap<String, Poss
                     }
                 }
             }
-            Function::IsLiteral => {
-                if args.len() == 1 {
-                    if let Expression::Variable(v) = args.first().unwrap() {
-                        return Some(HashMap::from([(
-                            v.as_str().to_string(),
-                            PossibleTypes::singular(ConstraintBaseRDFNodeType::Literal(
-                                rdfs::LITERAL.into_owned(),
-                            )),
-                        )]));
-                    }
+            Function::IsLiteral if args.len() == 1 => {
+                if let Expression::Variable(v) = args.first().unwrap() {
+                    return Some(HashMap::from([(
+                        v.as_str().to_string(),
+                        PossibleTypes::singular(ConstraintBaseRDFNodeType::Literal(
+                            rdfs::LITERAL.into_owned(),
+                        )),
+                    )]));
                 }
             }
             _ => {}

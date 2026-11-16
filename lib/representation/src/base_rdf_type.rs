@@ -277,7 +277,7 @@ fn literal_type(
         xsd::DATE => DataType::Date,
         //TODO: Fix when adding proper list support
         rdf::LIST => DataType::List(Box::new(DataType::Boolean)),
-        xsd::STRING | _ => match base_cat_state {
+        _ => match base_cat_state {
             BaseCatState::CategoricalNative(_) => DataType::UInt32,
             BaseCatState::String => DataType::String,
             BaseCatState::NonString => {
@@ -330,9 +330,6 @@ pub fn polars_lang_fields(base_cat_state: &BaseCatState) -> Vec<Field> {
             ));
         }
         BaseCatState::NonString => {}
-    }
-    if matches!(base_cat_state, BaseCatState::String) {
-    } else {
     }
     fields
 }

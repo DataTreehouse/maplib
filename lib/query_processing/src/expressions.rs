@@ -84,25 +84,29 @@ pub fn literal_enc(
             );
             let lang_enc = enc.pop().unwrap();
             let value_enc = enc.pop().unwrap();
-            let (value_enc, lang_enc, local) = if value_enc.is_some() && lang_enc.is_some() {
-                (value_enc.unwrap(), lang_enc.unwrap(), None)
-            } else if value_enc.is_some() {
-                let dt = l.datatype().into_owned();
-                let offset = global_cats.get_literal_counter(&dt);
-                let (lang_enc, local) =
-                    Cats::new_local_singular_literal(l.language().unwrap(), dt, offset);
-                (value_enc.unwrap(), lang_enc, Some(local))
-            } else if lang_enc.is_some() {
-                let dt = l.datatype().into_owned();
-                let offset = global_cats.get_literal_counter(&dt);
-                let (value_enc, local) = Cats::new_local_singular_literal(l.value(), dt, offset);
-                (value_enc, lang_enc.unwrap(), Some(local))
-            } else {
-                let dt = l.datatype().into_owned();
-                let offset_value = global_cats.get_literal_counter(&dt);
-                let (value_enc, lang_enc, local) =
-                    Cats::new_local_lang_string(l.value(), l.language().unwrap(), offset_value);
-                (value_enc, lang_enc, Some(local))
+            let (value_enc, lang_enc, local) = match (value_enc, lang_enc) {
+                (Some(value_enc), Some(lang_enc)) => (value_enc, lang_enc, None),
+                (Some(value_enc), None) => {
+                    let dt = l.datatype().into_owned();
+                    let offset = global_cats.get_literal_counter(&dt);
+                    let (lang_enc, local) =
+                        Cats::new_local_singular_literal(l.language().unwrap(), dt, offset);
+                    (value_enc, lang_enc, Some(local))
+                }
+                (None, Some(lang_enc)) => {
+                    let dt = l.datatype().into_owned();
+                    let offset = global_cats.get_literal_counter(&dt);
+                    let (value_enc, local) =
+                        Cats::new_local_singular_literal(l.value(), dt, offset);
+                    (value_enc, lang_enc, Some(local))
+                }
+                (None, None) => {
+                    let dt = l.datatype().into_owned();
+                    let offset_value = global_cats.get_literal_counter(&dt);
+                    let (value_enc, lang_enc, local) =
+                        Cats::new_local_lang_string(l.value(), l.language().unwrap(), offset_value);
+                    (value_enc, lang_enc, Some(local))
+                }
             };
             (
                 as_struct(vec![
@@ -141,8 +145,7 @@ pub fn literal_enc(
     } else {
         let bs = bt.default_input_cat_state().clone();
         (
-            rdf_literal_to_polars_expr(l)
-                .map_err(|x| QueryProcessingError::ParseLiteralError(x))?,
+            rdf_literal_to_polars_expr(l).map_err(QueryProcessingError::ParseLiteralError)?,
             bt,
             bs,
         )
@@ -162,7 +165,7 @@ pub fn named_node(
         .with_column(enc.alias(context.as_str()));
     let state = RDFNodeState::from_bases(
         BaseRDFNodeType::IRI,
-        BaseCatState::CategoricalNative(local.map(|x| LockedCats::new(x))),
+        BaseCatState::CategoricalNative(local.map(LockedCats::new)),
     );
     solution_mappings
         .rdf_node_types
@@ -536,7 +539,7 @@ pub fn bound(
         solution_mappings
             .rdf_node_types
             .get(v.as_str())
-            .expect(&format!("Finds {}", v.as_str())),
+            .unwrap_or_else(|| panic!("Finds {}", v.as_str())),
     )
     .not();
     solution_mappings.mappings = solution_mappings

@@ -85,7 +85,7 @@ fn filter_multitype(multitype_column: &Column, names: &Vec<&str>, col_name: &str
             let columns_drop: Vec<_> = names
                 .iter()
                 .filter(|&n| *n != col_name)
-                .map(|x| *x) // Make sure not to drop col_name even if it overlaps with one of the provided field names
+                .copied() // Make sure not to drop col_name even if it overlaps with one of the provided field names
                 .collect();
             lf = lf.drop(by_name(columns_drop, true, false));
             let df = lf.collect();
@@ -308,10 +308,10 @@ pub fn nest_multicolumns(
         drop_cols.extend(prefixed_inner_cols);
         structs.push(as_struct(struct_exprs).alias(&c));
     }
-    let mapping = mapping
-        .with_columns(structs)
-        .drop(by_name(drop_cols, true, false));
+
     mapping
+        .with_columns(structs)
+        .drop(by_name(drop_cols, true, false))
 }
 
 pub fn set_struct_all_null_to_null_row(expr: Expr, t: &RDFNodeState) -> Expr {

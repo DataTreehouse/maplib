@@ -95,6 +95,10 @@ impl SparseIndex {
     }
 }
 
+/// The triples of one graph, by predicate and by subject and object type.
+pub type PredicateTriples =
+    HashMap<NamedNode, HashMap<(BaseRDFNodeType, BaseRDFNodeType), Triples>>;
+
 #[derive(Clone)]
 pub struct Triples {
     segments: Vec<TriplesSegment>,

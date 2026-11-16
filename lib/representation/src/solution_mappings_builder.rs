@@ -76,3 +76,9 @@ impl SolutionMappingsBuilder {
         Ok(sm)
     }
 }
+
+impl Default for SolutionMappingsBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
+}

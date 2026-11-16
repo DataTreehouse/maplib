@@ -669,6 +669,7 @@ struct HalfBakedSolutionMappings {
     pub object_state: Option<BaseCatState>,
 }
 
+#[allow(clippy::too_many_arguments)]
 fn multiple_tt_to_lf(
     triples: &HashMap<(BaseRDFNodeType, BaseRDFNodeType), Triples>,
     types: Option<HashSet<(BaseRDFNodeType, BaseRDFNodeType)>>,

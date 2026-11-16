@@ -12,6 +12,9 @@ use representation::solution_mapping::SolutionMappings;
 use spargebra::term::GroundTerm;
 use std::collections::HashMap;
 
+/// Which variables the rows bind, and the rows.
+type ValuesPartition = (Vec<bool>, Vec<Vec<Option<GroundTerm>>>);
+
 impl Triplestore {
     pub(crate) fn lazy_values(
         &self,
@@ -32,7 +35,7 @@ impl Triplestore {
         // UNDEF in a row means that the variable is unconstrained by that row.
         // The rows are partitioned by which variables they bind, and each partition is
         // joined only on the variables that it binds.
-        let mut partitions: Vec<(Vec<bool>, Vec<Vec<Option<GroundTerm>>>)> = vec![];
+        let mut partitions: Vec<ValuesPartition> = vec![];
         for row in bindings {
             let pattern: Vec<bool> = row.iter().map(|x| x.is_some()).collect();
             let bound_row: Vec<_> = row.iter().filter(|x| x.is_some()).cloned().collect();

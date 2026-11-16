@@ -370,7 +370,7 @@ fn make_seed(left: &EagerSolutionMappings, seed_columns: &[String], key: &str) -
         left.mappings
             .clone()
             .lazy()
-            .select(seed_columns.iter().map(|c| col(c)).collect::<Vec<_>>()),
+            .select(seed_columns.iter().map(col).collect::<Vec<_>>()),
         rdf_node_types,
         left.mappings.height(),
     ))

@@ -24,7 +24,7 @@ impl Loader {
     pub fn add_mapping(&mut self, iri_prefix: String, dir: PathBuf) {
         self.mappings.push((iri_prefix, dir));
         self.mappings
-            .sort_by(|(a, _), (b, _)| b.len().cmp(&a.len()));
+            .sort_by_key(|(a, _)| std::cmp::Reverse(a.len()));
     }
 
     /// The local path of a document, if the IRI can be mapped to the file system.

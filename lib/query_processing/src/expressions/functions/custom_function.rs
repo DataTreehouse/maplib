@@ -21,6 +21,7 @@ use spargebra::algebra::{Expression, Function};
 use std::collections::HashMap;
 use std::ops::{Div, Mul};
 
+#[allow(clippy::too_many_arguments)]
 pub fn custom_(
     nn: &NamedNode,
     mut solution_mappings: SolutionMappings,
@@ -238,7 +239,7 @@ pub fn custom_(
                             bs,
                             global_cats.clone(),
                         )
-                        .alias(&lit_string.field_col_name())])
+                        .alias(lit_string.field_col_name())])
                         .alias(outer_context.as_str()),
                 );
             } else {
@@ -267,7 +268,7 @@ pub fn custom_(
             solution_mappings,
             func,
             args,
-            &args_contexts,
+            args_contexts,
             outer_context,
             global_cats,
         )?;
@@ -276,7 +277,7 @@ pub fn custom_(
             solution_mappings,
             func,
             args,
-            &args_contexts,
+            args_contexts,
             outer_context,
             global_cats,
         )?;

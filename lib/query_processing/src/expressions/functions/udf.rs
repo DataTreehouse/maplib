@@ -56,7 +56,7 @@ pub fn udf(
             };
 
             let (base_t, base_s) = if let Some(specified_type) = specified_type {
-                let base_s = t.map.get(&specified_type).unwrap();
+                let base_s = t.map.get(specified_type).unwrap();
                 (specified_type, base_s)
             } else {
                 (t.get_base_type().unwrap(), t.get_base_state().unwrap())
@@ -81,7 +81,7 @@ pub fn udf(
             .iter()
             .map(|x| x.name().to_string())
             .collect();
-        let result_df = f.clone().call(&iri, input_df)?;
+        let result_df = f.clone().call(iri, input_df)?;
         let mut maybe_output = None;
         for c in result_df.columns() {
             if !colnames.contains(c.name().as_str()) || result_df.columns().len() == 1 {

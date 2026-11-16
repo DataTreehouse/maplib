@@ -70,6 +70,7 @@ pub fn join(
     Ok(solution_mappings)
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn join_workaround(
     left_mappings: LazyFrame,
     mut left_datatypes: HashMap<String, RDFNodeState>,
@@ -282,7 +283,7 @@ pub fn join_workaround(
         {
             for (r, pr) in right_inner_columns
                 .into_iter()
-                .zip(right_prefixed_inner_columns.into_iter())
+                .zip(right_prefixed_inner_columns)
             {
                 if !left_inner_columns.contains(&r) {
                     left_inner_columns.push(r);
@@ -325,9 +326,9 @@ fn create_join_compatible_cats(
                     if let Some(left_oper) = left_oper {
                         left_mappings = left_oper.apply(
                             left_mappings,
-                            &c,
-                            &left_state,
-                            &left_base,
+                            c,
+                            left_state,
+                            left_base,
                             global_cats.clone(),
                         );
                     }
@@ -337,7 +338,7 @@ fn create_join_compatible_cats(
                             right_mappings,
                             c,
                             right_t,
-                            &left_base,
+                            left_base,
                             global_cats.clone(),
                         );
                     }
@@ -562,11 +563,11 @@ pub fn create_join_compatible_solution_mappings(
                         let base_right = right_dt.get_base_type().unwrap();
                         match join_type {
                             JoinType::Inner => {
-                                if left_dt.map.contains_key(&base_right) {
+                                if left_dt.map.contains_key(base_right) {
                                     left_mappings = force_convert_multicol_to_single_col(
                                         left_mappings,
                                         v,
-                                        &base_right,
+                                        base_right,
                                     );
                                     new_left_states.insert(v.clone(), right_dt.clone());
                                 } else {
@@ -625,11 +626,11 @@ pub fn create_join_compatible_solution_mappings(
                     if right_dt.is_multi() {
                         match join_type {
                             JoinType::Inner => {
-                                if right_dt.map.contains_key(&left_basic_dt) {
+                                if right_dt.map.contains_key(left_basic_dt) {
                                     right_mappings = force_convert_multicol_to_single_col(
                                         right_mappings,
                                         v,
-                                        &left_basic_dt,
+                                        left_basic_dt,
                                     );
                                     new_right_states.insert(
                                         v.clone(),
@@ -666,11 +667,11 @@ pub fn create_join_compatible_solution_mappings(
                                 }
                             }
                             JoinType::Left => {
-                                if right_dt.map.contains_key(&left_basic_dt) {
+                                if right_dt.map.contains_key(left_basic_dt) {
                                     right_mappings = force_convert_multicol_to_single_col(
                                         right_mappings,
                                         v,
-                                        &left_basic_dt,
+                                        left_basic_dt,
                                     );
                                     new_right_states.insert(
                                         v.clone(),

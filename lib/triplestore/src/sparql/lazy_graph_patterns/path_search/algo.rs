@@ -20,6 +20,8 @@ pub const NONE: u32 = u32::MAX;
 pub enum Direction {
     Forward,
     Backward,
+    // Only the tests build it so far; the search code already handles it.
+    #[cfg_attr(not(test), allow(dead_code))]
     Both,
 }
 
@@ -95,6 +97,7 @@ pub struct SearchGraph {
 
 impl SearchGraph {
     /// From the edges of the triples `from[i] p[i] to[i]`, where p is the predicate index.
+    #[cfg(test)]
     pub fn new(n: usize, from: &[u32], to: &[u32], predicates: &[u32]) -> SearchGraph {
         let fwd_labels: Vec<u32> = predicates.iter().map(|p| 2 * p).collect();
         let bwd_labels: Vec<u32> = predicates.iter().map(|p| 2 * p + 1).collect();
@@ -654,7 +657,7 @@ fn dijkstra(
     let mut pops = 0u32;
     while let Some(HeapItem(c, u)) = heap.pop() {
         pops = pops.wrapping_add(1);
-        if pops % 4096 == 0 && utils::cancel::stopped().is_some() {
+        if pops.is_multiple_of(4096) && utils::cancel::stopped().is_some() {
             break;
         }
         let ui = u as usize;
@@ -1042,6 +1045,7 @@ pub fn search_many(
 /// The nodes reached from `source` by walks of exactly d edges, for d = 1..=max_depth, passed
 /// to `visit(d, nodes)` one layer at a time. A node can be in several layers. `visit` returns
 /// false to stop. For length-constrained path predicates.
+#[cfg(test)]
 pub fn exact_length_layers(
     graph: &SearchGraph,
     source: u32,
@@ -1238,7 +1242,7 @@ mod tests {
             let g = SearchGraph::new(n as usize, &from, &to, &p);
             let mut scratch = Scratch::new(n as usize);
             let mut r = Lcg(seed + 1000);
-            let avoid: Vec<bool> = (0..n).map(|_| r.next() % 7 == 0).collect();
+            let avoid: Vec<bool> = (0..n).map(|_| r.next().is_multiple_of(7)).collect();
             for dir in DIRS {
                 for use_avoid in [false, true] {
                     let adj = naive_adj(n, &from, &to, &p, dir);

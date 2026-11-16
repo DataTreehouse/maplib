@@ -135,7 +135,7 @@ impl SparqlEndpoint {
                 let use_pattern = GraphPattern::Distinct {
                     inner: Box::new(GraphPattern::Project {
                         inner: Box::new(pattern.clone()),
-                        variables: used_variables.into_iter().map(|x| x.clone()).collect(),
+                        variables: used_variables.into_iter().cloned().collect(),
                     }),
                 };
                 Query::Select {
@@ -231,8 +231,8 @@ impl SparqlEndpoint {
                     }
 
                     let df = DataFrame::new(0, columns).unwrap();
-                    let sm = EagerSolutionMappings::new(df, states);
-                    sm
+
+                    EagerSolutionMappings::new(df, states)
                 };
                 sm
             }
@@ -265,7 +265,7 @@ impl SparqlEndpoint {
                     &quad_template,
                     LockedCats::new(Cats::new_empty(None, None)),
                 )
-                .map_err(|x| SparqlEndpointQueryError::CreateQuadsFromPatternError(x))?;
+                .map_err(SparqlEndpointQueryError::CreateQuadsFromPatternError)?;
                 Ok(QueryResult {
                     kind: QueryResultKind::Construct(sms),
                     debug: None,

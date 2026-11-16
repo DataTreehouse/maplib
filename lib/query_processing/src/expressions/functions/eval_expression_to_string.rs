@@ -16,18 +16,11 @@ pub fn eval_expression_to_string(
         }
     } else if let Expression::NamedNode(nn) = sparql_expression {
         Ok(nn.as_str().to_string())
-    } else if let Expression::FunctionCall(f, args) = sparql_expression {
-        match f {
-            Function::Str => eval_expression_to_string(args.get(0).unwrap(), false),
-            _ => {
-                return Err(QueryProcessingError::ExpectedConstantLiteralArgument(
-                    sparql_expression.clone(),
-                ))
-            }
-        }
+    } else if let Expression::FunctionCall(Function::Str, args) = sparql_expression {
+        eval_expression_to_string(args.first().unwrap(), false)
     } else {
-        return Err(QueryProcessingError::ExpectedConstantLiteralArgument(
+        Err(QueryProcessingError::ExpectedConstantLiteralArgument(
             sparql_expression.clone(),
-        ));
+        ))
     }
 }

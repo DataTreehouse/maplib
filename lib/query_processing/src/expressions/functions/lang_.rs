@@ -76,7 +76,7 @@ pub fn lang_(
             }
         }
         //Then the rest..
-        for (t, _) in &dt.map {
+        for t in dt.map.keys() {
             if !t.is_lang_string() && matches!(t, BaseRDFNodeType::Literal(_, _)) {
                 exprs.push(
                     when(

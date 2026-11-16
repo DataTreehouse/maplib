@@ -236,7 +236,8 @@ fn parse_value(s: &str, dt: &Datatype, errors: &mut Vec<String>) -> Val {
         }
     }
     // Value constraints
-    let checks: [(&Option<String>, fn(Ordering) -> bool, &str); 4] = [
+    type Check<'a> = (&'a Option<String>, fn(Ordering) -> bool, &'static str);
+    let checks: [Check; 4] = [
         (&dt.min_inclusive, |o| o != Ordering::Less, "minimum"),
         (&dt.max_inclusive, |o| o != Ordering::Greater, "maximum"),
         (

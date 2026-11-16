@@ -332,7 +332,7 @@ impl Model {
         self.chrontext_settings
             .get_or_insert_with(ChrontextSettings::default)
             .add_virtualization(
-                Arc::new(VirtualizedDatabase::OSIPIDatabase(db)),
+                Arc::new(VirtualizedDatabase::OSIPIDatabase(Box::new(db))),
                 Virtualization {
                     resources: HashMap::from([(OSIPI_RESOURCE.to_string(), template)]),
                 },
@@ -799,6 +799,7 @@ SELECT ?loc ?crs ?seq ?x ?y ?z WHERE {{
     }
 
     #[instrument(skip_all)]
+    #[allow(clippy::too_many_arguments)]
     pub fn query(
         &self,
         query: &str,
@@ -855,7 +856,7 @@ SELECT ?loc ?crs ?seq ?x ?y ?z WHERE {{
                 );
                 let qr = engine
                     .query_blocking(query, Some(&self.prefixes), bindings)
-                    .map_err(MaplibError::ChrontextError)?;
+                    .map_err(MaplibError::from)?;
                 Ok(qr)
             } else {
                 self.triplestore
@@ -949,7 +950,7 @@ SELECT ?loc ?crs ?seq ?x ?y ?z WHERE {{
         federation: Option<Arc<FederationSettings>>,
     ) -> Result<QueryPage, MaplibError> {
         if self.chrontext_settings.is_some() {
-            return Err(MaplibError::SparqlError(SparqlError::PagingError(
+            return Err(MaplibError::from(SparqlError::PagingError(
                 "queries of models with virtualized databases can not be paged yet".to_string(),
             )));
         }
@@ -991,6 +992,7 @@ SELECT ?loc ?crs ?seq ?x ?y ?z WHERE {{
     }
 
     #[instrument(skip_all)]
+    #[allow(clippy::too_many_arguments)]
     pub fn insert(
         &mut self,
         query: &str,
@@ -1257,6 +1259,7 @@ SELECT ?loc ?crs ?seq ?x ?y ?z WHERE {{
         Err(MappingError::TemplateNotFound(s.to_string()).into())
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn validate(
         &mut self,
         data_graph: &NamedGraph,
@@ -1295,7 +1298,7 @@ SELECT ?loc ?crs ?seq ?x ?y ?z WHERE {{
                 debug_rules,
             )
         })
-        .map_err(MaplibError::ShaclError)?;
+        .map_err(MaplibError::from)?;
         if let Some(report_graph) = report_graph {
             self.map_validation_result_to_report_graph(
                 &mut res,
@@ -1379,7 +1382,7 @@ SELECT ?loc ?crs ?seq ?x ?y ?z WHERE {{
                 debug_no_results,
             )
         });
-        res.map_err(MaplibError::DatalogError)
+        res.map_err(MaplibError::from)
     }
 
     /// Reasons over the graph with a built-in profile ("owl-rl", "rdfs-plus" or "rdfs"), putting
@@ -1393,7 +1396,7 @@ SELECT ?loc ?crs ?seq ?x ?y ?z WHERE {{
         max_rows: Option<usize>,
         max_violations: usize,
     ) -> Result<ReasoningResult, MaplibError> {
-        let profile = ReasoningProfile::parse(profile).map_err(MaplibError::DatalogError)?;
+        let profile = ReasoningProfile::parse(profile).map_err(MaplibError::from)?;
         reason(
             &mut self.triplestore,
             profile,
@@ -1403,7 +1406,7 @@ SELECT ?loc ?crs ?seq ?x ?y ?z WHERE {{
             max_rows,
             max_violations,
         )
-        .map_err(MaplibError::DatalogError)
+        .map_err(MaplibError::from)
     }
 
     pub fn infer_rdfs(&mut self, graph: &NamedGraph) -> Result<usize, MaplibError> {

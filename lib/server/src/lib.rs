@@ -10,6 +10,9 @@ use std::sync::{Arc, RwLock};
 use std::time::Duration;
 use thiserror::Error;
 
+/// Called with each snapshot event.
+pub type EventCallback = std::sync::Arc<dyn Fn(&serde_json::Value) + Send + Sync>;
+
 #[derive(Debug, Error)]
 pub enum ServerError {
     #[error(
@@ -168,7 +171,7 @@ pub struct GraphSnapshotOptions {
     pub random: Option<std::sync::Arc<dyn Fn() -> f64 + Send + Sync>>,
     /// Called with each event (see `GraphSnapshots::events`) after the snapshot or refresh, without
     /// any of the snapshots' locks held, e.g. to log slow snapshots where the platform collects logs.
-    pub on_event: Option<std::sync::Arc<dyn Fn(&serde_json::Value) + Send + Sync>>,
+    pub on_event: Option<EventCallback>,
 }
 
 /// Runs a function while holding a lock of the caller's, e.g. the Model portal's write lock, so

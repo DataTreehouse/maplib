@@ -10,11 +10,19 @@ use std::sync::Arc;
 
 #[derive(Debug, Clone)]
 pub enum CatMaps {
-    InMemory(CatMapsInMemory),
-    OnDisk(CatMapsOnDisk),
+    InMemory(Box<CatMapsInMemory>),
+    OnDisk(Box<CatMapsOnDisk>),
 }
 
 impl CatMaps {
+    pub fn in_memory(maps: CatMapsInMemory) -> CatMaps {
+        CatMaps::InMemory(Box::new(maps))
+    }
+
+    pub fn on_disk(maps: CatMapsOnDisk) -> CatMaps {
+        CatMaps::OnDisk(Box::new(maps))
+    }
+
     pub fn get_spaced_strings(&self, stride: usize) -> Vec<(String, String)> {
         match self {
             CatMaps::InMemory(cat_maps) => cat_maps.get_spaced_strings(stride),
@@ -70,10 +78,7 @@ impl CatMaps {
                 }
             },
             CatMaps::OnDisk(d) => match other {
-                CatMaps::InMemory(m) => {
-                    let cat_map = d.merge_other_in_memory(m.to_record_batch(), c);
-                    cat_map
-                }
+                CatMaps::InMemory(m) => d.merge_other_in_memory(m.to_record_batch(), c),
                 CatMaps::OnDisk(..) => {
                     unreachable!()
                 }
@@ -86,7 +91,7 @@ impl CatMaps {
     /// The in-memory dictionary, if the dictionary is in memory.
     pub fn as_in_memory(&self) -> Option<&CatMapsInMemory> {
         match self {
-            CatMaps::InMemory(m) => Some(m),
+            CatMaps::InMemory(m) => Some(m.as_ref()),
             CatMaps::OnDisk(_) => None,
         }
     }
@@ -179,20 +184,20 @@ impl CatMaps {
         dt: &BaseRDFNodeType,
     ) -> Option<Self> {
         match self {
-            CatMaps::InMemory(m) => m.image(s).map(CatMaps::InMemory),
+            CatMaps::InMemory(m) => m.image(s).map(CatMaps::in_memory),
             CatMaps::OnDisk(d) => {
                 if let Some(path) = path {
-                    d.image_disk(path, s).map(CatMaps::OnDisk)
+                    d.image_disk(path, s).map(CatMaps::on_disk)
                 } else {
-                    d.image_memory(s, dt.is_iri()).map(CatMaps::InMemory)
+                    d.image_memory(s, dt.is_iri()).map(CatMaps::in_memory)
                 }
             }
         }
     }
     pub fn new_empty(path: Option<&Path>, bt: &BaseRDFNodeType) -> Self {
         match path {
-            None => CatMaps::InMemory(CatMapsInMemory::new_empty(bt.is_iri())),
-            Some(p) => CatMaps::OnDisk(CatMapsOnDisk::new_empty(p)),
+            None => CatMaps::in_memory(CatMapsInMemory::new_empty(bt.is_iri())),
+            Some(p) => CatMaps::on_disk(CatMapsOnDisk::new_empty(p)),
         }
     }
 

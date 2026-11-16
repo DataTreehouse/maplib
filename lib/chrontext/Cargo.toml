@@ -5,7 +5,6 @@ edition = "2021"
 
 [dependencies]
 virtualization = { path = "../virtualization" }
-virtualized_query = { path = "../virtualized_query" }
 spargebra = { path = "../spargebra" }
 representation = { path = "../representation" }
 query_processing = { path = "../query_processing" }

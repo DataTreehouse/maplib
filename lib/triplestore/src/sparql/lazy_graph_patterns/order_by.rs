@@ -27,6 +27,7 @@ const KEYSET_MARKER: &str = "__maplib_keyset_marker";
 
 impl Triplestore {
     #[instrument(skip_all)]
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn lazy_order_by(
         &self,
         inner: &GraphPattern,
@@ -109,7 +110,7 @@ impl Triplestore {
                     }
                     let df = row
                         .mappings
-                        .select(sort_columns.iter().map(|c| col(c)).collect::<Vec<_>>())
+                        .select(sort_columns.iter().map(col).collect::<Vec<_>>())
                         .collect()
                         .map_err(|e| SparqlError::QueryExecutionError(e.to_string()))?;
                     KeysetMarker::Row(df)
@@ -218,7 +219,7 @@ impl Triplestore {
         let schema = solution_mappings
             .mappings
             .clone()
-            .select(columns.iter().map(|c| col(c)).collect::<Vec<_>>())
+            .select(columns.iter().map(col).collect::<Vec<_>>())
             .collect_schema()
             .map_err(|e| SparqlError::QueryExecutionError(e.to_string()))?;
         let empty = SolutionMappings::new(

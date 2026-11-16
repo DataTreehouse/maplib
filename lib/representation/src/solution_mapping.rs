@@ -20,13 +20,7 @@ pub enum BaseCatState {
 impl BaseCatState {
     pub fn get_local_cats(&self) -> Option<LockedCats> {
         match self {
-            BaseCatState::CategoricalNative(local_cats) => {
-                if let Some(local_cats) = local_cats {
-                    Some(local_cats.clone())
-                } else {
-                    None
-                }
-            }
+            BaseCatState::CategoricalNative(local_cats) => local_cats.clone(),
             BaseCatState::String | BaseCatState::NonString => None,
         }
     }

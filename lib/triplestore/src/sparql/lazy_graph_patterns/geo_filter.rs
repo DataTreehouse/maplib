@@ -100,7 +100,7 @@ pub(crate) fn split_for_spatial_join(
 
     // Union-find over the leaves, connected by shared variables.
     let mut parent: Vec<usize> = (0..leaves.len()).collect();
-    fn find(parent: &mut Vec<usize>, i: usize) -> usize {
+    fn find(parent: &mut [usize], i: usize) -> usize {
         let mut r = i;
         while parent[r] != r {
             r = parent[r];

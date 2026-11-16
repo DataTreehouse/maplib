@@ -17,9 +17,9 @@ pub fn create_regex_string(
     }
     let flags = if let Some((flags_regex_expr, flags_type)) = flags_expr {
         if !flags_type.is_lit_type(xsd::STRING) {
-            return Err(QueryProcessingError::BadArgument(format!(
-                "Replace flags is was not a xsd:string"
-            )));
+            return Err(QueryProcessingError::BadArgument(
+                "Replace flags is was not a xsd:string".to_string(),
+            ));
         } else {
             Some(eval_expression_to_string(flags_regex_expr, true)?)
         }
@@ -27,11 +27,7 @@ pub fn create_regex_string(
         None
     };
     let regex_str = eval_expression_to_string(regex_sparql_expression, true)?;
-    let flags_str = if let Some(flags) = &flags {
-        Some(flags.as_str())
-    } else {
-        None
-    };
+    let flags_str = flags.as_deref();
     let pattern = maybe_add_regex_feature_flags(&regex_str, flags_str);
     Ok(pattern)
 }

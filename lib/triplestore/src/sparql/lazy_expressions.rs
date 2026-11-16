@@ -19,6 +19,7 @@ use representation::BaseRDFNodeType;
 use spargebra::algebra::{Expression, Function};
 
 impl Triplestore {
+    #[allow(clippy::too_many_arguments)]
     pub fn lazy_expression(
         &self,
         expr: &Expression,

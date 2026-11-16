@@ -77,6 +77,7 @@ impl Ord for BadGraphPatternProperties {
 
 impl Triplestore {
     #[instrument(skip_all)]
+    #[allow(clippy::too_many_arguments)]
     pub fn lazy_join(
         &self,
         left: &GraphPattern,

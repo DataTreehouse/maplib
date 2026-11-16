@@ -15,6 +15,7 @@ pub enum DatalogError {
 #[derive(Clone)]
 pub struct InferenceResult {}
 
+#[allow(clippy::too_many_arguments)]
 pub fn infer(
     _triplestore: &mut Triplestore,
     _graph: Option<&NamedGraph>,

@@ -25,7 +25,7 @@ pub enum MappingError {
     #[error("Could not infer OTTR type for column {} with polars datatype {:?}", .0, .1)]
     CouldNotInferOTTRDatatypeForColumn(String, DataType),
     #[error("Column {} had datatype {:?} which was incompatible with the OTTR datatype {:?}, which expects {:?}", .0, .1, .2, .3)]
-    ColumnDataTypeMismatch(String, DataType, PType, Option<DataType>),
+    ColumnDataTypeMismatch(String, Box<DataType>, Box<PType>, Option<Box<DataType>>),
     #[error("Column {} had datatype {:?} which was incompatible with the OTTR datatype {:?}", .0, .1, .2)]
     IncompatibleColumnDataType(String, DataType, PType),
     #[error("Expected datatype: {:?}, but got: {:?}", .0, .1)]

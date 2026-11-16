@@ -340,7 +340,7 @@ impl Gen<'_> {
         let mut binds = vec![];
         let mut triples = vec![
             format!("{tn} csvw:row ?rowNode ."),
-            format!("?rowNode a csvw:Row ;\n    csvw:rownum ?_row ;\n    csvw:url ?rowUrl ."),
+            "?rowNode a csvw:Row ;\n    csvw:rownum ?_row ;\n    csvw:url ?rowUrl .".to_string(),
         ];
         binds.push(format!(
             "BIND(IRI(CONCAT({}, STR(?_sourceRow))) AS ?rowUrl)",
@@ -379,7 +379,7 @@ impl Gen<'_> {
         let root = self.iris.root(k);
         let mut graph_patterns = vec![
             format!("{} fx:child ?row .", iri(&root)),
-            format!("?row csvwx:rowNode ?rowNode ."),
+            "?row csvwx:rowNode ?rowNode .".to_string(),
             self.row_patterns().to_string(),
         ];
         if t.id.is_none() {

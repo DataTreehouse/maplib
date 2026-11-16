@@ -880,14 +880,13 @@ fn scan_delimiters(input: &str, until: usize) -> Delimiters {
                     ch: b as char,
                     offset: i,
                 }),
-                b')' | b']' | b'}' => {
+                b')' | b']' | b'}'
                     if result
                         .open
                         .last()
-                        .is_some_and(|o| closing_for(o.ch) == b as char)
-                    {
-                        result.open.pop();
-                    }
+                        .is_some_and(|o| closing_for(o.ch) == b as char) =>
+                {
+                    result.open.pop();
                 }
                 _ => {}
             },

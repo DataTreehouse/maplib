@@ -56,7 +56,7 @@ pub fn column_as_terms(
     } else {
         let mut iters: Vec<IntoIter<Option<Term>>> = vec![];
         for (t, s) in &t.map {
-            let type_column = extract_column_from_multitype(column, &t);
+            let type_column = extract_column_from_multitype(column, t);
             let v = basic_rdf_node_type_column_to_term_vec(
                 &type_column,
                 t,

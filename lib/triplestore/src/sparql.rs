@@ -74,6 +74,7 @@ pub struct QuerySettings {
 
 impl Triplestore {
     #[instrument(skip_all)]
+    #[allow(clippy::too_many_arguments)]
     pub fn query(
         &self,
         query: &str,
@@ -266,6 +267,7 @@ impl Triplestore {
         })
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn insert(
         &mut self,
         query: &str,
@@ -417,6 +419,7 @@ impl Triplestore {
         })
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn update_parsed_with_token(
         &mut self,
         update: &Update,

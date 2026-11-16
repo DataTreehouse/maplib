@@ -213,10 +213,7 @@ impl Triplestore {
                     settings.check_allowed(e, false)?;
                 }
                 let mask = |f: &dyn Fn(&Option<usize>) -> bool| {
-                    BooleanChunked::from_iter_values(
-                        "mask".into(),
-                        row_endpoint.iter().map(|x| f(x)),
-                    )
+                    BooleanChunked::from_iter_values("mask".into(), row_endpoint.iter().map(f))
                 };
                 let mut parts = vec![];
                 for (i, e) in endpoints.iter().enumerate() {

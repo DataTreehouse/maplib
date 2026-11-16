@@ -63,7 +63,6 @@ regex = "1.13.1"
 oxrdf = { version = "0.3.3" }
 oxrdfio = { version = "0.2.5" }
 oxttl = { version = "0.2.3" }
-oxjsonld = { version = "0.2.5" }
 oxiri = "0.2.11"
 sparesults = "0.3.3"
 oxsdatatypes = "0.2.2"
@@ -78,7 +77,6 @@ thiserror = "2.0.12"
 peg = "0.8"
 rand = "0.10.1"
 oxilangtag = "0.1.5"
-fundu = "2.0.1"
 hdt = { path = "lib/hdt" }
 memmap2 = "0.9.5"
 sprs = "0.11.3"
@@ -97,7 +95,6 @@ quick-xml = { version = "0.41.0", features = ["arbitrary"] }
 tracing = { version = "0.1", features = ["log"] }
 stacker = "0.1.25"
 tracing-subscriber = { version = "0.3.19", features = ["env-filter"] }
-tracing-log = "0.2"
 itoa = "1.0.15"
 ryu = "1.0.20"
 nohash-hasher = "0.2.0"

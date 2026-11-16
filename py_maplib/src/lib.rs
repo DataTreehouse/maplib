@@ -297,6 +297,7 @@ fn _maplib(py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 fn query_to_result(
     res: QueryResult,
     native_dataframe: bool,
@@ -335,13 +336,13 @@ fn query_to_result(
                 res.kind,
                 QueryResultKind::Select(..) | QueryResultKind::Ask(..)
             ) {
-                return Err(PyMaplibError::FunctionArgumentError(format!(
-                    "json response format can only be used with select and ask"
-                ))
+                return Err(PyMaplibError::FunctionArgumentError(
+                    "json response format can only be used with select and ask".to_string(),
+                )
                 .into());
             }
             let json = res.kind.json(global_cats.clone());
-            return Ok(PyString::new(py, &json).into());
+            Ok(PyString::new(py, &json).into())
         }
         SparqlResponseFormat::Turtle | SparqlResponseFormat::TriG => {
             let trig = matches!(use_response_format, SparqlResponseFormat::TriG);
@@ -380,7 +381,7 @@ fn query_to_result(
             let mut ts = Triplestore::new(StorageOptions::memory(), None)
                 .map_err(|x| PyMaplibError::MaplibError(MaplibError::TriplestoreError(x)))?;
             ts.insert_constructed_triples(sms, &NamedGraph::DefaultGraph)
-                .map_err(|x| PyMaplibError::MaplibError(MaplibError::SparqlError(x)))?;
+                .map_err(|x| PyMaplibError::MaplibError(MaplibError::from(x)))?;
             let mut out_bytes = vec![];
             if trig {
                 ts.write_quads(&mut out_bytes, RdfFormat::TriG, None, prefixes)
@@ -390,7 +391,7 @@ fn query_to_result(
             .map_err(|x| PyMaplibError::MaplibError(MaplibError::TriplestoreError(x)))?;
             let s = String::from_utf8(out_bytes)
                 .map_err(|e| PyMaplibError::RuntimeError(e.to_string()))?;
-            return Ok(PyString::new(py, &s).into());
+            Ok(PyString::new(py, &s).into())
         }
         SparqlResponseFormat::DataFrame => {
             let QueryResult {
@@ -750,15 +751,19 @@ fn is_batched_mapping_data(data: &Bound<'_, PyAny>, py: Python<'_>) -> PyResult<
     {
         return Ok(false);
     }
-    Ok(data.hasattr("__iter__")?)
+    data.hasattr("__iter__")
 }
+
+/// Called with each batch of a batched mapping input and its RDF node states, if given.
+type MappingBatchFn<'a> =
+    dyn FnMut(Python<'_>, DataFrame, Option<HashMap<String, RDFNodeState>>) -> PyResult<()> + 'a;
 
 /// Calls f for each batch in batched mapping input, holding the GIL only while fetching batches.
 /// LazyFrames are consumed in a single pass using collect_batches() when available.
 pub(crate) fn for_each_mapping_batch(
     data: &Bound<'_, PyAny>,
     py: Python<'_>,
-    f: &mut dyn FnMut(Python<'_>, DataFrame, Option<HashMap<String, RDFNodeState>>) -> PyResult<()>,
+    f: &mut MappingBatchFn<'_>,
 ) -> PyResult<()> {
     let polars = py.import("polars")?;
     let lazy_frame_type = polars.getattr("LazyFrame")?;

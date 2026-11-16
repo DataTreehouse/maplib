@@ -14,5 +14,5 @@ pub struct Virtualization {
 
 pub enum VirtualizedDatabase {
     VirtualizedPythonDatabase(VirtualizedPythonDatabase),
-    OSIPIDatabase(OSIPIDatabase),
+    OSIPIDatabase(Box<OSIPIDatabase>),
 }

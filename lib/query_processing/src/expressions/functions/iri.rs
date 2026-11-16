@@ -65,61 +65,52 @@ pub fn iri(
         let mut iri_state = None;
 
         for (t, s) in &dt.map {
-            match t {
-                BaseRDFNodeType::Literal(l, _) => {
-                    if l.as_ref() == xsd::STRING {
-                        string_col = Some(maybe_decode_expr(
-                            col(first_context.as_str())
-                                .struct_()
-                                .field_by_name(t.field_col_name().as_str()),
-                            t,
-                            s,
-                            global_cats.clone(),
-                        ));
-                    }
+            if let BaseRDFNodeType::Literal(l, _) = t {
+                if l.as_ref() == xsd::STRING {
+                    string_col = Some(maybe_decode_expr(
+                        col(first_context.as_str())
+                            .struct_()
+                            .field_by_name(t.field_col_name().as_str()),
+                        t,
+                        s,
+                        global_cats.clone(),
+                    ));
                 }
-                _ => {}
             }
         }
         for (t, s) in &dt.map {
-            match t {
-                BaseRDFNodeType::IRI => {
-                    if string_col.is_some() {
-                        iri_col = Some(maybe_decode_expr(
-                            col(first_context.as_str())
-                                .struct_()
-                                .field_by_name(MULTI_IRI_DT),
-                            t,
-                            s,
-                            global_cats.clone(),
-                        ));
-                        iri_state = Some(BaseCatState::String);
-                    } else {
-                        iri_col = Some(
-                            col(first_context.as_str())
-                                .struct_()
-                                .field_by_name(MULTI_IRI_DT),
-                        );
-                        iri_state = Some(s.clone());
-                    }
+            if t == &BaseRDFNodeType::IRI {
+                if string_col.is_some() {
+                    iri_col = Some(maybe_decode_expr(
+                        col(first_context.as_str())
+                            .struct_()
+                            .field_by_name(MULTI_IRI_DT),
+                        t,
+                        s,
+                        global_cats.clone(),
+                    ));
+                    iri_state = Some(BaseCatState::String);
+                } else {
+                    iri_col = Some(
+                        col(first_context.as_str())
+                            .struct_()
+                            .field_by_name(MULTI_IRI_DT),
+                    );
+                    iri_state = Some(s.clone());
                 }
-                _ => {}
             }
         }
         if iri_state.is_none() {
             iri_state = Some(BaseCatState::String);
         }
-        let e = if iri_col.is_some() && string_col.is_none() {
-            iri_col.unwrap()
-        } else if iri_col.is_none() && string_col.is_some() {
-            null_invalid_iris(string_col.unwrap())
-        } else if iri_col.is_some() && string_col.is_some() {
-            coalesce(&[
-                iri_col.unwrap().cast(DataType::String),
-                null_invalid_iris(string_col.unwrap().cast(DataType::String)),
-            ])
-        } else {
-            lit(LiteralValue::untyped_null()).cast(DataType::String)
+        let e = match (iri_col, string_col) {
+            (Some(iri_col), None) => iri_col,
+            (None, Some(string_col)) => null_invalid_iris(string_col),
+            (Some(iri_col), Some(string_col)) => coalesce(&[
+                iri_col.cast(DataType::String),
+                null_invalid_iris(string_col.cast(DataType::String)),
+            ]),
+            (None, None) => lit(LiteralValue::untyped_null()).cast(DataType::String),
         };
         (e, iri_state.unwrap())
     };

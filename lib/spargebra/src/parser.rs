@@ -759,10 +759,14 @@ impl Selection {
     }
 }
 
+/// The variables and the expressions bound by a GROUP BY clause.
+type GroupBy = (Vec<Variable>, Vec<(Expression, Variable)>);
+
+#[allow(clippy::too_many_arguments)]
 fn build_select(
     select: Selection,
     r#where: GraphPattern,
-    mut group: Option<(Vec<Variable>, Vec<(Expression, Variable)>)>,
+    mut group: Option<GroupBy>,
     having: Option<Expression>,
     order_by: Option<Vec<OrderExpression>>,
     offset_limit: Option<(usize, Option<usize>)>,

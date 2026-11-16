@@ -146,7 +146,7 @@ pub fn noop_t<T>(o: T) -> T {
 #[macro_export]
 macro_rules! binary_nonlang_nonlang_index_impl {
     ($struct_name:ident, $t:ty, $subj_chunked_func:expr, $obj_chunked_func:expr, $maybe_unwrap:expr, $prep_index_subj:expr, $prep_index_obj:expr, $subject_func:expr, $object_func:expr) => {
-        #[derive(Clone, Debug)]
+        #[derive(Clone, Debug, Default)]
         pub struct $struct_name {
             index: HashSet<$t>,
         }
@@ -260,7 +260,7 @@ macro_rules! binary_nonlang_nonlang_index_impl {
 #[macro_export]
 macro_rules! binary_nonlang_lang_index_impl {
     ($struct_name:ident, $t:ty, $subj_chunked_func:expr, $maybe_unwrap:expr, $prep_index_a:expr, $subject_func:expr) => {
-        #[derive(Clone, Debug)]
+        #[derive(Clone, Debug, Default)]
         pub struct $struct_name {
             index: HashSet<$t>,
         }

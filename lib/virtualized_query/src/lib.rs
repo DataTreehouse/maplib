@@ -16,7 +16,7 @@ pub const ID_VARIABLE_NAME: &str = "id";
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum VirtualizedQuery {
-    Basic(BasicVirtualizedQuery),
+    Basic(Box<BasicVirtualizedQuery>),
     Filtered(Box<VirtualizedQuery>, Expression),
     InnerJoin(Vec<VirtualizedQuery>, Vec<Synchronizer>),
     ExpressionAs(Box<VirtualizedQuery>, Variable, Expression),
@@ -398,8 +398,8 @@ impl Display for VirtualizedResultValidationError {
         write!(
             f,
             "Missing columns: {}, Extra columns: {}",
-            &self.missing_columns.join(","),
-            &self.extra_columns.join(",")
+            self.missing_columns.join(","),
+            self.extra_columns.join(",")
         )
     }
 }
@@ -644,7 +644,7 @@ impl VirtualizedQuery {
 
     pub fn get_basics(&self) -> Vec<&BasicVirtualizedQuery> {
         match self {
-            VirtualizedQuery::Basic(b) => vec![b],
+            VirtualizedQuery::Basic(b) => vec![b.as_ref()],
             VirtualizedQuery::Filtered(inner, _)
             | VirtualizedQuery::Sliced(inner, ..)
             | VirtualizedQuery::Ordered(inner, ..)
@@ -659,7 +659,7 @@ impl VirtualizedQuery {
     /// The basic queries, in the same order as get_basics()
     pub fn get_basics_mut(&mut self) -> Vec<&mut BasicVirtualizedQuery> {
         match self {
-            VirtualizedQuery::Basic(b) => vec![b],
+            VirtualizedQuery::Basic(b) => vec![b.as_mut()],
             VirtualizedQuery::Filtered(inner, _)
             | VirtualizedQuery::Sliced(inner, ..)
             | VirtualizedQuery::Ordered(inner, ..)

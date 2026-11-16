@@ -59,7 +59,7 @@ impl CatsMetadata {
             literal_counter_map: cats
                 .literal_counter_map
                 .iter()
-                .map(|(x, y)| (x.clone(), y.clone()))
+                .map(|(x, y)| (x.clone(), *y))
                 .collect(),
             uuid_cat_type_map,
         }
@@ -101,9 +101,9 @@ impl Cats {
                     if let Some(storage_folder) = storage_folder {
                         let dest_path = create_path(storage_folder, id);
                         let rb = data_frame_to_record_batch(&df, &name)?;
-                        CatMaps::OnDisk(CatMapsOnDisk::from_in_memory(&dest_path, rb))
+                        CatMaps::on_disk(CatMapsOnDisk::from_in_memory(&dest_path, rb))
                     } else {
-                        CatMaps::InMemory(data_frame_to_in_memory(&df, is_iri, &name)?)
+                        CatMaps::in_memory(data_frame_to_in_memory(&df, is_iri, &name)?)
                     }
                 } else {
                     // Raw DuckDB database (`raw_db`, and the format of earlier versions).
@@ -112,14 +112,14 @@ impl Cats {
                             let src_path = create_path(&create_path(path, CATS_FOLDER), id);
                             if let Some(storage_folder) = storage_folder {
                                 let dest_path = create_path(storage_folder, id);
-                                CatMaps::OnDisk(CatMapsOnDisk::new(
+                                CatMaps::on_disk(CatMapsOnDisk::new(
                                     &src_path,
                                     t.name.clone(),
                                     Some(&dest_path),
                                 ))
                             } else {
                                 let cmod = CatMapsOnDisk::new(&src_path, t.name.clone(), None);
-                                CatMaps::InMemory(cmod.to_memory(is_iri))
+                                CatMaps::in_memory(cmod.to_memory(is_iri))
                             }
                         }
                         SerializationSource::Bundle(_) | SerializationSource::Remote(_) => {
@@ -130,7 +130,7 @@ impl Cats {
                             if let Some(storage_folder) = storage_folder {
                                 let dest_path = create_path(storage_folder, id);
                                 extract_cat_db(source, id, &dest_path)?;
-                                CatMaps::OnDisk(CatMapsOnDisk::new(
+                                CatMaps::on_disk(CatMapsOnDisk::new(
                                     &dest_path,
                                     t.name.clone(),
                                     None,
@@ -145,7 +145,7 @@ impl Cats {
                                     cmod.to_memory(is_iri)
                                 });
                                 let _ = std::fs::remove_dir_all(&tmp_dir);
-                                CatMaps::InMemory(res?)
+                                CatMaps::in_memory(res?)
                             }
                         }
                     }
@@ -200,7 +200,7 @@ impl Cats {
                 Ok((path_uuid, CatMapOnDiskMetadata::new(name, t.clone())))
             })
             .collect();
-        let cats_metadata = CatsMetadata::new(&self, map?);
+        let cats_metadata = CatsMetadata::new(self, map?);
         let cats_string = serde_json::to_string_pretty(&cats_metadata)?;
         target.write_bytes(
             &format!("{CATS_FOLDER}/{CATS_METADATA_FILE}"),

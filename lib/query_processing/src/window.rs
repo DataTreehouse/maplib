@@ -328,7 +328,8 @@ pub fn window_function(
 /// Keeps the rows whose RANK (and DENSE_RANK) is 1, the peers of the first row of their
 /// partition, and binds `output` to 1 for them, for a window with one ordering key of one type:
 /// the rows with the smallest (largest for DESC) key, or with an unbound key when the partition
-/// has one in ascending order. Gives back the solution mappings unchanged otherwise.
+/// has one in ascending order. Gives back the solution mappings unchanged otherwise. The flag
+/// says whether the rows were filtered.
 pub fn rank_one(
     mut solution_mappings: SolutionMappings,
     partition_by: &[Context],
@@ -336,7 +337,7 @@ pub fn rank_one(
     ascending: bool,
     output: &Context,
     global_cats: LockedCats,
-) -> Result<SolutionMappings, SolutionMappings> {
+) -> (SolutionMappings, bool) {
     let (keys, asc) = ordering_exprs(
         &solution_mappings,
         &[order_by.as_str().to_string()],
@@ -344,7 +345,7 @@ pub fn rank_one(
         global_cats,
     );
     if keys.len() != 1 {
-        return Err(solution_mappings);
+        return (solution_mappings, false);
     }
     let key = keys.into_iter().next().unwrap();
     let partition: Vec<Expr> = partition_by.iter().map(|c| col(c.as_str())).collect();
@@ -373,7 +374,7 @@ pub fn rank_one(
         BaseRDFNodeType::Literal(xsd::INTEGER.into_owned(), None)
             .into_default_input_rdf_node_state(),
     );
-    Ok(solution_mappings)
+    (solution_mappings, true)
 }
 
 /// RANK (`min`) or DENSE_RANK of one ordering key in each partition. Polars gives unbound keys no

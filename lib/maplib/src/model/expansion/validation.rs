@@ -348,9 +348,9 @@ fn infer_validate_mapping_column_type_from_ptype(
                 } else {
                     Err(MappingError::ColumnDataTypeMismatch(
                         column_name.to_string(),
-                        datatype.clone(),
-                        ptype.clone(),
-                        Some(DataType::String),
+                        Box::new(datatype.clone()),
+                        Box::new(ptype.clone()),
+                        Some(Box::new(DataType::String)),
                     ))
                 }
             } else if ptype_is_blank(nn.as_ref()) {
@@ -364,9 +364,9 @@ fn infer_validate_mapping_column_type_from_ptype(
                 } else {
                     Err(MappingError::ColumnDataTypeMismatch(
                         column_name.to_string(),
-                        datatype.clone(),
-                        ptype.clone(),
-                        Some(DataType::String),
+                        Box::new(datatype.clone()),
+                        Box::new(ptype.clone()),
+                        Some(Box::new(DataType::String)),
                     ))
                 }
             } else {
@@ -414,9 +414,9 @@ fn infer_validate_mapping_column_type_from_ptype(
                             } else {
                                 Err(MappingError::ColumnDataTypeMismatch(
                                     column_name.to_string(),
-                                    datatype.clone(),
-                                    ptype.clone(),
-                                    Some(ptype_dt),
+                                    Box::new(datatype.clone()),
+                                    Box::new(ptype.clone()),
+                                    Some(Box::new(ptype_dt)),
                                 ))
                             }
                         } else {

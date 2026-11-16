@@ -1661,6 +1661,7 @@ impl<R> InternalRdfXmlParser<R> {
     }
 
     #[cfg_attr(feature = "rdf-12", expect(clippy::too_many_arguments))]
+    #[allow(clippy::too_many_arguments)]
     fn build_node_elt(
         &mut self,
         iri: NamedNode,

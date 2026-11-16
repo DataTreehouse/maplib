@@ -349,7 +349,7 @@ impl Cats {
         self.blank_counter
     }
     pub fn get_literal_counter(&self, nn: &NamedNode) -> u32 {
-        self.literal_counter_map.get(nn).map(|x| *x).unwrap_or(0)
+        self.literal_counter_map.get(nn).copied().unwrap_or(0)
     }
 
     pub fn local_rank_maps(
