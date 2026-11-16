@@ -10,6 +10,7 @@
 ### Bug fixes
 - Vector search (maplib Enterprise Edition) and the vector functions now agree with numpy and scipy on edge cases. Euclidean search is computed from the component differences, so near-duplicate vectors far from the origin are ranked correctly and a stored vector is at distance 0 from itself. Zero vectors and vectors with NaN or infinite components have no cosine similarity, so cosine searches leave them out (they were returned with a score of 0), and a zero query vector finds nothing. Vectors at an infinite distance or dot product are no longer dropped when fewer than `maplib:vectorLimit` results are found. `maplib:cosineSimilarity`, `maplib:dotProduct` and `maplib:euclideanDistance` compute in 64 bit floats, so very small or large components no longer underflow or overflow. Tests now check the functions against scipy, exact search against numpy and faiss, and the recall of the approximate index against hnswlib with the same parameters
 - The FILTER of an OPTIONAL can use variables that only the pattern before the OPTIONAL binds, as in `?s :min ?min OPTIONAL { ?s :v ?v FILTER(?v > ?min) }`. It used to be evaluated without those variables, so no optional match passed it and the variables of the OPTIONAL were always unbound
+- A SHACL SPARQL rule (maplib Enterprise Edition) whose `sh:construct` has GRAPH blocks in its template raises an error, as Datalog rules do. The graphs were ignored and the triples went to the inferences graph
 
 ## v0.22.0
 ### Breaking changes
