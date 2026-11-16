@@ -1297,6 +1297,7 @@ SELECT ?loc ?crs ?seq ?x ?y ?z WHERE {{
                 report_graph,
                 include_details || include_conforms,
             )?;
+            self.copy_result_paths(shape_graph, report_graph)?;
         }
         Ok(res)
     }

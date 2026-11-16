@@ -17,6 +17,7 @@ use shacl::ValidationReport;
 use std::collections::HashMap;
 use templates::MappingColumnType;
 use tracing::debug;
+use triplestore::sparql::QuerySettings;
 use uuid::Uuid;
 
 const SHACL_RESULT_TEMPLATE: &str =
@@ -80,7 +81,84 @@ ottr:Triple(?target_count_iri, maplib:targetCount, ?target_count),
 } .
 "#;
 
+// The nodes of complex paths (blank nodes reached through these predicates from a
+// sh:resultPath), whose triples are copied from the shapes graph into the report graph.
+const RESULT_PATH_NODES: &str = "(rdf:first|rdf:rest|sh:inversePath|sh:alternativePath|sh:zeroOrMorePath|sh:oneOrMorePath|sh:zeroOrOnePath)*";
+
+/// The pattern, evaluated in `graph` from a query whose source graph is `source`.
+fn pattern_in_graph(graph: &NamedGraph, source: &NamedGraph, pattern: &str) -> Option<String> {
+    if graph == source {
+        Some(pattern.to_string())
+    } else if let NamedGraph::NamedGraph(nn) = graph {
+        Some(format!("GRAPH {nn} {{ {pattern} }}"))
+    } else {
+        None
+    }
+}
+
+/// A query from `source` that copies the structure of the complex sh:resultPath values of the
+/// report graph from the shapes graph, or None if one of the graphs cannot be named in it.
+fn result_paths_query(
+    shapes_graph: &NamedGraph,
+    report_graph: &NamedGraph,
+    source: &NamedGraph,
+) -> Option<String> {
+    let report = pattern_in_graph(
+        report_graph,
+        source,
+        "?result sh:resultPath ?path . FILTER(isBlank(?path))",
+    )?;
+    let shapes = pattern_in_graph(
+        shapes_graph,
+        source,
+        &format!("?path {RESULT_PATH_NODES} ?node . FILTER(isBlank(?node)) ?node ?p ?o ."),
+    )?;
+    Some(format!(
+        "PREFIX sh: <http://www.w3.org/ns/shacl#>\n\
+         PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>\n\
+         CONSTRUCT {{ ?node ?p ?o }} WHERE {{ {report} {shapes} }}"
+    ))
+}
+
 impl Model {
+    /// A complex sh:resultPath is a blank node of the shapes graph, as in sh:path. The report
+    /// graph gets a copy of its triples, so that the path can be read from the report.
+    pub(crate) fn copy_result_paths(
+        &mut self,
+        shapes_graph: &NamedGraph,
+        report_graph: &NamedGraph,
+    ) -> Result<(), MaplibError> {
+        if shapes_graph == report_graph {
+            return Ok(());
+        }
+        let Some((query, source)) = result_paths_query(shapes_graph, report_graph, report_graph)
+            .map(|q| (q, report_graph))
+            .or_else(|| {
+                result_paths_query(shapes_graph, report_graph, shapes_graph)
+                    .map(|q| (q, shapes_graph))
+            })
+        else {
+            return Ok(());
+        };
+        let query_settings = QuerySettings {
+            include_graphs: vec![],
+            max_rows: None,
+            strict_project: false,
+            federation: None,
+            evaluation_hook: None,
+        };
+        self.triplestore.insert(
+            &query,
+            None,
+            &query_settings,
+            source,
+            report_graph,
+            None,
+            false,
+        )?;
+        Ok(())
+    }
+
     pub fn map_validation_result_to_report_graph(
         &mut self,
         report: &mut ValidationReport,
