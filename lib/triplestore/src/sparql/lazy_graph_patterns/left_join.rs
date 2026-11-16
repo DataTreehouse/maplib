@@ -14,7 +14,12 @@ use representation::dataset::QueryGraph;
 use representation::query_context::{Context, PathEntry};
 use representation::solution_mapping::{EagerSolutionMappings, SolutionMappings};
 use spargebra::algebra::{Expression, GraphPattern};
-use std::collections::HashMap;
+use oxrdf::vocab::xsd;
+use polars::prelude::{NamedFrom, Series};
+use polars_core::prelude::IntoColumn;
+use query_processing::find_query_variables::find_all_used_variables_in_expression;
+use representation::BaseRDFNodeType;
+use std::collections::{HashMap, HashSet};
 
 impl Triplestore {
     #[allow(clippy::too_many_arguments)]
@@ -91,32 +96,38 @@ impl Triplestore {
         )?;
 
         if let Some(expr) = expression {
-            right_solution_mappings = self.lazy_expression(
-                expr,
+            // The expression is evaluated on the merged solutions. When it uses a variable that
+            // only the left side binds, it is evaluated after joining the two sides.
+            let mut expression_variables = HashSet::new();
+            find_all_used_variables_in_expression(expr, &mut expression_variables, true, true);
+            if expression_variables.iter().any(|v| {
+                left_solution_mappings
+                    .rdf_node_types
+                    .contains_key(v.as_str())
+                    && !right_solution_mappings
+                        .rdf_node_types
+                        .contains_key(v.as_str())
+            }) {
+                return self.left_join_filtering_merged_solutions(
+                    left_solution_mappings,
+                    right_solution_mappings,
+                    expr,
+                    &expression_context,
+                    parameters,
+                    expression_pushdowns.as_ref(),
+                    query_settings,
+                    dataset,
+                );
+            }
+            right_solution_mappings = self.filter_on_expression(
                 right_solution_mappings,
+                expr,
                 &expression_context,
                 parameters,
                 expression_pushdowns.as_ref(),
                 query_settings,
                 dataset,
             )?;
-            right_solution_mappings = effective_boolean_value(
-                right_solution_mappings,
-                &expression_context,
-                self.global_cats.clone(),
-            );
-            right_solution_mappings = filter(right_solution_mappings, &expression_context)?;
-            //The following is a workaround:
-            let keep_cols: Vec<_> = right_solution_mappings
-                .rdf_node_types
-                .keys()
-                .filter(|x| x.as_str() != expression_context.as_str())
-                .map(col)
-                .collect();
-            right_solution_mappings.mappings = right_solution_mappings.mappings.select(keep_cols);
-            right_solution_mappings
-                .rdf_node_types
-                .remove(expression_context.as_str());
         }
         let left_solution_mappings = join(
             left_solution_mappings,
@@ -126,6 +137,103 @@ impl Triplestore {
             query_settings.max_rows,
         )?;
         Ok(left_solution_mappings)
+    }
+
+    /// Keeps the solutions where the expression is true, without the expression column.
+    #[allow(clippy::too_many_arguments)]
+    fn filter_on_expression(
+        &self,
+        solution_mappings: SolutionMappings,
+        expr: &Expression,
+        expression_context: &Context,
+        parameters: Option<&HashMap<String, EagerSolutionMappings>>,
+        expression_pushdowns: Option<&Pushdowns>,
+        query_settings: &QuerySettings,
+        dataset: &QueryGraph,
+    ) -> Result<SolutionMappings, SparqlError> {
+        let mut solution_mappings = self.lazy_expression(
+            expr,
+            solution_mappings,
+            expression_context,
+            parameters,
+            expression_pushdowns,
+            query_settings,
+            dataset,
+        )?;
+        solution_mappings = effective_boolean_value(
+            solution_mappings,
+            expression_context,
+            self.global_cats.clone(),
+        );
+        solution_mappings = filter(solution_mappings, expression_context)?;
+        Ok(drop_columns(solution_mappings, &[expression_context.as_str()]))
+    }
+
+    /// The left join where the expression is evaluated on the merged solutions: the left
+    /// solutions are numbered, joined with the right ones and filtered, and the matches that
+    /// remain are joined back to the left solutions by their number.
+    #[allow(clippy::too_many_arguments)]
+    fn left_join_filtering_merged_solutions(
+        &self,
+        left: SolutionMappings,
+        right: SolutionMappings,
+        expr: &Expression,
+        expression_context: &Context,
+        parameters: Option<&HashMap<String, EagerSolutionMappings>>,
+        expression_pushdowns: Option<&Pushdowns>,
+        query_settings: &QuerySettings,
+        dataset: &QueryGraph,
+    ) -> Result<SolutionMappings, SparqlError> {
+        let row = format!("__maplib_left_join_row_{}", expression_context.as_str());
+        // Collected once, so that the rows are numbered the same in both uses below.
+        let mut left = left.as_eager_interruptable().map_err(|e| match e {
+            utils::polars::InterruptableCollectError::Interrupted => SparqlError::InterruptSignal,
+            e => SparqlError::QueryExecutionError(e.to_string()),
+        })?;
+        let height = left.mappings.height();
+        left.mappings
+            .with_column(
+                Series::new(row.as_str().into(), (0..height as i64).collect::<Vec<_>>())
+                    .into_column(),
+            )
+            .map_err(|e| SparqlError::QueryExecutionError(e.to_string()))?;
+        left.rdf_node_types.insert(
+            row.clone(),
+            BaseRDFNodeType::Literal(xsd::LONG.into_owned(), None)
+                .into_default_input_rdf_node_state(),
+        );
+        let left = left.as_lazy();
+        let left_columns: Vec<String> = left.rdf_node_types.keys().cloned().collect();
+        let matches = join(
+            left.clone(),
+            right,
+            JoinType::Inner,
+            self.global_cats.clone(),
+            query_settings.max_rows,
+        )?;
+        let matches = self.filter_on_expression(
+            matches,
+            expr,
+            expression_context,
+            parameters,
+            expression_pushdowns,
+            query_settings,
+            dataset,
+        )?;
+        let shared: Vec<&str> = left_columns
+            .iter()
+            .filter(|c| **c != row)
+            .map(|c| c.as_str())
+            .collect();
+        let matches = drop_columns(matches, &shared);
+        let joined = join(
+            left,
+            matches,
+            JoinType::Left,
+            self.global_cats.clone(),
+            query_settings.max_rows,
+        )?;
+        Ok(drop_columns(joined, &[row.as_str()]))
     }
 
     /// Used by joins that treat unbound values as compatible (SERVICE results).
