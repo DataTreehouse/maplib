@@ -35,6 +35,7 @@ use utils::cancel::{with_token, CancelToken};
 use external_sparql::SparqlMethod;
 use maplib::model::Model as InnerModel;
 use cdf::map_cdf;
+use fabric::map_fabric;
 use opc_ua::mappings::map_opc_ua;
 use opc_ua::typing_shapes::{add_typing_shapes as add_opcua_typing_shapes, TypeNamespaces};
 use pyo3::exceptions::PyValueError;
@@ -496,6 +497,102 @@ impl PyModel {
         Ok(res.update)
     }
 
+    #[pyo3(signature = (mapping, database=None, tables=None, base_iri=None, graph=None,
+        ignore_data_errors=None))]
+    #[instrument(skip_all)]
+    #[allow(clippy::too_many_arguments)]
+    fn map_r2rml(
+        &self,
+        py: Python<'_>,
+        mapping: &Bound<'_, PyAny>,
+        database: Option<&Bound<'_, PyAny>>,
+        tables: Option<HashMap<String, Bound<'_, PyAny>>>,
+        base_iri: Option<String>,
+        graph: Option<String>,
+        ignore_data_errors: Option<bool>,
+    ) -> PyResult<()> {
+        let base_iri = base_iri.unwrap_or_else(|| "urn:maplib:r2rml:".to_string());
+        // The mapping is a path to a Turtle file, or the Turtle itself.
+        let text: String = if let Ok(p) = mapping.extract::<PathBuf>() {
+            let looks_like_turtle = mapping
+                .extract::<String>()
+                .map(|s| s.contains('\n') || s.contains("rr:") || s.contains("r2rml#"))
+                .unwrap_or(false);
+            if !looks_like_turtle && p.exists() {
+                std::fs::read_to_string(&p).map_err(|e| {
+                    PyMaplibError::FunctionArgumentError(format!(
+                        "could not read the R2RML mapping {}: {e}",
+                        p.display()
+                    ))
+                })?
+            } else {
+                mapping.extract::<String>()?
+            }
+        } else {
+            mapping.extract::<String>()?
+        };
+        let parsed = r2rml::parse_mapping(&text, Some(&base_iri))
+            .map_err(|e| PyMaplibError::from(maplib::errors::MaplibError::from(e)))?;
+        // The result of each logical table query: given in tables (by query or table name), or
+        // from the database.
+        let mut results: HashMap<String, polars::prelude::DataFrame> = HashMap::new();
+        for tm in &parsed.triples_maps {
+            let sql = tm.logical_table.sql();
+            if results.contains_key(&sql) {
+                continue;
+            }
+            let mut given = tables.as_ref().and_then(|t| t.get(&sql));
+            if given.is_none() {
+                if let r2rml::mapping::LogicalTable::Table(name) = &tm.logical_table {
+                    let unquoted = name.trim_matches('"').to_string();
+                    given = tables
+                        .as_ref()
+                        .and_then(|t| t.get(name).or_else(|| t.get(&unquoted)));
+                }
+            }
+            let frame = match (given, database) {
+                (Some(df), _) => df.clone(),
+                (None, Some(db)) => db.call_method1("query", (sql.as_str(),))?,
+                (None, None) => {
+                    return Err(PyMaplibError::FunctionArgumentError(format!(
+                        "no database was given, and tables has no result for the logical table {sql}"
+                    ))
+                    .into())
+                }
+            };
+            // duckdb relations and similar results convert to polars with .pl()
+            let frame = if frame.hasattr("to_arrow")? && frame.hasattr("height")? {
+                frame
+            } else if frame.hasattr("pl")? {
+                frame.call_method0("pl")?
+            } else {
+                frame
+            };
+            let df = representation::python_df_to_rust::polars_df_to_rust_df(&frame)?;
+            results.insert(sql, df);
+        }
+        let graph = parse_optional_named_node(graph)?;
+        let options = r2rml::R2RMLOptions {
+            base_iri,
+            graph: NamedGraph::from_maybe_named_node(graph.as_ref()),
+            ignore_data_errors: ignore_data_errors.unwrap_or(false),
+            blank_node_prefix: format!("r2rml{}_", uuid::Uuid::new_v4().simple()),
+        };
+        let warnings = py.detach(move || -> PyResult<Vec<String>> {
+            let mut inner = self.inner.write().unwrap_or_else(|e| e.into_inner());
+            inner
+                .map_r2rml(&parsed, &results, &options)
+                .map_err(|x| PyMaplibError::from(x).into())
+        })?;
+        let category = py.get_type::<pyo3::exceptions::PyUserWarning>();
+        for w in &warnings {
+            let msg = std::ffi::CString::new(format!("R2RML: {w}").replace('\0', ""))
+                .unwrap_or_default();
+            PyErr::warn(py, category.as_any(), &msg, 1)?;
+        }
+        Ok(())
+    }
+
     #[pyo3(signature = (df, graph=None, uuid_namespace=None))]
     #[instrument(skip_all)]
     fn map_df(
@@ -634,6 +731,34 @@ impl PyModel {
         options.set_item("virtualize_time_series", virtualize_time_series)?;
         // The mapping adds triples through this Model, so the inner model must not be locked here.
         map_cdf(slf.as_any(), client, &options)
+    }
+
+    #[pyo3(signature = (ontology, lakehouse=None, eventhouse=None, graph=None, base_iri=None,
+        include_schema=None, virtualize_time_series=None, table_reference=None))]
+    #[instrument(skip_all)]
+    #[allow(clippy::too_many_arguments)]
+    fn map_fabric<'py>(
+        slf: &Bound<'py, Self>,
+        ontology: &Bound<'py, PyAny>,
+        lakehouse: Option<Bound<'py, PyAny>>,
+        eventhouse: Option<Bound<'py, PyAny>>,
+        graph: Option<String>,
+        base_iri: Option<String>,
+        include_schema: Option<bool>,
+        virtualize_time_series: Option<bool>,
+        table_reference: Option<Bound<'py, PyAny>>,
+    ) -> PyResult<Bound<'py, PyAny>> {
+        parse_optional_named_node(graph.clone())?;
+        let options = PyDict::new(slf.py());
+        options.set_item("lakehouse", lakehouse)?;
+        options.set_item("eventhouse", eventhouse)?;
+        options.set_item("graph", graph)?;
+        options.set_item("base_iri", base_iri)?;
+        options.set_item("include_schema", include_schema)?;
+        options.set_item("virtualize_time_series", virtualize_time_series)?;
+        options.set_item("table_reference", table_reference)?;
+        // The mapping adds triples through this Model, so the inner model must not be locked here.
+        map_fabric(slf.as_any(), ontology, &options)
     }
 
     #[allow(clippy::too_many_arguments)]

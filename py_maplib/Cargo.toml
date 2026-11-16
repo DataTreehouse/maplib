@@ -11,6 +11,7 @@ serde_json.workspace = true
 maplib = { path = "../lib/maplib", features = ["pyo3"] }
 triplestore = { path = "../lib/triplestore", features = ["pyo3"] }
 csvw = { path = "../lib/csvw" }
+r2rml = { path = "../lib/r2rml" }
 representation = { path = "../lib/representation" }
 file_io = { path = "../lib/file_io" }
 templates = { path = "../lib/templates" }
@@ -22,6 +23,7 @@ virtualization = { path = "../lib/virtualization" }
 external_sparql = { path = "../lib/external_sparql" }
 opc_ua = { path = "../lib/opc_ua" }
 cdf = { path = "../lib/cdf" }
+fabric = { path = "../lib/fabric" }
 spargebra = { path = "../lib/spargebra" }
 server = { path = "../lib/server" }
 

@@ -1,0 +1,17 @@
+[package]
+name = "r2rml"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+representation = { path = "../representation" }
+
+oxrdf.workspace = true
+oxttl.workspace = true
+oxiri.workspace = true
+oxilangtag.workspace = true
+polars = { workspace = true, features = ["lazy", "dtype-full", "strings", "concat_str", "temporal", "is_in"] }
+thiserror.workspace = true
+uuid.workspace = true
+tracing.workspace = true

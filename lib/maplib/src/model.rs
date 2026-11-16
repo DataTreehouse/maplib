@@ -455,6 +455,38 @@ impl Model {
         Ok(res)
     }
 
+    /// Maps the results of the logical table queries of an R2RML mapping to RDF, see
+    /// <https://www.w3.org/TR/r2rml/>. `tables` holds the result of each query in
+    /// `mapping.queries()`. The term maps are evaluated column-wise, and each predicate,
+    /// object map and graph is added as one batch through the ottr:Triple expansion.
+    /// Returns the warnings about data errors that were ignored.
+    #[instrument(skip_all)]
+    pub fn map_r2rml(
+        &mut self,
+        mapping: &r2rml::R2RMLMapping,
+        tables: &HashMap<String, DataFrame>,
+        options: &r2rml::R2RMLOptions,
+    ) -> Result<Vec<String>, MaplibError> {
+        let (batches, warnings) = r2rml::execute(mapping, tables, options)?;
+        for b in batches {
+            let types: HashMap<String, MappingColumnType> = b
+                .types
+                .into_iter()
+                .map(|(k, v)| (k, MappingColumnType::Flat(v)))
+                .collect();
+            self.expand_triples(
+                b.df,
+                Some(types),
+                b.predicate,
+                MapOptions {
+                    graph: b.graph,
+                    validate_iris: false,
+                },
+            )?;
+        }
+        Ok(warnings)
+    }
+
     #[instrument(skip_all)]
     pub fn map_df(
         &mut self,

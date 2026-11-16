@@ -60,6 +60,8 @@ pub enum MaplibError {
     #[error(transparent)]
     CsvwError(#[from] csvw::errors::CsvwError),
     #[error(transparent)]
+    R2RMLError(#[from] r2rml::R2RMLError),
+    #[error(transparent)]
     OSIPIError(#[from] OSIPIError),
     #[error(transparent)]
     InsightsHubError(#[from] InsightsHubError),
