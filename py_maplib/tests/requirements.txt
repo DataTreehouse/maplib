@@ -3,3 +3,4 @@ rdflib>=7.6.0
 python-dotenv
 rdflib-endpoint
 fastapi
+uvicorn
