@@ -208,18 +208,19 @@ pub fn ordering_exprs_with_lang(
                     } else {
                         Ordering::Less
                     }
-                } else if x.is_iri() {
+                } else if x.is_blank_node() {
+                    // SPARQL 1.1, 15.1: unbound, then blank nodes, then IRIs, then literals.
                     if y.is_none() {
                         Ordering::Greater
-                    } else if y.is_iri() {
+                    } else if y.is_blank_node() {
                         Ordering::Equal
                     } else {
                         Ordering::Less
                     }
-                } else if x.is_blank_node() {
-                    if y.is_none() || y.is_iri() {
+                } else if x.is_iri() {
+                    if y.is_none() || y.is_blank_node() {
                         Ordering::Greater
-                    } else if y.is_blank_node() {
+                    } else if y.is_iri() {
                         Ordering::Equal
                     } else {
                         Ordering::Less
