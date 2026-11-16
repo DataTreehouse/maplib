@@ -1296,6 +1296,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "fabric"
+version = "0.1.0"
+dependencies = [
+ "pyo3",
+]
+
+[[package]]
 name = "fallible-streaming-iterator"
 version = "0.1.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2246,6 +2253,7 @@ dependencies = [
  "polars",
  "pyo3",
  "query_processing",
+ "r2rml",
  "rayon",
  "representation",
  "shacl",
@@ -3604,6 +3612,7 @@ dependencies = [
  "csvw",
  "datalog",
  "external_sparql",
+ "fabric",
  "file_io",
  "maplib",
  "object_store",
@@ -3613,6 +3622,7 @@ dependencies = [
  "polars",
  "polars-ooc",
  "pyo3",
+ "r2rml",
  "representation",
  "serde_json",
  "server",
@@ -3835,6 +3845,22 @@ name = "r-efi"
 version = "6.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f8dcc9c7d52a811697d2151c701e0d08956f92b0e24136cf4cf27b57a6a0d9bf"
+
+[[package]]
+name = "r2rml"
+version = "0.1.0"
+dependencies = [
+ "oxilangtag",
+ "oxiri",
+ "oxrdf",
+ "oxttl",
+ "polars",
+ "rayon",
+ "representation",
+ "thiserror",
+ "tracing",
+ "uuid",
+]
 
 [[package]]
 name = "rand"
