@@ -462,14 +462,14 @@ impl CatMapsInMemory {
         self.codes.get(*u).is_some()
     }
 
-    /// One more than the largest code. Panics if the map is empty.
+    /// One more than the largest code, or 0 if the map is empty. Deletes can
+    /// leave a cat that is present but empty, e.g. after DROP GRAPH.
     pub fn counter(&self) -> u32 {
         self.strings
             .live_slots()
             .map(|s| self.strings.codes[s as usize])
             .max()
-            .unwrap()
-            + 1
+            .map_or(0, |m| m + 1)
     }
 
     fn find(&self, prefix_id: u32, suf: &str) -> Option<u32> {
