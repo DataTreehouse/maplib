@@ -1965,6 +1965,7 @@ dependencies = [
  "nohash-hasher",
  "range-set-blaze",
  "rayon",
+ "ryu",
 ]
 
 [[package]]

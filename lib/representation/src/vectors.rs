@@ -5,6 +5,10 @@
 //! the components is ignored. The components are 32 bit floats.
 //!
 //! Polars columns of fixed size arrays of numbers are mapped to vector literals.
+//!
+//! The dictionary of vector literals stores canonical lexical forms packed, as the bits of the
+//! floats (see [`in_memory::vectors`]), and gives the lexical forms when decoding. Mapped vectors
+//! are packed directly, without writing their lexical forms.
 
 use crate::{BaseRDFNodeType, RDFNodeState};
 use oxrdf::NamedNode;
@@ -13,7 +17,6 @@ use polars::prelude::{
     StringChunkedBuilder,
 };
 use rayon::prelude::*;
-use std::fmt::Write;
 
 pub const VECTOR_DATATYPE: &str = "https://datatreehouse.github.io/maplib/vocab#vector";
 
@@ -29,52 +32,15 @@ pub fn is_vector_literal_type(t: &BaseRDFNodeType) -> bool {
     matches!(t, BaseRDFNodeType::Literal(l, _) if l.as_str() == VECTOR_DATATYPE)
 }
 
-/// Writes the lexical form of a vector, using the shortest representation of each component
-/// that reads back to the same float.
-pub fn format_vector_into(v: &[f32], out: &mut String) {
-    out.push('[');
-    let mut buf = ryu::Buffer::new();
-    for (i, x) in v.iter().enumerate() {
-        if i > 0 {
-            out.push(',');
-        }
-        if x.is_finite() {
-            let s = buf.format_finite(*x);
-            // ryu writes integral values as "1.0", which is fine, but trims nothing else.
-            out.push_str(s);
-        } else {
-            // Not valid in the lexical space, but keeps the length of the vector.
-            write!(out, "{x}").unwrap();
-        }
-    }
-    out.push(']');
-}
+pub use in_memory::vectors::{
+    format_vector_into, is_packed, pack_vector, pack_vector_into, parse_vector_into,
+    stored_to_lexical, stored_to_vector_into, unpack_vector_into,
+};
 
 pub fn format_vector(v: &[f32]) -> String {
     let mut s = String::with_capacity(v.len() * 11 + 2);
     format_vector_into(v, &mut s);
     s
-}
-
-/// Parses the lexical form of a vector literal into `out`, which is cleared first.
-pub fn parse_vector_into(s: &str, out: &mut Vec<f32>) -> Result<(), String> {
-    out.clear();
-    let t = s.trim();
-    let inner = t
-        .strip_prefix('[')
-        .and_then(|t| t.strip_suffix(']'))
-        .ok_or_else(|| format!("a vector literal must be enclosed in square brackets: {s}"))?;
-    if inner.trim().is_empty() {
-        return Ok(());
-    }
-    for part in inner.split(',') {
-        let part = part.trim();
-        let x: f32 = part
-            .parse()
-            .map_err(|_| format!("invalid vector component {part:?} in {s}"))?;
-        out.push(x);
-    }
-    Ok(())
 }
 
 pub fn parse_vector(s: &str) -> Result<Vec<f32>, String> {
@@ -92,9 +58,20 @@ pub fn is_vector_column_dtype(dt: &DataType) -> bool {
     }
 }
 
+/// Converts a column of fixed size arrays of numbers into a string column with the stored
+/// (packed) forms of vector literals, which the dictionary of vector literals takes as they are.
+/// Null arrays become null.
+pub fn vector_column_to_stored(c: &Column) -> Result<Column, String> {
+    vector_column_to_strings(c, true)
+}
+
 /// Converts a column of fixed size arrays of numbers into a string column with the lexical forms
 /// of vector literals. Null arrays become null.
 pub fn vector_column_to_lexical(c: &Column) -> Result<Column, String> {
+    vector_column_to_strings(c, false)
+}
+
+fn vector_column_to_strings(c: &Column, packed: bool) -> Result<Column, String> {
     let name = c.name().clone();
     let DataType::Array(_, width) = c.dtype() else {
         return Err(format!("column {name} is not an array column"));
@@ -135,7 +112,12 @@ pub fn vector_column_to_lexical(c: &Column) -> Result<Column, String> {
             for i in from..to {
                 if outer_validity[i] {
                     buf.clear();
-                    format_vector_into(&slice[i * width..(i + 1) * width], &mut buf);
+                    let v = &slice[i * width..(i + 1) * width];
+                    if packed {
+                        pack_vector_into(v, &mut buf);
+                    } else {
+                        format_vector_into(v, &mut buf);
+                    }
                     b.append_value(&buf);
                 } else {
                     b.append_null();
@@ -155,9 +137,13 @@ pub fn vector_column_to_lexical(c: &Column) -> Result<Column, String> {
 }
 
 /// Converts the vector columns of a DataFrame into vector literal columns. Returns the names of
-/// the converted columns along with the RDF node state they have afterwards.
+/// the converted columns along with the RDF node state they have afterwards. The columns for
+/// which `keep_lexical` is true get the lexical forms (e.g. when they are mapped to another type
+/// than vector literals), the others the stored forms, which only the dictionary of vector
+/// literals takes.
 pub fn vector_columns_to_literals(
     df: &mut DataFrame,
+    keep_lexical: impl Fn(&str) -> bool,
 ) -> Result<Vec<(String, RDFNodeState)>, String> {
     let mut converted = vec![];
     let names: Vec<_> = df
@@ -167,7 +153,7 @@ pub fn vector_columns_to_literals(
         .map(|c| c.name().to_string())
         .collect();
     for n in names {
-        let c = vector_column_to_lexical(df.column(&n).unwrap())?;
+        let c = vector_column_to_strings(df.column(&n).unwrap(), !keep_lexical(&n))?;
         df.replace(&n, c)
             .map_err(|e| e.to_string())?;
         converted.push((n, vector_base_type().into_default_input_rdf_node_state()));
@@ -187,5 +173,29 @@ mod tests {
         assert_eq!(parse_vector(" [ 1 , 2.5 ] ").unwrap(), vec![1.0, 2.5]);
         assert_eq!(parse_vector("[]").unwrap(), Vec::<f32>::new());
         assert!(parse_vector("1,2").is_err());
+    }
+
+    #[test]
+    fn mapped_columns_are_packed() {
+        use polars::prelude::{NamedFrom, Series};
+        let s = Series::new("v".into(), [0.1f32, -2.0, 3e-4, 1.0, f32::NAN, 0.0])
+            .reshape_array(&[
+                polars::prelude::ReshapeDimension::Infer,
+                polars::prelude::ReshapeDimension::new_dimension(3),
+            ])
+            .unwrap();
+        let c = s.into_column();
+        let stored = vector_column_to_stored(&c).unwrap();
+        let lexical = vector_column_to_lexical(&c).unwrap();
+        for (p, l) in stored
+            .str()
+            .unwrap()
+            .iter()
+            .zip(lexical.str().unwrap().iter())
+        {
+            let (p, l) = (p.unwrap(), l.unwrap());
+            assert!(is_packed(p));
+            assert_eq!(stored_to_lexical(p), l);
+        }
     }
 }

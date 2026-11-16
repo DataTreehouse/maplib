@@ -148,3 +148,86 @@ def test_written_vector_literals_are_read_from_other_sources():
     # The lexical form is kept as written.
     assert df["v"].to_list() == ["[ 1 , -2.5e0, 3E-1 ]", "[]"]
     assert same_floats(parse(df["v"][0]), [1.0, -2.5, 0.3])
+
+
+def canonical(v):
+    """The lexical form maplib writes: the shortest decimal of each float32, no spaces."""
+    m = Model()
+    m.map_triples(vectors_df(np.asarray([v], dtype=np.float32), pl.Float32), predicate=EX + "embedding")
+    (lexical,) = m.query(f"SELECT ?v WHERE {{ ?s <{EX}embedding> ?v }}")["v"].to_list()
+    return lexical
+
+
+def test_mapped_and_parsed_vectors_are_the_same_term():
+    vectors = edge_vectors()
+    m = Model()
+    m.map_triples(vectors_df(vectors, pl.Float32), predicate=EX + "embedding")
+    # The same vectors written as text, under other subjects.
+    text = m.writes(format="ntriples").replace(f"{EX}item", f"{EX}copy")
+    m.reads(text, format="ntriples")
+    df = m.query(
+        f"""SELECT ?a ?b WHERE {{ ?a <{EX}embedding> ?v . ?b <{EX}embedding> ?v
+        FILTER(STRSTARTS(STR(?a), "{EX}item") && STRSTARTS(STR(?b), "{EX}copy")) }}"""
+    )
+    pairs = {(a.strip("<>")[len(EX) + 4 :], b.strip("<>")[len(EX) + 4 :]) for a, b in zip(df["a"], df["b"])}
+    assert pairs == {(str(i), str(i)) for i in range(len(vectors))}
+    # Mapping the vectors again adds nothing.
+    n = m.query(f"SELECT (COUNT(*) AS ?n) WHERE {{ ?s <{EX}embedding> ?v }}")["n"][0]
+    m.map_triples(vectors_df(vectors, pl.Float32), predicate=EX + "embedding")
+    assert m.query(f"SELECT (COUNT(*) AS ?n) WHERE {{ ?s <{EX}embedding> ?v }}")["n"][0] == n == 2 * len(vectors)
+    assert m.query(f"SELECT (COUNT(DISTINCT ?v) AS ?n) WHERE {{ ?s <{EX}embedding> ?v }}")["n"][0] == len(vectors)
+
+
+def test_filter_and_str_on_mapped_vectors():
+    vectors = edge_vectors()
+    m = Model()
+    m.map_triples(vectors_df(vectors, pl.Float32), predicate=EX + "embedding")
+    lexical = canonical(vectors[5])
+    df = m.query(f'SELECT ?s WHERE {{ ?s <{EX}embedding> "{lexical}"^^<{VECTOR}> }}')
+    assert df["s"].to_list() == [f"<{EX}item5>"]
+    df = m.query(
+        f'SELECT ?s (STR(?v) AS ?t) WHERE {{ ?s <{EX}embedding> ?v FILTER(?v = "{lexical}"^^<{VECTOR}>) }}'
+    )
+    assert df["s"].to_list() == [f"<{EX}item5>"]
+    assert df["t"].to_list() == [lexical]
+    assert m.query(
+        f'SELECT ?s WHERE {{ ?s <{EX}embedding> ?v FILTER(STR(?v) = "{lexical}") }}'
+    )["s"].to_list() == [f"<{EX}item5>"]
+    # ORDER BY gives every vector once, in a fixed order.
+    q = f"SELECT ?s ?v WHERE {{ ?s <{EX}embedding> ?v }} ORDER BY ?v ?s"
+    first = m.query(q)
+    assert first.height == len(vectors)
+    assert first.equals(m.query(q))
+
+
+def test_non_canonical_lexical_forms_are_other_terms():
+    m = Model()
+    m.map_triples(vectors_df(np.array([[1.0, 2.0]]), pl.Float32), predicate=EX + "embedding")
+    m.reads(
+        f'<{EX}b> <{EX}embedding> "[1, 2]"^^<{VECTOR}> .\n<{EX}c> <{EX}embedding> "[1.0,2.0]"^^<{VECTOR}> .\n',
+        format="ntriples",
+    )
+    df = m.query(f"SELECT ?s ?v WHERE {{ ?s <{EX}embedding> ?v }} ORDER BY ?s")
+    # b, c, item0
+    assert df["v"].to_list() == ["[1, 2]", "[1.0,2.0]", "[1.0,2.0]"]
+    assert m.query(f"SELECT (COUNT(DISTINCT ?v) AS ?n) WHERE {{ ?s <{EX}embedding> ?v }}")["n"][0] == 2
+
+
+def test_native_serialization_round_trip(tmp_path):
+    vectors = edge_vectors()
+    m = Model()
+    m.map_triples(vectors_df(vectors, pl.Float32), predicate=EX + "embedding")
+    m.reads(f'<{EX}hand> <{EX}embedding> "[ 1 , 2 ]"^^<{VECTOR}> .\n', format="ntriples")
+    path = tmp_path / "m.maplib"
+    m.serialize(path)
+    m2 = Model.deserialize(path)
+    stored = stored_vectors(m2)
+    assert len(stored) == len(vectors) + 1
+    for i, v in enumerate(vectors):
+        assert same_floats(stored[f"{EX}item{i}"], v), i
+    assert m2.query(f"SELECT ?v WHERE {{ <{EX}hand> <{EX}embedding> ?v }}")["v"].to_list() == ["[ 1 , 2 ]"]
+    # Vectors mapped after deserializing are the same terms as the deserialized ones.
+    m2.map_triples(vectors_df(vectors, pl.Float32), predicate=EX + "embedding")
+    assert m2.query(f"SELECT (COUNT(*) AS ?n) WHERE {{ ?s <{EX}embedding> ?v }}")["n"][0] == len(vectors) + 1
+    lines = lambda model: sorted(model.writes(format="ntriples").splitlines())
+    assert lines(m2) == lines(m)

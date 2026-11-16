@@ -83,7 +83,19 @@ impl Model {
         let mut df = df;
         let mut mapping_column_types = mapping_column_types;
         if let Some(df) = &mut df {
-            let converted = representation::vectors::vector_columns_to_literals(df)
+            // Columns given another type than vector literals keep their lexical forms, the
+            // others get the packed forms that the dictionary of vector literals stores.
+            let keep_lexical = |c: &str| {
+                mapping_column_types
+                    .as_ref()
+                    .and_then(|t| t.get(c))
+                    .is_some_and(|t| {
+                        !matches!(t, MappingColumnType::Flat(s)
+                            if s.map.len() == 1
+                                && s.map.keys().all(representation::vectors::is_vector_literal_type))
+                    })
+            };
+            let converted = representation::vectors::vector_columns_to_literals(df, keep_lexical)
                 .map_err(MappingError::VectorColumnError)?;
             if !converted.is_empty() {
                 let types = mapping_column_types.get_or_insert_with(HashMap::new);

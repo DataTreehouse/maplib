@@ -2,6 +2,7 @@ use super::{CatEncs, CatType, Cats};
 use crate::cats::LockedCats;
 use crate::solution_mapping::BaseCatState;
 use crate::{BaseRDFNodeType, LANG_STRING_LANG_FIELD, LANG_STRING_VALUE_FIELD};
+use in_memory::vectors::{is_packed, stored_to_lexical_into};
 use in_memory::CatMapsInMemory;
 use oxrdf::NamedNode;
 use polars::datatypes::{DataType, Field, PlSmallStr};
@@ -381,10 +382,20 @@ fn decode_codes(
                     continue;
                 }
                 let u = arr.value(i);
-                match maps.iter().find_map(|m| m.decode_parts(u)) {
+                match maps
+                    .iter()
+                    .find_map(|m| m.decode_parts(u).map(|pq| (m.is_vector(), pq)))
+                {
                     None => b.push_null(),
-                    Some((p, q)) if p.is_empty() && !wrap => b.push_value(q),
-                    Some((p, q)) => {
+                    Some((true, (_, q))) if is_packed(q) => {
+                        scratch.clear();
+                        scratch.push_str(prefix);
+                        stored_to_lexical_into(q, &mut scratch);
+                        scratch.push_str(suffix);
+                        b.push_value(scratch.as_str());
+                    }
+                    Some((_, (p, q))) if p.is_empty() && !wrap => b.push_value(q),
+                    Some((_, (p, q))) => {
                         scratch.clear();
                         scratch.push_str(prefix);
                         scratch.push_str(p);

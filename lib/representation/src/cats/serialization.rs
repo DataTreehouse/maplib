@@ -4,6 +4,8 @@ use crate::cats::maps::CatMaps;
 use arrow::array::{AsArray, RecordBatch, StringArray, UInt32Array};
 use arrow::datatypes::{DataType, Field, Schema};
 use disk::CatMapsOnDisk;
+use crate::vectors::is_vector_literal_type;
+use in_memory::vectors::stored_to_lexical;
 use in_memory::CatMapsInMemory;
 use oxrdf::NamedNode;
 use polars::prelude::{
@@ -93,6 +95,7 @@ impl Cats {
             .par_iter()
             .map(|(id, t)| {
                 let is_iri = t.cat_type.as_base_rdf_node_type().is_iri();
+                let is_vector = is_vector_literal_type(&t.cat_type.as_base_rdf_node_type());
                 let parquet_file =
                     source.file(&format!("{CATS_FOLDER}/{id}.{CAT_MAP_FILE_EXTENSION}"));
                 let maps = if parquet_file.exists() {
@@ -100,10 +103,10 @@ impl Cats {
                     let df = parquet_file.read_parquet()?;
                     if let Some(storage_folder) = storage_folder {
                         let dest_path = create_path(storage_folder, id);
-                        let rb = data_frame_to_record_batch(&df, &name)?;
+                        let rb = data_frame_to_record_batch(&df, is_vector, &name)?;
                         CatMaps::on_disk(CatMapsOnDisk::from_in_memory(&dest_path, rb))
                     } else {
-                        CatMaps::in_memory(data_frame_to_in_memory(&df, is_iri, &name)?)
+                        CatMaps::in_memory(data_frame_to_in_memory(&df, is_iri, is_vector, &name)?)
                     }
                 } else {
                     // Raw DuckDB database (`raw_db`, and the format of earlier versions).
@@ -171,8 +174,10 @@ impl Cats {
             .par_iter()
             .map(|(t, e)| {
                 let path_uuid = Uuid::new_v4().to_string();
-                // Rows are in string order, which parquet deserialization relies on.
+                // Rows are in string order, which parquet deserialization relies on. Vector
+                // literals are written packed to parquet, and as lexical forms to DuckDB.
                 let rb = match &e.maps {
+                    CatMaps::InMemory(im) if !raw_db => im.to_stored_record_batch(),
                     CatMaps::InMemory(im) => im.to_record_batch(),
                     CatMaps::OnDisk(od) => od
                         .to_memory(t.as_base_rdf_node_type().is_iri())
@@ -247,6 +252,7 @@ fn malformed(path: &str, e: impl ToString) -> CatSerializationError {
 fn data_frame_to_in_memory(
     df: &DataFrame,
     is_iri: bool,
+    is_vector: bool,
     path: &str,
 ) -> Result<CatMapsInMemory, CatSerializationError> {
     let strs = df
@@ -263,11 +269,14 @@ fn data_frame_to_in_memory(
         .zip(cats.into_no_null_iter())
         .map(|(s, u)| (Cow::Borrowed(s), u))
         .collect();
-    Ok(CatMapsInMemory::from_ordered_vec(ss, is_iri))
+    Ok(CatMapsInMemory::from_ordered_vec_kind(ss, is_iri, is_vector))
 }
 
+/// The cat map of a parquet file as a record batch, with the lexical forms of vector literals,
+/// which are stored packed in the files (see [`in_memory::vectors`]).
 fn data_frame_to_record_batch(
     df: &DataFrame,
+    is_vector: bool,
     path: &str,
 ) -> Result<RecordBatch, CatSerializationError> {
     let strs = df
@@ -278,7 +287,11 @@ fn data_frame_to_record_batch(
         .column(CAT_COLUMN)?
         .u32()
         .map_err(|e| malformed(path, e))?;
-    let strs = StringArray::from_iter(strs.iter());
+    let strs = if is_vector {
+        StringArray::from_iter(strs.iter().map(|s| s.map(stored_to_lexical)))
+    } else {
+        StringArray::from_iter(strs.iter())
+    };
     let cats = UInt32Array::from_iter_values(cats.into_no_null_iter());
     let schema = Schema::new(vec![
         Field::new(STR_COLUMN, DataType::Utf8, true),

@@ -29,6 +29,8 @@ use std::fmt::{Debug, Formatter, Write};
 use std::hash::{BuildHasher, BuildHasherDefault, Hasher};
 use std::sync::{Arc, RwLock};
 
+pub mod vectors;
+
 /// Orders two strings that are each given as (prefix, suffix), as if the parts were concatenated.
 #[inline]
 fn cmp_split_strs((a_pre, a_suf): (&str, &str), (b_pre, b_suf): (&str, &str)) -> Ordering {
@@ -118,6 +120,8 @@ fn hash_parts(prefix_id: u32, suffix: &[u8]) -> u64 {
 #[derive(Clone, Default)]
 struct Strings {
     compressed: bool,
+    /// Vector literals, stored packed when canonical (see [`vectors`]).
+    vector: bool,
     /// Byte arena. A string never spans chunks, so chunks are never reallocated once full.
     chunks: Vec<Vec<u8>>,
     total_bytes: usize,
@@ -134,9 +138,10 @@ struct Strings {
 }
 
 impl Strings {
-    fn new(compressed: bool) -> Self {
+    fn new(compressed: bool, vector: bool) -> Self {
         Strings {
             compressed,
+            vector,
             ..Default::default()
         }
     }
@@ -200,12 +205,39 @@ impl Strings {
 
     /// The prefix id and suffix that `s` is stored as, if its prefix is known.
     #[inline]
-    fn key<'a>(&self, s: &'a str) -> Option<(u32, &'a str)> {
+    fn key<'a>(&self, s: &'a str) -> Option<(u32, Cow<'a, str>)> {
         if self.compressed {
             let (pre, suf) = split_iri(s);
-            Some((*self.prefix_index.get(pre)?, suf))
+            Some((*self.prefix_index.get(pre)?, Cow::Borrowed(suf)))
+        } else if self.vector {
+            Some((0, vectors::lexical_to_stored(s)))
         } else {
-            Some((0, s))
+            Some((0, Cow::Borrowed(s)))
+        }
+    }
+
+    /// The string of a slot as it is outside the map: the lexical form for vector literals.
+    #[inline]
+    fn decoded(&self, slot: u32) -> Cow<'_, str> {
+        let (pre, suf) = self.parts(slot);
+        if self.vector {
+            vectors::stored_to_lexical(suf)
+        } else if pre.is_empty() {
+            Cow::Borrowed(suf)
+        } else {
+            Cow::Owned(self.to_string(slot))
+        }
+    }
+
+    /// The string of a slot as (prefix, suffix), as it is to be given to a map that is a vector
+    /// map if `to_vector` is: other maps get the lexical forms of vector literals.
+    #[inline]
+    fn parts_for(&self, slot: u32, to_vector: bool) -> (&str, Cow<'_, str>) {
+        let (pre, suf) = self.parts(slot);
+        if self.vector && !to_vector {
+            ("", vectors::stored_to_lexical(suf))
+        } else {
+            (pre, Cow::Borrowed(suf))
         }
     }
 
@@ -256,6 +288,14 @@ impl Strings {
             let id = self.intern_prefix(pre);
             self.prefix_ids.push(id);
             self.push_suffix(suf, code)
+        } else if self.vector {
+            let joined: Cow<'_, str> = if pre.is_empty() {
+                Cow::Borrowed(suf)
+            } else {
+                Cow::Owned([pre, suf].concat())
+            };
+            let stored = vectors::lexical_to_stored(&joined);
+            self.push_suffix(&stored, code)
         } else if pre.is_empty() {
             self.push_suffix(suf, code)
         } else {
@@ -420,6 +460,7 @@ impl Debug for CatMapsInMemory {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("CatMapsInMemory")
             .field("compressed", &self.strings.compressed)
+            .field("vector", &self.strings.vector)
             .field("len", &self.n_live)
             .field("bytes", &self.strings.total_bytes)
             .finish()
@@ -428,8 +469,14 @@ impl Debug for CatMapsInMemory {
 
 impl CatMapsInMemory {
     pub fn new_empty(is_iri: bool) -> CatMapsInMemory {
+        Self::new_empty_kind(is_iri, false)
+    }
+
+    /// An empty map, of IRIs (prefix compressed) or of vector literals (packed, see
+    /// [`vectors`]) or of other strings.
+    pub fn new_empty_kind(is_iri: bool, is_vector: bool) -> CatMapsInMemory {
         CatMapsInMemory {
-            strings: Strings::new(is_iri),
+            strings: Strings::new(is_iri, is_vector && !is_iri),
             table: HashTable::new(),
             codes: CodeIndex::default(),
             n_live: 0,
@@ -438,15 +485,32 @@ impl CatMapsInMemory {
     }
 
     pub fn new_singular(value: &str, u: u32, is_iri: bool) -> Self {
-        let mut m = Self::new_empty(is_iri);
+        Self::new_singular_kind(value, u, is_iri, false)
+    }
+
+    pub fn new_singular_kind(value: &str, u: u32, is_iri: bool, is_vector: bool) -> Self {
+        let mut m = Self::new_empty_kind(is_iri, is_vector);
         m.encode_new_in_memory_string(Cow::Borrowed(value), u);
         m
     }
 
     pub fn from_ordered_vec(ss: Vec<(Cow<'_, str>, u32)>, is_iri: bool) -> Self {
-        let mut m = Self::new_empty(is_iri);
+        Self::from_ordered_vec_kind(ss, is_iri, false)
+    }
+
+    pub fn from_ordered_vec_kind(
+        ss: Vec<(Cow<'_, str>, u32)>,
+        is_iri: bool,
+        is_vector: bool,
+    ) -> Self {
+        let mut m = Self::new_empty_kind(is_iri, is_vector);
         m.insert_many(ss.iter().map(|(s, u)| (("", s.as_ref()), *u)), ss.len());
         m
+    }
+
+    /// Whether this is a map of vector literals, which are stored packed (see [`vectors`]).
+    pub fn is_vector(&self) -> bool {
+        self.strings.vector
     }
 
     pub fn height(&self) -> u32 {
@@ -485,17 +549,17 @@ impl CatMapsInMemory {
     fn find_parts(&self, pre: &str, suf: &str) -> Option<u32> {
         if pre.is_empty() {
             let (id, suf) = self.strings.key(suf)?;
-            self.find(id, suf)
+            self.find(id, &suf)
         } else {
             let s = [pre, suf].concat();
             let (id, suf) = self.strings.key(&s)?;
-            self.find(id, suf)
+            self.find(id, &suf)
         }
     }
 
     pub fn maybe_encode_in_memory_str(&self, s: &str) -> Option<u32> {
         let (id, suf) = self.strings.key(s)?;
-        self.find(id, suf)
+        self.find(id, &suf)
             .map(|slot| self.strings.codes[slot as usize])
     }
 
@@ -528,6 +592,29 @@ impl CatMapsInMemory {
             return;
         }
         self.rank_cache.on_append();
+        if self.strings.vector {
+            // Different lexical forms given here may be stored alike (a canonical form and its
+            // packed form), so each is looked up after it is converted.
+            self.strings.reserve(n);
+            for ((pre, suf), u) in items {
+                let joined: Cow<'_, str> = if pre.is_empty() {
+                    Cow::Borrowed(suf)
+                } else {
+                    Cow::Owned([pre, suf].concat())
+                };
+                let stored = vectors::lexical_to_stored(&joined);
+                if self.find(0, &stored).is_some() {
+                    continue;
+                }
+                let slot = self.strings.push_suffix(&stored, u);
+                let strings = &self.strings;
+                let h = strings.hash_slot(slot);
+                self.table.insert_unique(h, slot, |&x| strings.hash_slot(x));
+                self.n_live += 1;
+                self.codes.insert(u, slot, self.n_live);
+            }
+            return;
+        }
         let first = self.strings.n_slots() as u32;
         self.strings.reserve(n);
         for ((pre, suf), u) in items {
@@ -607,12 +694,7 @@ impl CatMapsInMemory {
 
     #[inline]
     fn decode_slot(&self, slot: u32) -> Cow<'_, str> {
-        let (pre, suf) = self.strings.parts(slot);
-        if pre.is_empty() {
-            Cow::Borrowed(suf)
-        } else {
-            Cow::Owned(self.strings.to_string(slot))
-        }
+        self.strings.decoded(slot)
     }
 
     pub fn decode_batch(&self, v: &[Option<u32>]) -> Vec<Option<Cow<'_, str>>> {
@@ -740,8 +822,8 @@ impl CatMapsInMemory {
             }
             if i != 0 && i % stride == 0 || i == sorted.len() - 1 {
                 spaced.push((
-                    self.strings.to_string(start_string.take().unwrap()),
-                    self.strings.to_string(*slot),
+                    self.decode_slot(start_string.take().unwrap()).into_owned(),
+                    self.decode_slot(*slot).into_owned(),
                 ));
             }
         }
@@ -751,7 +833,7 @@ impl CatMapsInMemory {
     /// Renumbers the codes in string order (0, 1, ...), and drops removed entries.
     pub fn compact(&mut self) {
         let sorted = self.sorted_slots();
-        let mut new = Self::new_empty(self.strings.compressed);
+        let mut new = Self::new_empty_kind(self.strings.compressed, self.strings.vector);
         new.insert_many(
             sorted
                 .iter()
@@ -797,8 +879,8 @@ impl CatMapsInMemory {
             .into_par_iter()
             .filter(|s| strings.is_live(*s))
             .filter_map(|slot| {
-                let (pre, suf) = strings.parts(slot);
-                let r = other.strings.codes[other.find_parts(pre, suf)? as usize];
+                let (pre, suf) = strings.parts_for(slot, other.strings.vector);
+                let r = other.strings.codes[other.find_parts(pre, &suf)? as usize];
                 let l = strings.codes[slot as usize];
                 (l != r).then_some((l, r))
             })
@@ -817,8 +899,8 @@ impl CatMapsInMemory {
             .into_par_iter()
             .filter(|s| o.is_live(*s))
             .map(|slot| {
-                let (pre, suf) = o.parts(slot);
-                (slot, self.find_parts(pre, suf))
+                let (pre, suf) = o.parts_for(slot, self.strings.vector);
+                (slot, self.find_parts(pre, &suf))
             })
             .collect();
         let mut remap =
@@ -835,7 +917,15 @@ impl CatMapsInMemory {
             }
         }
         let n = new_slots.len();
-        self.insert_many(new_slots.into_iter().map(|(s, u)| (o.parts(s), u)), n);
+        let to_vector = self.strings.vector;
+        let parts: Vec<(&str, Cow<'_, str>, u32)> = new_slots
+            .into_iter()
+            .map(|(s, u)| {
+                let (pre, suf) = o.parts_for(s, to_vector);
+                (pre, suf, u)
+            })
+            .collect();
+        self.insert_many(parts.iter().map(|(p, s, u)| ((*p, s.as_ref()), *u)), n);
         remap
     }
 
@@ -850,7 +940,7 @@ impl CatMapsInMemory {
         if slots.is_empty() {
             return None;
         }
-        let mut m = Self::new_empty(self.strings.compressed);
+        let mut m = Self::new_empty_kind(self.strings.compressed, self.strings.vector);
         let n = slots.len();
         m.insert_many(
             slots.into_iter().map(|(s, u)| (self.strings.parts(s), u)),
@@ -859,8 +949,39 @@ impl CatMapsInMemory {
         Some(m)
     }
 
-    /// The entries in string order, as a record batch with the columns "str" and "cat".
+    /// The entries in string order, as a record batch with the columns "str" and "cat". Vector
+    /// literals are given as they are stored (see [`vectors`]); the dictionaries they are read
+    /// back into take both the stored and the lexical forms.
     pub fn to_record_batch(&self) -> RecordBatch {
+        if self.strings.vector {
+            return self.to_lexical_record_batch();
+        }
+        self.to_record_batch_raw()
+    }
+
+    /// The entries in string order as a record batch like [`Self::to_record_batch`], but with
+    /// the stored forms of vector literals, for dictionaries of vector literals (see
+    /// [`Self::from_ordered_vec_kind`]).
+    pub fn to_stored_record_batch(&self) -> RecordBatch {
+        self.to_record_batch_raw()
+    }
+
+    /// The entries in string order as a record batch, with the lexical forms of vector literals.
+    pub fn to_lexical_record_batch(&self) -> RecordBatch {
+        if !self.strings.vector {
+            return self.to_record_batch_raw();
+        }
+        let sorted = self.sorted_slots();
+        let mut strs = StringBuilder::with_capacity(sorted.len(), sorted.len() * 16);
+        let mut us = Vec::with_capacity(sorted.len());
+        for slot in sorted.iter() {
+            strs.append_value(self.decode_slot(*slot));
+            us.push(self.strings.codes[*slot as usize]);
+        }
+        record_batch(strs.finish(), UInt32Array::from(us))
+    }
+
+    fn to_record_batch_raw(&self) -> RecordBatch {
         let sorted = self.sorted_slots();
         let data_len: usize = sorted
             .iter()
@@ -878,14 +999,16 @@ impl CatMapsInMemory {
             strs.append_value("");
             us.push(self.strings.codes[*slot as usize]);
         }
-        let strs = strs.finish();
-        let us = UInt32Array::from(us);
-        let schema = Schema::new(vec![
-            Field::new("str", strs.data_type().clone(), true),
-            Field::new("cat", us.data_type().clone(), true),
-        ]);
-        RecordBatch::try_new(Arc::new(schema), vec![Arc::new(strs), Arc::new(us)]).unwrap()
+        record_batch(strs.finish(), UInt32Array::from(us))
     }
+}
+
+fn record_batch(strs: arrow::array::StringArray, us: UInt32Array) -> RecordBatch {
+    let schema = Schema::new(vec![
+        Field::new("str", strs.data_type().clone(), true),
+        Field::new("cat", us.data_type().clone(), true),
+    ]);
+    RecordBatch::try_new(Arc::new(schema), vec![Arc::new(strs), Arc::new(us)]).unwrap()
 }
 
 /// The distinct strings of `strs`, in an order that depends only on the strings. The strings

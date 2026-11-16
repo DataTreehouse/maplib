@@ -2,7 +2,9 @@ use crate::cats::CatReEnc;
 use crate::BaseRDFNodeType;
 use disk::CatMapsOnDisk;
 use in_memory::{CatMapsInMemory, RankMap};
+use in_memory::vectors::stored_to_vector_into;
 use range_set_blaze::RangeSetBlaze;
+use rayon::prelude::*;
 use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
@@ -174,6 +176,33 @@ impl CatMaps {
             CatMaps::OnDisk(d) => d.decode_batch(v),
         }
     }
+    /// The vectors of the vector literals with the codes `v`: None for codes that are not here,
+    /// an error for literals that are not valid vectors. Vectors stored packed are read without
+    /// writing their lexical forms (see [`in_memory::vectors`]).
+    pub fn decode_vectors_batch(&self, v: &[Option<u32>]) -> Vec<Option<Result<Vec<f32>, String>>> {
+        match self {
+            CatMaps::InMemory(m) => v
+                .par_iter()
+                .with_min_len(256)
+                .map(|u| {
+                    let (_, q) = m.decode_parts((*u)?)?;
+                    let mut out = Vec::new();
+                    Some(stored_to_vector_into(q, &mut out).map(|_| out))
+                })
+                .collect(),
+            CatMaps::OnDisk(d) => d
+                .decode_batch(v)
+                .into_par_iter()
+                .with_min_len(256)
+                .map(|s| {
+                    let s = s?;
+                    let mut out = Vec::new();
+                    Some(stored_to_vector_into(&s, &mut out).map(|_| out))
+                })
+                .collect(),
+        }
+    }
+
     pub fn maybe_decode(&self, u: &u32) -> Option<Cow<'_, str>> {
         match self {
             CatMaps::InMemory(m) => m.maybe_decode(u),
@@ -199,7 +228,10 @@ impl CatMaps {
     }
     pub fn new_empty(path: Option<&Path>, bt: &BaseRDFNodeType) -> Self {
         match path {
-            None => CatMaps::in_memory(CatMapsInMemory::new_empty(bt.is_iri())),
+            None => CatMaps::in_memory(CatMapsInMemory::new_empty_kind(
+                bt.is_iri(),
+                crate::vectors::is_vector_literal_type(bt),
+            )),
             Some(p) => CatMaps::on_disk(CatMapsOnDisk::new_empty(p)),
         }
     }

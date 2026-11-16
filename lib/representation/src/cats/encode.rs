@@ -25,7 +25,12 @@ impl CatEncs {
     }
 
     pub fn new_local_singular(value: &str, u: u32, bt: &BaseRDFNodeType) -> CatEncs {
-        let maps = CatMapsInMemory::new_singular(value, u, bt.is_iri());
+        let maps = CatMapsInMemory::new_singular_kind(
+            value,
+            u,
+            bt.is_iri(),
+            crate::vectors::is_vector_literal_type(bt),
+        );
         CatEncs {
             maps: CatMaps::in_memory(maps),
         }
