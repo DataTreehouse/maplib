@@ -3613,6 +3613,7 @@ dependencies = [
  "polars-ooc",
  "pyo3",
  "representation",
+ "serde_json",
  "server",
  "shacl",
  "spargebra",
@@ -4436,6 +4437,7 @@ version = "0.1.0"
 dependencies = [
  "maplib",
  "representation",
+ "serde_json",
  "thiserror",
 ]
 

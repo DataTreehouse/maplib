@@ -52,6 +52,29 @@ pub enum RemoteError {
     Io(String, io::Error),
 }
 
+impl RemoteError {
+    /// Whether there was no object.
+    pub fn is_not_found(&self) -> bool {
+        match self {
+            RemoteError::ObjectStore(_, object_store::Error::NotFound { .. }) => true,
+            RemoteError::Io(_, e) => e.kind() == io::ErrorKind::NotFound,
+            _ => false,
+        }
+    }
+
+    /// Whether a conditional put lost: the object changed (`IfMatch`) or already existed
+    /// (`IfNoneMatch`).
+    pub fn is_precondition_failed(&self) -> bool {
+        matches!(
+            self,
+            RemoteError::ObjectStore(
+                _,
+                object_store::Error::Precondition { .. } | object_store::Error::AlreadyExists { .. }
+            )
+        )
+    }
+}
+
 impl From<RemoteError> for io::Error {
     fn from(e: RemoteError) -> Self {
         match e {

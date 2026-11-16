@@ -20,6 +20,7 @@ __all__ = [
     "Model",
     "ModelStream",
     "Server",
+    "GraphSnapshots",
     "a",
     "Triple",
     "SolutionMappings",

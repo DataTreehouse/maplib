@@ -21,7 +21,7 @@ use crate::{
     parse_optional_named_node, print_debug_if_exists, query_to_result, resolve_rdf_node_type,
     DocumentData, MappingData, ParametersType, PyIndexingOptions,
 };
-use server::{serve as serve_model, ArrowCompression, ServerOptions, SnapshotOptions};
+use server::{serve as serve_model, ArrowCompression, ServerOptions, SnapshotFormat, SnapshotOptions};
 
 use datalog::python::PyInferenceResult;
 use external_sparql::federation::{AllowedEndpoints, FederationSettings, ServiceMethod};
@@ -1884,6 +1884,8 @@ impl PyModel {
         snapshot_url=None,
         snapshot_interval=Some(900.0),
         storage_options=None,
+        snapshot_format="model".to_string(),
+        refresh_interval=Some(10.0),
     ))]
     fn serve(
         &self,
@@ -1916,6 +1918,8 @@ impl PyModel {
         snapshot_url: Option<String>,
         snapshot_interval: Option<f64>,
         storage_options: Option<HashMap<String, String>>,
+        snapshot_format: String,
+        refresh_interval: Option<f64>,
     ) -> PyResult<Py<PyServer>> {
         let query_timeout = parse_timeout(query_timeout)?;
         let snapshot = match snapshot_url {
@@ -1933,10 +1937,34 @@ impl PyModel {
                         .into())
                     }
                 };
+                let format = match snapshot_format.as_str() {
+                    "model" => SnapshotFormat::Model,
+                    "graphs" => SnapshotFormat::Graphs {
+                        refresh_interval: match refresh_interval {
+                            None => None,
+                            Some(t) if t.is_finite() && t > 0.0 => {
+                                Some(std::time::Duration::from_secs_f64(t))
+                            }
+                            Some(t) => {
+                                return Err(PyMaplibError::FunctionArgumentError(format!(
+                                    "refresh_interval must be a positive number of seconds or None, not {t}"
+                                ))
+                                .into())
+                            }
+                        },
+                    },
+                    other => {
+                        return Err(PyMaplibError::FunctionArgumentError(format!(
+                            "snapshot_format must be \"model\" or \"graphs\", not {other:?}"
+                        ))
+                        .into())
+                    }
+                };
                 Some(SnapshotOptions {
                     url,
                     interval,
                     storage_options: storage_options.unwrap_or_default(),
+                    format,
                 })
             }
         };

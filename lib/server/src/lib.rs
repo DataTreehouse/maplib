@@ -103,6 +103,147 @@ pub struct SnapshotOptions {
     pub interval: Option<Duration>,
     /// Object storage options, as for `Model.serialize(storage_options=)`.
     pub storage_options: std::collections::HashMap<String, String>,
+    /// How the model is kept at the URL.
+    pub format: SnapshotFormat,
+}
+
+/// How a served model is snapshotted.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SnapshotFormat {
+    /// The whole model with `Model.serialize`, for a single writer.
+    Model,
+    /// One HDT file per named graph and a manifest, see `GraphSnapshots`: only the changed
+    /// graphs are written, several writers can share the URL, and the snapshot at the URL is
+    /// restored into the model when the server starts.
+    Graphs {
+        /// How often other writers' snapshots are read. None never reads them.
+        refresh_interval: Option<Duration>,
+    },
+}
+
+/// Options of `GraphSnapshots`.
+#[derive(Clone)]
+pub struct GraphSnapshotOptions {
+    /// Where the snapshot is kept: a path or URL (gs://, az://, s3://, file://).
+    pub url: String,
+    /// Object storage options, as for `Model.serialize(storage_options=)`.
+    pub storage_options: std::collections::HashMap<String, String>,
+    /// The name of this writer in the manifest, by default host-pid-random.
+    pub writer: Option<String>,
+    /// How long a file no manifest names is kept (another writer may still merge against it);
+    /// tombstones of removed graphs are kept twice as long.
+    pub grace: Duration,
+    /// The background loop: a snapshot `debounce` after the last change and at least every
+    /// `snapshot_interval`.
+    pub snapshot_interval: Option<Duration>,
+    pub debounce: Duration,
+    /// The background loop publishes changes at most this long after the first unpublished
+    /// one, so that steady writes are still published.
+    pub max_delay: Duration,
+    /// Each writer waits up to this much longer (drawn per wait), and starts its periodic work at
+    /// a random point in its interval, so that writers changing the model together do not all
+    /// publish the manifest at the same moment.
+    pub jitter: Duration,
+    /// How often the background loop reads other writers' snapshots.
+    pub refresh_interval: Option<Duration>,
+    /// How often the background loop collects garbage, by default max(60 s, grace / 4).
+    pub gc_interval: Option<Duration>,
+    /// Snapshots slower than this are logged as warnings.
+    pub warn_after: Duration,
+    /// How long a refresh waits for the write lock before it leaves the model to catch up later.
+    pub lock_timeout: Duration,
+    /// Seconds since the Unix epoch, for the times in the manifest and garbage collection.
+    pub clock: Option<std::sync::Arc<dyn Fn() -> f64 + Send + Sync>>,
+    /// Random numbers in [0, 1) for the jitter, for tests.
+    pub random: Option<std::sync::Arc<dyn Fn() -> f64 + Send + Sync>>,
+    /// Called with each event (see `GraphSnapshots::events`) after the snapshot or refresh, without
+    /// any of the snapshots' locks held, e.g. to log slow snapshots where the platform collects logs.
+    pub on_event: Option<std::sync::Arc<dyn Fn(&serde_json::Value) + Send + Sync>>,
+}
+
+/// Runs a function while holding a lock of the caller's, e.g. the Model portal's write lock, so
+/// that other writers' graphs are loaded into the model between the portal's requests: it waits
+/// at most the given time for the lock (zero: only tries it) and returns whether it ran the
+/// function. It must not be one that is held while waiting for the snapshots.
+pub type WriteLock = std::sync::Arc<dyn Fn(Duration, &mut (dyn FnMut() + Send)) -> bool + Send + Sync>;
+
+impl GraphSnapshotOptions {
+    pub fn new(url: String) -> GraphSnapshotOptions {
+        GraphSnapshotOptions {
+            url,
+            storage_options: Default::default(),
+            writer: None,
+            grace: Duration::from_secs(3600),
+            snapshot_interval: Some(Duration::from_secs(300)),
+            debounce: Duration::from_secs(2),
+            max_delay: Duration::from_secs(5),
+            jitter: Duration::from_secs(1),
+            refresh_interval: Some(Duration::from_secs(10)),
+            gc_interval: None,
+            warn_after: Duration::from_secs(10),
+            lock_timeout: Duration::from_millis(200),
+            clock: None,
+            random: None,
+            on_event: None,
+        }
+    }
+}
+
+/// A model kept in storage as one HDT file per named graph (maplib Enterprise Edition).
+pub struct GraphSnapshots {
+    _private: (),
+}
+
+impl GraphSnapshots {
+    pub fn new(
+        _model: Arc<RwLock<Model>>,
+        _options: GraphSnapshotOptions,
+    ) -> Result<Arc<GraphSnapshots>, ServerError> {
+        Err(ServerError::NotAvailable)
+    }
+    pub fn url(&self) -> &str {
+        ""
+    }
+    pub fn writer(&self) -> &str {
+        ""
+    }
+    pub fn restore(&self) -> Result<u64, ServerError> {
+        Err(ServerError::NotAvailable)
+    }
+    pub fn snapshot(&self) -> Result<bool, ServerError> {
+        Err(ServerError::NotAvailable)
+    }
+    pub fn refresh(&self) -> Result<bool, ServerError> {
+        Err(ServerError::NotAvailable)
+    }
+    pub fn gc(&self) -> Result<Vec<String>, ServerError> {
+        Err(ServerError::NotAvailable)
+    }
+    pub fn pending(&self) -> bool {
+        false
+    }
+    pub fn manifest_json(&self) -> String {
+        "{}".to_string()
+    }
+    pub fn graph_keys(&self) -> Vec<String> {
+        vec![]
+    }
+    pub fn start(self: &Arc<Self>) -> Result<(), ServerError> {
+        Err(ServerError::NotAvailable)
+    }
+    pub fn stop(&self, _snapshot: bool) -> Result<(), ServerError> {
+        Ok(())
+    }
+    pub fn set_write_lock(&self, _lock: Option<WriteLock>) {}
+    pub fn catch_up(&self) -> Result<bool, ServerError> {
+        Err(ServerError::NotAvailable)
+    }
+    pub fn behind(&self) -> bool {
+        false
+    }
+    pub fn events(&self, _since: Option<u64>) -> Vec<serde_json::Value> {
+        vec![]
+    }
 }
 
 /// Compression of Arrow record batch buffers, as defined by the Arrow IPC format.

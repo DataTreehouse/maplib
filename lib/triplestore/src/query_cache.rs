@@ -67,6 +67,9 @@ struct Table {
     prefixes: u64,
     /// Stamps of removed entries are at most this.
     floor: u64,
+    /// The last write to each graph, never pruned (one entry per graph ever written), for
+    /// `VersionTable::changed_graphs_since`.
+    graph_last: HashMap<NamedGraph, u64>,
 }
 
 fn stamp_of<K: std::hash::Hash + Eq>(m: &HashMap<K, u64>, k: &K, floor: u64) -> u64 {
@@ -79,9 +82,11 @@ impl Table {
             Touched::Cell(g, p) => {
                 self.cell.insert((g.clone(), p.clone()), s);
                 self.graph_any.insert(g.clone(), s);
+                self.graph_last.insert(g.clone(), s);
                 self.predicate_any.insert(p.clone(), s);
             }
             Touched::Graph(g) => {
+                self.graph_last.insert(g.clone(), s);
                 self.graph_all.insert(g.clone(), s);
                 self.graph_any.insert(g.clone(), s);
                 self.max_graph_all = s;
@@ -174,6 +179,30 @@ impl VersionTable {
             }
         }
         self.clock.store(s, Ordering::SeqCst);
+    }
+
+    /// The graphs written after `stamp`, or None when anything may have changed since (a write
+    /// that touched everything, e.g. a change of indexing options). Unlike the stamps the cache
+    /// checks results with, these are never pruned. Read it while holding the model's lock.
+    pub fn changed_graphs_since(&self, stamp: u64) -> Option<Vec<NamedGraph>> {
+        let table = self.lock();
+        if table.all > stamp {
+            return None;
+        }
+        Some(
+            table
+                .graph_last
+                .iter()
+                .filter(|(_, s)| **s > stamp)
+                .map(|(g, _)| g.clone())
+                .collect(),
+        )
+    }
+
+    /// The stamp of the last write to the graph, 0 if it was never written.
+    pub fn graph_stamp(&self, graph: &NamedGraph) -> u64 {
+        let table = self.lock();
+        table.graph_last.get(graph).copied().unwrap_or(0).max(table.all)
     }
 
     /// The number of stamps kept, for statistics.
@@ -568,6 +597,32 @@ mod tests {
 
     fn hit(c: &QueryCache, key: &str) -> bool {
         matches!(c.get(key), Lookup::Hit(_))
+    }
+
+    #[test]
+    fn changed_graphs_since_survives_pruning() {
+        let c = enabled();
+        let start = c.versions.stamp();
+        c.versions.record(Touched::Cell(g("1"), nn("p")));
+        let after_1 = c.versions.stamp();
+        c.versions.record(Touched::Graph(g("2")));
+        // a cached result newer than both writes prunes the cache's own stamps
+        put(&c, "a", vec![ReadItem::Graph(g("3"))]);
+        c.versions.record(Touched::Cell(g("3"), nn("p")));
+        put(&c, "b", vec![ReadItem::Graph(g("1"))]);
+        let mut since_start = c.versions.changed_graphs_since(start).unwrap();
+        since_start.sort_by_key(|g| g.to_string());
+        assert_eq!(since_start, vec![g("1"), g("2"), g("3")]);
+        let mut since_1 = c.versions.changed_graphs_since(after_1).unwrap();
+        since_1.sort_by_key(|g| g.to_string());
+        assert_eq!(since_1, vec![g("2"), g("3")]);
+        assert_eq!(c.versions.changed_graphs_since(c.versions.stamp()), Some(vec![]));
+        assert!(c.versions.graph_stamp(&g("1")) <= after_1);
+        assert_eq!(c.versions.graph_stamp(&g("4")), 0);
+        let now = c.versions.stamp();
+        c.versions.record(Touched::All);
+        assert_eq!(c.versions.changed_graphs_since(now), None);
+        assert!(c.versions.graph_stamp(&g("4")) > now);
     }
 
     #[test]

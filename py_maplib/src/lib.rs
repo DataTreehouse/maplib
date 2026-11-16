@@ -1,6 +1,7 @@
 extern crate core;
 mod error;
 mod mutexes;
+mod py_graph_snapshots;
 mod py_indexing_options;
 mod py_model;
 mod py_query_cache;
@@ -214,6 +215,7 @@ fn _maplib(py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<py_query_cache::PyQueryCacheOptions>()?;
     m.add_class::<PyModel>()?;
     m.add_class::<py_server::PyServer>()?;
+    m.add_class::<py_graph_snapshots::PyGraphSnapshots>()?;
     m.add_class::<py_stream::PyModelStream>()?;
     m.add_class::<PyValidationReport>()?;
     m.add_class::<PySolutionMappings>()?;

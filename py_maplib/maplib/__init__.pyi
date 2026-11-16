@@ -2075,6 +2075,8 @@ class Model:
             snapshot_url: Optional[str] = None,
             snapshot_interval: Optional[float] = 900,
             storage_options: Optional[Dict[str, str]] = None,
+            snapshot_format: LiteralType["model", "graphs"] = "model",
+            refresh_interval: Optional[float] = 10,
     ) -> "Server":
         """
         Serve the Model over the SPARQL 1.1 Protocol and Arrow Flight (maplib Enterprise Edition).
@@ -2176,6 +2178,14 @@ class Model:
         :param snapshot_interval: Seconds between checks for changes to snapshot, 900 by default. None snapshots only
                                   when the server stops.
         :param storage_options: Object storage options for snapshot_url, as for Model.serialize.
+        :param snapshot_format: "model" (the default) writes the whole model with Model.serialize, for a single
+                                writer. "graphs" keeps it as one HDT file per named graph and a manifest.json at
+                                snapshot_url, see GraphSnapshots: the snapshot there is restored into the model when
+                                the server starts, only the graphs that changed are written (shortly after a change
+                                and every snapshot_interval), and several servers can share the URL, merging each
+                                other's changes.
+        :param refresh_interval: With snapshot_format="graphs": seconds between reads of other servers' snapshots,
+                                 10 by default, None for never.
         :return: The running Server. With snapshot_url, Server.stop() raises if the last snapshot fails.
         """
 
@@ -2317,6 +2327,126 @@ class ExploreServer:
         """
         Block until the server stops (or the timeout). True if it stopped.
         """
+
+
+class GraphSnapshots:
+    """
+    A model kept in storage as one HDT file per named graph and a manifest.json (maplib Enterprise Edition),
+    which several writers, e.g. the replicas of a writable Model portal, can share::
+
+        <url>/manifest.json                          the current snapshot
+        <url>/graphs/<sha256(iri)>-<ms>-<rand>.hdt   one HDT file per named graph (and the default graph)
+
+    Which graphs changed comes from the model's writes (from Python, through Model.serve or the portal), and only
+    those are written. A snapshot publishes by replacing manifest.json last, with a conditional put. A writer that
+    loses the put (another writer published first) merges the graphs both sides changed three-way at the triple
+    level, a triple one side added is kept, and publishes again. Blank nodes are matched by label. Graph files are
+    never overwritten, and garbage collection deletes the ones no manifest names after the grace period.
+
+    >>> s = GraphSnapshots(m, "gs://bucket/model")
+    >>> s.restore()  # reads the snapshot into m
+    >>> s.start()    # snapshots, refreshes and collects garbage in the background
+    >>> s.stop()     # with a last snapshot
+
+    :param model: The model.
+    :param url: Where the snapshot is kept: a path or a gs://, az://, s3:// or file:// URL.
+    :param storage_options: Object storage options, as for Model.serialize.
+    :param writer: This writer's name in the manifest, by default host-pid-random.
+    :param grace: Seconds a file no manifest names is kept (it may be another writer's merge base); tombstones of
+                  removed graphs are kept twice as long. Must be longer than twice the intervals.
+    :param snapshot_interval: With start(): seconds between snapshots (a snapshot also follows debounce seconds
+                              after the last change).
+    :param refresh_interval: With start(): seconds between reads of other writers' snapshots, None for never.
+    :param debounce: With start(): seconds after the last change before a snapshot.
+    :param gc_interval: With start(): seconds between garbage collections, by default max(60, grace / 4).
+    :param warn_after: Snapshots slower than this many seconds are logged as warnings.
+    :param clock: A function giving the time in seconds since the epoch, for tests.
+    :param max_delay: With start(): changes are published at most this many seconds after the first unpublished
+                      one, so steady writes are still published.
+    :param jitter: With start(): each wait gets up to this many seconds more, drawn per writer, and the periodic
+                   work starts at a random point in its interval, so writers changing the model together do not
+                   all publish the manifest at once.
+    :param write_lock: See set_write_lock.
+    :param random: A function giving random numbers in [0, 1) for the jitter, for tests.
+    :param lock_timeout: Seconds a refresh waits for the write lock, see set_write_lock.
+    :param on_event: Called with each event (see events) after its snapshot or refresh, from the thread that ran it.
+                     By default slow snapshots (warn_after) and failures are logged as warnings, with where the time
+                     went, on the "maplib.graph_snapshots" logger, and other events at debug.
+    """
+
+    url: str
+    writer: str
+    manifest_json: str
+    pending: bool
+
+    def __init__(
+            self,
+            model: Model,
+            url: str,
+            storage_options: Optional[Dict[str, str]] = None,
+            writer: Optional[str] = None,
+            grace: float = 3600,
+            snapshot_interval: Optional[float] = 300,
+            refresh_interval: Optional[float] = 10,
+            debounce: float = 2,
+            gc_interval: Optional[float] = None,
+            warn_after: float = 10,
+            clock: Optional[Callable[[], float]] = None,
+            max_delay: float = 5,
+            jitter: float = 1,
+            write_lock: Optional[Any] = None,
+            random: Optional[Callable[[], float]] = None,
+            lock_timeout: float = 0.2,
+            on_event: Optional[Callable[[Dict[str, Any]], None]] = None,
+    ): ...
+
+    behind: bool
+    """Whether a graph of the last manifest read is not yet applied to the model (the write lock was taken)."""
+
+    def events(self, since: Optional[int] = None) -> List[Dict[str, Any]]:
+        """The last snapshots and refreshes (at most 1000), oldest first, with an id greater than since. Each is a
+        dict with "id", "kind" ("snapshot", "refresh" or "catch_up"), "writer", "time" (epoch seconds), "s"
+        (duration in seconds), "ok" (and "error"), "generation" (of the manifest after it), "applied" and
+        "merged" (graphs applied to the model, and of those the ones changed here too), "lock_wait_s" and
+        "lock_taken" (times the write lock was taken by someone else and the model left to catch up). A snapshot
+        also has "published", "attempts", "conflicts" (manifest puts lost to another writer), "files" and
+        "bytes" (graph files written) and "merged_in_files"; a refresh has "changed". Snapshots and refreshes that
+        found nothing to do are left out. The same objects are logged at INFO by the maplib::graph_snapshots
+        tracing target."""
+
+    def catch_up(self) -> bool:
+        """Applies what the last refresh could not because the write lock was taken, without reading the manifest
+        again. Returns whether the model is now up to date."""
+
+    def set_write_lock(self, lock: Optional[Any]) -> None:
+        """The lock (e.g. the Model portal's write lock, a threading.Lock) held while other writers' graphs are
+        loaded into the model, so that they land between the portal's requests; None for none. Only a refresh's
+        model changes are made under it, and a refresh waits at most lock_timeout for it, then leaves the model
+        to catch up later. A snapshot never takes it: a graph changed here whose newer version is not yet in the
+        model is merged into a new file instead. So an upload holding the lock does not hold up a snapshot."""
+
+    def graphs(self) -> List[str]:
+        """The model's non-empty graphs (without the transient graph), the default graph as ""."""
+
+    def restore(self) -> int:
+        """Reads the snapshot at the URL (if any) into the model and returns its generation, 0 when there is
+        none. A graph in the snapshot adds to a graph of the same name in the model."""
+
+    def snapshot(self) -> bool:
+        """Writes the graphs that changed and publishes the manifest. Returns whether it published."""
+
+    def refresh(self) -> bool:
+        """Reads what other writers published, merging graphs changed here too. Returns whether there was
+        anything new."""
+
+    def gc(self) -> List[str]:
+        """Deletes graph files no manifest names after the grace period, and returns their URLs."""
+
+    def start(self) -> None:
+        """Snapshots, refreshes and collects garbage in a background thread."""
+
+    def stop(self, snapshot: bool = True) -> None:
+        """Stops the background thread and, with snapshot, takes a last snapshot."""
 
 
 class Server:
