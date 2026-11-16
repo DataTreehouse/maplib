@@ -44,6 +44,7 @@ A short guide to v0.22.1, which adds features and fixes to v0.22.0. Features mar
 - The FILTER of an OPTIONAL can use variables bound before the OPTIONAL, and variables left unbound by an OPTIONAL or UNION join correctly with the rest of their group.
 - Deeply nested `REGEX`, `SUBSTR` and `REPLACE` calls parse in linear time (they could hang `map_csvw`).
 - `FILTER (NOT) EXISTS` is correct next to variable predicate patterns.
+- `GRAPH ?g { … }` keeps `?g` in scope on a model without named graphs, so `GROUP BY ?g` gives an empty result instead of an error.
 - `COUNT(DISTINCT ?x)` no longer counts unbound as a value; `SAMPLE` skips unbound values, and `AVG` of nothing is 0.
 - ORDER BY sorts numbers of different datatypes by value, and puts blank nodes before IRIs as SPARQL specifies.
 - Virtualized time series queries **EE** now match materialized results for subqueries in joins, GROUP BY on timestamps, empty aggregates and repeated data point patterns.

@@ -1,9 +1,5 @@
 # Change log
 
-## v0.22.2
-### Bug fixes
-- `GRAPH ?g { ... }` on a model or dataset without named graphs keeps `?g` in scope, so `GROUP BY ?g`, ORDER BY or projecting `?g` give an empty result instead of an error that `?g` is not defined
-
 ## v0.22.1
 ### Breaking changes
 - `Model.update` returns what the update changed instead of `None`, see Features. In Rust, `UpdateResult` has a `changes` field, and `Triplestore::delete_construct_result` and `delete_triples_vec` take `keep_triples` and return the deleted triples (`triplestore::changes::Deleted`) instead of nothing
@@ -54,6 +50,7 @@
 - A `Model` stays usable after a call panics: every Python method recovers the model's lock instead of raising on a poisoned lock
 - Virtualized time series queries (maplib Enterprise Edition) give the same results as the equivalent queries over materialized data in more cases: subqueries in joins (with LIMIT, DISTINCT or hidden variables), GROUP BY on a virtualized value such as the timestamp, aggregates without GROUP BY over no rows (one row, e.g. a count of 0), several data point patterns of one time series, and data points written without their time series. A differential test against materialized data now passes for all of its queries
 - SHACL reports (maplib Enterprise Edition) hold the whole `sh:resultPath` of a result with a complex path (a sequence, alternative, inverse or zero-or-more path, i.e. a blank node of the shapes graph): its triples are copied from the shapes graph into the report graph, where the path was a dangling blank node
+- `GRAPH ?g { ... }` on a model or dataset without named graphs keeps `?g` in scope, so `GROUP BY ?g`, ORDER BY or projecting `?g` give an empty result instead of an error that `?g` is not defined
 
 ## v0.22.0
 ### Breaking changes
