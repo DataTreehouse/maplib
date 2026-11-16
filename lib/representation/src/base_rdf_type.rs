@@ -151,8 +151,6 @@ impl BaseRDFNodeType {
                 l.datatype().into_owned(),
                 literal_time_zone(l.value(), l.datatype()),
             ),
-            #[cfg(feature = "rdf-star")]
-            Term::Triple(_) => todo!(),
         }
     }
 
@@ -164,13 +162,17 @@ impl BaseRDFNodeType {
         } else if s == MULTI_NONE_DT {
             Self::None
         } else {
-            if s.starts_with("<") {
-                todo!();
-            }
+            // The datatype IRI may be written as `<iri>`, as Display writes it.
+            let strip = |dt: &str| -> String {
+                dt.strip_prefix('<')
+                    .and_then(|x| x.strip_suffix('>'))
+                    .unwrap_or(dt)
+                    .to_string()
+            };
             if let Some((dt, tz)) = s.split_once(TIME_ZONE_SEPARATOR) {
-                Self::Literal(NamedNode::new_unchecked(dt), tz.parse().ok())
+                Self::Literal(NamedNode::new_unchecked(strip(dt)), tz.parse().ok())
             } else {
-                Self::Literal(NamedNode::new_unchecked(s), None)
+                Self::Literal(NamedNode::new_unchecked(strip(&s)), None)
             }
         }
     }
@@ -385,8 +387,6 @@ pub fn get_subject_datatype_ref(s: &NamedOrBlankNode) -> BaseRDFNodeTypeRef<'_> 
     match s {
         NamedOrBlankNode::NamedNode(_) => BaseRDFNodeTypeRef::IRI,
         NamedOrBlankNode::BlankNode(_) => BaseRDFNodeTypeRef::BlankNode,
-        #[cfg(feature = "rdf-star")]
-        _ => unimplemented!(),
     }
 }
 
@@ -397,8 +397,6 @@ pub fn get_term_datatype_ref(t: &Term) -> BaseRDFNodeTypeRef<'_> {
         Term::Literal(l) => {
             BaseRDFNodeTypeRef::Literal(l.datatype(), literal_time_zone(l.value(), l.datatype()))
         }
-        #[cfg(feature = "rdf-star")]
-        _ => unimplemented!(),
     }
 }
 
@@ -408,8 +406,6 @@ pub fn get_ground_term_datatype_ref(t: &GroundTerm) -> BaseRDFNodeTypeRef<'_> {
         GroundTerm::Literal(l) => {
             BaseRDFNodeTypeRef::Literal(l.datatype(), literal_time_zone(l.value(), l.datatype()))
         }
-        #[cfg(feature = "rdf-star")]
-        _ => unimplemented!(),
     }
 }
 

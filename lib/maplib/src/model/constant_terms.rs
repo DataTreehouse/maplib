@@ -171,7 +171,9 @@ pub fn constant_blank_node_to_series(
             )
         }
         ConstantTermOrList::ConstantList(_) => {
-            todo!("Not yet implemented support for lists of blank nodes")
+            return Err(MappingError::BlankNodeInConstantListNotSupported(
+                constant_term.clone(),
+            ));
         }
         _ => {
             panic!("Should never happen")

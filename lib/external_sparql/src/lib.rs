@@ -37,6 +37,10 @@ pub enum SparqlEndpointQueryError {
     SolutionParseError(QueryResultsSyntaxError),
     #[error("Wrong result type, expected solutions")]
     WrongResultType,
+    #[error("Wrong result type, expected a boolean")]
+    WrongResultTypeExpectedBoolean,
+    #[error("{0} queries are not supported against SPARQL endpoints")]
+    UnsupportedQueryForm(String),
     #[error("Invalid query results: `{0}`")]
     InvalidResults(RepresentationError),
     #[error("SPARQL parse error: `{0}`")]
@@ -144,7 +148,12 @@ impl SparqlEndpoint {
                     base_iri: base_iri.clone(),
                 }
             }
-            _ => todo!(),
+            Query::Ask { .. } => query.clone(),
+            Query::Describe { .. } => {
+                return Err(SparqlEndpointQueryError::UnsupportedQueryForm(
+                    "DESCRIBE".to_string(),
+                ))
+            }
         };
         outbound::check_url(&self.endpoint).map_err(SparqlEndpointQueryError::Outbound)?;
         let client = outbound::guard_client(reqwest::Client::builder())
@@ -189,14 +198,17 @@ impl SparqlEndpoint {
                     .await
             }
         };
-        let solutions = match response {
+        let text = match response {
             Ok(proper_response) => {
                 if proper_response.status().as_u16() != 200 {
                     return Err(SparqlEndpointQueryError::BadStatusCode(
                         proper_response.status().to_string(),
                     ));
                 } else {
-                    parse_json_text(&proper_response.text().await.expect("Read text error"))?
+                    proper_response
+                        .text()
+                        .await
+                        .map_err(SparqlEndpointQueryError::RequestError)?
                 }
             }
             Err(error) => {
@@ -206,6 +218,14 @@ impl SparqlEndpoint {
                 })
             }
         };
+        if let Query::Ask { .. } = use_query {
+            return Ok(QueryResult {
+                kind: QueryResultKind::Ask(parse_json_boolean(&text)?),
+                debug: None,
+                pushdown_paths: vec![],
+            });
+        }
+        let solutions = parse_json_text(&text)?;
         let sm = match use_query {
             Query::Select { pattern, .. } => {
                 let mut vars = Vec::new();
@@ -272,8 +292,19 @@ impl SparqlEndpoint {
                     pushdown_paths: vec![],
                 })
             }
-            _ => unimplemented!(),
+            Query::Ask { .. } | Query::Describe { .. } => {
+                unreachable!("ASK returns early and DESCRIBE is refused")
+            }
         }
+    }
+}
+
+fn parse_json_boolean(text: &str) -> Result<bool, SparqlEndpointQueryError> {
+    let json_parser = QueryResultsParser::from_format(QueryResultsFormat::Json);
+    match json_parser.for_slice(text.as_bytes()) {
+        Ok(SliceQueryResultsParserOutput::Boolean(b)) => Ok(b),
+        Ok(_) => Err(SparqlEndpointQueryError::WrongResultTypeExpectedBoolean),
+        Err(parse_error) => Err(SparqlEndpointQueryError::ResultsParseError(parse_error)),
     }
 }
 

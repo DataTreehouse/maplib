@@ -80,6 +80,8 @@ pub enum TriplestoreError {
     InvalidPrefix(String, String),
     #[error("Could not memory map file: {0}")]
     MemoryMapError(io::Error),
+    #[error("Column {0} cannot be mapped: {1}")]
+    UnsupportedColumn(String, String),
 }
 
 impl<T> From<PoisonError<T>> for TriplestoreError {

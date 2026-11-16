@@ -431,3 +431,48 @@ def test_legacy_chrontext_iris_in_data_templates_and_queries():
     assert m.query(
         f"SELECT ?ts WHERE {{ ?ts <{MAPLIB}hasResource> ?r }}"
     ).height == 2
+
+
+def test_pvalues_in_a_virtualized_query_is_an_error(dbs):
+    from maplib import SolutionMappings
+
+    m, _, _ = dbs
+    q = (
+        PREFIXES
+        + """
+    SELECT ?w ?v WHERE {
+        ?w types:hasSensor ?s .
+        ?s maplib:hasTimeseries ?ts .
+        ?ts maplib:hasDataPoint ?dp .
+        ?dp maplib:hasValue ?v .
+        PVALUES (?w) h
+    }
+    """
+    )
+    params = {
+        "h": SolutionMappings(
+            pl.DataFrame({"w": ["http://example.org/case#myWidget1"]}), {"w": RDFType.IRI}
+        )
+    }
+    with pytest.raises(Exception, match="PVALUES is not supported"):
+        m.query(q, parameters=params)
+
+
+def test_resource_template_with_variable_predicate_is_an_error():
+    db = RecordingDuckDB("table_a", TS_A)
+    t = template("resource_a")
+    t = Template(
+        iri=Prefix("http://example.org/templates#").suf("resource_a"),
+        parameters=t.parameters,
+        instances=t.instances
+        + [Triple(Variable("id"), Variable("value"), Variable("timestamp"))],
+    )
+    m = Model()
+    m.reads(GRAPH, format="turtle")
+    m.add_virtualization(
+        virtualized_database(db, "table_a", "resource_a"),
+        resources={"resource_a": t},
+    )
+    q = PREFIXES + "SELECT ?v WHERE { ?ts maplib:hasDataPoint ?dp . ?dp maplib:hasValue ?v }"
+    with pytest.raises(Exception, match="predicate of each triple must be a constant IRI"):
+        m.query(q)

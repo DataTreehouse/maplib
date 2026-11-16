@@ -74,4 +74,8 @@ pub enum MappingError {
     FunctionListArgument(String, String),
     #[error("Could not evaluate the function call {}: {}", .0, .1)]
     FunctionEvaluationError(String, String),
+    #[error("Argument {} of {} is a list containing variables or function calls, which is not supported. Use a list typed parameter instead", .0, .1)]
+    ListArgumentNotSupported(usize, String),
+    #[error("Constant list {} contains blank nodes, which is not supported", .0)]
+    BlankNodeInConstantListNotSupported(ConstantTermOrList),
 }

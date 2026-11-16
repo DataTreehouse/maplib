@@ -176,7 +176,7 @@ impl Triples {
     pub(crate) fn ensure_subject_object_index(&mut self) -> Result<(), TriplestoreError> {
         if self.subject_object_index.is_none() {
             let mut subject_object_index =
-                SubjectObjectIndex::new(&self.subject_type, &self.object_type);
+                SubjectObjectIndex::new(&self.subject_type, &self.object_type)?;
             // In disk storage mode the index is rebuilt from all stored segments.
             for lf in self.get_all_triples_lazy_frames(true)? {
                 let df = collect_in_memory(lf).map_err(TriplestoreError::LazyLoadError)?;
@@ -221,7 +221,7 @@ impl Triples {
         if rows * 2 > self.height {
             return Ok(None);
         }
-        let mut index = SubjectObjectIndex::new(&self.subject_type, &self.object_type);
+        let mut index = SubjectObjectIndex::new(&self.subject_type, &self.object_type)?;
         for (seg, offsets) in self.segments.iter().zip(ranges) {
             if offsets.is_empty() {
                 continue;
@@ -246,7 +246,7 @@ impl Triples {
         df: &DataFrame,
         cats: &Cats,
     ) -> Result<SubjectObjectIndex, TriplestoreError> {
-        let mut index = SubjectObjectIndex::new(&self.subject_type, &self.object_type);
+        let mut index = SubjectObjectIndex::new(&self.subject_type, &self.object_type)?;
         let subjects = subject_strings(df, cats, &self.subject_type);
         let mut lfs = vec![];
         for seg in &self.segments {

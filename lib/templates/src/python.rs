@@ -124,27 +124,7 @@ impl PyParameter {
     fn get_default_value(&self, py: Python) -> PyResult<Option<Py<PyAny>>> {
         match &self.parameter.default_value {
             None => Ok(None),
-            Some(def) => match &def {
-                ConstantTermOrList::ConstantTerm(ct) => match ct {
-                    ConstantTerm::Iri(i) => {
-                        Ok(Some(Py::new(py, PyIRI::from(i.clone()))?.as_any().clone()))
-                    }
-                    ConstantTerm::BlankNode(bl) => Ok(Some(
-                        Py::new(py, PyBlankNode { inner: bl.clone() })?
-                            .as_any()
-                            .clone(),
-                    )),
-                    ConstantTerm::Literal(l) => Ok(Some(
-                        Py::new(py, PyLiteral::from_literal(l.clone()))?
-                            .as_any()
-                            .clone(),
-                    )),
-                    ConstantTerm::None => Ok(None),
-                },
-                ConstantTermOrList::ConstantList(_) => {
-                    todo!()
-                }
-            },
+            Some(def) => constant_term_or_list_to_py(py, def),
         }
     }
 
@@ -167,6 +147,32 @@ impl PyParameter {
     }
 }
 
+/// A constant as an IRI, BlankNode or Literal object, a list as a Python list, None as None.
+fn constant_term_or_list_to_py(
+    py: Python,
+    ct: &ConstantTermOrList,
+) -> PyResult<Option<Py<PyAny>>> {
+    Ok(match ct {
+        ConstantTermOrList::ConstantTerm(ct) => match ct {
+            ConstantTerm::Iri(i) => Some(Py::new(py, PyIRI::from(i.clone()))?.into_any()),
+            ConstantTerm::BlankNode(bl) => {
+                Some(Py::new(py, PyBlankNode { inner: bl.clone() })?.into_any())
+            }
+            ConstantTerm::Literal(l) => {
+                Some(Py::new(py, PyLiteral::from_literal(l.clone()))?.into_any())
+            }
+            ConstantTerm::None => None,
+        },
+        ConstantTermOrList::ConstantList(l) => {
+            let mut elements = Vec::with_capacity(l.len());
+            for x in l {
+                elements.push(constant_term_or_list_to_py(py, x)?);
+            }
+            Some(pyo3::types::PyList::new(py, elements)?.into_any().unbind())
+        }
+    })
+}
+
 fn ptype_to_py_rdf_type(ptype: &PType) -> PyRDFType {
     match ptype {
         PType::Basic(b) => PyRDFType {
@@ -177,13 +183,8 @@ fn ptype_to_py_rdf_type(ptype: &PType) -> PyRDFType {
             flat: Some(BaseRDFNodeType::None.into_default_input_rdf_node_state()),
             nested: None,
         },
-        PType::Lub(_) => {
-            todo!()
-        }
-        PType::List(l) => ptype_to_py_rdf_type(l),
-        PType::NEList(_) => {
-            todo!()
-        }
+        // As for lists, the type given is that of the elements.
+        PType::Lub(l) | PType::List(l) | PType::NEList(l) => ptype_to_py_rdf_type(l),
     }
 }
 

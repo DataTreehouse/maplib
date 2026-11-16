@@ -112,11 +112,12 @@ impl QueryResultKind {
                             let t = t.unwrap();
                             let v = variables.get(i).unwrap();
                             if v.as_str() == SUBJECT_COL_NAME {
-                                subject = Some(match t {
-                                    Term::NamedNode(nn) => NamedOrBlankNode::NamedNode(nn),
-                                    Term::BlankNode(bl) => NamedOrBlankNode::BlankNode(bl),
-                                    _ => todo!(),
-                                });
+                                // A literal subject gives no triple (SPARQL 1.1 section 16.2).
+                                subject = match t {
+                                    Term::NamedNode(nn) => Some(NamedOrBlankNode::NamedNode(nn)),
+                                    Term::BlankNode(bl) => Some(NamedOrBlankNode::BlankNode(bl)),
+                                    _ => None,
+                                };
                             } else if v.as_str() == PREDICATE_COL_NAME {
                                 predicate = Some(match t {
                                     Term::NamedNode(nn) => nn,
@@ -128,7 +129,10 @@ impl QueryResultKind {
                                 panic!("Should never happen");
                             }
                         }
-                        let t = Triple::new(subject.unwrap(), predicate.unwrap(), object.unwrap());
+                        let Some(subject) = subject else {
+                            continue;
+                        };
+                        let t = Triple::new(subject, predicate.unwrap(), object.unwrap());
                         ser.serialize_triple(t.as_ref()).unwrap();
                     }
                 }

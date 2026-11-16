@@ -554,9 +554,7 @@ pub fn create_join_compatible_solution_mappings(
                                         .insert(v.to_string(), RDFNodeState::from_map(right_map));
                                 }
                             }
-                            _ => {
-                                todo!()
-                            }
+                            _ => unreachable!("join_type is Inner or Left"),
                         }
                     } else {
                         //right not multi
@@ -615,9 +613,7 @@ pub fn create_join_compatible_solution_mappings(
                                     );
                                 }
                             }
-                            _ => {
-                                todo!()
-                            }
+                            _ => unreachable!("join_type is Inner or Left"),
                         }
                     }
                 } else {
@@ -695,9 +691,7 @@ pub fn create_join_compatible_solution_mappings(
                                     );
                                 }
                             }
-                            _ => {
-                                todo!()
-                            }
+                            _ => unreachable!("join_type is Inner or Left"),
                         }
                     } else {
                         //Right not multi
@@ -739,9 +733,7 @@ pub fn create_join_compatible_solution_mappings(
                                     BaseRDFNodeType::None.into_default_input_rdf_node_state(),
                                 );
                             }
-                            _ => {
-                                todo!()
-                            }
+                            _ => unreachable!("join_type is Inner or Left"),
                         }
                     }
                 }

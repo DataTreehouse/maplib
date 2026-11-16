@@ -28,8 +28,15 @@ impl Triplestore {
         let mut column_types = HashMap::new();
         let col_names: Vec<_> = df.columns().iter().map(|x| x.name().to_string()).collect();
         for c in df.columns() {
-            //Todo handle
-            let dt = polars_type_to_literal_type(c.dtype()).unwrap();
+            let dt = polars_type_to_literal_type(c.dtype()).map_err(|e| {
+                TriplestoreError::UnsupportedColumn(c.name().to_string(), e.to_string())
+            })?;
+            if dt.is_multi() {
+                return Err(TriplestoreError::UnsupportedColumn(
+                    c.name().to_string(),
+                    "columns with values of several RDF types are not supported".to_string(),
+                ));
+            }
             column_types.insert(c.name().to_string(), dt);
         }
         let id_col = Uuid::new_v5(&use_uuid_namespace, "id".as_bytes()).to_string();
@@ -45,36 +52,31 @@ impl Triplestore {
             let subj_type = BaseRDFNodeType::IRI;
             let obj_type = column_types.get(c).unwrap().clone();
             let subj_state = subj_type.default_input_cat_state();
-
-            if obj_type.is_multi() {
-                todo!()
-            } else {
-                let base_obj_type = obj_type.get_base_type().unwrap();
-                let base_obj_state = obj_type.get_base_state().unwrap();
-                let tta = TriplesToAdd {
-                    df: df
-                        .clone()
-                        .lazy()
-                        .select([
-                            col(id_col.clone()).alias(SUBJECT_COL_NAME),
-                            col(c).alias(OBJECT_COL_NAME),
-                        ])
-                        .collect()
-                        .unwrap(),
-                    subject_type: subj_type,
-                    object_type: base_obj_type.clone(),
-                    predicate: Some(NamedNode::new_unchecked(format!(
-                        "{}{}",
-                        XYZ_PREFIX_IRI,
-                        urlencoding::encode(c)
-                    ))),
-                    graph: named_graph.clone(),
-                    subject_cat_state: subj_state,
-                    object_cat_state: base_obj_state.clone(),
-                    predicate_cat_state: None,
-                };
-                triples_to_add.push(tta);
-            }
+            let base_obj_type = obj_type.get_base_type().unwrap();
+            let base_obj_state = obj_type.get_base_state().unwrap();
+            let tta = TriplesToAdd {
+                df: df
+                    .clone()
+                    .lazy()
+                    .select([
+                        col(id_col.clone()).alias(SUBJECT_COL_NAME),
+                        col(c).alias(OBJECT_COL_NAME),
+                    ])
+                    .collect()
+                    .unwrap(),
+                subject_type: subj_type,
+                object_type: base_obj_type.clone(),
+                predicate: Some(NamedNode::new_unchecked(format!(
+                    "{}{}",
+                    XYZ_PREFIX_IRI,
+                    urlencoding::encode(c)
+                ))),
+                graph: named_graph.clone(),
+                subject_cat_state: subj_state,
+                object_cat_state: base_obj_state.clone(),
+                predicate_cat_state: None,
+            };
+            triples_to_add.push(tta);
         }
         let tta_children = TriplesToAdd {
             df: df

@@ -144,13 +144,14 @@ pub fn global_df_as_triples(
     subjects
         .into_par_iter()
         .zip(objects.into_par_iter())
-        .map(|(subject, object)| {
+        .filter_map(|(subject, object)| {
+            // A literal subject gives no triple.
             let subject = match subject.unwrap() {
                 Term::NamedNode(nn) => NamedOrBlankNode::NamedNode(nn),
                 Term::BlankNode(bl) => NamedOrBlankNode::BlankNode(bl),
-                _ => todo!(),
+                _ => return None,
             };
-            Triple::new(subject, predicate.clone(), object.unwrap())
+            Some(Triple::new(subject, predicate.clone(), object.unwrap()))
         })
         .collect()
 }

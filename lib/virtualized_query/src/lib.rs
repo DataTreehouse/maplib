@@ -353,10 +353,9 @@ impl BasicVirtualizedQuery {
         let mut s = HashSet::new();
         for tp in self.column_mapping.values() {
             match tp {
-                TermPattern::BlankNode(b) => {
-                    todo!("For the time being, replace {} with a variable", b)
-                }
-                TermPattern::Literal(_) | TermPattern::NamedNode(_) => {
+                // A blank node only asks for some value to exist, so the source is not asked
+                // for a column for it, just as for constants.
+                TermPattern::BlankNode(_) | TermPattern::Literal(_) | TermPattern::NamedNode(_) => {
                     //No action required
                 }
                 TermPattern::Variable(v) => {

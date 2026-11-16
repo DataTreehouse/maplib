@@ -101,17 +101,6 @@ impl RDFNodeState {
         }
     }
 
-    // pub fn infer_from_term_pattern(tp: &TermPattern) -> Option<RDFNodeType> {
-    //     match tp {
-    //         TermPattern::NamedNode(nn) => Some(RDFNodeType::IRI(Some(named_node_split_prefix(nn)))),
-    //         TermPattern::BlankNode(_) => None,
-    //         TermPattern::Literal(l) => Some(RDFNodeType::Literal(l.datatype().into_owned())),
-    //         TermPattern::Variable(_v) => None,
-    //         #[cfg(feature = "rdf-star")]
-    //         TermPattern::Triple(_) => todo!(),
-    //     }
-    // }
-
     pub fn is_iri(&self) -> bool {
         if let Some(b) = self.get_base_type() {
             b.is_iri()

@@ -1,3 +1,4 @@
+use crate::errors::TriplestoreError;
 use crate::{OBJECT_RANK_COL_NAME, SUBJECT_RANK_COL_NAME};
 use ordered_float::OrderedFloat;
 use oxrdf::vocab::xsd;
@@ -616,49 +617,60 @@ pub enum SubjectObjectIndex {
 }
 
 impl SubjectObjectIndex {
-    pub fn new(subject_type: &BaseRDFNodeType, object_type: &BaseRDFNodeType) -> Self {
-        if subject_type.is_iri()
-            || subject_type.is_blank_node()
-            || subject_type.is_lit_type(xsd::UNSIGNED_INT)
-        {
-            if object_type.is_lang_string() {
-                SubjectObjectIndex::U32LangIndex(U32LangIndex::new())
-            } else if object_type.stored_cat() || object_type.is_lit_type(xsd::UNSIGNED_INT) {
-                SubjectObjectIndex::U32U32Index(U32U32Index::new())
-            } else if object_type.is_lit_type(xsd::DATE) {
-                SubjectObjectIndex::U32DateIndex(U32DateIndex::new())
-            } else if object_type.is_lit_type(xsd::BOOLEAN) {
-                SubjectObjectIndex::U32BoolIndex(U32BoolIndex::new())
-            } else if object_type.is_lit_type(xsd::FLOAT) {
-                SubjectObjectIndex::U32F32Index(U32F32Index::new())
-            } else if object_type.is_lit_type(xsd::DOUBLE) {
-                SubjectObjectIndex::U32F64Index(U32F64Index::new())
-            } else if object_type.is_lit_type(xsd::DECIMAL) {
-                SubjectObjectIndex::U32DecimalIndex(U32DecimalIndex::new())
-            } else if object_type.is_lit_type(xsd::BYTE) {
-                SubjectObjectIndex::U32I8Index(U32I8Index::new())
-            } else if object_type.is_lit_type(xsd::UNSIGNED_BYTE) {
-                SubjectObjectIndex::U32U8Index(U32U8Index::new())
-            } else if object_type.is_lit_type(xsd::SHORT) {
-                SubjectObjectIndex::U32I16Index(U32I16Index::new())
-            } else if object_type.is_lit_type(xsd::UNSIGNED_SHORT) {
-                SubjectObjectIndex::U32U16Index(U32U16Index::new())
-            } else if object_type.is_lit_type(xsd::INT) {
-                SubjectObjectIndex::U32I32Index(U32I32Index::new())
-            } else if object_type.is_lit_type(xsd::LONG) || object_type.is_lit_type(xsd::INTEGER) {
-                SubjectObjectIndex::U32I64Index(U32I64Index::new())
-            } else if object_type.is_lit_type(xsd::UNSIGNED_LONG) {
-                SubjectObjectIndex::U32U64Index(U32U64Index::new())
-            } else if object_type.is_lit_type(xsd::DATE_TIME)
-                || object_type.is_lit_type(xsd::DATE_TIME_STAMP)
+    pub fn new(
+        subject_type: &BaseRDFNodeType,
+        object_type: &BaseRDFNodeType,
+    ) -> Result<Self, TriplestoreError> {
+        Ok(
+            if subject_type.is_iri()
+                || subject_type.is_blank_node()
+                || subject_type.is_lit_type(xsd::UNSIGNED_INT)
             {
-                SubjectObjectIndex::U32DateTimeIndex(U32DateTimeIndex::new())
+                if object_type.is_lang_string() {
+                    SubjectObjectIndex::U32LangIndex(U32LangIndex::new())
+                } else if object_type.stored_cat() || object_type.is_lit_type(xsd::UNSIGNED_INT) {
+                    SubjectObjectIndex::U32U32Index(U32U32Index::new())
+                } else if object_type.is_lit_type(xsd::DATE) {
+                    SubjectObjectIndex::U32DateIndex(U32DateIndex::new())
+                } else if object_type.is_lit_type(xsd::BOOLEAN) {
+                    SubjectObjectIndex::U32BoolIndex(U32BoolIndex::new())
+                } else if object_type.is_lit_type(xsd::FLOAT) {
+                    SubjectObjectIndex::U32F32Index(U32F32Index::new())
+                } else if object_type.is_lit_type(xsd::DOUBLE) {
+                    SubjectObjectIndex::U32F64Index(U32F64Index::new())
+                } else if object_type.is_lit_type(xsd::DECIMAL) {
+                    SubjectObjectIndex::U32DecimalIndex(U32DecimalIndex::new())
+                } else if object_type.is_lit_type(xsd::BYTE) {
+                    SubjectObjectIndex::U32I8Index(U32I8Index::new())
+                } else if object_type.is_lit_type(xsd::UNSIGNED_BYTE) {
+                    SubjectObjectIndex::U32U8Index(U32U8Index::new())
+                } else if object_type.is_lit_type(xsd::SHORT) {
+                    SubjectObjectIndex::U32I16Index(U32I16Index::new())
+                } else if object_type.is_lit_type(xsd::UNSIGNED_SHORT) {
+                    SubjectObjectIndex::U32U16Index(U32U16Index::new())
+                } else if object_type.is_lit_type(xsd::INT) {
+                    SubjectObjectIndex::U32I32Index(U32I32Index::new())
+                } else if object_type.is_lit_type(xsd::LONG)
+                    || object_type.is_lit_type(xsd::INTEGER)
+                {
+                    SubjectObjectIndex::U32I64Index(U32I64Index::new())
+                } else if object_type.is_lit_type(xsd::UNSIGNED_LONG) {
+                    SubjectObjectIndex::U32U64Index(U32U64Index::new())
+                } else if object_type.is_lit_type(xsd::DATE_TIME)
+                    || object_type.is_lit_type(xsd::DATE_TIME_STAMP)
+                {
+                    SubjectObjectIndex::U32DateTimeIndex(U32DateTimeIndex::new())
+                } else {
+                    return Err(TriplestoreError::IndexingError(format!(
+                        "triples with objects of type {object_type} cannot be deduplicated"
+                    )));
+                }
             } else {
-                todo!("B type {:?}", object_type);
-            }
-        } else {
-            todo!("A type {}", subject_type);
-        }
+                return Err(TriplestoreError::IndexingError(format!(
+                    "triples with subjects of type {subject_type} cannot be deduplicated"
+                )));
+            },
+        )
     }
 
     pub fn insert(&mut self, df: &DataFrame) {

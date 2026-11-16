@@ -3,8 +3,9 @@ use crate::expressions::durations::temporal_operation;
 use oxrdf::vocab::xsd;
 use oxrdf::NamedNodeRef;
 use polars::prelude::{col, lit, when, DataType, Expr, LiteralValue};
-use representation::cats::LockedCats;
+use representation::cats::{maybe_decode_expr, LockedCats};
 use representation::solution_mapping::BaseCatState;
+use representation::subtypes::is_literal_subtype;
 use representation::{
     literal_is_boolean, literal_is_date, literal_is_datetime, literal_is_numeric,
     literal_is_string, BaseRDFNodeType, RDFNodeState,
@@ -38,6 +39,32 @@ pub(crate) fn literal_parts(
     parts
 }
 
+/// The values of numeric types that are stored as strings (e.g. xsd:positiveInteger) as numbers,
+/// so that arithmetic is done on the values rather than on the dictionary codes. Other columns
+/// are returned as they are.
+fn numeric_value_expr(
+    e: Expr,
+    t: &BaseRDFNodeType,
+    s: &BaseCatState,
+    global_cats: LockedCats,
+) -> Expr {
+    let BaseRDFNodeType::Literal(dt, _) = t else {
+        return e;
+    };
+    if matches!(s, BaseCatState::NonString) || !literal_is_numeric(dt.as_ref()) {
+        return e;
+    }
+    let use_type = if is_decimal(dt.as_ref()) || !is_literal_subtype(dt.as_ref(), xsd::INTEGER) {
+        DataType::Float64
+    } else {
+        DataType::Int64
+    };
+    maybe_decode_expr(e, t, s, global_cats)
+        .str()
+        .strip_chars(lit(LiteralValue::untyped_null()))
+        .cast(use_type)
+}
+
 pub fn typed_numerical_operation(
     left_col: &str,
     right_col: &str,
@@ -69,8 +96,8 @@ pub fn typed_numerical_operation(
                 ops.push(o);
             } else {
                 ops.push(op(
-                    le.clone(),
-                    re.clone(),
+                    numeric_value_expr(le.clone(), &lt, &ls, global_cats.clone()),
+                    numeric_value_expr(re.clone(), rt, rs, global_cats.clone()),
                     lt_nn.as_ref(),
                     rt_nn.as_ref(),
                     expression,
@@ -197,7 +224,7 @@ pub fn compatible_operation(expression: &Expression, l1: NamedNodeRef, l2: Named
         | Expression::Subtract(..)
         | Expression::Multiply(..)
         | Expression::Divide(..) => literal_is_numeric(l1) && literal_is_numeric(l2),
-        _ => todo!(),
+        _ => false,
     }
 }
 
@@ -229,7 +256,9 @@ fn gen_type(
                 xsd::DOUBLE
             }
         } else {
-            todo!()
+            unreachable!(
+                "n_bits returns 1, 8, 16, 32 or 64 bits, and decimal types have at least 32"
+            )
         }
     } else {
         if bits == 1 {
@@ -243,7 +272,9 @@ fn gen_type(
         } else if bits == 64 {
             xsd::INTEGER
         } else {
-            todo!()
+            unreachable!(
+                "n_bits returns 1, 8, 16, 32 or 64 bits, and decimal types have at least 32"
+            )
         }
     }
 }
@@ -257,12 +288,14 @@ fn n_bits(t: NamedNodeRef) -> u8 {
         | xsd::POSITIVE_INTEGER
         | xsd::NON_NEGATIVE_INTEGER
         | xsd::NEGATIVE_INTEGER
+        | xsd::NON_POSITIVE_INTEGER
         | xsd::INTEGER => 64,
         xsd::FLOAT | xsd::INT | xsd::UNSIGNED_INT => 32,
         xsd::SHORT | xsd::UNSIGNED_SHORT => 16,
         xsd::BYTE | xsd::UNSIGNED_BYTE => 8,
         xsd::BOOLEAN => 1,
-        _ => todo!("nbytes {}", t),
+        // Other numeric types, such as owl:real subtypes, are treated as 64-bit.
+        _ => 64,
     }
 }
 

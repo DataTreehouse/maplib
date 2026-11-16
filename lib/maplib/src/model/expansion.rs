@@ -828,8 +828,11 @@ fn create_remapped(
                     }
                 }
             }
-            StottrTerm::List(_l) => {
-                todo!()
+            StottrTerm::List(_) => {
+                return Err(MappingError::ListArgumentNotSupported(
+                    argument_index,
+                    instance.template_iri.to_string(),
+                ));
             }
             StottrTerm::FunctionCall(fc) => {
                 if original.list_expand {

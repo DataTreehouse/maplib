@@ -59,13 +59,16 @@ impl CatMaps {
         match self {
             CatMaps::InMemory(m) => match other {
                 CatMaps::InMemory(other_m) => m.inner_join_re_enc(other_m),
-                CatMaps::OnDisk(_) => {
-                    todo!()
-                }
+                // The disk side gives (disk code, in-memory code), so the pairs are swapped.
+                CatMaps::OnDisk(other_d) => other_d
+                    .inner_join_re_enc_in_memory(m.to_record_batch())
+                    .into_iter()
+                    .map(|(d, m)| (m, d))
+                    .collect(),
             },
             CatMaps::OnDisk(d) => match other {
                 CatMaps::InMemory(m) => d.inner_join_re_enc_in_memory(m.to_record_batch()),
-                CatMaps::OnDisk(d) => d.inner_join_re_enc_on_disk(d),
+                CatMaps::OnDisk(other_d) => d.inner_join_re_enc_on_disk(other_d),
             },
         }
     }
