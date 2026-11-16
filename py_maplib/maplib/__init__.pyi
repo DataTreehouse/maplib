@@ -2072,6 +2072,9 @@ class Model:
             query_timeout: Optional[float] = None,
             max_query_timeout: Optional[float] = None,
             max_concurrent: Optional[int] = None,
+            snapshot_url: Optional[str] = None,
+            snapshot_interval: Optional[float] = 900,
+            storage_options: Optional[Dict[str, str]] = None,
     ) -> "Server":
         """
         Serve the Model over the SPARQL 1.1 Protocol and Arrow Flight (maplib Enterprise Edition).
@@ -2164,7 +2167,16 @@ class Model:
         :param max_concurrent: How many queries, updates and other operations on the model run at the same time,
                                64 by default. Requests beyond this wait for their turn (their timeout counts while
                                they wait).
-        :return: The running Server.
+        :param snapshot_url: Snapshot the model to this path or URL (gs://, az://, s3://, ...) as Model.serialize does,
+                             e.g. the URL it was read from with Model.deserialize: every snapshot_interval seconds if
+                             it changed since the last snapshot (through the endpoints or from Python), and when the
+                             server stops (Server.stop, Ctrl-C with block). A URL ending in .maplib is written as a
+                             single file, others as a folder; with hybrid or disk storage the maps are written as
+                             DuckDB databases (raw_db). A failed snapshot is logged and retried at the next interval.
+        :param snapshot_interval: Seconds between checks for changes to snapshot, 900 by default. None snapshots only
+                                  when the server stops.
+        :param storage_options: Object storage options for snapshot_url, as for Model.serialize.
+        :return: The running Server. With snapshot_url, Server.stop() raises if the last snapshot fails.
         """
 
     def infer(

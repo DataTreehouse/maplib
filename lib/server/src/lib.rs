@@ -88,6 +88,21 @@ pub struct ServerOptions {
     /// How many operations on the model (queries, updates, graph reads and writes) run at the
     /// same time. Others wait for their turn.
     pub max_concurrent: usize,
+    /// Snapshot the model (serialize it) every interval when it changed, and when the server
+    /// stops. None takes no snapshots.
+    pub snapshot: Option<SnapshotOptions>,
+}
+
+/// Where and how often a served model is snapshotted.
+#[derive(Debug, Clone)]
+pub struct SnapshotOptions {
+    /// A path or URL (gs://, az://, s3://, ...) to serialize the model to, as `Model.serialize`
+    /// does. A URL ending in `.maplib` is written as a single file, others as a folder.
+    pub url: String,
+    /// How often to check for changes. None snapshots only when the server stops.
+    pub interval: Option<Duration>,
+    /// Object storage options, as for `Model.serialize(storage_options=)`.
+    pub storage_options: std::collections::HashMap<String, String>,
 }
 
 /// Compression of Arrow record batch buffers, as defined by the Arrow IPC format.
@@ -151,6 +166,7 @@ impl Default for ServerOptions {
             query_timeout: None,
             max_query_timeout: None,
             max_concurrent: 64,
+            snapshot: None,
         }
     }
 }

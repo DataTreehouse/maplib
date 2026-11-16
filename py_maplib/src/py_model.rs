@@ -21,7 +21,7 @@ use crate::{
     parse_optional_named_node, print_debug_if_exists, query_to_result, resolve_rdf_node_type,
     DocumentData, MappingData, ParametersType, PyIndexingOptions,
 };
-use server::{serve as serve_model, ArrowCompression, ServerOptions};
+use server::{serve as serve_model, ArrowCompression, ServerOptions, SnapshotOptions};
 
 use datalog::python::PyInferenceResult;
 use external_sparql::federation::{AllowedEndpoints, FederationSettings, ServiceMethod};
@@ -1839,6 +1839,9 @@ impl PyModel {
         query_timeout=None,
         max_query_timeout=None,
         max_concurrent=None,
+        snapshot_url=None,
+        snapshot_interval=Some(900.0),
+        storage_options=None,
     ))]
     fn serve(
         &self,
@@ -1868,8 +1871,33 @@ impl PyModel {
         query_timeout: Option<f64>,
         max_query_timeout: Option<f64>,
         max_concurrent: Option<usize>,
+        snapshot_url: Option<String>,
+        snapshot_interval: Option<f64>,
+        storage_options: Option<HashMap<String, String>>,
     ) -> PyResult<Py<PyServer>> {
         let query_timeout = parse_timeout(query_timeout)?;
+        let snapshot = match snapshot_url {
+            None => None,
+            Some(url) => {
+                let interval = match snapshot_interval {
+                    None => None,
+                    Some(t) if t.is_finite() && t > 0.0 => {
+                        Some(std::time::Duration::from_secs_f64(t))
+                    }
+                    Some(t) => {
+                        return Err(PyMaplibError::FunctionArgumentError(format!(
+                            "snapshot_interval must be a positive number of seconds or None, not {t}"
+                        ))
+                        .into())
+                    }
+                };
+                Some(SnapshotOptions {
+                    url,
+                    interval,
+                    storage_options: storage_options.unwrap_or_default(),
+                })
+            }
+        };
         let max_query_timeout = parse_timeout(max_query_timeout)?;
         if max_concurrent == Some(0) {
             return Err(PyMaplibError::FunctionArgumentError(
@@ -1911,6 +1939,7 @@ impl PyModel {
             query_timeout,
             max_query_timeout,
             max_concurrent: max_concurrent.unwrap_or(ServerOptions::default().max_concurrent),
+            snapshot,
             ..ServerOptions::default()
         };
         if let Some(cors_origins) = cors_origins {
