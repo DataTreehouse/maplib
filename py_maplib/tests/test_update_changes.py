@@ -168,10 +168,8 @@ def test_solution_mappings(model):
     assert set(sm.rdf_types.keys()) == {"subject", "object"}
 
 
-def test_clear_and_drop():
-    # Clearing graphs is not supported with a storage folder, so only in memory.
-    m = Model()
-    m.reads(DATA, format="turtle")
+def test_clear_and_drop(model):
+    m = model
     m.update(f"INSERT DATA {{ GRAPH <{G1}> {{ <{EX}x> <{EX}knows> <{EX}y> }} }}")
     changes = m.update(f"CLEAR GRAPH <{G1}>", return_triples=True)
     c = changes[G1]
@@ -179,7 +177,8 @@ def test_clear_and_drop():
     assert c["deleted_triples"][f"{EX}knows"].height == 1
     changes = m.update("DROP DEFAULT")
     assert counts(changes) == {DEFAULT_GRAPH: (0, 5)}
-
+    assert count_triples(m) == 0
+    assert count_triples(m, graph=G1) == 0
 
 
 def test_insert_template_with_several_graphs(model):
@@ -231,11 +230,9 @@ def test_load(model, tmp_path):
     assert counts(changes) == {DEFAULT_GRAPH: (1, 0), G1: (1, 0)}
 
 
-def test_add_copy_move():
-    # COPY and MOVE clear the target first, which is only supported in memory.
+def test_add_copy_move(model):
     g2, g3 = "http://example.net/g2", "http://example.net/g3"
-    m = Model()
-    m.reads(DATA, format="turtle")
+    m = model
     m.update(f"INSERT DATA {{ GRAPH <{G1}> {{ <{EX}x> <{EX}knows> <{EX}y> . <{EX}a> <{EX}knows> <{EX}b> }} }}")
     # ADD inserts what is not in the target yet.
     assert counts(m.update(f"ADD <{G1}> TO DEFAULT")) == {DEFAULT_GRAPH: (1, 0)}

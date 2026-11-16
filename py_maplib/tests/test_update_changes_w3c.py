@@ -47,10 +47,6 @@ from .test_w3c_sparql11 import (
     with_base,
 )
 
-# Clearing or dropping graphs is not supported with a storage folder (and COPY and MOVE clear the
-# target graph first), so these updates run in memory only.
-NEEDS_CLEAR = ("CLEAR", "DROP", "COPY", "MOVE")
-
 
 def update_tests():
     known = load_known_failures()
@@ -142,8 +138,6 @@ def run_maplib(g, entry, storage: str):
 def test_reported_changes_are_the_difference(g, entry, storage):
     action = g.value(entry, MF.action)
     text = read_text(g.value(action, UT.request))
-    if storage != "memory" and any(k in text.upper() for k in NEEDS_CLEAR):
-        pytest.skip("clearing graphs is not supported with a storage folder")
     m, text, before, after, changes = run_maplib(g, entry, storage)
 
     # The graphs after the update are the expected ones (in every storage mode).
