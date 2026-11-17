@@ -22,7 +22,7 @@ use representation::dataset::NamedGraph;
 use representation::constants::normalize_legacy_chrontext_named_node;
 use representation::BaseRDFNodeType;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Instant;
@@ -382,8 +382,10 @@ impl Triplestore {
                 cats
             },
         );
-        let cats = cats?;
+        let mut cats = cats?;
         let mut graph_triples_map: HashMap<NamedGraph, PredicateTriples> = HashMap::new();
+        // Predicates renamed below (from the chrontext namespace) may never have been encoded.
+        let mut renamed_predicates = HashSet::new();
         for (graph, pred, subject_type, object_type, triples) in triples_vec? {
             // Stored predicates in the former chrontext namespace are read as the predicates of
             // the maplib vocabulary, unless a stored table already has that predicate.
@@ -396,6 +398,9 @@ impl Triplestore {
                 if taken {
                     pred
                 } else {
+                    if new_pred != pred {
+                        renamed_predicates.insert(new_pred.as_str().to_string());
+                    }
                     new_pred
                 }
             };
@@ -410,6 +415,7 @@ impl Triplestore {
             triples_map.insert((subject_type, object_type), triples);
         }
 
+        cats.encode_iris(renamed_predicates);
         let fts_index = maybe_create_fts_index_map(&triplestore_metadata.indexing)?;
         let geo_index =
             maybe_create_geo_index(&triplestore_metadata.indexing, storage_pathbuf.as_deref())?;

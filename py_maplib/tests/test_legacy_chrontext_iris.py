@@ -63,3 +63,22 @@ def test_legacy_function_iri():
     assert new.height == 1
     assert new.equals(old)
     assert new.get_column("b").dtype != pl.Null
+
+
+def test_predicate_variable_over_legacy_predicates_alone():
+    """A legacy predicate is stored as the maplib predicate: that predicate must be in the
+    dictionary even when no data names it, or ?p and zero-length paths cannot look it up."""
+    m = Model()
+    m.reads(f"<urn:ts1> <{LEGACY_CHRONTEXT}hasResource> \"readings\" .\n", format="ntriples")
+    predicates = m.query("SELECT ?p (COUNT(*) AS ?n) WHERE { ?s ?p ?o } GROUP BY ?p").get_column("p").to_list()
+    assert predicates == [f"<{MAPLIB}hasResource>"]
+    df = m.query("SELECT ?a WHERE { VALUES ?x { <urn:ts1> } ?a <urn:p>* ?x }")
+    assert df.get_column("a").to_list() == ["<urn:ts1>"]
+
+
+def test_predicate_variable_after_update_inserting_legacy_predicate():
+    m = Model()
+    m.reads("<urn:a> <urn:p> <urn:b> .\n", format="ntriples")
+    m.update(f"INSERT {{ ?a <{LEGACY_CHRONTEXT}hasExternalId> \"M-1\" }} WHERE {{ ?a <urn:p> ?b }}")
+    predicates = sorted(m.query("SELECT DISTINCT ?p WHERE { ?s ?p ?o }").get_column("p").to_list())
+    assert predicates == [f"<{MAPLIB}hasExternalId>", "<urn:p>"]

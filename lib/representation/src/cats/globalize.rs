@@ -35,6 +35,15 @@ impl Cats {
                 predicates_and_named_graphs.insert(nn.as_str().to_string());
             }
         }
+        self.encode_iris(predicates_and_named_graphs);
+    }
+
+    /// Adds the IRIs that are not yet in the IRI dictionary, e.g. predicates, which are stored as
+    /// table keys rather than in encoded columns but are looked up when a query binds them.
+    pub fn encode_iris(&mut self, iris: HashSet<String>) {
+        if iris.is_empty() {
+            return;
+        }
         let t = CatType::IRI;
         if !self.cat_map.contains_key(&t) {
             self.cat_map.insert(
@@ -47,9 +56,9 @@ impl Cats {
         }
         let mut iri_counter = self.iri_counter;
         let enc = self.cat_map.get_mut(&t).unwrap();
-        let predicates_and_graph_names: Vec<_> = predicates_and_named_graphs.into_iter().collect();
+        let iris: Vec<_> = iris.into_iter().collect();
         enc.maps
-            .encode_all_new_non_duplicated_strings(predicates_and_graph_names, &mut iri_counter);
+            .encode_all_new_non_duplicated_strings(iris, &mut iri_counter);
         self.iri_counter = iri_counter;
     }
 }
