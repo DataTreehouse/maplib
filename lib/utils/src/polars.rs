@@ -183,7 +183,8 @@ const STREAMING_CANCEL_POLL: Duration = Duration::from_millis(5);
 /// query within a batch, but the streaming engine then waits for every task to finish the batch
 /// it is working on, e.g. a filter of 100k rows from a cross join, which took 0.5 s to several
 /// seconds on a loaded machine. Meanwhile the query held the model, so a timed out or abandoned
-/// query blocked updates. The thread finishes those batches and drops the result.
+/// query blocked updates. The thread finishes those batches and drops the result, and counts as a
+/// [cancel::Leftover] until then.
 fn collect_streaming_cancellable(
     lf: LazyFrame,
     engine: Engine,
@@ -191,9 +192,13 @@ fn collect_streaming_cancellable(
 ) -> Result<DataFrame, InterruptableCollectError> {
     let (tx, rx) = std::sync::mpsc::sync_channel(1);
     let thread_token = token.clone();
+    let leftover = cancel::Leftover::default();
+    let thread_leftover = EndOnDrop(leftover.clone());
     let thread = std::thread::Builder::new()
         .name("maplib-collect".into())
         .spawn(move || {
+            // Ends the leftover after the result was dropped, also on a panic.
+            let _leftover = thread_leftover;
             let r = cancel::with_token(Some(thread_token), || collect_streaming(lf, engine));
             let _ = tx.send(r);
         })
@@ -205,6 +210,7 @@ fn collect_streaming_cancellable(
             Ok(r) => return r,
             Err(RecvTimeoutError::Timeout) => {
                 if let Some(c) = token.stopped() {
+                    leftover.leave();
                     return Err(c.into());
                 }
             }
@@ -293,9 +299,23 @@ fn pl_interruptable_collect_in_memory(
 /// panics if the receiver is gone, which aborts the process from its Rayon thread
 /// (<https://github.com/pola-rs/polars/issues/22515>). A thread keeps the receiver until then and
 /// drops the result, so the query returns at once and its memory is freed when it stops.
+/// The thread counts as a [cancel::Leftover] until then.
 fn abandon(future: InProcessQuery) {
     future.cancel();
+    let leftover = cancel::Leftover::default();
+    leftover.leave();
+    let leftover = EndOnDrop(leftover);
     std::thread::spawn(move || {
+        let _leftover = leftover;
         let _ = future.fetch_blocking();
     });
+}
+
+/// Ends a [cancel::Leftover] when dropped.
+struct EndOnDrop(cancel::Leftover);
+
+impl Drop for EndOnDrop {
+    fn drop(&mut self) {
+        self.0.end();
+    }
 }

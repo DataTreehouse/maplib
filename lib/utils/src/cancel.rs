@@ -22,7 +22,7 @@ use polars::prelude::{DataFrame, LazyFrame, OptFlags, PolarsError, PolarsResult}
 use std::cell::RefCell;
 use std::fmt;
 use std::sync::atomic::{AtomicBool, AtomicU64, AtomicU8, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, Condvar, Mutex};
 use std::time::{Duration, Instant};
 
 const RUNNING: u8 = 0;
@@ -231,16 +231,105 @@ impl CancelToken {
     }
 }
 
+/// The number of [Leftover]s that were left to run in the background and have not ended.
+static LEFTOVERS: Mutex<usize> = Mutex::new(0);
+static LEFTOVER_ENDED: Condvar = Condvar::new();
+
+/// Polars work of a query that may keep running after the query stopped waiting for it: a
+/// cancelled collect returns at once, while its running operators or batches finish on another
+/// thread and only then free their memory (see `utils::polars`). Once [Leftover::leave] is called
+/// before [Leftover::end], the work counts as a leftover until it ends, so that queries started
+/// meanwhile can wait for it to free its memory ([wait_for_leftovers]).
+#[derive(Debug, Clone, Default)]
+pub struct Leftover(Arc<Mutex<LeftoverState>>);
+
+#[derive(Debug, Default)]
+struct LeftoverState {
+    left: bool,
+    ended: bool,
+}
+
+impl Leftover {
+    /// The query stops waiting for the work, which may still be running.
+    pub fn leave(&self) {
+        let mut s = self.0.lock().unwrap_or_else(|e| e.into_inner());
+        if !s.left && !s.ended {
+            s.left = true;
+            *LEFTOVERS.lock().unwrap_or_else(|e| e.into_inner()) += 1;
+        }
+    }
+
+    /// The work ended and its memory was freed.
+    pub fn end(&self) {
+        let mut s = self.0.lock().unwrap_or_else(|e| e.into_inner());
+        if !s.ended {
+            s.ended = true;
+            if s.left {
+                *LEFTOVERS.lock().unwrap_or_else(|e| e.into_inner()) -= 1;
+                LEFTOVER_ENDED.notify_all();
+            }
+        }
+    }
+}
+
+/// The longest a query waits for leftover work of stopped queries, see [wait_for_leftovers].
+const MAX_LEFTOVER_WAIT: Duration = Duration::from_secs(60);
+
+/// Waits until the process uses no more memory than queries may
+/// ([crate::memory::query_memory_limit]), or no work of stopped queries is left running (see
+/// [Leftover]), whichever comes first. Called by [with_token] before a query starts.
+///
+/// A query stopped for using too much memory returns before its join has ended and freed its
+/// memory. A query started right after it would otherwise see that memory and be stopped at once.
+/// The wait ends at the token's deadline, when the token is cancelled, or after a minute.
+fn wait_for_leftovers(token: &CancelToken) {
+    let Some(limit) = crate::memory::query_memory_limit() else {
+        return;
+    };
+    let over = || crate::memory::memory_usage() > limit;
+    if !over() {
+        return;
+    }
+    let mut until = Instant::now() + MAX_LEFTOVER_WAIT;
+    if let Some(deadline) = token.deadline() {
+        until = until.min(deadline);
+    }
+    let mut n = LEFTOVERS.lock().unwrap_or_else(|e| e.into_inner());
+    // Memory is counted by the allocator, so it can drop without a notification: check it often.
+    while *n > 0 && over() && token.0.state.load(Ordering::Relaxed) == RUNNING {
+        let now = Instant::now();
+        if now >= until {
+            break;
+        }
+        let slice = (until - now).min(Duration::from_millis(10));
+        n = LEFTOVER_ENDED
+            .wait_timeout(n, slice)
+            .unwrap_or_else(|e| e.into_inner())
+            .0;
+    }
+}
+
+/// The number of leftovers of stopped queries that are still running.
+#[cfg(test)]
+fn leftovers() -> usize {
+    *LEFTOVERS.lock().unwrap_or_else(|e| e.into_inner())
+}
+
 thread_local! {
     static CURRENT: RefCell<Option<CancelToken>> = const { RefCell::new(None) };
 }
 
 /// Runs `f` with `token` as the current token of this thread, restoring the previous one after.
 /// With None, `f` runs with the token that is already current, if any.
+///
+/// When the process uses more memory than queries may, `f` first waits for leftover work of
+/// stopped queries to free its memory ([wait_for_leftovers]). This blocks the thread, so it must
+/// not be one of Polars' threads, which the leftovers may need to end.
 pub fn with_token<R>(token: Option<CancelToken>, f: impl FnOnce() -> R) -> R {
     let Some(token) = token else {
         return f();
     };
+    wait_for_leftovers(&token);
     struct Restore(Option<CancelToken>);
     impl Drop for Restore {
         fn drop(&mut self) {
@@ -354,5 +443,21 @@ mod tests {
             assert_eq!(check(), Err(Cancelled::Cancelled));
         });
         assert!(current().is_none());
+    }
+
+    #[test]
+    fn leftovers_are_counted_until_they_end() {
+        // Work that ends before the query stops waiting is never a leftover.
+        let done = Leftover::default();
+        done.end();
+        done.leave();
+        let left = Leftover::default();
+        left.leave();
+        left.leave();
+        assert!(leftovers() >= 1);
+        let before = leftovers();
+        left.end();
+        left.end();
+        assert_eq!(leftovers(), before - 1);
     }
 }

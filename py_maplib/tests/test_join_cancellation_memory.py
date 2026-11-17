@@ -16,6 +16,8 @@ import sys
 import textwrap
 
 N = 15_000
+# Times the memory case runs the large join, each followed by a small query.
+ROUNDS = 4
 
 CHILD = textwrap.dedent(
     """
@@ -24,7 +26,7 @@ CHILD = textwrap.dedent(
     import polars as pl
     import maplib
 
-    n, case = int(sys.argv[1]), sys.argv[2]
+    n, case, rounds = int(sys.argv[1]), sys.argv[2], int(sys.argv[3])
     ex = "http://ex.org/"
     m = maplib.Model()
     m.map_triples(
@@ -37,49 +39,63 @@ CHILD = textwrap.dedent(
         predicate=ex + "kind",
     )
     q = f"PREFIX ex: <{ex}> SELECT ?s ?t WHERE {{ ?s ex:kind ?k . ?t ex:kind ?k }}"
-    if case == "timeout":
+    small = f"PREFIX ex: <{ex}> SELECT ?s WHERE {{ ?s ex:kind ex:k1 }}"
+
+    def big(**kwargs):
         try:
-            m.query(q, timeout=0.005)
+            m.query(q, **kwargs)
             print("finished", flush=True)
         except Exception as e:
             print("error", type(e).__name__, flush=True)
+
+    if case == "timeout":
+        big(timeout=0.005)
         # The join must not go on after the query returned.
         time.sleep(1.0)
         print("memory_mb", maplib.memory_usage() // 1_000_000, flush=True)
+        print("rows", m.query(small).height, flush=True)
     else:
         maplib.set_memory_limit(abort_above_mb=int(case))
-        try:
-            m.query(q)
-            print("finished", flush=True)
-        except Exception as e:
-            print("error", type(e).__name__, flush=True)
-    small = m.query(f"PREFIX ex: <{ex}> SELECT ?s WHERE {{ ?s ex:kind ex:k1 }}")
-    print("rows", small.height, flush=True)
+        for _ in range(rounds):
+            big()
+            # The stopped join may still be freeing its memory, which the next query waits for
+            # instead of being stopped at once.
+            try:
+                print("rows", m.query(small).height, flush=True)
+            except Exception as e:
+                print("small_error", type(e).__name__, e, flush=True)
     """
 )
 
 
 def run(case):
     p = subprocess.run(
-        [sys.executable, "-c", CHILD, str(N), case],
+        [sys.executable, "-c", CHILD, str(N), case, str(ROUNDS)],
         capture_output=True,
         text=True,
         timeout=600,
     )
     assert p.returncode == 0, f"exit {p.returncode}\n{p.stdout}\n{p.stderr[-2000:]}"
-    return dict(line.split(" ", 1) for line in p.stdout.splitlines())
+    lines = {}
+    for line in p.stdout.splitlines():
+        key, value = line.split(" ", 1)
+        lines.setdefault(key, []).append(value)
+    return lines
 
 
 def test_timed_out_large_join_stops():
     lines = run("timeout")
-    assert lines["error"] == "QueryTimeoutError"
-    assert int(lines["memory_mb"]) < 200
-    assert lines["rows"] == str(N // 3)
+    assert lines["error"] == ["QueryTimeoutError"]
+    assert int(lines["memory_mb"][0]) < 200
+    assert lines["rows"] == [str(N // 3)]
 
 
 def test_memory_limit_stops_a_large_join_without_aborting():
     # The join's result needs over 0.6 GB. The query is stopped at 90% of the limit, checked between
-    # batches of the join, so the limit leaves room for the memory used between two checks.
+    # batches of the join, so the limit leaves room for the memory used between two checks. The
+    # small query after each stopped join must succeed, though the join may still be freeing its
+    # memory when that query starts.
     lines = run("500")
-    assert lines["error"] == "MemoryError"
-    assert lines["rows"] == str(N // 3)
+    assert "small_error" not in lines, lines["small_error"]
+    assert lines["error"] == ["MemoryError"] * ROUNDS
+    assert lines["rows"] == [str(N // 3)] * ROUNDS
