@@ -438,9 +438,9 @@ pub fn create_join_compatible_solution_mappings(
                                 } else if keep.len() == 1 {
                                     let t = keep.first().unwrap();
                                     left_mappings =
-                                        force_convert_multicol_to_single_col(left_mappings, v, t);
+                                        multicol_to_single_type(left_mappings, v, left_dt, t);
                                     right_mappings =
-                                        force_convert_multicol_to_single_col(right_mappings, v, t);
+                                        multicol_to_single_type(right_mappings, v, right_dt, t);
                                     new_left_states.insert(
                                         v.clone(),
                                         RDFNodeState::from_bases(
@@ -520,7 +520,7 @@ pub fn create_join_compatible_solution_mappings(
                                 } else if right_keep.len() == 1 {
                                     let t = right_keep.first().unwrap();
                                     right_mappings =
-                                        force_convert_multicol_to_single_col(right_mappings, v, t);
+                                        multicol_to_single_type(right_mappings, v, right_dt, t);
                                     new_right_states.insert(
                                         v.to_string(),
                                         RDFNodeState::from_bases(
@@ -567,9 +567,10 @@ pub fn create_join_compatible_solution_mappings(
                         match join_type {
                             JoinType::Inner => {
                                 if left_dt.map.contains_key(base_right) {
-                                    left_mappings = force_convert_multicol_to_single_col(
+                                    left_mappings = multicol_to_single_type(
                                         left_mappings,
                                         v,
+                                        left_dt,
                                         base_right,
                                     );
                                     new_left_states.insert(v.clone(), right_dt.clone());
@@ -628,9 +629,10 @@ pub fn create_join_compatible_solution_mappings(
                         match join_type {
                             JoinType::Inner => {
                                 if right_dt.map.contains_key(left_basic_dt) {
-                                    right_mappings = force_convert_multicol_to_single_col(
+                                    right_mappings = multicol_to_single_type(
                                         right_mappings,
                                         v,
+                                        right_dt,
                                         left_basic_dt,
                                     );
                                     new_right_states.insert(
@@ -669,9 +671,10 @@ pub fn create_join_compatible_solution_mappings(
                             }
                             JoinType::Left => {
                                 if right_dt.map.contains_key(left_basic_dt) {
-                                    right_mappings = force_convert_multicol_to_single_col(
+                                    right_mappings = multicol_to_single_type(
                                         right_mappings,
                                         v,
+                                        right_dt,
                                         left_basic_dt,
                                     );
                                     new_right_states.insert(
@@ -753,6 +756,35 @@ pub fn create_join_compatible_solution_mappings(
         right_mappings,
         right_datatypes,
     )
+}
+
+/// Makes the multi-type column `c` a column of type `t`, without the rows where `c` holds another
+/// type. Those rows would otherwise be null in the new column, and the join matches nulls with
+/// each other (`nulls_equal`, see [`join_workaround`]), so that e.g. a literal on one side would
+/// join a blank node on the other. Rows where `c` is unbound are kept.
+fn multicol_to_single_type(
+    mut lf: LazyFrame,
+    c: &str,
+    state: &RDFNodeState,
+    t: &BaseRDFNodeType,
+) -> LazyFrame {
+    let others: Vec<_> = state
+        .map
+        .keys()
+        .filter(|x| *x != t && !x.is_none())
+        .collect();
+    let mut other_bound: Option<Expr> = None;
+    for f in all_multi_main_cols(others) {
+        let e = col(c).struct_().field_by_name(&f).is_not_null();
+        other_bound = Some(match other_bound {
+            Some(o) => o.or(e),
+            None => e,
+        });
+    }
+    if let Some(other_bound) = other_bound {
+        lf = lf.filter(other_bound.not());
+    }
+    force_convert_multicol_to_single_col(lf, c, t)
 }
 
 /// Joins solution mappings where some shared variables may be unbound (null) in some rows.
