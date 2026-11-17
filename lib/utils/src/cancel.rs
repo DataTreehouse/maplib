@@ -107,8 +107,11 @@ struct Inner {
     /// The most bytes the memory allocated by the process may grow by while the query runs, see
     /// [CancelToken::with_memory_limit].
     memory_limit: Option<u64>,
-    /// The bytes allocated by the process when the token was made.
-    memory_start: u64,
+    /// The least bytes allocated by the process seen since the token was made: the growth of the
+    /// query is counted from there, see [CancelToken::stopped].
+    memory_start: AtomicU64,
+    /// Set when the token is first made current, see [with_token].
+    started: AtomicBool,
 }
 
 /// A deadline and a cancel flag shared by everything that evaluates one query. Cloning gives
@@ -143,7 +146,8 @@ impl CancelToken {
             timeout,
             deadline,
             memory_limit,
-            memory_start: memory_limit.map_or(0, |_| crate::memory::memory_usage()),
+            memory_start: AtomicU64::new(memory_limit.map_or(0, |_| crate::memory::memory_usage())),
+            started: AtomicBool::new(false),
         }))
     }
 
@@ -198,7 +202,12 @@ impl CancelToken {
                     }
                 }
                 if let Some(limit) = self.0.memory_limit {
-                    let grown = crate::memory::memory_usage().saturating_sub(self.0.memory_start);
+                    // Counted from the least memory seen since the query started, so that memory
+                    // freed meanwhile by other work, e.g. by the leftovers of a query stopped just
+                    // before (see [Leftover]), does not add to what the query may use.
+                    let usage = crate::memory::memory_usage();
+                    let start = self.0.memory_start.fetch_min(usage, Ordering::Relaxed);
+                    let grown = usage.saturating_sub(start);
                     if grown > limit {
                         let _ = self.0.state.compare_exchange(
                             RUNNING,
@@ -322,14 +331,18 @@ thread_local! {
 /// Runs `f` with `token` as the current token of this thread, restoring the previous one after.
 /// With None, `f` runs with the token that is already current, if any.
 ///
-/// When the process uses more memory than queries may, `f` first waits for leftover work of
-/// stopped queries to free its memory ([wait_for_leftovers]). This blocks the thread, so it must
-/// not be one of Polars' threads, which the leftovers may need to end.
+/// The first time a token is made current, i.e. when its query starts, `f` first waits for
+/// leftover work of stopped queries to free its memory when the process uses more memory than
+/// queries may ([wait_for_leftovers]). This blocks the thread, so the first call must not be on
+/// one of Polars' threads, which the leftovers may need to end. Later calls, e.g. on the worker
+/// threads of the query, do not wait.
 pub fn with_token<R>(token: Option<CancelToken>, f: impl FnOnce() -> R) -> R {
     let Some(token) = token else {
         return f();
     };
-    wait_for_leftovers(&token);
+    if !token.0.started.swap(true, Ordering::Relaxed) {
+        wait_for_leftovers(&token);
+    }
     struct Restore(Option<CancelToken>);
     impl Drop for Restore {
         fn drop(&mut self) {

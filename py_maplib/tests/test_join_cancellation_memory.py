@@ -18,6 +18,8 @@ import textwrap
 N = 15_000
 # Times the memory case runs the large join, each followed by a small query.
 ROUNDS = 4
+# The memory limit of a query of its own, far below the process limit of the memory case.
+OWN_LIMIT_MB = 100
 
 CHILD = textwrap.dedent(
     """
@@ -48,7 +50,17 @@ CHILD = textwrap.dedent(
         except Exception as e:
             print("error", type(e).__name__, flush=True)
 
-    if case == "timeout":
+    if case.startswith("own:"):
+        # The large join is stopped by the process limit, and then run again right away with a
+        # limit of its own, which must stop it, though the first join may still be freeing its
+        # memory when the second starts.
+        _, process_mb, own_mb = case.split(":")
+        maplib.set_memory_limit(abort_above_mb=int(process_mb))
+        for _ in range(rounds):
+            big()
+            big(max_memory_mb=float(own_mb))
+            print("rows", m.query(small).height, flush=True)
+    elif case == "timeout":
         big(timeout=0.005)
         # The join must not go on after the query returned.
         time.sleep(1.0)
@@ -98,4 +110,14 @@ def test_memory_limit_stops_a_large_join_without_aborting():
     lines = run("500")
     assert "small_error" not in lines, lines["small_error"]
     assert lines["error"] == ["MemoryError"] * ROUNDS
+    assert lines["rows"] == [str(N // 3)] * ROUNDS
+
+
+def test_own_limit_of_a_query_right_after_a_stopped_one():
+    # A query's own limit counts its growth from the least memory seen since it started. It
+    # counted from when the query was made, which could be while the stopped join was still
+    # freeing over 400 MB, so the second join was not stopped by its own limit of 100 MB but by
+    # the process limit, with a MemoryError.
+    lines = run(f"own:500:{OWN_LIMIT_MB}")
+    assert lines["error"] == ["MemoryError", "QueryMemoryLimitError"] * ROUNDS
     assert lines["rows"] == [str(N // 3)] * ROUNDS
