@@ -2,4 +2,7 @@
 ignore = [
     "RUSTSEC-2024-0436", #paste unmaintained - used by qwt (via lib/hdt); qwt has no release without it
     "RUSTSEC-2025-0141", #bincode unmaintained - used by qwt 0.4 (via lib/hdt) and by Polars' serde feature
+    "RUSTSEC-2026-0543", #chrono unmaintained - used by maplib's own crates and by Polars, pyo3 and object_store; no drop-in replacement yet
+    "RUSTSEC-2026-0555", #chrono-tz unmaintained - same as chrono, used with it by maplib, Polars and pyo3
+    "RUSTSEC-2026-0542", #humantime unmaintained (wraps chrono) - used by object_store
 ]
