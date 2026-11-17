@@ -1,4 +1,4 @@
-"""Tests for Model.reason, the built-in reasoning profiles (OWL 2 RL, RDFS-Plus and RDFS).
+"""Tests for Model.infer(profile=...), the built-in reasoning profiles (OWL 2 RL, RDFS-Plus and RDFS).
 Reasoning uses the Datalog engine, which is only available in some builds, so the tests skip when
 it is not."""
 
@@ -217,7 +217,19 @@ def test_profiles_differ():
 def test_unknown_profile():
     m = model("ex:a ex:b ex:c .")
     with pytest.raises(Exception, match="Unknown reasoning profile|Contact Data Treehouse"):
-        m.reason("owl-dl")
+        m.infer(profile="owl-dl")
+
+
+def test_infer_takes_rulesets_or_profile():
+    m = model("ex:a ex:b ex:c .")
+    with pytest.raises(Exception, match="either rulesets or profile"):
+        m.infer("[?a, ex:d, ?c] :- [?a, ex:b, ?c] .", profile="rdfs")
+    with pytest.raises(Exception, match="rulesets or a profile"):
+        m.infer()
+    with pytest.raises(Exception, match="only used with a profile"):
+        m.infer("[?a, ex:d, ?c] :- [?a, ex:b, ?c] .", target_graph="urn:graph:inferred")
+    with pytest.raises(Exception, match="only used with a profile"):
+        m.infer("[?a, ex:d, ?c] :- [?a, ex:b, ?c] .", max_violations=5)
 
 
 def test_same_as_from_functional_and_keys():

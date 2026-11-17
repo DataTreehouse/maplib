@@ -1,5 +1,5 @@
 """
-W3C OWL 2 test cases for Model.reason(profile="owl-rl").
+W3C OWL 2 test cases for Model.infer(profile="owl-rl").
 
 The test data in ``testdata/w3c_owl2_rl`` is from the W3C OWL 2 Test Case Repository, see
 ``testdata/w3c_owl2_rl/README.md`` and ``LICENSE.md``:

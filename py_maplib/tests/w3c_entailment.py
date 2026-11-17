@@ -1,6 +1,6 @@
 """
 Helpers for the W3C entailment test suites (test_w3c_owl2_rl.py, test_w3c_rdf_mt.py and
-test_w3c_sparql11_entailment.py), which run Model.reason.
+test_w3c_sparql11_entailment.py), which run Model.infer with a profile.
 
 A graph G entails a graph E (simple entailment) when the blank nodes of E can be mapped to terms
 of G so that every triple of E is in G. Graphs are read back from maplib with SPARQL JSON results,
@@ -30,7 +30,7 @@ def term_key(t):
 
 def reason_or_skip(m: Model, profile: str, **kwargs):
     try:
-        return m.reason(profile, **kwargs)
+        return m.infer(profile=profile, **kwargs)
     except BaseException as e:
         if "Contact Data Treehouse" in str(e):
             pytest.skip("Reasoning is not available in this build")

@@ -1,5 +1,5 @@
 """
-W3C SPARQL 1.1 entailment regime tests for Model.reason.
+W3C SPARQL 1.1 entailment regime tests for Model.infer with a profile.
 
 The test data in ``testdata/w3c_sparql11/entailment`` is an unmodified copy of
 ``sparql/sparql11/entailment`` of https://github.com/w3c/rdf-tests, see

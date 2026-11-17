@@ -136,8 +136,8 @@ Ctrl-C stops a running query, and syntax errors show the offending source with a
 | Method | What it does |
 |---|---|
 | `m.infer_rdfs()` | Applies RDFS entailment (subclass, subproperty, domain and range) and puts the inferred triples in the transient graph. |
-| `m.reason(profile)` **EE** | Materializes a built-in reasoning profile with the Datalog engine: `"owl-rl"` (OWL 2 RL), `"rdfs-plus"` or `"rdfs"` (all RDFS entailment rules). Puts the inferred triples in the transient graph and returns a `ReasoningResult` with the count and the consistency violations. |
 | `m.infer(rules)` **EE** | Runs Datalog rules to a fixpoint. |
+| `m.infer(profile=...)` **EE** | Materializes a built-in reasoning profile with the Datalog engine: `"owl-rl"` (OWL 2 RL), `"rdfs-plus"` or `"rdfs"` (all RDFS entailment rules). Puts the inferred triples in the transient graph and returns a `ReasoningResult` with the count and the consistency violations. |
 | `m.validate(shape_graph=...)` **EE** | Validates the graph with SHACL Core and SHACL-SPARQL, evaluating shapes in parallel, and runs SHACL rules (`sh:rule`). Returns a `ValidationReport` with `.conforms`, `.results()` and `.details()` as DataFrames, and can also write the report as RDF. |
 
 ### Virtualize time series **EE**

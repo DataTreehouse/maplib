@@ -1942,35 +1942,88 @@ impl PyModel {
     }
 
     #[pyo3(signature = (
-        rulesets,
+        rulesets=None,
         graph=None,
         max_iterations=100_000,
         include_graphs=None,
         max_rows=100_000_000,
-        debug=None))]
+        debug=None,
+        profile=None,
+        target_graph=None,
+        max_violations=None))]
     #[instrument(skip_all)]
     #[allow(clippy::too_many_arguments)]
     fn infer(
         &self,
         py: Python<'_>,
-        rulesets: Py<PyAny>,
+        rulesets: Option<Py<PyAny>>,
         graph: Option<String>,
         max_iterations: Option<usize>,
         include_graphs: Option<Vec<String>>,
         max_rows: Option<usize>,
         debug: Option<bool>,
-    ) -> PyResult<PyInferenceResult> {
-        let rulesets = if let Ok(s) = rulesets.extract::<String>(py) {
-            vec![s]
-        } else if let Ok(ss) = rulesets.extract::<Vec<String>>(py) {
-            ss
-        } else {
-            return Err(PyMaplibError::FunctionArgumentError(
-                "ruleset should be str or List[str]".to_string(),
-            )
-            .into());
+        profile: Option<String>,
+        target_graph: Option<String>,
+        max_violations: Option<usize>,
+    ) -> PyResult<Py<PyAny>> {
+        let rulesets = match (rulesets, &profile) {
+            (Some(_), Some(_)) => {
+                return Err(PyMaplibError::FunctionArgumentError(
+                    "give either rulesets or profile, not both".to_string(),
+                )
+                .into())
+            }
+            (None, None) => {
+                return Err(PyMaplibError::FunctionArgumentError(
+                    "give rulesets or a profile (\"owl-rl\", \"rdfs-plus\" or \"rdfs\")"
+                        .to_string(),
+                )
+                .into())
+            }
+            (Some(rulesets), None) => {
+                if let Ok(s) = rulesets.extract::<String>(py) {
+                    Some(vec![s])
+                } else if let Ok(ss) = rulesets.extract::<Vec<String>>(py) {
+                    Some(ss)
+                } else {
+                    return Err(PyMaplibError::FunctionArgumentError(
+                        "ruleset should be str or List[str]".to_string(),
+                    )
+                    .into());
+                }
+            }
+            (None, Some(_)) => None,
         };
         let graph = parse_optional_named_node(graph)?;
+        let include_graphs = parse_include_graphs(include_graphs, true)?;
+        let Some(rulesets) = rulesets else {
+            let profile = profile.unwrap();
+            let graph = NamedGraph::from_maybe_named_node(graph.as_ref());
+            let target_graph = if let Some(target_graph) = target_graph {
+                NamedGraph::from_maybe_named_node(Some(&parse_named_node(target_graph)?))
+            } else {
+                NamedGraph::transient()
+            };
+            let res = py.detach(|| -> PyResult<_> {
+                let mut inner = self.write_inner();
+                Ok(reason_mutex(
+                    &mut inner,
+                    &profile,
+                    &graph,
+                    &target_graph,
+                    include_graphs,
+                    max_rows,
+                    max_violations.unwrap_or(1000),
+                )?)
+            })?;
+            return Ok(Py::new(py, PyReasoningResult { inner: res })?.into_any());
+        };
+        if target_graph.is_some() || max_violations.is_some() {
+            return Err(PyMaplibError::FunctionArgumentError(
+                "target_graph and max_violations are only used with a profile".to_string(),
+            )
+            .into());
+        }
         let named_graph = graph.map(|graph| NamedGraph::from_maybe_named_node(Some(&graph)));
         let (res, ..) = py.detach(|| -> PyResult<(_, LockedCats)> {
             let mut inner = self.write_inner();
@@ -1982,56 +2035,14 @@ impl PyModel {
                 rulesets,
                 max_iterations,
                 named_graph.as_ref(),
-                parse_include_graphs(include_graphs, true)?,
+                include_graphs,
                 max_rows,
                 debug,
             )?;
 
             Ok((res, cats))
         })?;
-        Ok(PyInferenceResult { inner: res })
-    }
-
-    #[pyo3(signature = (
-        profile="owl-rl".to_string(),
-        graph=None,
-        target_graph=None,
-        include_graphs=None,
-        max_violations=1000,
-        max_rows=100_000_000))]
-    #[instrument(skip_all)]
-    #[allow(clippy::too_many_arguments)]
-    fn reason(
-        &self,
-        py: Python<'_>,
-        profile: String,
-        graph: Option<String>,
-        target_graph: Option<String>,
-        include_graphs: Option<Vec<String>>,
-        max_violations: usize,
-        max_rows: Option<usize>,
-    ) -> PyResult<PyReasoningResult> {
-        let graph = parse_optional_named_node(graph)?;
-        let graph = NamedGraph::from_maybe_named_node(graph.as_ref());
-        let target_graph = if let Some(target_graph) = target_graph {
-            NamedGraph::from_maybe_named_node(Some(&parse_named_node(target_graph)?))
-        } else {
-            NamedGraph::transient()
-        };
-        let include_graphs = parse_include_graphs(include_graphs, true)?;
-        let res = py.detach(|| -> PyResult<_> {
-            let mut inner = self.write_inner();
-            Ok(reason_mutex(
-                &mut inner,
-                &profile,
-                &graph,
-                &target_graph,
-                include_graphs,
-                max_rows,
-                max_violations,
-            )?)
-        })?;
-        Ok(PyReasoningResult { inner: res })
+        Ok(Py::new(py, PyInferenceResult { inner: res })?.into_any())
     }
 
     #[pyo3(signature = (graph=None))]

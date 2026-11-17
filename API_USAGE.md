@@ -1506,9 +1506,31 @@ print(m.infer_rdfs())
 print(m.query("SELECT ?t WHERE { <http://example.net/ns#rex> a ?t }"))   # Dog, Animal, Thing
 ```
 
-### reason **EE**
+### Datalog: infer **EE**
 
-`reason(profile="owl-rl", graph=None, target_graph=None, include_graphs=None, max_violations=1000,
+`infer(rulesets, graph=None, max_iterations=100_000, include_graphs=None, max_rows=100_000_000,
+debug=False)` runs Datalog rules to a fixpoint and adds the inferred triples. With `profile=`
+instead of rulesets, it runs a built-in reasoning profile, see the next section. A rule is
+`head :- body .`, with triple patterns written `[subject, predicate, object]`:
+
+<!-- skip: EE -->
+```python
+rules = """
+PREFIX ex: <http://example.net/ns#>
+[?a, ex:ancestor, ?b] :- [?a, ex:parent, ?b] .
+[?a, ex:ancestor, ?c] :- [?a, ex:parent, ?b], [?b, ex:ancestor, ?c] .
+[?p, ex:category, "adult"] :- [?p, ex:age, ?age], FILTER(?age >= 18) .
+"""
+result = m.infer(rules)          # EE; also takes a list of rulesets
+```
+
+Bodies can use `FILTER(...)`, `BIND(expr AS ?v)` and `AGGREGATE(... ON ?group BIND SUM(?x) as ?s)`.
+A ruleset can also consist of SPARQL `CONSTRUCT` queries, which are run as rules. Prefixes added with
+`add_prefixes` are known in rules. `debug=True` reports rule bodies that give no triples.
+
+### Reasoning profiles: infer(profile=...) **EE**
+
+`infer(profile="owl-rl", graph=None, target_graph=None, include_graphs=None, max_violations=1000,
 max_rows=100_000_000)` materializes the entailments of a built-in reasoning profile with the Datalog
 engine. The schema (classes, properties, restrictions and lists) is compiled into rules, which run to
 a fixpoint. The profiles are:
@@ -1555,7 +1577,7 @@ ex:Breaker owl:disjointWith ex:Transformer .
 ex:bay1 ex:partOf ex:substation1 . ex:substation1 ex:partOf ex:region1 .
 ex:b1 a ex:Breaker, ex:Transformer .
 """, format="turtle")
-res = m.reason("owl-rl")        # EE
+res = m.infer(profile="owl-rl")   # EE
 print(res.inferred_triples, res.consistent)   # consistent is False
 for v in res.violations:
     print(v["rule"], v["message"])            # cax-dw: ex:b1 is an instance of the disjoint classes ...
@@ -1565,35 +1587,14 @@ print(m.query("SELECT ?x WHERE { <http://example.org/region1> <http://example.or
 
 Choosing between them: `infer_rdfs` is in the open-source core. It runs the RDFS rules once each,
 in order, as SPARQL inserts, which is fast and enough for typical class and property hierarchies.
-`reason("rdfs")` computes the complete RDFS closure (for example, types from domains of
-subproperties found late), with the axiomatic triples, on the Datalog engine. `reason("rdfs-plus")`
+`infer(profile="rdfs")` computes the complete RDFS closure (for example, types from domains of
+subproperties found late), with the axiomatic triples, on the Datalog engine. `infer(profile="rdfs-plus")`
 adds the common OWL property axioms and equality without the cost of axiomatic triples or checks;
-use it for inverse and transitive properties in models such as CIM. Use `reason("owl-rl")` for
+use it for inverse and transitive properties in models such as CIM. Use `infer(profile="owl-rl")` for
 class expressions, property chains, keys and consistency checks.
 
 Inferring or asserting `owl:sameAs` is costly for large groups of equal resources, because the
 triples of every member are copied to the others.
-
-### Datalog: infer **EE**
-
-`infer(rulesets, graph=None, max_iterations=100_000, include_graphs=None, max_rows=100_000_000,
-debug=False)` runs Datalog rules to a fixpoint and adds the inferred triples. A rule is
-`head :- body .`, with triple patterns written `[subject, predicate, object]`:
-
-<!-- skip: EE -->
-```python
-rules = """
-PREFIX ex: <http://example.net/ns#>
-[?a, ex:ancestor, ?b] :- [?a, ex:parent, ?b] .
-[?a, ex:ancestor, ?c] :- [?a, ex:parent, ?b], [?b, ex:ancestor, ?c] .
-[?p, ex:category, "adult"] :- [?p, ex:age, ?age], FILTER(?age >= 18) .
-"""
-result = m.infer(rules)          # EE; also takes a list of rulesets
-```
-
-Bodies can use `FILTER(...)`, `BIND(expr AS ?v)` and `AGGREGATE(... ON ?group BIND SUM(?x) as ?s)`.
-A ruleset can also consist of SPARQL `CONSTRUCT` queries, which are run as rules. Prefixes added with
-`add_prefixes` are known in rules. `debug=True` reports rule bodies that give no triples.
 
 ### SHACL: validate **EE**
 

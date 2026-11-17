@@ -1,5 +1,5 @@
 """
-W3C RDF 1.1 Semantics entailment tests for Model.reason(profile="rdfs").
+W3C RDF 1.1 Semantics entailment tests for Model.infer(profile="rdfs").
 
 The test data in ``testdata/w3c_rdf_mt`` is a copy of ``rdf/rdf11/rdf-mt`` of
 https://github.com/w3c/rdf-tests (without the TESTS archives and reports), see

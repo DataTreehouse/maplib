@@ -2676,6 +2676,7 @@ class Model:
         :return: The running Server. With snapshot_url, Server.stop() raises if the last snapshot fails.
         """
 
+    @overload
     def infer(
             self,
             rulesets: Union[str, List[str]],
@@ -2684,44 +2685,39 @@ class Model:
             include_graphs: Optional[List[str]] = None,
             max_rows: Optional[int] = 100_000_000,
             debug: bool = False,
-    ) -> "InferenceResult":
-        """
-        Run the inference rules that are provided
-        :param rulesets: The ruleset (a string), or a list of rulesets. A ruleset is written in maplib's datalog syntax,
-            as SPARQL CONSTRUCT queries, or in SPARQL-RL 1.2 (RULE { ... } WHERE { ... }, maplib Enterprise Edition).
-        :param graph: Apply the ruleset to this graph, defaults to the default graph, or the graph specified in the rules.
-        :param max_iterations: Maximum number of rule executions.
-        :param include_graphs: IRIs of graphs whose triples are merged into the graph that is reasoned over, as with FROM.
-            None includes the transient graph (TRANSIENT_GRAPH), use [] to query only the graph itself.
-        :param max_rows: Maximum estimated rows in result, helps avoid out-of-memory errors.
-        :param debug: Debugs rule bodies for executions that give no triples.
-        :return: The result of inference.
-        """
+    ) -> "InferenceResult": ...
 
-    def infer_rdfs(
+    @overload
+    def infer(
             self,
+            *,
+            profile: LiteralType["owl-rl", "rdfs-plus", "rdfs"],
             graph: Optional[str] = None,
-    ) -> int:
-        """
-        RDFS Inference with rules: 2, 3, 5, 6, 7, 8, 9, 10, 11 of RDF 1.1 Semantics, using SPARQL rules. See
-        Model.reason for all the RDFS entailment rules (profile "rdfs"), RDFS-Plus and OWL 2 RL.
-        The inferred triples are put in the transient graph (TRANSIENT_GRAPH), so they are not written unless
-        that graph is written explicitly.
-        :param graph: Apply rdfs inferencing to this graph, defaults to the default graph, or the graph specified in the rules.
-        :return number of inferred triples
-        """
-
-    def reason(
-            self,
-            profile: LiteralType["owl-rl", "rdfs-plus", "rdfs"] = "owl-rl",
-            graph: Optional[str] = None,
-            target_graph: Optional[str] = None,
             include_graphs: Optional[List[str]] = None,
-            max_violations: int = 1000,
             max_rows: Optional[int] = 100_000_000,
-    ) -> "ReasoningResult":
+            target_graph: Optional[str] = None,
+            max_violations: Optional[int] = 1000,
+    ) -> "ReasoningResult": ...
+
+    def infer(
+            self,
+            rulesets: Optional[Union[str, List[str]]] = None,
+            graph: Optional[str] = None,
+            max_iterations: Optional[int] = 100_000,
+            include_graphs: Optional[List[str]] = None,
+            max_rows: Optional[int] = 100_000_000,
+            debug: bool = False,
+            profile: Optional[LiteralType["owl-rl", "rdfs-plus", "rdfs"]] = None,
+            target_graph: Optional[str] = None,
+            max_violations: Optional[int] = None,
+    ) -> Union["InferenceResult", "ReasoningResult"]:
         """
-        Materialize the entailments of a built-in reasoning profile, using the Datalog engine.
+        Run the inference rules that are provided, or materialize the entailments of a built-in reasoning profile
+        (maplib Enterprise Edition). Give either rulesets or profile.
+
+        >>> m.infer('''
+        ... [?x, <urn:ex:ancestor>, ?z] :- [?x, <urn:ex:parent>, ?y], [?y, <urn:ex:ancestor>, ?z] .
+        ... ''')
 
         Profiles:
 
@@ -2747,24 +2743,44 @@ class Model:
 
         >>> m = Model()
         >>> m.read("model.ttl")
-        >>> res = m.reason("owl-rl")
+        >>> res = m.infer(profile="owl-rl")
         >>> print(res.inferred_triples, res.consistent)
         >>> for v in res.violations:
         ...     print(v["rule"], v["message"])
 
-        :param profile: "owl-rl" (the default), "rdfs-plus" or "rdfs".
-        :param graph: The graph to reason over, defaults to the default graph.
-        :param target_graph: The graph the inferred triples are put in. Defaults to the transient graph
+        :param rulesets: The ruleset (a string), or a list of rulesets. A ruleset is written in maplib's datalog syntax,
+            as SPARQL CONSTRUCT queries, or in SPARQL-RL 1.2 (RULE { ... } WHERE { ... }, maplib Enterprise Edition).
+        :param graph: Apply the rules to this graph, defaults to the default graph, or (for rulesets) the graph
+            specified in the rules.
+        :param max_iterations: Maximum number of rule executions (rulesets only).
+        :param include_graphs: IRIs of graphs whose triples are merged into the graph that is reasoned over, as with FROM.
+            None includes the transient graph (TRANSIENT_GRAPH), use [] to query only the graph itself.
+        :param max_rows: Maximum estimated rows in the result of a rule, helps avoid out-of-memory errors.
+        :param debug: Debugs rule bodies for executions that give no triples (rulesets only).
+        :param profile: "owl-rl", "rdfs-plus" or "rdfs", instead of rulesets.
+        :param target_graph: With a profile: the graph the inferred triples are put in. Defaults to the transient graph
             (TRANSIENT_GRAPH), so they are not written unless that graph is written explicitly. There is one
             transient graph, shared by all graphs and included in queries by default, so when reasoning over
             several named graphs separately, give each its own target graph. Pass the graph
             itself (DEFAULT_GRAPH for the default graph) to add them to it. Triples that are already in the graph
             (or the included graphs) are not added to the target graph.
-        :param include_graphs: IRIs of graphs whose triples are read along with the graph, as with FROM. None
-            includes the transient graph, use [] to read only the graph itself (and the target graph).
-        :param max_violations: The maximum number of violations reported per rule, 0 skips the consistency checks.
-        :param max_rows: Maximum estimated rows in the result of a rule, helps avoid out-of-memory errors.
-        :return: The number of inferred triples and the violations.
+        :param max_violations: With a profile: the maximum number of violations reported per rule, 0 skips the
+            consistency checks. Defaults to 1000.
+        :return: An InferenceResult for rulesets, or for a profile a ReasoningResult with the number of inferred
+            triples and the violations.
+        """
+
+    def infer_rdfs(
+            self,
+            graph: Optional[str] = None,
+    ) -> int:
+        """
+        RDFS Inference with rules: 2, 3, 5, 6, 7, 8, 9, 10, 11 of RDF 1.1 Semantics, using SPARQL rules. See
+        Model.infer(profile="rdfs") for all the RDFS entailment rules, RDFS-Plus and OWL 2 RL.
+        The inferred triples are put in the transient graph (TRANSIENT_GRAPH), so they are not written unless
+        that graph is written explicitly.
+        :param graph: Apply rdfs inferencing to this graph, defaults to the default graph, or the graph specified in the rules.
+        :return number of inferred triples
         """
 
     def size(self, graph: Optional[str] = None) -> int:
@@ -2848,7 +2864,7 @@ class InferenceResult:
 
 class ReasoningResult:
     """
-    The result of Model.reason.
+    The result of Model.infer with a profile.
     Only constructed by maplib.
     """
 
