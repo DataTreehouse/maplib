@@ -1,0 +1,59 @@
+# W3C SPARQL 1.0 (DAWG) tests that maplib currently fails (used by test_w3c_sparql10.py).
+# One test id per line, optionally followed by "# reason".
+# These are marked as strict xfails: when a test starts passing, remove it from this list.
+#
+# Most of these come from maplib storing literals of the XSD datatypes by value: lexical forms
+# such as "01"^^xsd:integer, "1.0e0"^^xsd:double or "+1"^^xsd:integer are not kept (they come
+# back canonical, e.g. "1"^^xsd:integer and "1.0"^^xsd:double), terms with the same value are
+# the same term, and literals whose lexical form is not valid for their datatype
+# ("xyz"^^xsd:integer) are dropped when the data is read.
+open-world/open-eq-01  # "001"^^xsd:integer in a triple pattern matches "1" by value; RDF terms must match exactly
+open-world/open-eq-03  # "01"^^xsd:integer is returned as "1"
+open-world/open-eq-04  # "02"^^xsd:integer is returned as "2", and != with literals of unknown datatypes is true instead of an error
+open-world/open-eq-06  # != with literals of another unknown datatype is true instead of an error
+open-world/open-eq-07  # the ill-typed "xyz"^^xsd:integer is dropped when the data is read
+open-world/open-eq-08  # the ill-typed "xyz"^^xsd:integer is dropped when the data is read
+open-world/open-eq-09  # = between language-tagged literals of different values is true
+open-world/open-eq-10  # the ill-typed "abc"^^xsd:integer is dropped when the data is read
+open-world/open-eq-11  # the ill-typed "abc"^^xsd:integer is dropped when the data is read
+open-world/open-eq-12  # the ill-typed "xyz"^^xsd:integer is dropped when the data is read
+open-world/date-4  # the time zone of "2006-08-24Z"^^xsd:date is not kept
+algebra/filter-nested-2  # a FILTER alone in a nested group sees the variables of the enclosing group
+algebra/filter-scope-1  # a FILTER in an OPTIONAL inside a nested group sees ?v of the enclosing group
+optional-filter/dawg-optional-filter-005-not-simplified  # a FILTER in a group nested in an OPTIONAL sees ?title of the enclosing group (the braces are simplified away)
+graph/graph-not-exist  # GRAPH <unknown> {} gives one empty solution instead of none
+expr-builtin/dawg-str-1  # STR of "1"^^xsd:double is "1.0", and "01"^^xsd:integer is returned as "1"
+expr-builtin/dawg-str-2  # "01"^^xsd:integer is stored as 1, so STR gives "1"
+expr-builtin/dawg-datatype-1  # "1.0e0" and "1"^^xsd:double are returned as "1.0"
+expr-builtin/dawg-datatype-2  # the ill-typed literals of the data are dropped when it is read
+expr-builtin/dawg-lang-1  # the ill-typed literals of the data are dropped when it is read
+expr-builtin/sameTerm-simple  # sameTerm compares values: "1"^^xsd:double and "1.0e0"^^xsd:double are the same term
+expr-builtin/sameTerm-eq  # sameTerm compares values: "1"^^xsd:double and "1.0e0"^^xsd:double are the same term
+expr-builtin/sameTerm-not-eq  # sameTerm compares values: "1"^^xsd:double and "1.0e0"^^xsd:double are the same term
+expr-builtin/case-insensitive-booleans  # TRUE and False (any case) are not parsed as boolean literals
+expr-ops/add-numbers-cast  # "3"^^xsd:double and "3"^^xsd:float are returned as "3.0"
+expr-ops/subtract-numbers-cast  # "3"^^xsd:double and "3"^^xsd:float are returned as "3.0"
+expr-ops/multiply-numbers-cast  # "3"^^xsd:double and "3"^^xsd:float are returned as "3.0"
+expr-ops/divide-numbers-cast  # "3"^^xsd:double and "3"^^xsd:float are returned as "3.0"
+expr-ops/unplus-2  # "3"^^xsd:double and "3"^^xsd:float are returned as "3.0"
+expr-ops/unminus-2  # "3"^^xsd:double and "3"^^xsd:float are returned as "3.0"
+expr-equals/eq-2-1  # values with different lexical forms (e.g. "01" and "1"^^xsd:integer) are one stored term
+expr-equals/eq-2-2  # values with different lexical forms (e.g. "01" and "1"^^xsd:integer) are one stored term
+expr-equals/eq-graph-1  # the constant 1 in a triple pattern matches "01"^^xsd:integer by value
+expr-equals/eq-graph-2  # the constant 1.0e0 in a triple pattern matches "1"^^xsd:double by value
+expr-equals/eq-dateTime  # dateTimes are compared without the rules for time zones (a dateTime without one is not comparable with one with a time zone)
+regex/regex-no-metacharacters  # the "q" flag (no metacharacters) is not supported
+regex/regex-no-metacharacters-case-insensitive  # the "q" flag (no metacharacters) is not supported
+distinct/no-distinct-1  # lexical forms such as "+1"^^xsd:integer and "1.3e0"^^xsd:double are not kept
+distinct/distinct-1  # values with different lexical forms are one term, so DISTINCT merges them
+distinct/no-distinct-9  # lexical forms such as "+1"^^xsd:integer and "1.3e0"^^xsd:double are not kept
+distinct/distinct-9  # values with different lexical forms are one term, so DISTINCT merges them
+syntax-sparql1/syntax-expr-05  # a call of an unknown function is an error at query time, not only at evaluation
+syntax-sparql1/syntax-order-05  # a call of an unknown function is an error at query time, not only at evaluation
+syntax-sparql1/syntax-order-06  # a call of an unknown function is an error at query time, not only at evaluation
+syntax-sparql2/syntax-general-07  # panics (SchemaMismatch) on a triple pattern with the object +1.0
+syntax-sparql2/syntax-function-01  # a call of an unknown function is an error at query time, not only at evaluation
+syntax-sparql2/syntax-function-02  # a call of an unknown function is an error at query time, not only at evaluation
+syntax-sparql2/syntax-function-03  # a call of an unknown function is an error at query time, not only at evaluation
+syntax-sparql2/syntax-function-04  # a call of an unknown function is an error at query time, not only at evaluation
+syntax-sparql3/syn-bad-26  # "FILTER (?x<?a&&?b>?y)" is accepted but must be rejected

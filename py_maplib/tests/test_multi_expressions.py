@@ -832,17 +832,19 @@ def test_mul_types_single():
     """,
         solution_mappings=True,
     )
+    # Numeric type promotion (SPARQL 1.1 17.3, XPath op:numeric-multiply): integer types <
+    # decimal < float < double, and any two types derived from xsd:integer give xsd:integer.
     assert sm.rdf_types == {
         "a": RDFType.Literal("http://www.w3.org/2001/XMLSchema#string"),
-        "n1": RDFType.Literal("http://www.w3.org/2001/XMLSchema#decimal"),
-        "n2": RDFType.Literal("http://www.w3.org/2001/XMLSchema#decimal"),
+        "n1": RDFType.Literal("http://www.w3.org/2001/XMLSchema#float"),
+        "n2": RDFType.Literal("http://www.w3.org/2001/XMLSchema#double"),
         "n3": RDFType.Literal("http://www.w3.org/2001/XMLSchema#decimal"),
         "n4": RDFType.Literal("http://www.w3.org/2001/XMLSchema#float"),
         "n5": RDFType.Literal("http://www.w3.org/2001/XMLSchema#double"),
         "n6": RDFType.Literal("http://www.w3.org/2001/XMLSchema#decimal"),
         "n8": RDFType.Literal("http://www.w3.org/2001/XMLSchema#integer"),
         "n9": RDFType.Literal("http://www.w3.org/2001/XMLSchema#integer"),
-        "n10": RDFType.Literal("http://www.w3.org/2001/XMLSchema#int"),
+        "n10": RDFType.Literal("http://www.w3.org/2001/XMLSchema#integer"),
     }
 
 

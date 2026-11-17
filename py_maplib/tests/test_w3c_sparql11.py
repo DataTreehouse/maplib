@@ -633,7 +633,11 @@ def parse_rdf_results(iri) -> dict:
         row = {}
         for b in g.objects(solution, rs.binding):
             row[str(g.value(b, rs.variable))] = rdflib_term(g.value(b, rs.value))
-        rows.append(row)
+        # The order of the solutions of an ordered result (ORDER BY) is given by rs:index
+        # (rs["index"]: rs.index is str.index, as a Namespace is a str).
+        index = g.value(solution, rs["index"])
+        rows.append((int(index) if index is not None else 0, row))
+    rows = [row for _, row in sorted(rows, key=lambda r: r[0])]
     return {"vars": variables, "boolean": None, "rows": rows}
 
 

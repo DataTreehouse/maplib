@@ -1,4 +1,4 @@
-use crate::expressions::coalesce_expressions;
+use crate::expressions::combine_disjoint_expressions;
 use crate::expressions::durations::temporal_operation;
 use oxrdf::vocab::xsd;
 use oxrdf::NamedNodeRef;
@@ -110,8 +110,9 @@ pub fn typed_numerical_operation(
         let e = lit(LiteralValue::untyped_null()).cast(t.default_input_polars_data_type());
         (e, t.into_default_input_rdf_node_state())
     } else {
+        // A row has one type on each side, so at most one of the operations is bound.
         let (exprs, types): (Vec<_>, Vec<_>) = ops.into_iter().unzip();
-        coalesce_expressions(exprs, types, global_cats)
+        combine_disjoint_expressions(exprs, types, global_cats)
     }
 }
 
@@ -125,29 +126,29 @@ fn op(
     if matches!(expression, Expression::Divide(..)) {
         return divide(e_left, e_right, dt_left, dt_right);
     }
-    let mut e = match expression {
-        Expression::Multiply(_, _) => e_left.clone().mul(e_right.clone()),
-        Expression::Add(_, _) => e_left.clone().add(e_right.clone()),
-        Expression::Subtract(_, _) => e_left.clone().sub(e_right.clone()),
-        _ => panic!("Should never happen"),
-    };
-    let compat = compatible_operation(expression, dt_left, dt_right);
-    if compat {
-        let t = match expression {
-            Expression::Multiply(_, _) => greatest_common_dt(dt_left, dt_right),
-            Expression::Add(_, _) => greatest_common_dt(dt_left, dt_right),
-            Expression::Subtract(_, _) => greatest_common_dt(dt_left, dt_right),
-            _ => unreachable!("Should never happen"),
-        };
-        e = e.cast(t.default_input_polars_data_type());
-        (e, t.into_default_input_rdf_node_state())
-    } else {
+    if !compatible_operation(expression, dt_left, dt_right) {
         let t = BaseRDFNodeType::None;
-        (
+        return (
             lit(LiteralValue::untyped_null()).cast(t.default_input_polars_data_type()),
             t.into_default_input_rdf_node_state(),
-        )
+        );
     }
+    let t = greatest_common_dt(dt_left, dt_right);
+    let dtype = t.default_input_polars_data_type();
+    // Integer operands are widened to the type of the result first: xsd:short values are
+    // stored as Int16, and 30000 + 30000 overflowed before the cast of the sum.
+    let (e_left, e_right) = if dtype.is_integer() {
+        (e_left.cast(dtype.clone()), e_right.cast(dtype.clone()))
+    } else {
+        (e_left, e_right)
+    };
+    let e = match expression {
+        Expression::Multiply(_, _) => e_left.mul(e_right),
+        Expression::Add(_, _) => e_left.add(e_right),
+        Expression::Subtract(_, _) => e_left.sub(e_right),
+        _ => unreachable!("op is called for +, -, * and /"),
+    };
+    (e.cast(dtype), t.into_default_input_rdf_node_state())
 }
 
 /// Numeric type promotion levels (SPARQL 1.1 section 17.3, XPath op:numeric-*):
@@ -228,75 +229,22 @@ pub fn compatible_operation(expression: &Expression, l1: NamedNodeRef, l2: Named
     }
 }
 
+/// The type of the result of op:numeric-add, op:numeric-subtract and op:numeric-multiply
+/// (XPath 2.0 section 6.2, SPARQL 1.1 section 17.3): the operands are promoted to the greater of
+/// their types in xsd:integer < xsd:decimal < xsd:float < xsd:double, where every type derived
+/// from xsd:integer counts as xsd:integer. So xsd:short + xsd:short is an xsd:integer.
 fn greatest_common_dt(dt_left: NamedNodeRef, dt_right: NamedNodeRef) -> BaseRDFNodeType {
-    let bits_left = n_bits(dt_left);
-    let bits_right = n_bits(dt_right);
-    let decimal_left = is_decimal(dt_left);
-    let decimal_right = is_decimal(dt_right);
-
-    let use_bits = cmp::max(bits_left, bits_right);
-    let decimal = decimal_left || decimal_right;
-    let use_type = gen_type(use_bits, decimal, dt_left, dt_right);
-    BaseRDFNodeType::Literal(use_type.into_owned(), None)
-}
-
-fn gen_type(
-    bits: u8,
-    decimal: bool,
-    left: NamedNodeRef,
-    right: NamedNodeRef,
-) -> NamedNodeRef<'static> {
-    if decimal {
-        if bits == 32 {
-            xsd::FLOAT
-        } else if bits == 64 {
-            if left == xsd::DECIMAL || right == xsd::DECIMAL {
-                xsd::DECIMAL
-            } else {
-                xsd::DOUBLE
-            }
-        } else {
-            unreachable!(
-                "n_bits returns 1, 8, 16, 32 or 64 bits, and decimal types have at least 32"
-            )
-        }
-    } else {
-        if bits == 1 {
-            xsd::BOOLEAN
-        } else if bits == 8 {
-            xsd::BYTE
-        } else if bits == 16 {
-            xsd::SHORT
-        } else if bits == 32 {
-            xsd::INT
-        } else if bits == 64 {
-            xsd::INTEGER
-        } else {
-            unreachable!(
-                "n_bits returns 1, 8, 16, 32 or 64 bits, and decimal types have at least 32"
-            )
-        }
-    }
-}
-
-fn n_bits(t: NamedNodeRef) -> u8 {
-    match t {
-        xsd::DOUBLE
-        | xsd::DECIMAL
-        | xsd::LONG
-        | xsd::UNSIGNED_LONG
-        | xsd::POSITIVE_INTEGER
-        | xsd::NON_NEGATIVE_INTEGER
-        | xsd::NEGATIVE_INTEGER
-        | xsd::NON_POSITIVE_INTEGER
-        | xsd::INTEGER => 64,
-        xsd::FLOAT | xsd::INT | xsd::UNSIGNED_INT => 32,
-        xsd::SHORT | xsd::UNSIGNED_SHORT => 16,
-        xsd::BYTE | xsd::UNSIGNED_BYTE => 8,
-        xsd::BOOLEAN => 1,
-        // Other numeric types, such as owl:real subtypes, are treated as 64-bit.
-        _ => 64,
-    }
+    let level = cmp::max(
+        numeric_promotion_level(dt_left).unwrap_or(0),
+        numeric_promotion_level(dt_right).unwrap_or(0),
+    );
+    let t = match level {
+        3 => xsd::DOUBLE,
+        2 => xsd::FLOAT,
+        1 => xsd::DECIMAL,
+        _ => xsd::INTEGER,
+    };
+    BaseRDFNodeType::Literal(t.into_owned(), None)
 }
 
 fn is_decimal(t: NamedNodeRef) -> bool {

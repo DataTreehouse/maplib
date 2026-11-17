@@ -1,0 +1,20 @@
+# W3C RDF 1.0 Test Cases (2004) that maplib currently fails (used by test_w3c_rdf10.py).
+# One test id per line, optionally followed by "# reason".
+# These are marked as strict xfails: when a test starts passing, remove it from this list.
+# The entailment tests are skipped by builds without reasoning (open source maplib).
+datatypes/test002  # the ill-typed literal "flargh"^^xsd:integer is dropped when the data is read
+rdfms-empty-property-elements/test003  # rdf:parseType="Literal" with empty content fails: "No value found for rdf:XMLLiteral value"
+rdfms-empty-property-elements/test009  # rdf:parseType="Literal" with empty content fails: "No value found for rdf:XMLLiteral value"
+rdfms-xml-literal-namespaces/test001  # XML literals are not in exclusive canonical form (namespace declarations differ)
+rdfms-xml-literal-namespaces/test002  # XML literals are not in exclusive canonical form (namespace declarations differ)
+xml-canon/test001  # XML literals are not in exclusive canonical form (unused namespace declarations are kept)
+datatypes-intensional/xsd-integer-string-incompatible  # inconsistencies (datatype clashes) are not detected
+datatypes/range-clash  # inconsistencies (datatype clashes) are not detected
+datatypes/test010  # inconsistencies (datatype clashes) are not detected
+rdfs-entailment/test001  # inconsistencies (datatype clashes) are not detected
+datatypes/semantic-equivalence-between-datatypes  # D-entailment: "10"^^xsd:integer does not entail the same value as xsd:decimal
+pfps-10/non-well-formed-literal-1  # the ill-typed literal of the premise is dropped when it is read
+xmlsch-02/whitespace-facet-1  # the ill-typed literal " 3 "^^xsd:integer is dropped when the data is read
+xmlsch-02/whitespace-facet-3  # the ill-typed literal " 3 "^^xsd:integer is dropped when the data is read
+rdfms-seq-representation/test002  # the axiomatic triples of the container membership properties (rdf:_1 a rdfs:ContainerMembershipProperty) are not inferred
+rdfms-seq-representation/test004  # rdf:_1 rdfs:subPropertyOf rdfs:member is not inferred

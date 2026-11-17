@@ -687,10 +687,34 @@ pub fn coalesce_contexts(
     Ok(solution_mappings)
 }
 
+/// COALESCE: the first argument that is bound, taken as a whole.
 pub fn coalesce_expressions(
     expressions: Vec<Expr>,
     states: Vec<RDFNodeState>,
     global_cats: LockedCats,
+) -> (Expr, RDFNodeState) {
+    combine_expressions(expressions, states, global_cats, false)
+}
+
+/// Combines expressions of which at most one is bound in any row, such as the results of an
+/// operation for each pair of the types of its operands, into one column.
+///
+/// Unlike [`coalesce_expressions`] this needs no ordering of the arguments, so the expression
+/// grows linearly with their number. Ordering n arguments takes O(n^2) terms, and the
+/// 16 x 16 type pairs of an operation on two numeric columns made a plan of many GB.
+pub(crate) fn combine_disjoint_expressions(
+    expressions: Vec<Expr>,
+    states: Vec<RDFNodeState>,
+    global_cats: LockedCats,
+) -> (Expr, RDFNodeState) {
+    combine_expressions(expressions, states, global_cats, true)
+}
+
+fn combine_expressions(
+    expressions: Vec<Expr>,
+    states: Vec<RDFNodeState>,
+    global_cats: LockedCats,
+    disjoint: bool,
 ) -> (Expr, RDFNodeState) {
     let mut basic_types = HashSet::new();
     let mut keep_exprs = vec![];
@@ -720,24 +744,29 @@ pub fn coalesce_expressions(
 
         // COALESCE returns the first bound argument as a whole. Coalescing each type
         // separately would mix values of different arguments when they have different types.
-        let bound: Vec<Expr> = exploded
-            .iter()
-            .map(|m| {
-                m.values()
-                    .flat_map(|(e_v, _)| e_v.iter().map(|e| e.clone().is_not_null()))
-                    .reduce(|a, b| a.or(b))
-                    .unwrap_or(lit(false))
-            })
-            .collect();
-        let chosen: Vec<Expr> = (0..bound.len())
-            .map(|i| {
-                let mut c = bound[i].clone();
-                for b in &bound[..i] {
-                    c = c.and(b.clone().not());
-                }
-                c
-            })
-            .collect();
+        // Disjoint arguments are never bound in the same row, so they need no choice.
+        let chosen: Vec<Option<Expr>> = if disjoint {
+            vec![None; exploded.len()]
+        } else {
+            let bound: Vec<Expr> = exploded
+                .iter()
+                .map(|m| {
+                    m.values()
+                        .flat_map(|(e_v, _)| e_v.iter().map(|e| e.clone().is_not_null()))
+                        .reduce(|a, b| a.or(b))
+                        .unwrap_or(lit(false))
+                })
+                .collect();
+            (0..bound.len())
+                .map(|i| {
+                    let mut c = bound[i].clone();
+                    for b in &bound[..i] {
+                        c = c.and(b.clone().not());
+                    }
+                    Some(c)
+                })
+                .collect()
+        };
 
         let mut coalesce_map = HashMap::new();
         let mut state_map = HashMap::new();
@@ -750,11 +779,12 @@ pub fn coalesce_expressions(
                         if to_coalesce.len() <= k {
                             to_coalesce.push(vec![]);
                         }
-                        to_coalesce[k].push(
-                            when(chosen.clone())
+                        to_coalesce[k].push(match chosen {
+                            Some(chosen) => when(chosen.clone())
                                 .then(e)
                                 .otherwise(lit(LiteralValue::untyped_null())),
-                        );
+                            None => e,
+                        });
                     }
                     state_map.insert(t.clone(), s);
                 }
