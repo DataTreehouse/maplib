@@ -26,16 +26,34 @@ pub fn join(
     max_rows: Option<usize>,
 ) -> Result<SolutionMappings, QueryProcessingError> {
     let SolutionMappings {
-        mappings: left_mappings,
-        rdf_node_types: left_datatypes,
+        mappings: mut left_mappings,
+        rdf_node_types: mut left_datatypes,
         height_estimate: left_height,
     } = left_solution_mappings;
 
     let SolutionMappings {
-        mappings: right_mappings,
-        rdf_node_types: right_datatypes,
+        mappings: mut right_mappings,
+        rdf_node_types: mut right_datatypes,
         height_estimate: right_height,
     } = right_solution_mappings;
+
+    // A shared variable that is unbound in every solution of one side (e.g. a projected variable
+    // the pattern does not bind) is compatible with any value on the other side, so it is not a
+    // join key: drop it from that side and keep the other side's values.
+    let shared: Vec<String> = left_datatypes
+        .keys()
+        .filter(|k| right_datatypes.contains_key(*k))
+        .cloned()
+        .collect();
+    for k in shared {
+        if right_datatypes.get(&k).unwrap().is_none() {
+            right_mappings = right_mappings.drop(by_name([k.as_str()], true, false));
+            right_datatypes.remove(&k);
+        } else if left_datatypes.get(&k).unwrap().is_none() {
+            left_mappings = left_mappings.drop(by_name([k.as_str()], true, false));
+            left_datatypes.remove(&k);
+        }
+    }
 
     let (left_mappings, right_mappings, target_cat_state) = create_join_compatible_cats(
         left_mappings,

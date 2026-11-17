@@ -6,7 +6,9 @@ use tracing::{instrument, trace};
 use crate::sparql::QuerySettings;
 use oxrdf::vocab::xsd;
 use crate::sparql::lazy_graph_patterns::lateral::{lateral_key_columns, lateral_seed};
-use polars::prelude::{coalesce, col, cols, lit, when, DataType, IntoLazy, JoinArgs, JoinType};
+use polars::prelude::{
+    coalesce, col, cols, lit, when, DataType, IntoLazy, JoinArgs, JoinType, LiteralValue,
+};
 use polars_core::prelude::UniqueKeepStrategy;
 use polars_core::df;
 use polars_core::frame::DataFrame;
@@ -68,6 +70,26 @@ impl Triplestore {
             query_settings,
             dataset,
         )?;
+        let mut output_solution_mappings = output_solution_mappings;
+        // A GROUP BY variable the inner pattern does not bind is unbound in every solution,
+        // so it groups as a single unbound key (SPARQL 1.1, 18.5.1).
+        for v in variables {
+            if !output_solution_mappings
+                .rdf_node_types
+                .contains_key(v.as_str())
+            {
+                output_solution_mappings.mappings =
+                    output_solution_mappings.mappings.with_column(
+                        lit(LiteralValue::untyped_null())
+                            .cast(BaseRDFNodeType::None.default_input_polars_data_type())
+                            .alias(v.as_str()),
+                    );
+                output_solution_mappings.rdf_node_types.insert(
+                    v.as_str().to_string(),
+                    BaseRDFNodeType::None.into_default_input_rdf_node_state(),
+                );
+            }
+        }
         let lateral_keys: Vec<_> = lateral_keys
             .into_iter()
             .filter(|k| output_solution_mappings.rdf_node_types.contains_key(k))
