@@ -29,6 +29,7 @@ A short guide to v0.23.0, which adds features and fixes to v0.22.1 and changes s
 
 - Joins on variables with values of several kinds no longer match values of different kinds, which gave wrong `owl:sameAs` merges and OPTIONAL results.
 - A FILTER after VALUES, a property path, GRAPH or SERVICE is no longer dropped, and a FILTER in a nested group no longer sees the enclosing group's variables.
+- `EXISTS` and `NOT EXISTS` treat a variable left unbound by OPTIONAL, UNION or VALUES as free, as SPARQL 1.1 says, and use less memory.
 - String comparisons and MIN/MAX of stored strings use codepoint order.
 - GROUP BY a variable the grouped pattern does not bind gives one group, and a SELECT expression that is a GROUP BY expression is the group's value.
 - Arithmetic follows SPARQL's numeric type promotion, without overflow on small integer types, and no longer runs away in memory on many datatypes.
