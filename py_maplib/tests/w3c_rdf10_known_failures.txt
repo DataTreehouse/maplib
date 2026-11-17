@@ -3,8 +3,6 @@
 # These are marked as strict xfails: when a test starts passing, remove it from this list.
 # The entailment tests are skipped by builds without reasoning (open source maplib).
 datatypes/test002  # the ill-typed literal "flargh"^^xsd:integer is dropped when the data is read
-rdfms-empty-property-elements/test003  # rdf:parseType="Literal" with empty content fails: "No value found for rdf:XMLLiteral value"
-rdfms-empty-property-elements/test009  # rdf:parseType="Literal" with empty content fails: "No value found for rdf:XMLLiteral value"
 rdfms-xml-literal-namespaces/test001  # XML literals are not in exclusive canonical form (namespace declarations differ)
 rdfms-xml-literal-namespaces/test002  # XML literals are not in exclusive canonical form (namespace declarations differ)
 xml-canon/test001  # XML literals are not in exclusive canonical form (unused namespace declarations are kept)

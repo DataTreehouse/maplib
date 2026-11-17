@@ -1470,6 +1470,21 @@ impl<R> InternalRdfXmlParser<R> {
                 } else {
                     self.parse_name(tag_name)?
                 };
+                // parseTypeLiteralPropertyElt and parseTypeOtherPropertyElt (RDF/XML 7.2.17,
+                // 7.2.20) take no attributes other than rdf:ID and rdf:parseType.
+                if matches!(
+                    parse_type,
+                    RdfXmlParseType::Literal | RdfXmlParseType::Other
+                ) && (resource_attr.is_some()
+                    || node_id_attr.is_some()
+                    || datatype_attr.is_some()
+                    || !property_attrs.is_empty())
+                {
+                    return Err(RdfXmlSyntaxError::msg(format!(
+                        "A property element with rdf:parseType {iri} may only have the rdf:ID attribute"
+                    ))
+                    .into());
+                }
                 match parse_type {
                     RdfXmlParseType::Default => {
                         if resource_attr.is_some()
@@ -1943,12 +1958,9 @@ impl<R> InternalRdfXmlParser<R> {
                 ..
             } => {
                 if emit {
+                    // An empty element is the empty XML literal (RDF/XML 7.2.17, RDF Test
+                    // Cases rdfms-empty-property-elements test003 and test009).
                     let object = writer.into_inner();
-                    if object.is_empty() {
-                        return Err(RdfXmlSyntaxError::msg(format!(
-                            "No value found for rdf:XMLLiteral value of property {iri}"
-                        )));
-                    }
                     let triple = Triple::new(
                         subject,
                         iri,
