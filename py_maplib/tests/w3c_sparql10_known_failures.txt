@@ -18,9 +18,6 @@ open-world/open-eq-10  # the ill-typed "abc"^^xsd:integer is dropped when the da
 open-world/open-eq-11  # the ill-typed "abc"^^xsd:integer is dropped when the data is read
 open-world/open-eq-12  # the ill-typed "xyz"^^xsd:integer is dropped when the data is read
 open-world/date-4  # the time zone of "2006-08-24Z"^^xsd:date is not kept
-algebra/filter-nested-2  # a FILTER alone in a nested group sees the variables of the enclosing group
-algebra/filter-scope-1  # a FILTER in an OPTIONAL inside a nested group sees ?v of the enclosing group
-optional-filter/dawg-optional-filter-005-not-simplified  # a FILTER in a group nested in an OPTIONAL sees ?title of the enclosing group (the braces are simplified away)
 graph/graph-not-exist  # GRAPH <unknown> {} gives one empty solution instead of none
 expr-builtin/dawg-str-1  # STR of "1"^^xsd:double is "1.0", and "01"^^xsd:integer is returned as "1"
 expr-builtin/dawg-str-2  # "01"^^xsd:integer is stored as 1, so STR gives "1"

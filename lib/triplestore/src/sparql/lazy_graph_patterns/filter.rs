@@ -5,9 +5,11 @@ use tracing::{instrument, trace};
 use crate::sparql::lazy_graph_patterns::geo_filter::{
     binds_variable_in_triple, conjunction, conjuncts, split_for_spatial_join,
 };
+use crate::sparql::lazy_graph_patterns::lateral::lateral_seed;
 use crate::sparql::QuerySettings;
 use polars::prelude::JoinType;
 use query_processing::expressions::{contains_graph_pattern, effective_boolean_value};
+use query_processing::find_query_variables::find_all_used_variables_in_expression;
 use query_processing::graph_patterns::{extend, filter, join};
 use query_processing::pushdowns::Pushdowns;
 use representation::dataset::QueryGraph;
@@ -18,7 +20,7 @@ use oxrdf::vocab::xsd;
 use oxrdf::Variable;
 use spargebra::algebra::{Expression, GraphPattern};
 use spargebra::window::{contains_window_function, WindowCall};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 impl Triplestore {
     #[instrument(skip_all)]
@@ -53,6 +55,30 @@ impl Triplestore {
                 )?;
                 return Ok(join(
                     sm,
+                    filtered,
+                    JoinType::Inner,
+                    self.global_cats.clone(),
+                    query_settings.max_rows,
+                )?);
+            }
+        }
+        // A FILTER sees only the variables of its own group: a variable that only the incoming
+        // solutions bind (e.g. ?v in { :x :p ?v . { FILTER(?v = 1) } }) is unbound for it. The
+        // filter is then evaluated without them, and joined with them afterwards.
+        if let Some(sm) = &input_solution_mappings {
+            if uses_variables_out_of_scope(expression, &[inner], sm, context, parameters) {
+                let filtered = self.lazy_filter(
+                    inner,
+                    expression,
+                    None,
+                    context,
+                    parameters,
+                    Pushdowns::new(),
+                    query_settings,
+                    dataset,
+                )?;
+                return Ok(join(
+                    input_solution_mappings.unwrap(),
                     filtered,
                     JoinType::Inner,
                     self.global_cats.clone(),
@@ -307,4 +333,33 @@ fn rank_one_filter<'a>(
         _ => false,
     };
     rank_one.then_some((rank_inner.as_ref(), variable, window))
+}
+
+/// True if the expression uses a variable that the incoming solutions bind but that is not in
+/// scope in the patterns the expression belongs to. Such a variable is unbound for the
+/// expression (SPARQL 1.1 18.2.2: a filter applies to the group it is in).
+///
+/// Inside EXISTS and LATERAL the incoming solutions are substituted into the whole pattern, so
+/// their variables are in scope everywhere in it, and this is always false.
+pub(crate) fn uses_variables_out_of_scope(
+    expression: &Expression,
+    patterns: &[&GraphPattern],
+    incoming: &SolutionMappings,
+    context: &Context,
+    parameters: Option<&HashMap<String, EagerSolutionMappings>>,
+) -> bool {
+    if context.contains(&PathEntry::Exists) || lateral_seed(parameters).is_some() {
+        return false;
+    }
+    let mut used = HashSet::new();
+    find_all_used_variables_in_expression(expression, &mut used, true, true);
+    used.iter().any(|v| {
+        incoming.rdf_node_types.contains_key(v.as_str()) && {
+            let mut in_scope = false;
+            for p in patterns {
+                p.on_in_scope_variable(|w| in_scope |= w == v);
+            }
+            !in_scope
+        }
+    })
 }

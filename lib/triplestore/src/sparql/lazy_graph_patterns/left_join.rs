@@ -3,6 +3,7 @@ use super::Triplestore;
 use crate::sparql::errors::SparqlError;
 use tracing::{instrument, trace};
 
+use super::filter::uses_variables_out_of_scope;
 use super::join::maybe_unbound_variables;
 use crate::sparql::QuerySettings;
 use oxrdf::Variable;
@@ -38,6 +39,30 @@ impl Triplestore {
         dataset: &QueryGraph,
     ) -> Result<SolutionMappings, SparqlError> {
         trace!("Processing left join graph pattern");
+        // The expression of an OPTIONAL sees only the variables of the two sides: a variable
+        // that only the incoming solutions bind is unbound for it (as for FILTER).
+        if let (Some(expr), Some(sm)) = (expression, &solution_mappings) {
+            if uses_variables_out_of_scope(expr, &[left, right], sm, context, parameters) {
+                let left_joined = self.lazy_left_join(
+                    left,
+                    right,
+                    expression,
+                    None,
+                    context,
+                    parameters,
+                    Pushdowns::new(),
+                    query_settings,
+                    dataset,
+                )?;
+                return Ok(join(
+                    solution_mappings.unwrap(),
+                    left_joined,
+                    JoinType::Inner,
+                    self.global_cats.clone(),
+                    query_settings.max_rows,
+                )?);
+            }
+        }
         let left_context = context.extension_with(PathEntry::LeftJoinLeftSide);
         let right_context = context.extension_with(PathEntry::LeftJoinRightSide);
         let expression_context = context.extension_with(PathEntry::LeftJoinExpression);

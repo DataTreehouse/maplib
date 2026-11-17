@@ -1882,7 +1882,19 @@ parser! {
             state.currently_used_bnodes.clear();
         }
 
-        rule GroupGraphPatternSub() -> GraphPattern = a:TriplesBlock()? _ b:GroupGraphPatternSub_item()* {?
+        rule GroupGraphPatternSub() -> GraphPattern = p:GroupGraphPatternSub_parts() {
+            let (g, filter) = p;
+            if let Some(expr) = filter {
+                GraphPattern::Filter { expr, inner: Box::new(g) }
+            } else {
+                g
+            }
+        }
+        // The pattern of a group and the FILTERs of the group itself, apart, so that OPTIONAL can
+        // make only its own FILTERs the condition of the left join (SPARQL 1.1 18.2.2.6), and
+        // not the FILTER of a group nested in it: OPTIONAL { { P FILTER(e) } } keeps the filter
+        // inside (DAWG optional-filter/dawg-optional-filter-005-not-simplified).
+        rule GroupGraphPatternSub_parts() -> (GraphPattern, Option<Expression>) = a:TriplesBlock()? _ b:GroupGraphPatternSub_item()* {?
             let mut filter: Option<Expression> = None;
             let mut g = a.map_or_else(GraphPattern::default, build_bgp);
             for e in b.into_iter().flatten() {
@@ -1929,11 +1941,7 @@ parser! {
                 }
             }
 
-            Ok(if let Some(expr) = filter {
-                GraphPattern::Filter { expr, inner: Box::new(g) }
-            } else {
-                g
-            })
+            Ok((g, filter))
         }
         rule GroupGraphPatternSub_item() -> Vec<PartialGraphPattern> = a:GraphPatternNotTriples() _ ("." _)? b:TriplesBlock()? _ {
             let mut result = vec![a];
@@ -1972,13 +1980,12 @@ parser! {
 
         rule GraphPatternNotTriples() -> PartialGraphPattern = GroupOrUnionGraphPattern() / OptionalGraphPattern() / LateralGraphPattern() / MinusGraphPattern() / GraphGraphPattern() / ServiceGraphPattern() / Filter() / Bind() / InlineData()
 
-        rule OptionalGraphPattern() -> PartialGraphPattern = i("OPTIONAL") _ p:GroupGraphPattern() {
-            if let GraphPattern::Filter { expr, inner } =  p {
-               PartialGraphPattern::Optional(*inner, Some(expr))
-            } else {
-               PartialGraphPattern::Optional(p, None)
-            }
-        }
+        rule OptionalGraphPattern() -> PartialGraphPattern =
+            i("OPTIONAL") _ "{" _ GroupGraphPattern_clear() p:GroupGraphPatternSub_parts() GroupGraphPattern_clear() _ "}" {
+                let (g, filter) = p;
+                PartialGraphPattern::Optional(g, filter)
+            } /
+            i("OPTIONAL") _ p:GroupGraphPattern() { PartialGraphPattern::Optional(p, None) }
 
         rule LateralGraphPattern() -> PartialGraphPattern = i("LATERAL") _ p:GroupGraphPattern() {?
                 #[cfg(feature = "sep-0006")]{Ok(PartialGraphPattern::Lateral(p))}
