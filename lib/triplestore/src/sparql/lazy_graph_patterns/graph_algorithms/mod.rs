@@ -50,6 +50,7 @@ use query_processing::graph_patterns::{distinct, join, union};
 use query_processing::pushdowns::Pushdowns;
 use representation::dataset::QueryGraph;
 use representation::multitype::compress_actual_multitypes;
+use representation::null::expr_is_null_workaround;
 use representation::query_context::Context;
 use representation::solution_mapping::{BaseCatState, EagerSolutionMappings, SolutionMappings};
 use representation::{BaseRDFNodeType, RDFNodeState};
@@ -662,9 +663,11 @@ impl Triplestore {
         };
         let ends = union(vec![end(a, 0), end(b, 1)], false, self.global_cats.clone())?;
         let value_state = ends.rdf_node_types.get(VALUE_VAR).unwrap().clone();
+        // an unbound end (e.g. from a UNION branch that binds other variables) is no node; a
+        // column of several types is a struct, unbound when all its types are
         let ends = ends
             .mappings
-            .filter(col(VALUE_VAR).is_not_null())
+            .filter(expr_is_null_workaround(col(VALUE_VAR), &value_state).not())
             .collect()
             .map_err(|e| err(format!("collecting the edges of a graph algorithm: {e}")))?;
         let lookup = ends
@@ -747,7 +750,7 @@ impl Triplestore {
         let projected = distinct(SolutionMappings::new(
             mappings
                 .select([col(var)])
-                .filter(col(var).is_not_null()),
+                .filter(expr_is_null_workaround(col(var), &state).not()),
             HashMap::from([(var.to_string(), state.clone())]),
             height_estimate,
         ))?;

@@ -433,3 +433,46 @@ SELECT DISTINCT ?i ?size WHERE {{ {edges}
 }}"""
         )
         assert comps.rows() == [(1, 3)]
+
+
+def test_unbound_values_are_not_nodes():
+    # edges and node sets from solutions where some rows leave them unbound, as a UNION does: an
+    # unbound value is no node, also when the column has values of several types (a literal and IRIs)
+    m = Model()
+    edges = 'VALUES (?a ?b ?x) { (<urn:t:a> <urn:t:b> UNDEF) (<urn:t:b> "c" UNDEF) (UNDEF UNDEF <urn:t:b>) (UNDEF UNDEF "d") }'
+    comps = m.query(
+        PREFIXES
+        + f"""
+SELECT ?n ?part WHERE {{ {edges}
+  ?n maplib:component ?o .
+  ?o maplib:edgeSource ?a ; maplib:edgeTarget ?b ; maplib:componentId ?part .
+}}"""
+    )
+    assert comps["n"].null_count() == 0
+    assert sorted(strip(comps).rows()) == [('"c"', 1), ("urn:t:a", 1), ("urn:t:b", 1)]
+    avoided = m.query(
+        PREFIXES
+        + f"""
+SELECT ?n ?part WHERE {{ {edges}
+  ?n maplib:component ?o .
+  ?o maplib:edgeSource ?a ; maplib:edgeTarget ?b ; maplib:avoid ?x ; maplib:componentId ?part .
+}}"""
+    )
+    assert avoided["n"].null_count() == 0
+
+
+@pytest.mark.xfail(
+    strict=True,
+    reason="maplib:avoid does not match nodes whose IRIs are only in VALUES (not in the model, nor made by BIND)",
+)
+def test_avoid_iris_that_are_only_in_values():
+    m = Model()
+    rows = m.query(
+        PREFIXES
+        + """
+SELECT ?n WHERE { VALUES (?a ?b) { (<urn:u:a> <urn:u:b>) (<urn:u:b> <urn:u:c>) }
+  ?n maplib:component ?o .
+  ?o maplib:edgeSource ?a ; maplib:edgeTarget ?b ; maplib:avoid <urn:u:b> ; maplib:componentId ?part .
+}"""
+    )
+    assert sorted(strip(rows)["n"].to_list()) == ["urn:u:a", "urn:u:c"]
