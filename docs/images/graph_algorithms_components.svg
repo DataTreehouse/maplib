@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 610 280" width="610" height="280" font-family="Helvetica, Arial, sans-serif">
+<rect width="610" height="280" rx="10" fill="#ffffff" stroke="#d8dce2"/>
+<text x="20" y="28" font-size="15" font-weight="bold" fill="#2b2f36">maplib:component: the connected parts</text>
+<line x1="70" y1="70" x2="70" y2="170" stroke="#9aa1ab" stroke-width="2.5"/>
+<line x1="70" y1="170" x2="160" y2="120" stroke="#9aa1ab" stroke-width="2.5"/>
+<line x1="160" y1="120" x2="70" y2="70" stroke="#9aa1ab" stroke-width="2.5"/>
+<line x1="160" y1="120" x2="260" y2="120" stroke="#9aa1ab" stroke-width="2.5"/>
+<line x1="260" y1="120" x2="340" y2="60" stroke="#9aa1ab" stroke-width="2.5"/>
+<line x1="340" y1="60" x2="340" y2="180" stroke="#9aa1ab" stroke-width="2.5"/>
+<line x1="340" y1="180" x2="260" y2="120" stroke="#9aa1ab" stroke-width="2.5"/>
+<line x1="340" y1="180" x2="440" y2="180" stroke="#9aa1ab" stroke-width="2.5"/>
+<line x1="440" y1="180" x2="530" y2="180" stroke="#9aa1ab" stroke-width="2.5"/>
+<line x1="460" y1="70" x2="540" y2="70" stroke="#9aa1ab" stroke-width="2.5"/>
+<circle cx="70" cy="70" r="17" fill="#3a6ea5"/><text x="70" y="75" font-size="14" text-anchor="middle" fill="#ffffff">a</text>
+<circle cx="70" cy="170" r="17" fill="#3a6ea5"/><text x="70" y="175" font-size="14" text-anchor="middle" fill="#ffffff">b</text>
+<circle cx="160" cy="120" r="17" fill="#3a6ea5"/><text x="160" y="125" font-size="14" text-anchor="middle" fill="#ffffff">c</text>
+<circle cx="260" cy="120" r="17" fill="#3a6ea5"/><text x="260" y="125" font-size="14" text-anchor="middle" fill="#ffffff">d</text>
+<circle cx="340" cy="60" r="17" fill="#3a6ea5"/><text x="340" y="65" font-size="14" text-anchor="middle" fill="#ffffff">e</text>
+<circle cx="340" cy="180" r="17" fill="#3a6ea5"/><text x="340" y="185" font-size="14" text-anchor="middle" fill="#ffffff">f</text>
+<circle cx="440" cy="180" r="17" fill="#3a6ea5"/><text x="440" y="185" font-size="14" text-anchor="middle" fill="#ffffff">g</text>
+<circle cx="530" cy="180" r="17" fill="#3a6ea5"/><text x="530" y="185" font-size="14" text-anchor="middle" fill="#ffffff">h</text>
+<circle cx="460" cy="70" r="17" fill="#d9822b"/><text x="460" y="75" font-size="14" text-anchor="middle" fill="#ffffff">x</text>
+<circle cx="540" cy="70" r="17" fill="#d9822b"/><text x="540" y="75" font-size="14" text-anchor="middle" fill="#ffffff">y</text>
+<text x="300" y="238" font-size="12" text-anchor="middle" fill="#3a6ea5">componentId 1, componentSize 8</text>
+<text x="500" y="112" font-size="12" text-anchor="middle" fill="#d9822b">componentId 2, size 2</text>
+<circle cx="27" cy="258" r="7" fill="#3a6ea5"/>
+<text x="44" y="263" font-size="12" fill="#2b2f36">component 1 (the largest)</text>
+<circle cx="226.0" cy="258" r="7" fill="#d9822b"/>
+<text x="243.0" y="263" font-size="12" fill="#2b2f36">component 2</text>
+</svg>

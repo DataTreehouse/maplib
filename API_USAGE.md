@@ -1234,45 +1234,183 @@ the nodes), and, for one row per node, `maplib:pathNode`, `maplib:nodeIndex`,
 
 ### Graph algorithms: maplib:component, maplib:bridge, maplib:articulationPoint
 
-Connected components, bridges and articulation points are magic predicates too, so islands,
-switch-bounded areas, single points of failure and what-ifs are plain SPARQL. The edges are
-predicates (followed both ways), or the rows of other patterns of the group:
+Three questions come up whenever a graph is a network (a power grid, a rail net, a supply chain,
+a dependency graph): which parts hang together, which single link would split them, and which single
+node would. maplib answers them with three magic predicates, so they are plain SPARQL that can be
+combined with any other pattern, and run without changing or copying the model:
+
+| Question | Predicate | Typical use |
+|---|---|---|
+| Which nodes are connected? | `?n maplib:component ?o` | islands, switch-bounded areas, what is still supplied |
+| Which edges split their part when lost? | `?a maplib:bridge ?o` | lines without a backup, N-1 on lines |
+| Which nodes split their part when lost? | `?n maplib:articulationPoint ?o` | single points of failure, N-1 on substations |
+
+The examples use this small graph of `ex:line` edges: two triangles joined by `c - d`, a tail
+`f - g - h`, and a separate pair `x - y`.
 
 ```python
 m = Model()
-m.reads("""
-@prefix ex: <http://example.org/> .
-ex:a ex:next ex:b . ex:b ex:next ex:c . ex:c ex:next ex:d .
-ex:x ex:next ex:y .
-ex:c ex:open true .
-""")
-print(m.query("""
-PREFIX ex: <http://example.org/>
-PREFIX maplib: <https://datatreehouse.github.io/maplib/vocab#>
-SELECT ?node ?island ?size WHERE {
-    ?node maplib:component ?c .
-    ?c maplib:predicate ex:next ;
-       maplib:avoid ?open ;            # left out of the graph, with their edges
-       maplib:componentId ?island ;    # 1 is the largest
-       maplib:componentSize ?size .
-    ?open ex:open true .
-} ORDER BY ?island ?node"""))   # {a, b}, {x, y} and {d}
+m.add_prefixes({"ex": EX, "maplib": "https://datatreehouse.github.io/maplib/vocab#"})
+m.reads(f"""
+@prefix ex: <{EX}> .
+ex:a ex:line ex:b . ex:b ex:line ex:c . ex:c ex:line ex:a .
+ex:c ex:line ex:d .
+ex:d ex:line ex:e . ex:e ex:line ex:f . ex:f ex:line ex:d .
+ex:f ex:line ex:g . ex:g ex:line ex:h .
+ex:x ex:line ex:y .
+""", format="turtle")
 ```
 
-Edges derived by a query: `maplib:edgeSource ?a ; maplib:edgeTarget ?b` make one edge of every
-distinct solution of the patterns that bind `?a` and `?b` (put them in a subquery), e.g. the
-substations at the two ends of every line:
+The figures are drawn from maplib's own answers by `docs/images/graph_algorithms_figures.py`.
+
+#### Connected components
+
+`maplib:component` gives every node the number of its component (`maplib:componentId`, 1 for the
+largest, then by decreasing size) and the component's size. The edges are followed in both
+directions:
+
+![The example graph coloured by component: a to h are component 1 of size 8, x and y component 2 of size 2](docs/images/graph_algorithms_components.svg)
 
 ```python
 print(m.query("""
-PREFIX ex: <http://example.org/>
-PREFIX maplib: <https://datatreehouse.github.io/maplib/vocab#>
+SELECT ?node ?id ?size WHERE {
+    ?node maplib:component ?c .
+    ?c maplib:predicate ex:line ;
+       maplib:componentId ?id ;
+       maplib:componentSize ?size .
+} ORDER BY ?id ?node"""))   # a to h: 1, 8; x and y: 2, 2
+```
+
+The options are on a blank node or a variable (`?c` above); `[ ... ]` works as well. Every
+predicate below takes the same edge options.
+
+#### What-ifs: maplib:avoid
+
+`maplib:avoid` takes nodes out of the graph, with their edges, for this query only. It is a what-if
+(open switches, equipment out of service, a closed station) without changing the model. The avoided
+nodes have no row:
+
+![The example graph without d: a, b and c, e to h, and x and y are three components; d is left out](docs/images/graph_algorithms_avoid.svg)
+
+```python
+print(m.query("""
+SELECT ?node ?id WHERE {
+    ?node maplib:component [
+        maplib:predicate ex:line ; maplib:avoid ex:d ; maplib:componentId ?id
+    ]
+} ORDER BY ?id ?node"""))   # e, f, g, h: 1; a, b, c: 2; x, y: 3
+```
+
+`maplib:avoid` also takes a variable that the group binds, so the nodes to avoid can be found by a
+query, e.g. every node marked as open. Put the patterns that find them in a subquery before the
+magic predicate:
+
+```python
+m.reads(f"@prefix ex: <{EX}> . ex:d ex:open true .", format="turtle")
+print(m.query("""
+SELECT ?node ?id WHERE {
+    { SELECT ?open WHERE { ?open ex:open true } }
+    ?node maplib:component [ maplib:predicate ex:line ; maplib:avoid ?open ; maplib:componentId ?id ]
+} ORDER BY ?id ?node"""))   # as above
+```
+
+#### Bridges
+
+A bridge is an edge whose loss splits its component. `?a maplib:bridge ?o` gives one row per
+bridge, with `maplib:object` binding the other end and `maplib:cutOff` the number of nodes on the
+smaller side, which is how much the loss would cut off:
+
+![The example graph with its bridges dashed: c - d cuts off 3, f - g 2, g - h 1 and x - y 1](docs/images/graph_algorithms_bridges.svg)
+
+```python
+print(m.query("""
+SELECT ?a ?b ?cut WHERE {
+    ?a maplib:bridge ?o .
+    ?o maplib:object ?b ; maplib:predicate ex:line ; maplib:cutOff ?cut .
+} ORDER BY DESC(?cut)"""))   # c-d 3, f-g 2, g-h 1, x-y 1
+```
+
+The edges of the triangles are not bridges, as each has a way around it. Parallel edges are not
+bridges either. `maplib:edgePredicate` gives the predicate of the bridge's edge.
+
+#### Articulation points
+
+An articulation point is a node whose loss splits its component. `maplib:cutOff` is the number of
+nodes no longer connected to the largest remaining part:
+
+![The example graph with its articulation points: c cuts off 2, d 3, f 2 and g 1](docs/images/graph_algorithms_articulation.svg)
+
+```python
+print(m.query("""
+SELECT ?n ?cut WHERE {
+    ?n maplib:articulationPoint [ maplib:predicate ex:line ; maplib:cutOff ?cut ]
+} ORDER BY DESC(?cut)"""))   # d 3, c 2, f 2, g 1
+```
+
+Losing `c` leaves `a, b` apart from `d` to `h` (2 cut off); losing `d` leaves `a, b, c` apart
+from `e` to `h` (3 cut off).
+
+#### Edges given by a query: maplib:edgeSource and maplib:edgeTarget
+
+Often the edges of the network are not single triples. A power line connects the substations at its
+two ends through terminals and connectivity nodes, for instance. `maplib:edgeSource ?a ;
+maplib:edgeTarget ?b` make one edge of every distinct solution of the patterns that bind `?a` and
+`?b`, so derived edges need no materialization. Put those patterns in a subquery:
+
+```python
+m.reads(f"""
+@prefix ex: <{EX}> .
+ex:l1 ex:from ex:p ; ex:to ex:q .
+ex:l2 ex:from ex:q ; ex:to ex:r .
+ex:l3 ex:from ex:q ; ex:to ex:r .
+""", format="turtle")
+print(m.query("""
 SELECT ?line ?a ?b ?cut WHERE {
     { SELECT ?line ?a ?b WHERE { ?line ex:from ?a ; ex:to ?b } }
     ?a maplib:bridge ?o .
     ?o maplib:object ?b ; maplib:edgeSource ?a ; maplib:edgeTarget ?b ; maplib:cutOff ?cut .
-}"""))
+}"""))   # l1 from p to q, cutting off 1; l2 and l3 are parallel, so neither is a bridge
 ```
+
+The rows keep the other variables of the subquery (`?line` above), so a bridge comes back with the
+line that makes it. A CIM grid's substation graph, with each line between the substations of its
+two terminals:
+
+```sparql
+PREFIX cim: <http://iec.ch/TC57/CIM100#>
+PREFIX maplib: <https://datatreehouse.github.io/maplib/vocab#>
+SELECT ?line ?s1 ?s2 ?cut WHERE {
+    { SELECT DISTINCT ?line ?s1 ?s2 WHERE {
+        ?line a cim:ACLineSegment .
+        ?t1 cim:Terminal.ConductingEquipment ?line ; cim:Terminal.ConnectivityNode ?n1 .
+        ?t2 cim:Terminal.ConductingEquipment ?line ; cim:Terminal.ConnectivityNode ?n2 .
+        ?n1 cim:ConnectivityNode.ConnectivityNodeContainer/cim:VoltageLevel.Substation ?s1 .
+        ?n2 cim:ConnectivityNode.ConnectivityNodeContainer/cim:VoltageLevel.Substation ?s2 .
+        FILTER(STR(?s1) < STR(?s2))   # each line once
+    } }
+    ?s1 maplib:bridge ?o .
+    ?o maplib:object ?s2 ; maplib:edgeSource ?s1 ; maplib:edgeTarget ?s2 ; maplib:cutOff ?cut .
+} ORDER BY DESC(?cut)
+```
+
+Every row is an edge, and two rows between the same nodes are parallel edges, which are never
+bridges. A pattern that is symmetric in `?a` and `?b` (like the terminals above) gives each line
+twice, once in each direction, so keep one direction with a filter such as
+`FILTER(STR(?s1) < STR(?s2))`; two different lines between the same substations then stay
+parallel, as they should. On the Nordic44 test grid this query gives 18 bridges.
+
+The algorithms know nothing of CIM: the grid is only in the query, and the same predicates work on
+rail nets, pipelines or call graphs.
+
+#### Counting only some nodes, restricting the rows, and strong components
+
+* `maplib:countNodes` takes nodes (a variable bound by the group, or constants) and makes only them
+  count in `componentSize` and `cutOff`, e.g. the customers or substations cut off rather than every
+  node of the graph.
+* A subject bound by other patterns of the same block restricts the rows to those nodes. Nodes
+  among them without edges are then components of their own.
+* `maplib:strong true` gives the strongly connected components of the directed edges, which is
+  what a cycle check or a dependency analysis needs.
 
 | Predicate | Rows | Outputs |
 |---|---|---|
@@ -1281,15 +1419,31 @@ SELECT ?line ?a ?b ?cut WHERE {
 | `?n maplib:articulationPoint ?o` | one per node whose loss splits its component | `maplib:cutOff` (the nodes no longer connected to the largest remaining part), `maplib:componentId`, `maplib:componentSize` |
 
 The edge options are those of `maplib:shortestPath` (`maplib:predicate`, `maplib:inversePredicate`,
-`maplib:anyPredicate`, `maplib:excludePredicate`) or `maplib:edgeSource`/`maplib:edgeTarget`, and
-`maplib:avoid` takes a variable bound by the group (or a subquery before it) or constants, and so
-does `maplib:countNodes`: only those nodes count in `componentSize` and `cutOff` (e.g. the
-substations or the customers cut off, not every node of the graph). A
-subject bound by the other patterns restricts the rows to those nodes; nodes without edges are
-then components of their own; write those patterns in the same block as the predicate, after
-a subquery of avoided nodes, since a separate block before the subquery is joined with it first
-(a cross product). Parallel edges are not bridges. The algorithms run on the cached
-integer graph of `maplib:shortestPath` (union-find, Tarjan's algorithms, without recursion).
+`maplib:anyPredicate`, `maplib:excludePredicate`) or `maplib:edgeSource`/`maplib:edgeTarget`;
+`maplib:avoid` and `maplib:countNodes` take a variable bound by the group (or a subquery before
+it) or constants.
+
+#### Speed and pitfalls
+
+The algorithms run on the cached integer graph of `maplib:shortestPath`: union-find for
+components, Tarjan's algorithms for strong components, bridges and articulation points, all
+without recursion, so deep graphs do not overflow the stack. A grid of ten million triples answers
+in well under a second.
+
+Write the patterns that restrict the rows in the same block as the predicate, after a subquery of
+avoided nodes. A separate block before the subquery is joined with it first, which is a cross
+product.
+
+#### Standards and compliance
+
+No W3C or ISO standard defines these algorithms in a query language. SPARQL 1.1 and 1.2 have no graph
+algorithms, and ISO GQL and SQL/PGQ leave them to vendor procedures. Other RDF stores also use their
+own extensions, such as AnzoGraph's connected components SERVICE. maplib therefore follows the textbook
+definitions (a bridge or an articulation point is an edge or a node whose removal increases the
+number of connected components) and is checked against them. The tests in
+`py_maplib/tests/test_graph_algorithms.py` cover the cases above, and
+`py_maplib/tests/test_graph_algorithm_definitions.py` checks maplib on random graphs against the
+definitions themselves, by removing every edge and every node in turn.
 
 ### Full-text search: maplib:fts **EE**
 
