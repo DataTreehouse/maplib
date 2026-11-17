@@ -11,6 +11,7 @@ use super::{TermOrList, TurtleBlock, TurtleBlockOrTermOrList};
 use oxrdf::vocab::{rdf, xsd};
 use oxrdf::{BlankNodeRef, NamedNode, Term, TermRef};
 use std::collections::{HashMap, HashSet};
+use representation::prefixes::WELL_KNOWN_PREFIXES;
 use std::io::{self, Write};
 
 const RDF_NS: &str = "http://www.w3.org/1999/02/22-rdf-syntax-ns#";
@@ -24,8 +25,8 @@ pub(super) struct XmlNamespaces {
 }
 
 impl XmlNamespaces {
-    /// User prefixes that are valid XML prefixes, `rdf`, and generated prefixes (`ns1`, `ns2`,
-    /// ...) for the namespaces of all predicates not covered by them.
+    /// User prefixes that are valid XML prefixes, `rdf`, maplib's well-known prefixes and generated
+    /// prefixes (`ns1`, `ns2`, ...) for the namespaces of all predicates not covered by them.
     pub(super) fn new<'a>(
         prefixes: &HashMap<String, NamedNode>,
         predicates: impl Iterator<Item = &'a NamedNode>,
@@ -49,6 +50,15 @@ impl XmlNamespaces {
             .collect();
         predicate_namespaces.sort();
         predicate_namespaces.dedup();
+        // maplib's well-known prefixes for the namespaces the user gave no prefix (cim16, md, ...)
+        for n in &predicate_namespaces {
+            if ns.ns_to_prefix.contains_key(n) {
+                continue;
+            }
+            if let Some((prefix, _)) = WELL_KNOWN_PREFIXES.iter().find(|(_, w)| w == n) {
+                ns.declare(prefix, n, &mut used_prefixes);
+            }
+        }
         let mut i = 0;
         for n in predicate_namespaces {
             if ns.ns_to_prefix.contains_key(&n) {

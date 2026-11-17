@@ -24,9 +24,6 @@ use templates::ast::{
 };
 use thiserror::Error;
 
-const RDF: &str = "http://www.w3.org/1999/02/22-rdf-syntax-ns#";
-const RDFS: &str = "http://www.w3.org/2000/01/rdf-schema#";
-const OWL: &str = "http://www.w3.org/2002/07/owl#";
 const XSD: &str = "http://www.w3.org/2001/XMLSchema#";
 const RDFS_LITERAL: &str = "http://www.w3.org/2000/01/rdf-schema#Literal";
 
@@ -58,23 +55,8 @@ const NON_XSD_DATATYPES: [&str; 9] = [
 pub const SUBJECT_VARIABLE_NAME: &str = "id";
 pub const NOTYPE_SUFFIX: &str = "_notype";
 
-/// Prefixes that are known without being given.
-pub const WELL_KNOWN_PREFIXES: [(&str, &str); 14] = [
-    ("rdf", RDF),
-    ("rdfs", RDFS),
-    ("owl", OWL),
-    ("xsd", XSD),
-    ("skos", "http://www.w3.org/2004/02/skos/core#"),
-    ("dcterms", "http://purl.org/dc/terms/"),
-    ("dc", "http://purl.org/dc/elements/1.1/"),
-    ("foaf", "http://xmlns.com/foaf/0.1/"),
-    ("prov", "http://www.w3.org/ns/prov#"),
-    ("sh", "http://www.w3.org/ns/shacl#"),
-    ("dcat", "http://www.w3.org/ns/dcat#"),
-    ("time", "http://www.w3.org/2006/time#"),
-    ("geo", "http://www.opengis.net/ont/geosparql#"),
-    ("schema", "https://schema.org/"),
-];
+/// Prefixes that are known without being given: maplib's well-known prefixes.
+pub use representation::prefixes::WELL_KNOWN_PREFIXES;
 
 #[derive(Debug, Error)]
 pub enum TemplateGeneratorError {

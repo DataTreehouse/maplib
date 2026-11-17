@@ -785,50 +785,21 @@ OWL = "http://www.w3.org/2002/07/owl#"
 #: The owl:Ontology of the config graph that declares the model's prefixes (sh:declare).
 PREFIXES = CONFIG + "prefixes"
 
-#: Well-known vocabularies and their usual prefixes (namespace to name), as generate_prefixes
-#: names them when the data uses them.
-WELL_KNOWN_PREFIXES: Dict[str, str] = {
-    "http://www.w3.org/1999/02/22-rdf-syntax-ns#": "rdf",
-    "http://www.w3.org/2000/01/rdf-schema#": "rdfs",
-    XSD: "xsd",
-    OWL: "owl",
-    SHACL: "sh",
-    "http://www.w3.org/2004/02/skos/core#": "skos",
-    DCTERMS: "dcterms",
-    "http://purl.org/dc/elements/1.1/": "dc",
-    "http://www.w3.org/ns/prov#": "prov",
-    "http://www.opengis.net/ont/geosparql#": "geo",
-    "http://www.opengis.net/def/function/geosparql/": "geof",
-    "http://www.opengis.net/ont/sf#": "sf",
-    "http://www.w3.org/2003/01/geo/wgs84_pos#": "wgs",
-    "http://iec.ch/TC57/2013/CIM-schema-cim16#": "cim",
-    "http://iec.ch/TC57/CIM100#": "cim100",
-    "http://iec.ch/TC57/CIM100-European#": "eu",
-    "http://entsoe.eu/CIM/SchemaExtension/3/1#": "entsoe",
-    "http://iec.ch/TC57/61970-552/ModelDescription/1#": "md",
-    "http://iec.ch/TC57/61970-552/DifferenceModel/1#": "dm",
-    "http://opcfoundation.org/UA/": "opc",
-    "http://xmlns.com/foaf/0.1/": "foaf",
-    "https://schema.org/": "schema",
-    "http://schema.org/": "schema",
-    "http://www.w3.org/ns/dcat#": "dcat",
-    "http://www.w3.org/2006/time#": "time",
-    "http://www.w3.org/ns/sosa/": "sosa",
-    "http://www.w3.org/ns/ssn/": "ssn",
-    "http://qudt.org/schema/qudt/": "qudt",
-    "http://qudt.org/vocab/unit/": "unit",
-    "http://qudt.org/vocab/quantitykind/": "quantitykind",
-    "http://purl.org/vocab/vann/": "vann",
-    "http://rdfs.org/ns/void#": "void",
-    "http://data.europa.eu/949/": "era",
-    "http://ns.ottr.xyz/0.4/": "ottr",
-    MAPLIB: "maplib",
-    CONFIG: "mcfg",
-}
+def well_known_prefixes() -> Dict[str, str]:
+    """maplib's well-known prefixes, from namespace to name (maplib.well_known_prefixes(), the
+    one table of default prefixes, kept in Rust): the names generate_prefixes gives the
+    vocabularies it finds. cim is CIM100; CIM16 is cim16."""
+    from maplib import maplib as native
 
-#: Names generate_prefixes prefers for some well-known vocabularies when they are free: CGMES 3
-#: (CIM100) data is usually written with cim:, which WELL_KNOWN_PREFIXES gives to CIM16.
-PREFERRED_PREFIXES: Dict[str, str] = {"http://iec.ch/TC57/CIM100#": "cim"}
+    return {ns: name for name, ns in native.well_known_prefixes().items()}
+
+
+def __getattr__(name: str):
+    # WELL_KNOWN_PREFIXES (namespace to name) reads the Rust table when it is first used
+    if name == "WELL_KNOWN_PREFIXES":
+        return well_known_prefixes()
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
 
 #: generate_prefixes names at most this many of the other namespaces the data uses, the most used first.
 GENERATED_PREFIXES = 8
@@ -1004,8 +975,9 @@ def prefix_name_for(namespace: str) -> str:
     import re
     from urllib.parse import urlparse
 
-    if namespace in WELL_KNOWN_PREFIXES:
-        return WELL_KNOWN_PREFIXES[namespace]
+    known = well_known_prefixes()
+    if namespace in known:
+        return known[namespace]
     candidates: List[str] = []
     if re.match(r"^https?://", namespace, re.IGNORECASE):
         u = urlparse(namespace)
@@ -1089,7 +1061,7 @@ def generate_prefixes(
 ) -> List[PrefixConfig]:
     """
     Makes prefixes for the namespaces the data uses: the usual prefix of each well-known vocabulary
-    in it (WELL_KNOWN_PREFIXES: rdf, rdfs, xsd, owl, sh, skos, dcterms, prov, geo, cim, opc, ...),
+    in it (maplib.well_known_prefixes(): rdf, rdfs, xsd, owl, sh, skos, dcterms, prov, geo, cim, opc, ...),
     and a short name (prefix_name_for) for the max_generated namespaces it uses most besides these.
     Namespaces that have a prefix already (in the config graph, or declared with sh:prefix in any
     graph) keep it, and names in use are not given again.
@@ -1119,16 +1091,12 @@ def generate_prefixes(
         new.append(PrefixConfig(name=name, namespace=namespace, generated=True))
 
     by_use = sorted(used.items(), key=lambda kv: (-kv[1], kv[0]))
-    known = [ns for ns, _ in by_use if ns in WELL_KNOWN_PREFIXES and ns not in taken_namespaces]
-    for namespace in known:
-        if namespace not in PREFERRED_PREFIXES:
-            give(namespace, WELL_KNOWN_PREFIXES[namespace])
-    for namespace in known:
-        if namespace in PREFERRED_PREFIXES:
-            preferred = PREFERRED_PREFIXES[namespace]
-            give(namespace, preferred if preferred not in taken_names else WELL_KNOWN_PREFIXES[namespace])
+    well_known = well_known_prefixes()
+    for namespace, _ in by_use:
+        if namespace in well_known and namespace not in taken_namespaces:
+            give(namespace, well_known[namespace])
     # the well-known names stay for their vocabularies
-    taken_names.update(WELL_KNOWN_PREFIXES.values())
+    taken_names.update(well_known.values())
     others = 0
     for namespace, _ in by_use:
         if others >= max_generated:

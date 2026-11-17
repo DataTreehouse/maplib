@@ -91,7 +91,7 @@ pub fn render_peg_error(
         headline = format!("`{word}` is not a valid term");
         label = "not a variable, IRI, prefixed name or literal".to_string();
         span = (start, offset);
-        notes.push(bare_word_hint(word, ctx));
+        notes.push(bare_word_hint(word));
     } else if let Some(message) = expected.messages.first() {
         let (headline_, label_, span_, mut notes_) = describe_message(message, input, offset, ctx);
         headline = headline_;
@@ -114,7 +114,7 @@ pub fn render_peg_error(
         if expected.len() > 3 {
             notes.push(format!("expected {}", expected.summary(MAX_EXPECTED_SHOWN)));
         }
-        notes.extend(hints(input, offset, found, &expected, &delimiters, ctx));
+        notes.extend(hints(input, offset, found, &expected, &delimiters));
     }
 
     let (line, column) = line_col(input, span.0);
@@ -553,7 +553,6 @@ fn hints(
     found: Option<Found<'_>>,
     expected: &Expected,
     delimiters: &Delimiters,
-    ctx: &DiagnosticContext,
 ) -> Vec<String> {
     let mut hints = Vec::new();
     match found {
@@ -631,7 +630,7 @@ fn hints(
                     };
                     hints.push(format!("help: did you mean `{keyword}`?"));
                 } else if expected.accepts_term() {
-                    hints.push(bare_word_hint(f.text, ctx));
+                    hints.push(bare_word_hint(f.text));
                 }
             }
             let previous = input[..offset].trim_end().chars().next_back();
@@ -725,24 +724,11 @@ fn duplicated_projection_variable(input: &str, offset: usize) -> Option<((usize,
     None
 }
 
-fn bare_word_hint(word: &str, ctx: &DiagnosticContext) -> String {
-    let example_prefix = if ctx.known_prefixes.iter().any(|p| p == "ex") {
-        "ex"
-    } else {
-        ctx.known_prefixes
-            .iter()
-            .filter(|p| {
-                !p.is_empty()
-                    && !matches!(
-                        p.as_str(),
-                        "rdf" | "rdfs" | "xsd" | "owl" | "def" | "ottr" | "maplib" | "sh" | "skos"
-                    )
-            })
-            .min()
-            .map_or("ex", String::as_str)
-    };
+fn bare_word_hint(word: &str) -> String {
+    // the example prefix is always ex: maplib's default prefixes (representation::prefixes) are
+    // many, and the parser cannot tell them from the ones the query declares
     format!(
-        "help: write a variable as `?{word}`, a prefixed name as `{example_prefix}:{word}`, or a full IRI as `<http://example.com/{word}>`"
+        "help: write a variable as `?{word}`, a prefixed name as `ex:{word}`, or a full IRI as `<http://example.com/{word}>`"
     )
 }
 

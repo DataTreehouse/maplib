@@ -125,6 +125,16 @@ fn set_memory_limit(
 }
 
 /// The estimated number of bytes allocated by maplib.
+/// maplib's well-known prefixes (name to namespace): the usual prefix of each well-known
+/// vocabulary, the one table of default prefixes (`representation::prefixes::WELL_KNOWN_PREFIXES`).
+#[pyfunction]
+fn well_known_prefixes() -> HashMap<String, String> {
+    representation::prefixes::WELL_KNOWN_PREFIXES
+        .iter()
+        .map(|(name, ns)| (name.to_string(), ns.to_string()))
+        .collect()
+}
+
 #[pyfunction]
 fn memory_usage() -> u64 {
     utils::memory::memory_usage()
@@ -266,6 +276,7 @@ fn _maplib(py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
     )?)?;
     m.add_function(wrap_pyfunction!(set_memory_limit, m)?)?;
     m.add_function(wrap_pyfunction!(memory_usage, m)?)?;
+    m.add_function(wrap_pyfunction!(well_known_prefixes, m)?)?;
     m.add_function(wrap_pyfunction!(memory_limit, m)?)?;
     m.add_function(wrap_pyfunction!(py_model::add_triples, m)?)?;
     py_storage::register(m)?;

@@ -1117,3 +1117,52 @@ def test_generate_prefixes_over_several_graphs():
     m.reads("<http://example.org/b/x> <http://example.org/b/p> 1 .", format="turtle")
     got = {p.namespace: p.name for p in generate_prefixes(m, graph=["urn:g:a", None], write=False)}
     assert got == {"http://example.org/a/": "a", "http://example.org/b/": "b"}
+
+
+# ── maplib's one table of default prefixes ──────────────────────────
+
+from maplib import well_known_prefixes  # noqa: E402
+
+CIM100 = "http://iec.ch/TC57/CIM100#"
+CIM16 = "http://iec.ch/TC57/2013/CIM-schema-cim16#"
+
+
+def test_well_known_prefixes_come_from_rust():
+    known = well_known_prefixes()
+    assert known["cim"] == CIM100
+    assert known["cim16"] == CIM16
+    assert known["rdfs"] == "http://www.w3.org/2000/01/rdf-schema#"
+    assert known["opc"] == "http://opcfoundation.org/UA/"
+    assert len(set(known.values())) == len(known)
+    # maplib.config reads the same table, from namespace to name
+    from maplib import config
+
+    assert config.WELL_KNOWN_PREFIXES == {ns: name for name, ns in known.items()}
+    assert not hasattr(config, "PREFERRED_PREFIXES")
+
+
+def test_generated_prefixes_name_cim16_cim16():
+    m = Model()
+    m.reads(
+        f"""@prefix c16: <{CIM16}> .
+<http://example.org/grid/b1> a c16:Breaker ; c16:IdentifiedObject.name "b1" .""",
+        format="turtle",
+    )
+    got = {p.namespace: p.name for p in generate_prefixes(m, write=False)}
+    assert got[CIM16] == "cim16"
+    assert "cim" not in got.values()
+
+
+def test_rdfxml_names_well_known_namespaces():
+    m = Model()
+    m.reads(
+        f"""@prefix c16: <{CIM16}> .
+<http://example.org/grid/b1> a c16:Breaker ; c16:IdentifiedObject.name "b1" ;
+    <http://example.org/other/p> "x" .""",
+        format="turtle",
+    )
+    xml = m.writes(format="rdf/xml")
+    assert f'xmlns:cim16="{CIM16}"' in xml
+    assert "<cim16:IdentifiedObject.name>" in xml
+    # namespaces maplib has no name for are still numbered
+    assert 'xmlns:ns1="http://example.org/other/"' in xml

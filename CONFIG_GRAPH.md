@@ -242,7 +242,7 @@ with Dublin Core terms, and linked to the vocabulary of the data it is about.
     dcterms:title "Lines and their lengths" ;
     rdfs:label "Lines and their lengths" ;
     dcterms:description "The AC line segments with their length (km), voltage and impedance, longest first." ;
-    sh:select """PREFIX cim: <http://iec.ch/TC57/2013/CIM-schema-cim16#>
+    sh:select """PREFIX cim16: <http://iec.ch/TC57/2013/CIM-schema-cim16#>
 SELECT ?segment ?name ?length WHERE { ... }""" ;
     mcfg:appliesTo <http://iec.ch/TC57/2013/CIM-schema-cim16#> ;   # optional: about CIM16 data
     mcfg:bundled true ;                                            # shipped with maplib EE
@@ -304,14 +304,22 @@ Datalog and OTTR given to the model can use them without `PREFIX` declarations.
 `generate_prefixes(m, graph=None, max_generated=8, write=True)` makes prefixes for the data in a
 graph (the default graph when not given, or a list of graphs, `None` in it for the default graph,
 whose uses are added up): the usual prefix of each well-known vocabulary it uses
-(`maplib.config.WELL_KNOWN_PREFIXES`: `rdf`, `rdfs`, `xsd`, `owl`, `sh`, `skos`, `dcterms`, `dc`,
-`prov`, `geo`, `geof`, `sf`, `cim` (CIM16; CIM100 gets `cim` when it is free, else `cim100`),
-`entsoe`, `md`, `opc`, `foaf`, `schema`, `dcat`, `time`, `sosa`, `ssn`, `qudt`, `unit`, `era`,
-`maplib`, ...), and a short name for each of the `max_generated` other namespaces it uses most (the
+(`maplib.well_known_prefixes()`, see below: `rdf`, `rdfs`, `xsd`, `owl`, `sh`, `skos`, `dcterms`,
+`dc`, `prov`, `geo`, `geof`, `sf`, `cim` (CIM100), `cim16` (CIM16), `entsoe`, `md`, `opc`, `foaf`,
+`schema`, `dcat`, `time`, `sosa`, `ssn`, `qudt`, `unit`, `era`, `maplib`, ...), and a short name for each of the `max_generated` other namespaces it uses most (the
 predicates by their triples, the classes by their instances and the typed subjects;
 `prefix_name_for` names `http://example.org/plant/` `plant` and `urn:acme:pump:` `pump`).
 Namespaces that have a prefix already, in the config graph or declared in any graph, keep it, and
 taken names get a number (`plant2`). It returns the new prefixes, and writes them unless `write=False`.
+
+### Well-known prefixes
+
+maplib has one table of default prefixes, in Rust (`representation::prefixes::WELL_KNOWN_PREFIXES`),
+read in Python with `maplib.well_known_prefixes()` (name to namespace). Every model knows them when
+parsing SPARQL, Datalog and OTTR and writes with them; `generate_prefixes`, template generation and
+the RDF/XML writer name namespaces with them; and the Graph portal shows IRIs with
+them (behind the model's own prefixes). `cim` is always CIM100 (CGMES 3); CIM16 (CGMES 2.4.15) is
+`cim16`. Applications extend this table rather than keeping their own.
 
 ```python
 from maplib.config import PrefixConfig, write_prefix, read_prefixes, remove_prefix, generate_prefixes

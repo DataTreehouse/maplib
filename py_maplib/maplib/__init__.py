@@ -54,6 +54,7 @@ __all__ = [
     "TRANSIENT_GRAPH",
     "set_memory_limit",
     "memory_usage",
+    "well_known_prefixes",
     "memory_limit",
     "set_outbound_policy",
     "get_outbound_policy",

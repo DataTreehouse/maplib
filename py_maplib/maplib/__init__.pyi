@@ -3175,6 +3175,21 @@ def memory_usage() -> int:
 def memory_limit() -> int:
     """The memory limit in bytes above which queries spill to disk. See set_memory_limit."""
 
+def well_known_prefixes() -> Dict[str, str]:
+    """
+    maplib's well-known prefixes, from prefix name to namespace: the usual prefix of each
+    well-known vocabulary (rdf, rdfs, xsd, owl, sh, skos, dcterms, prov, geo, qudt, cim, opc, ...).
+    This is maplib's one table of default prefixes: the prefixes every model knows when parsing
+    SPARQL are among them, maplib.config.generate_prefixes and the RDF/XML writer name namespaces
+    with them, and applications such as the Graph portal show IRIs with them.
+
+    cim is CIM100 (CGMES 3); CIM16 (CGMES 2.4.15) is cim16.
+
+    >>> from maplib import well_known_prefixes
+    >>> well_known_prefixes()["cim"]
+    'http://iec.ch/TC57/CIM100#'
+    """
+
 from maplib.outbound import OutboundError as OutboundError, OutboundPolicy
 
 def set_outbound_policy(
