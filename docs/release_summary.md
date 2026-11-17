@@ -1,3 +1,50 @@
+# What's new in v0.23.0
+
+A short guide to v0.23.0, which adds features and fixes to v0.22.1 and changes some APIs (see Breaking changes). Features marked **EE** need [maplib Enterprise Edition](../README.md#open-source-and-enterprise-edition); everything else is in the open-source core. [CHANGES.md](../CHANGES.md) has the full details, and [API_USAGE.md](../API_USAGE.md) has worked examples.
+
+## Highlights
+
+- **Graph algorithms.** `maplib:component`, `maplib:bridge` and `maplib:articulationPoint` find connected components, bridges and articulation points as magic predicates, with `maplib:avoid` for what-if analysis.
+- **CIM grids (EE).** `cim.scissors.cut_to_graph` cuts part of a grid out with SPARQL, and `cim.add_serves` reads the serves relations from several graphs.
+- **Memory limits per query.** `Model.query(max_memory_mb=...)` stops a query at its own memory limit, and a timed-out or abandoned query stops at once instead of running on.
+- **One set of default prefixes.** `maplib.well_known_prefixes()` is maplib's only table of defaults, with `cim` for CIM100, and prefixes can be kept in the config graph.
+- **Durable portal writes (EE).** The writable Model portal answers a write only once it is published, and leaves a rebuilt default graph out of its snapshots.
+- **SPARQL additions.** DESCRIBE, the XPath math functions (`math:sqrt`, `math:pow`, ...), parameterised updates and per-row REGEX patterns.
+- **Faster reading.** Turtle, TriG, N-Triples, N-Quads, RDF/XML and CIM/XML parse faster, and `map_json`/`map_xml` map many documents at once.
+- **Correct results.** Fixes for joins of mixed types, FILTER placement, string comparisons, GROUP BY and numeric type promotion, checked against the W3C SPARQL 1.0 and RDF 1.0 suites, which now run with the tests.
+
+## Major features
+
+**Graph algorithms.** `?n maplib:component ?o` (or strongly connected with `maplib:strong true`), `?a maplib:bridge ?o` and `?n maplib:articulationPoint ?o` run union-find and iterative Tarjan over the cached integer graph. Edges come from predicates or from other patterns' rows (`maplib:edgeSource`/`maplib:edgeTarget`), and `maplib:avoid` leaves nodes out without changing the model. They are checked against brute force and the LDBC Graphalytics validation graphs.
+
+**Memory limits.** A timeout stops a runaway query on time but not its memory. `max_memory_mb` on `query` and `update`, and a default with `maplib.set_memory_limit(max_query_memory_mb=...)` that served queries **EE** use too, stop a query when it grows past its limit. Joins of timed-out or cancelled queries stop without aborting the process, and the next query waits for their memory to be freed.
+
+**Prefixes.** `maplib.well_known_prefixes()` lists the 43 default prefixes (`cim` is CIM100, `cim16` CIM16). `maplib.config` keeps a model's own prefixes in its config graph as SHACL prefix declarations, and `generate_prefixes` suggests names for the namespaces a graph uses.
+
+**SPARQL.** DESCRIBE returns the triples of the described IRIs. The XPath 3.1 math functions run the specification's examples as tests. `update(bindings=...)` parameterises updates, `REGEX` and `STRBEFORE`/`STRAFTER` take arguments that differ per row, and `query(bindings=...)` accepts Python `bool`, `int` and `float`.
+
+**Performance.** The vendored oxttl parsers and the RDF/XML parser are faster; `map_json` and `map_xml` add up to a thousand documents at once (20,000 JSON documents: 36 s to 0.31 s); vector literals are stored packed (about two fifths of the memory); joins on two shared variables no longer take quadratic memory; reasoning with `owl:sameAs` uses one representative per group; small-batch steps of streams and `scratch_graphs` cost less, especially in hybrid and disk storage **EE**.
+
+## Fixes
+
+- Joins on variables with values of several kinds no longer match values of different kinds, which gave wrong `owl:sameAs` merges and OPTIONAL results.
+- A FILTER after VALUES, a property path, GRAPH or SERVICE is no longer dropped, and a FILTER in a nested group no longer sees the enclosing group's variables.
+- String comparisons and MIN/MAX of stored strings use codepoint order.
+- GROUP BY a variable the grouped pattern does not bind gives one group, and a SELECT expression that is a GROUP BY expression is the group's value.
+- Arithmetic follows SPARQL's numeric type promotion, without overflow on small integer types, and no longer runs away in memory on many datatypes.
+- `-(0.0e0)` is negative zero, an empty `rdf:parseType="Literal"` is read, and property paths with a constant of another type give no solutions instead of panicking.
+- Security: quick-xml 0.41 and zstd 0.13.4, and DuckDB 1.5.6 in maplib Enterprise Edition.
+
+## Breaking changes
+
+| Change | Migration |
+|---|---|
+| `Model.reason(profile, ...)` **EE** is now `Model.infer(profile=..., ...)` | Rename the call; the parameters and `ReasoningResult` are the same |
+| `Model.update(update, graph=G)` writes to `G`, as `WITH <G>` | Updates that relied on writing to the default graph must add `GRAPH` or drop `graph=` |
+| A misspelt magic predicate, or `maplib:fts` without an index, is an error | Fix the predicate name, or add the full text index |
+| `STRSTARTS`, `STRENDS` and `CONTAINS` with a non-string second argument from the data are unbound | Check filters that relied on the query failing |
+| `+`, `-` and `*` give the promoted XPath datatype, e.g. `xsd:integer` for two `xsd:int` | Check code that read the result's datatype |
+
 # What's new in v0.22.1
 
 A short guide to v0.22.1, which adds features and fixes to v0.22.0. Features marked **EE** need [maplib Enterprise Edition](../README.md#open-source-and-enterprise-edition); everything else is in the open-source core. [CHANGES.md](../CHANGES.md) has the full details, and [API_USAGE.md](../API_USAGE.md) has worked examples.
