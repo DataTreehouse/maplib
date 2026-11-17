@@ -326,7 +326,7 @@ pub(crate) fn maybe_unbound_variables(gp: &GraphPattern) -> HashSet<String> {
     }
 }
 
-fn certainly_bound_variables(gp: &GraphPattern) -> HashSet<String> {
+pub(crate) fn certainly_bound_variables(gp: &GraphPattern) -> HashSet<String> {
     let maybe = maybe_unbound_variables(gp);
     let mut vs = in_scope_variable_names(gp);
     vs.retain(|v| !maybe.contains(v));

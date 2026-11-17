@@ -4,7 +4,7 @@ mod filter;
 mod geo_filter;
 mod graph;
 mod group;
-mod join;
+pub(crate) mod join;
 pub(crate) mod lateral;
 mod left_join;
 pub mod graph_algorithms;

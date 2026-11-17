@@ -1,74 +1,69 @@
+use crate::sparql::lazy_graph_patterns::join::certainly_bound_variables;
 use oxrdf::Variable;
 use query_processing::find_query_variables::find_all_used_variables_in_expression;
 use spargebra::algebra::{Expression, GraphPattern};
-use spargebra::window::contains_window_function;
 use spargebra::term::NamedNodePattern;
+use spargebra::window::contains_window_function;
 use std::collections::HashSet;
 
-pub fn rewrite_gp_pushdown(
-    q: GraphPattern,
-    mut filters: Vec<Expression>,
-    seen_vars: HashSet<Variable>,
-) -> GraphPattern {
+/// Moves the conjuncts of filters above patterns with a variable predicate down towards the
+/// patterns that bind their variables.
+///
+/// A filter is moved into a pattern only when that pattern binds every variable of the filter
+/// in all of its solutions. A sibling in a join is not enough: the patterns of a join are
+/// reordered when it is evaluated, so a filter moved next to a sibling's variables could be
+/// evaluated before they are bound. Every filter that reaches a pattern it cannot be moved into
+/// is kept above it.
+pub fn rewrite_gp_pushdown(q: GraphPattern, mut filters: Vec<Expression>) -> GraphPattern {
     match q {
         GraphPattern::Bgp { patterns } => {
-            let mut outer_filter = vec![];
-
-            if !filters.is_empty() {
-                let mut left_patterns = vec![];
-                let mut right_patterns = vec![];
-                for p in patterns {
-                    if matches!(p.predicate, NamedNodePattern::Variable(..)) {
-                        right_patterns.push(p);
-                    } else {
-                        left_patterns.push(p);
-                    }
+            let n_variable_predicates = patterns
+                .iter()
+                .filter(|p| matches!(p.predicate, NamedNodePattern::Variable(..)))
+                .count();
+            if filters.is_empty()
+                || n_variable_predicates == 0
+                || n_variable_predicates == patterns.len()
+            {
+                return create_filter_gps(GraphPattern::Bgp { patterns }, filters);
+            }
+            let mut left_patterns = vec![];
+            let mut right_patterns = vec![];
+            for p in patterns {
+                if matches!(p.predicate, NamedNodePattern::Variable(..)) {
+                    right_patterns.push(p);
+                } else {
+                    left_patterns.push(p);
                 }
-                let mut outer = if !right_patterns.is_empty() {
-                    let mut left_gp = GraphPattern::Bgp {
-                        patterns: left_patterns,
-                    };
-                    let left_vars = get_gp_vars(&left_gp);
-                    let all_seen_vars: HashSet<_> = left_vars.union(&seen_vars).cloned().collect();
-                    while let Some(candidate) = filters.pop() {
-                        let candidate_vars = get_expr_vars(&candidate);
-                        if candidate_vars.is_subset(&all_seen_vars) {
-                            left_gp = GraphPattern::Filter {
-                                inner: Box::new(left_gp),
-                                expr: candidate,
-                            }
-                        } else {
-                            outer_filter.push(candidate);
-                        }
-                    }
-
-                    GraphPattern::Join {
-                        left: Box::new(left_gp),
-                        right: Box::new(GraphPattern::Bgp {
-                            patterns: right_patterns,
-                        }),
+            }
+            let mut left_gp = GraphPattern::Bgp {
+                patterns: left_patterns,
+            };
+            let left_vars = get_gp_vars(&left_gp);
+            let mut outer_filters = vec![];
+            for f in filters {
+                if get_expr_vars(&f).is_subset(&left_vars) {
+                    left_gp = GraphPattern::Filter {
+                        inner: Box::new(left_gp),
+                        expr: f,
                     }
                 } else {
-                    GraphPattern::Bgp {
-                        patterns: left_patterns,
-                    }
-                };
-                for f in outer_filter {
-                    outer = GraphPattern::Filter {
-                        inner: Box::new(outer),
-                        expr: f,
-                    };
+                    outer_filters.push(f);
                 }
-                outer
-            } else {
-                GraphPattern::Bgp { patterns }
             }
+            let outer = GraphPattern::Join {
+                left: Box::new(left_gp),
+                right: Box::new(GraphPattern::Bgp {
+                    patterns: right_patterns,
+                }),
+            };
+            create_filter_gps(outer, outer_filters)
         }
         GraphPattern::Filter { inner, expr } if contains_window_function(&expr) => {
             // A window function depends on all solutions of the inner pattern, so no filters
             // are moved below or out of it.
             let outer = GraphPattern::Filter {
-                inner: Box::new(rewrite_gp_pushdown(*inner, vec![], seen_vars)),
+                inner: Box::new(rewrite_gp_pushdown(*inner, vec![])),
                 expr,
             };
             create_filter_gps(outer, filters)
@@ -77,18 +72,17 @@ pub fn rewrite_gp_pushdown(
             if contains_variable_predicate(&inner) {
                 let exprs = rewrite_expr_pushdown(expr);
                 filters.extend(exprs);
-                rewrite_gp_pushdown(*inner, filters, seen_vars)
+                rewrite_gp_pushdown(*inner, filters)
             } else {
                 GraphPattern::Filter {
-                    inner: Box::new(rewrite_gp_pushdown(*inner, filters, seen_vars)),
+                    inner: Box::new(rewrite_gp_pushdown(*inner, filters)),
                     expr,
                 }
             }
         }
         GraphPattern::Join { left, right } => {
-            let left_vars = get_gp_vars(&left);
-            let right_vars = get_gp_vars(&right);
-            let left_and_right_vars: HashSet<_> = left_vars.union(&right_vars).cloned().collect();
+            let left_vars = get_certain_vars(&left);
+            let right_vars = get_certain_vars(&right);
             let mut left_filters = vec![];
             let mut right_filters = vec![];
             let mut outer_filters = vec![];
@@ -96,28 +90,26 @@ pub fn rewrite_gp_pushdown(
                 let expr_vars = get_expr_vars(&f);
                 if expr_vars.is_subset(&left_vars) {
                     left_filters.push(f);
-                } else if expr_vars.is_subset(&left_and_right_vars) {
+                } else if expr_vars.is_subset(&right_vars) {
                     right_filters.push(f);
                 } else {
                     outer_filters.push(f);
                 }
             }
-            let all_seen_vars: HashSet<_> = seen_vars.union(&left_vars).cloned().collect();
-            let left = rewrite_gp_pushdown(*left, left_filters, seen_vars);
-            let right = rewrite_gp_pushdown(*right, right_filters, all_seen_vars);
-            let mut outer = GraphPattern::Join {
+            let left = rewrite_gp_pushdown(*left, left_filters);
+            let right = rewrite_gp_pushdown(*right, right_filters);
+            let outer = GraphPattern::Join {
                 left: Box::new(left),
                 right: Box::new(right),
             };
-            outer = create_filter_gps(outer, outer_filters);
-            outer
+            create_filter_gps(outer, outer_filters)
         }
         GraphPattern::LeftJoin {
             left,
             right,
             expression,
         } => {
-            let left_vars = get_gp_vars(&left);
+            let left_vars = get_certain_vars(&left);
             let mut left_filters = vec![];
             let mut outer_filters = vec![];
             for f in filters {
@@ -128,8 +120,8 @@ pub fn rewrite_gp_pushdown(
                     outer_filters.push(f);
                 }
             }
-            let left = rewrite_gp_pushdown(*left, left_filters, seen_vars);
-            let right = rewrite_gp_pushdown(*right, vec![], HashSet::new());
+            let left = rewrite_gp_pushdown(*left, left_filters);
+            let right = rewrite_gp_pushdown(*right, vec![]);
             let mut outer = GraphPattern::LeftJoin {
                 left: Box::new(left),
                 right: Box::new(right),
@@ -140,7 +132,7 @@ pub fn rewrite_gp_pushdown(
         }
         GraphPattern::Lateral { left, right } => {
             // Filters on the left variables can be applied before the right side is evaluated.
-            let left_vars = get_gp_vars(&left);
+            let left_vars = get_certain_vars(&left);
             let mut left_filters = vec![];
             let mut outer_filters = vec![];
             for f in filters {
@@ -151,9 +143,8 @@ pub fn rewrite_gp_pushdown(
                     outer_filters.push(f);
                 }
             }
-            let all_seen_vars: HashSet<_> = seen_vars.union(&left_vars).cloned().collect();
-            let left = rewrite_gp_pushdown(*left, left_filters, seen_vars);
-            let right = rewrite_gp_pushdown(*right, vec![], all_seen_vars);
+            let left = rewrite_gp_pushdown(*left, left_filters);
+            let right = rewrite_gp_pushdown(*right, vec![]);
             let mut outer = GraphPattern::Lateral {
                 left: Box::new(left),
                 right: Box::new(right),
@@ -162,8 +153,8 @@ pub fn rewrite_gp_pushdown(
             outer
         }
         GraphPattern::Union { left, right } => {
-            let left = rewrite_gp_pushdown(*left, vec![], seen_vars.clone());
-            let right = rewrite_gp_pushdown(*right, vec![], seen_vars);
+            let left = rewrite_gp_pushdown(*left, vec![]);
+            let right = rewrite_gp_pushdown(*right, vec![]);
             let mut outer = GraphPattern::Union {
                 left: Box::new(left),
                 right: Box::new(right),
@@ -176,7 +167,7 @@ pub fn rewrite_gp_pushdown(
             variable,
             inner,
         } => {
-            let inner = rewrite_gp_pushdown(*inner, vec![], seen_vars);
+            let inner = rewrite_gp_pushdown(*inner, vec![]);
             let mut outer = GraphPattern::Extend {
                 inner: Box::new(inner),
                 variable,
@@ -186,8 +177,8 @@ pub fn rewrite_gp_pushdown(
             outer
         }
         GraphPattern::Minus { left, right } => {
-            let left = rewrite_gp_pushdown(*left, vec![], seen_vars.clone());
-            let right = rewrite_gp_pushdown(*right, vec![], seen_vars);
+            let left = rewrite_gp_pushdown(*left, vec![]);
+            let right = rewrite_gp_pushdown(*right, vec![]);
             let mut outer = GraphPattern::Minus {
                 left: Box::new(left),
                 right: Box::new(right),
@@ -196,7 +187,7 @@ pub fn rewrite_gp_pushdown(
             outer
         }
         GraphPattern::OrderBy { inner, expression } => {
-            let inner = rewrite_gp_pushdown(*inner, filters, seen_vars);
+            let inner = rewrite_gp_pushdown(*inner, filters);
             GraphPattern::OrderBy {
                 inner: Box::new(inner),
                 expression,
@@ -204,7 +195,7 @@ pub fn rewrite_gp_pushdown(
         }
         GraphPattern::Project { inner, variables } => {
             let mut inner = *inner;
-            inner = rewrite_gp_pushdown(inner, vec![], seen_vars);
+            inner = rewrite_gp_pushdown(inner, vec![]);
             let mut outer = GraphPattern::Project {
                 inner: Box::new(inner),
                 variables,
@@ -213,14 +204,14 @@ pub fn rewrite_gp_pushdown(
             outer
         }
         GraphPattern::Distinct { inner } => {
-            let inner = rewrite_gp_pushdown(*inner, filters, seen_vars);
+            let inner = rewrite_gp_pushdown(*inner, filters);
             GraphPattern::Distinct {
                 inner: Box::new(inner),
             }
         }
         GraphPattern::Reduced { inner } => {
             let mut inner = *inner;
-            inner = rewrite_gp_pushdown(inner, vec![], seen_vars);
+            inner = rewrite_gp_pushdown(inner, vec![]);
             let mut outer = GraphPattern::Reduced {
                 inner: Box::new(inner),
             };
@@ -233,7 +224,7 @@ pub fn rewrite_gp_pushdown(
             length,
         } => {
             let mut inner = *inner;
-            inner = rewrite_gp_pushdown(inner, vec![], seen_vars);
+            inner = rewrite_gp_pushdown(inner, vec![]);
             let mut outer = GraphPattern::Slice {
                 inner: Box::new(inner),
                 start,
@@ -248,7 +239,7 @@ pub fn rewrite_gp_pushdown(
             aggregates,
         } => {
             let mut inner = *inner;
-            inner = rewrite_gp_pushdown(inner, vec![], HashSet::new());
+            inner = rewrite_gp_pushdown(inner, vec![]);
             let mut outer = GraphPattern::Group {
                 inner: Box::new(inner),
                 variables,
@@ -257,7 +248,9 @@ pub fn rewrite_gp_pushdown(
             outer = create_filter_gps(outer, filters);
             outer
         }
-        gp => gp,
+        // VALUES, property paths, GRAPH, SERVICE and the other patterns the filters are not moved
+        // into keep them above.
+        gp => create_filter_gps(gp, filters),
     }
 }
 
@@ -268,7 +261,6 @@ pub fn rewrite_expr_pushdown(e: Expression) -> Vec<Expression> {
             out_exprs.push(Expression::Exists(Box::new(rewrite_gp_pushdown(
                 *gp,
                 vec![],
-                HashSet::new(),
             ))));
         }
         Expression::And(left, right) => {
@@ -296,6 +288,14 @@ fn get_gp_vars(graph_pattern: &GraphPattern) -> HashSet<Variable> {
         vars.insert(x.clone());
     });
     vars
+}
+
+/// The variables bound in every solution of the pattern.
+fn get_certain_vars(graph_pattern: &GraphPattern) -> HashSet<Variable> {
+    certainly_bound_variables(graph_pattern)
+        .into_iter()
+        .map(Variable::new_unchecked)
+        .collect()
 }
 
 fn get_expr_vars(expression: &Expression) -> HashSet<Variable> {
