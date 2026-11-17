@@ -8,7 +8,7 @@
   <a href="https://pypi.org/project/maplib/"><img alt="PyPI" src="https://img.shields.io/pypi/v/maplib.svg"></a>
   <a href="https://pypi.org/project/maplib/"><img alt="Python versions" src="https://img.shields.io/pypi/pyversions/maplib.svg"></a>
   <a href="LICENSE"><img alt="License: Apache 2.0" src="https://img.shields.io/badge/license-Apache%202.0-blue.svg"></a>
-  <a href="https://datatreehouse.github.io/maplib/maplib.html"><img alt="API docs" src="https://img.shields.io/badge/docs-API-green.svg"></a>
+  <a href="https://datatreehouse.github.io/maplib/"><img alt="Documentation" src="https://img.shields.io/badge/docs-website-green.svg"></a>
 </p>
 
 maplib is a knowledge graph engine that runs inside your Python process. It turns DataFrames, CSV, JSON, XML and RDF files into a knowledge graph, which you can query with SPARQL and GeoSPARQL, enrich with rules and OWL 2 RL reasoning, validate with SHACL and write out in any standard RDF format. You don't need a server or a database: `pip install maplib`, create a `Model`, and query results come back as Polars DataFrames.
@@ -76,7 +76,7 @@ Loading, inference and querying run on the open-source build; validation and vir
 
 ## What you can do
 
-Features marked **EE** need [maplib Enterprise Edition](#open-source-and-enterprise-edition). For worked examples of every method, see **[API_USAGE.md](API_USAGE.md)**. Each method's docstring documents its parameters (`help(Model.map)`).
+Features marked **EE** need [maplib Enterprise Edition](#open-source-and-enterprise-edition). For worked examples of every method, see **[API_USAGE.md](API_USAGE.md)**. Each method's docstring documents its parameters (`help(Model.map)`), and the **[documentation site](https://datatreehouse.github.io/maplib/)** has the guides and the [API reference](https://datatreehouse.github.io/maplib/api/maplib/index.html) together, with search.
 
 ### Build the graph
 
@@ -180,8 +180,9 @@ The maplib core (everything above that isn't marked **EE**) is open source under
 
 ## Learn more
 
+- [Documentation site](https://datatreehouse.github.io/maplib/): the guides and the API reference, searchable
 - [API usage guide with examples](API_USAGE.md)
-- [API reference](https://datatreehouse.github.io/maplib/maplib.html)
+- [API reference](https://datatreehouse.github.io/maplib/api/maplib/index.html), generated from the type stubs and docstrings
 - [Changelog](CHANGES.md)
 - [GitHub issues](https://github.com/DataTreehouse/maplib/issues)
 

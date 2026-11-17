@@ -2,7 +2,9 @@
 
 This guide walks through the maplib Python API by task, with an example for each public method of
 `Model` and `ModelStream`, and for the module-level functions. The [README](README.md) has the
-short overview, and each method's docstring (`help(Model.query)`) lists every parameter.
+short overview, and each method's docstring (`help(Model.query)`) lists every parameter. The
+[documentation site](https://datatreehouse.github.io/maplib/) has this guide and the [API reference](https://datatreehouse.github.io/maplib/api/maplib/index.html), generated from
+the docstrings, side by side.
 
 Features marked **EE** need maplib Enterprise Edition. In the open-source build they panic or raise
 with "Contact Data Treehouse to try" (or raise `NotImplementedError`). Everything else works with

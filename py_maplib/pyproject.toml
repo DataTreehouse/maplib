@@ -26,7 +26,7 @@ dynamic = ["version"]
 
 [project.urls]
 Homepage = "https://github.com/DataTreehouse/maplib"
-Documentation = "https://datatreehouse.github.io/maplib/maplib/maplib.html"
+Documentation = "https://datatreehouse.github.io/maplib/"
 Repository = "https://github.com/DataTreehouse/maplib"
 Changelog = "https://github.com/DataTreehouse/maplib/releases"
 

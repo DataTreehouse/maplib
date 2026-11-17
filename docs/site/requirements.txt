@@ -1,0 +1,5 @@
+# Pinned tools for the documentation site (docs/site, built by .github/workflows/docs.yaml)
+sphinx==9.1.1
+sphinx-autoapi==3.9.0
+furo==2025.12.19
+myst-parser==5.2.0

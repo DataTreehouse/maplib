@@ -1,60 +1,76 @@
-#Based on https://github.com/mitmproxy/pdoc/blob/main/.github/workflows/docs.yml
+# The documentation site, https://datatreehouse.github.io/maplib/
+#
+# Sphinx builds the site from the Markdown guides (README.md, API_USAGE.md, CHANGES.md, CONFIG_GRAPH.md,
+# docs/release_summary.md) and from the type stubs in py_maplib/maplib, which sphinx-autoapi reads without
+# building maplib. The configuration is docs/site/conf.py.
+#
+# Pull requests that touch the docs or the stubs build the site with warnings as errors and attach it as an
+# artifact. Pushes to main and v* release tags build it and publish it to GitHub Pages.
 name: website
 
-# build the documentation whenever there are new changes on main
 on:
   push:
     branches:
       - main
+    tags:
+      - 'v*'
+  pull_request:
+    paths:
+      - '**.md'
+      - 'docs/**'
+      - 'py_maplib/maplib/**'
+      - 'py_maplib/Cargo.toml'
+      - '.github/workflows/docs.yaml'
+  workflow_dispatch:
 
 # security: restrict permissions for CI jobs.
 permissions:
   contents: read
 
-env:
-  CARGO_TERM_COLOR: always
-  RUST_LOG: debug
-  MATURIN_VERSION: '1.16.0'
-  RUST_TOOLCHAIN: nightly-2026-09-01
+# One publish at a time; a newer push replaces a queued one, a running one finishes.
+concurrency:
+  group: website-${{ github.event_name == 'pull_request' && github.ref || 'pages' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  # Build the documentation and upload the static HTML files as an artifact.
+  # Build the site and upload it: as the Pages artifact when it will be published, otherwise as a
+  # downloadable artifact for review.
   build:
     runs-on: ubuntu-latest
-
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install dependencies
-        run: |
-          python -m venv .venv
-          source .venv/bin/activate
-          pip install --upgrade pip
-          pip install "maturin[patchelf]"==${{ env.MATURIN_VERSION }}
-          pip install -r tests/requirements.txt
-          pip install pdoc
-        working-directory: ./py_maplib
-
-      - name: Set up nightly rust
-        run: |
-          rustup toolchain install ${{ env.RUST_TOOLCHAIN }}
-          rustup default ${{ env.RUST_TOOLCHAIN }}
-
-      - name: Build install package and build docs
-        run: |
-          source .venv/bin/activate
-          maturin develop
-          pdoc -o docs/ maplib
-        working-directory: ./py_maplib
-
-      - uses: actions/upload-pages-artifact@v3
+      - uses: actions/setup-python@v5
         with:
-          path: py_maplib/docs/
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: docs/site/requirements.txt
 
-  # Deploy the artifact to GitHub pages.
+      - name: Install Sphinx
+        run: pip install -r docs/site/requirements.txt
+
+      - name: Build the site
+        run: sphinx-build -W --keep-going -b html docs/site docs/site/_build/html
+
+      - name: Upload the Pages artifact
+        if: github.event_name != 'pull_request'
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs/site/_build/html
+
+      - name: Upload the site for review
+        if: github.event_name == 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: website
+          path: docs/site/_build/html
+          retention-days: 7
+
+  # Deploy the artifact to GitHub Pages.
   # This is a separate job so that only actions/deploy-pages has the necessary permissions.
   deploy:
     needs: build
+    if: github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
     runs-on: ubuntu-latest
     permissions:
       pages: write
