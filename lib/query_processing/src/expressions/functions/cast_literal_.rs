@@ -139,9 +139,10 @@ pub fn cast_literal(
     trg: NamedNodeRef,
     trg_type: DataType,
 ) -> Expr {
-    // Works around issue where src is string and trg is string.
-    // TODO: Handle state comprehensively
-    if src == xsd::STRING || is_duration_datatype(src) {
+    // Dictionary-encoded values are decoded to their lexical forms first. Only xsd:string and
+    // durations were decoded, so a literal of another dictionary-encoded datatype, such as
+    // "5389.96"^^bsbm:USD, was cast from its code: xsd:string() gave "1795".
+    if !src_bt.is_lang_string() {
         c = maybe_decode_expr(c, src_bt, src_bs, global_cats);
     }
     if trg == xsd::STRING {

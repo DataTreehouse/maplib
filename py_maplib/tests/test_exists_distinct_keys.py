@@ -96,9 +96,9 @@ CHILD = textwrap.dedent(
 # The child is killed above this.
 HARD_CEILING_MB = 1500
 # The query's peak above the model's memory (macOS physical footprint). Per incoming solution it
-# peaked at about 110 MB, as a semi join at about 75-80 MB. The 960k-row cross product alone
-# takes about 30 MB, and the anti join holds it and its output at once.
-QUERY_PEAK_LIMIT_MB = 95
+# peaked at about 110 MB, as an anti join on the cross product at about 75-80 MB, and with the
+# distinct feature × product pairs answered and joined with each side at about 55 MB.
+QUERY_PEAK_LIMIT_MB = 65
 
 
 def _footprint_mb(pid):
@@ -213,6 +213,17 @@ QUERIES = {
     "no_keys": "SELECT ?s WHERE { ?s ex:q ?v FILTER EXISTS { ex:x ex:r ?z } }",
     # EXISTS as a value.
     "projected": "SELECT ?s (EXISTS { ?s ex:p ex:x } AS ?e) WHERE { ?s ex:q ?v }",
+    # Keys from both sides of a cross product, which is answered for the distinct key pairs
+    # and joined with each side (BSBM BI Q4).
+    "cross_not_exists": "SELECT ?s ?t WHERE { { SELECT DISTINCT ?t { ?t ex:r ?z } } ?s ex:q ?v FILTER NOT EXISTS { ?t ex:r ?s } }",
+    "cross_exists": "SELECT ?s ?t WHERE { { SELECT DISTINCT ?t { ?t ex:r ?z } } ?s ex:q ?v FILTER EXISTS { ?t ex:r ?s } }",
+    "cross_and_other_conjunct": "SELECT ?s ?t ?v WHERE { { SELECT DISTINCT ?t { ?t ex:r ?z } } ?s ex:q ?v FILTER (NOT EXISTS { ?t ex:r ?s } && ?v > 1) }",
+    # Duplicate solutions on one side are kept as duplicates.
+    "cross_duplicates": "SELECT ?s ?t WHERE { { SELECT ?t { ?t ?p ?o } } ?s ex:q ?v FILTER NOT EXISTS { ?t ex:r ?s } }",
+    # A side with an OPTIONAL variable that is not a key.
+    "cross_optional_side": "SELECT ?s ?n ?t WHERE { { ?s ex:q ?v OPTIONAL { ?s ex:name ?n } } { ?t ex:r ?z } FILTER NOT EXISTS { ?t ex:r ?s } }",
+    # Two EXISTS conjuncts, one over both sides and one over one side.
+    "cross_two_conjuncts": "SELECT ?s ?t WHERE { { SELECT DISTINCT ?t { ?t ex:r ?z } } ?s ex:q ?v FILTER (NOT EXISTS { ?t ex:r ?s } && EXISTS { ?s ex:p ?o }) }",
 }
 
 

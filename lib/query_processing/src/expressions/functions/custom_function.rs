@@ -7,7 +7,7 @@ use crate::expressions::functions::struuid_v5::struuid_v5;
 use crate::expressions::functions::udf::udf;
 use crate::expressions::functions::uuid_v5::uuid_v5;
 use crate::expressions::functions::xpath_math::{xpath_math, xpath_math_function};
-use crate::expressions::functions::xsd_cast_literal::xsd_cast_literal;
+use crate::expressions::functions::xsd_cast_literal::{is_xsd_cast_function, xsd_cast_literal};
 use crate::udf::UdfRegistry;
 use oxrdf::vocab::xsd;
 use oxrdf::NamedNode;
@@ -44,29 +44,7 @@ pub fn custom_(
             outer_context,
         );
     }
-    if matches!(
-        nn.as_ref(),
-        xsd::INT
-            | xsd::LONG
-            | xsd::INTEGER
-            | xsd::BOOLEAN
-            | xsd::UNSIGNED_LONG
-            | xsd::UNSIGNED_INT
-            | xsd::UNSIGNED_SHORT
-            | xsd::UNSIGNED_BYTE
-            | xsd::BYTE
-            | xsd::SHORT
-            | xsd::DECIMAL
-            | xsd::DOUBLE
-            | xsd::FLOAT
-            | xsd::STRING
-            | xsd::DATE_TIME
-            | xsd::DATE
-            | xsd::DURATION
-            | xsd::YEAR_MONTH_DURATION
-            | xsd::DAY_TIME_DURATION
-            | xsd::TIME
-    ) {
+    if is_xsd_cast_function(nn.as_ref()) {
         if args.len() != 1 {
             return Err(QueryProcessingError::BadNumberOfFunctionArguments(
                 func.clone(),

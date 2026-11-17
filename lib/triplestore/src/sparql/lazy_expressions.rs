@@ -6,6 +6,9 @@ use oxrdf::vocab::xsd;
 use oxrdf::{Literal, NamedNode};
 use polars::prelude::IntoLazy;
 use query_processing::expressions::functions::func_expression::func_expression;
+use query_processing::expressions::functions::xsd_cast_literal::{
+    is_xsd_cast_function, xsd_cast_chain_on_codes,
+};
 use query_processing::expressions::{
     binary_expression, bound, can_use_in_iris, coalesce_contexts, effective_boolean_value, exists,
     if_expression, in_expression, in_integers_expression, in_integers_values, in_iris_expression,
@@ -15,7 +18,7 @@ use query_processing::pushdowns::Pushdowns;
 use representation::dataset::QueryGraph;
 use representation::query_context::{Context, PathEntry};
 use representation::solution_mapping::{EagerSolutionMappings, SolutionMappings};
-use representation::BaseRDFNodeType;
+use representation::{BaseRDFNodeType, RDFNodeState};
 use spargebra::algebra::{Expression, Function, GraphPattern};
 
 impl Triplestore {
@@ -609,6 +612,19 @@ impl Triplestore {
                     dataset,
                 );
             }
+            Expression::FunctionCall(Function::Custom(_), _)
+                if self.cast_chain_on_codes(expr, &solution_mappings).is_some() =>
+            {
+                let (cast, state) = self.cast_chain_on_codes(expr, &solution_mappings).unwrap();
+                let mut output_solution_mappings = solution_mappings;
+                output_solution_mappings.mappings = output_solution_mappings
+                    .mappings
+                    .with_column(cast.alias(context.as_str()));
+                output_solution_mappings
+                    .rdf_node_types
+                    .insert(context.as_str().to_string(), state);
+                output_solution_mappings
+            }
             Expression::FunctionCall(func, args) => {
                 let mut args_contexts: HashMap<usize, Context> = HashMap::new();
                 let mut output_solution_mappings = solution_mappings;
@@ -717,6 +733,34 @@ impl Triplestore {
             exists_context,
             context,
         )?)
+    }
+}
+
+impl Triplestore {
+    /// `xsd:T1(xsd:T2(... ?v))`, casts of a variable whose values are dictionary-encoded, as
+    /// one expression evaluated once per distinct value (see xsd_cast_chain_on_codes).
+    fn cast_chain_on_codes(
+        &self,
+        expr: &Expression,
+        solution_mappings: &SolutionMappings,
+    ) -> Option<(polars::prelude::Expr, RDFNodeState)> {
+        let mut targets = vec![];
+        let mut e = expr;
+        let variable = loop {
+            match e {
+                Expression::FunctionCall(Function::Custom(nn), args)
+                    if args.len() == 1 && is_xsd_cast_function(nn.as_ref()) =>
+                {
+                    targets.push(nn.clone());
+                    e = &args[0];
+                }
+                Expression::Variable(v) if !targets.is_empty() => break v,
+                _ => return None,
+            }
+        };
+        targets.reverse();
+        let state = solution_mappings.rdf_node_types.get(variable.as_str())?;
+        xsd_cast_chain_on_codes(variable.as_str(), state, &targets, self.global_cats.clone())
     }
 }
 

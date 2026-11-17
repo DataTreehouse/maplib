@@ -268,25 +268,47 @@ impl Triplestore {
             expression
         };
 
-        let mut output_solution_mappings = if let Some(joined) = geo_joined {
-            joined
-        } else {
-            self.lazy_graph_pattern(
+        let cross_product = if geo_joined.is_none()
+            && input_solution_mappings.is_none()
+            && lateral_seed(parameters).is_none()
+        {
+            self.lazy_exists_over_cross_product(
                 inner,
-                input_solution_mappings,
+                expression,
                 &inner_context,
+                &expression_context,
                 parameters,
-                pushdowns,
+                &pushdowns,
+                expression_pushdowns.as_ref(),
                 query_settings,
                 dataset,
             )?
+        } else {
+            None
         };
+        let (mut output_solution_mappings, remaining_conjuncts) =
+            if let Some(evaluated) = cross_product {
+                evaluated
+            } else if let Some(joined) = geo_joined {
+                (joined, conjuncts(expression))
+            } else {
+                let sm = self.lazy_graph_pattern(
+                    inner,
+                    input_solution_mappings,
+                    &inner_context,
+                    parameters,
+                    pushdowns,
+                    query_settings,
+                    dataset,
+                )?;
+                (sm, conjuncts(expression))
+            };
         // FILTER EXISTS and FILTER NOT EXISTS conjuncts become semi and anti joins on the
         // variables the pattern shares with the solutions (see lazy_exists_join).
         let certain = certainly_bound_variables(inner);
         let mut residual_conjuncts = vec![];
         let mut exists_joins = vec![];
-        for c in conjuncts(expression) {
+        for c in remaining_conjuncts {
             if let Some((pattern, negated)) = exists_conjunct(c) {
                 let mentioned = mentioned_variable_names(pattern);
                 let mut keys: Vec<String> = output_solution_mappings
@@ -336,6 +358,163 @@ impl Triplestore {
         );
         output_solution_mappings = filter(output_solution_mappings, &expression_context)?;
         Ok(output_solution_mappings)
+    }
+
+    /// FILTER (NOT) EXISTS { P } over `{ A } { B }`, where A and B share no variables (a cross
+    /// product) and P mentions variables of both, e.g. BSBM BI Q4:
+    ///
+    ///     { SELECT DISTINCT ?feature { ... } }                          # A: 431 rows
+    ///     ?product a %ProductType% . ?offer bsbm:product ?product ...  # B: 2,357 rows
+    ///     FILTER NOT EXISTS { ?product bsbm:productFeature ?feature }
+    ///
+    /// Whether P has a solution depends only on the key values from A (?feature) and from B
+    /// (?product). The distinct key pairs (431 × 121) are answered first, and the pairs that
+    /// pass are joined with A on A's keys and with B on B's. The 957k rows that remain are then
+    /// built once by those joins, instead of building the million-row cross product, keeping it
+    /// while the anti join builds its result, and computing the distinct pairs from it.
+    ///
+    /// Returns the solutions and the conjuncts left to evaluate, or `None` if the expression
+    /// has no such conjunct.
+    #[allow(clippy::too_many_arguments)]
+    fn lazy_exists_over_cross_product<'e>(
+        &self,
+        inner: &GraphPattern,
+        expression: &'e Expression,
+        inner_context: &Context,
+        expression_context: &Context,
+        parameters: Option<&HashMap<String, EagerSolutionMappings>>,
+        pushdowns: &Pushdowns,
+        expression_pushdowns: Option<&Pushdowns>,
+        query_settings: &QuerySettings,
+        dataset: &QueryGraph,
+    ) -> Result<Option<(SolutionMappings, Vec<&'e Expression>)>, SparqlError> {
+        let GraphPattern::Join { left, right } = inner else {
+            return Ok(None);
+        };
+        let in_scope = |gp: &GraphPattern| {
+            let mut vs = HashSet::new();
+            gp.on_in_scope_variable(|v| {
+                vs.insert(v.as_str().to_string());
+            });
+            vs
+        };
+        let (left_vars, right_vars) = (in_scope(left), in_scope(right));
+        if !left_vars.is_disjoint(&right_vars) {
+            return Ok(None);
+        }
+        let (left_certain, right_certain) = (
+            certainly_bound_variables(left),
+            certainly_bound_variables(right),
+        );
+        let mut conjuncts = conjuncts(expression);
+        let found = conjuncts.iter().enumerate().find_map(|(i, c)| {
+            let (pattern, negated) = exists_conjunct(c)?;
+            let mentioned = mentioned_variable_names(pattern);
+            let keys_in = |vars: &HashSet<String>, certain: &HashSet<String>| {
+                let mut keys: Vec<String> = vars
+                    .iter()
+                    .filter(|v| mentioned.contains(v.as_str()))
+                    .cloned()
+                    .collect();
+                keys.sort();
+                (!keys.is_empty() && keys.iter().all(|k| certain.contains(k))).then_some(keys)
+            };
+            let left_keys = keys_in(&left_vars, &left_certain)?;
+            let right_keys = keys_in(&right_vars, &right_certain)?;
+            Some((i, pattern, negated, left_keys, right_keys))
+        });
+        let Some((i, pattern, negated, left_keys, right_keys)) = found else {
+            return Ok(None);
+        };
+        conjuncts.remove(i);
+
+        // Each side is read twice, for its keys and for the join, so it is collected once.
+        let side = |gp: &GraphPattern, entry: PathEntry| -> Result<SolutionMappings, SparqlError> {
+            let mut sm = self.lazy_graph_pattern(
+                gp,
+                None,
+                &inner_context.extension_with(entry),
+                parameters,
+                pushdowns.clone(),
+                query_settings,
+                dataset,
+            )?;
+            sm.mappings = sm.mappings.collect().unwrap().lazy();
+            Ok(sm)
+        };
+        let left_sm = side(left, PathEntry::JoinLeftSide)?;
+        let right_sm = side(right, PathEntry::JoinRightSide)?;
+        let distinct = |sm: &SolutionMappings, keys: &[String]| {
+            SolutionMappings::new(
+                sm.mappings
+                    .clone()
+                    .select(keys.iter().map(|k| col(k)).collect::<Vec<_>>())
+                    .unique(None, UniqueKeepStrategy::Any),
+                keys.iter()
+                    .map(|k| (k.clone(), sm.rdf_node_types.get(k).unwrap().clone()))
+                    .collect(),
+                sm.height_estimate,
+            )
+        };
+        // All combinations of the keys' values: no larger than the cross product, and for BI Q4
+        // 52,151 pairs against a million rows.
+        let mut pairs = join(
+            distinct(&left_sm, &left_keys),
+            distinct(&right_sm, &right_keys),
+            JoinType::Inner,
+            self.global_cats.clone(),
+            query_settings.max_rows,
+        )?;
+        pairs.mappings = pairs.mappings.collect().unwrap().lazy();
+        let mut keys: Vec<String> = left_keys.iter().chain(&right_keys).cloned().collect();
+        keys.sort();
+        let key_columns: Vec<Expr> = keys.iter().map(|k| col(k)).collect();
+        let answers = self.lazy_exists(
+            pattern,
+            pairs.clone(),
+            &expression_context.extension_with(PathEntry::Exists),
+            expression_context,
+            parameters,
+            expression_pushdowns,
+            query_settings,
+            dataset,
+        )?;
+        let matching = answers
+            .mappings
+            .filter(col(expression_context.as_str()))
+            .select(key_columns.clone());
+        let how = if negated {
+            JoinType::Anti
+        } else {
+            JoinType::Semi
+        };
+        let passing = SolutionMappings::new(
+            pairs
+                .mappings
+                .join(
+                    matching,
+                    key_columns.as_slice(),
+                    key_columns.as_slice(),
+                    JoinArgs::new(how),
+                )
+                .unwrap(),
+            pairs.rdf_node_types,
+            pairs.height_estimate,
+        );
+        let sm = join(
+            join(
+                left_sm,
+                passing,
+                JoinType::Inner,
+                self.global_cats.clone(),
+                query_settings.max_rows,
+            )?,
+            right_sm,
+            JoinType::Inner,
+            self.global_cats.clone(),
+            query_settings.max_rows,
+        )?;
+        Ok(Some((sm, conjuncts)))
     }
 
     /// Keeps the solutions for which the pattern has a solution (EXISTS), or has none (NOT
