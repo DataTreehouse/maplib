@@ -1,6 +1,6 @@
 # Change log
 
-## v0.22.2
+## v0.23.0
 ### Breaking changes
 - `Model.reason(profile, ...)` (maplib Enterprise Edition) is now `Model.infer(profile=..., ...)`, with the same parameters (`graph`, `target_graph`, `include_graphs`, `max_violations`, `max_rows`), and still returns a `ReasoningResult`. `Model.infer` takes either `rulesets` or `profile`, and raises if it gets both or neither, or `target_graph` or `max_violations` with rulesets. `Model.reason` is removed. In Rust, `Model::reason` is unchanged
 - `Model.update(update, graph=G)` writes to `G`: `G` is the default graph of the update, as with `WITH <G>`, so triples without a `GRAPH` in the INSERT and DELETE templates, `INSERT DATA` and `DELETE DATA` are inserted into and deleted from `G`, and CLEAR DEFAULT clears it. Before, the WHERE clause was evaluated on `G`, but the triples were inserted into and deleted from the default graph. Updates sent to `Model.serve(graph=G)` (maplib Enterprise Edition) write to `G` in the same way
