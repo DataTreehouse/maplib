@@ -1443,7 +1443,10 @@ definitions (a bridge or an articulation point is an edge or a node whose remova
 number of connected components) and is checked against them. The tests in
 `py_maplib/tests/test_graph_algorithms.py` cover the cases above, and
 `py_maplib/tests/test_graph_algorithm_definitions.py` checks maplib on random graphs against the
-definitions themselves, by removing every edge and every node in turn.
+definitions themselves, by removing every edge and every node in turn. Connected components are also
+checked against the validation graphs of the [LDBC Graphalytics](https://github.com/ldbc/ldbc_graphalytics)
+benchmark, which defines weakly connected components with reference outputs
+(`py_maplib/tests/test_ldbc_graphalytics_wcc.py`).
 
 ### Full-text search: maplib:fts **EE**
 
