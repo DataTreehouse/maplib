@@ -2197,7 +2197,7 @@ class Model:
             are read as UTF-8.
         :param format: One of "ntriples", "turtle", "trig", "nquads", "rdf/xml", "json-ld", "cim/xml" or "hdt", otherwise it is inferred from the file extension.
         :param base_iri: Base iri
-        :param parallel: Parse triples in parallel, currently only NTRiples and Turtle. Assumes all prefixes are in the beginning of the document. Defaults to true only for NTriples.
+        :param parallel: Parse triples in parallel, currently only N-Triples, N-Quads and Turtle. Assumes all prefixes are in the beginning of the document. Defaults to true only for N-Triples and N-Quads.
         :param checked: Check IRIs etc.
         :param graph: The IRI of the graph to read the triples into, if None, it will be the default graph (or, for TriG, N-Quads and JSON-LD, the graphs named in the document).
         :param replace_graph: Replace the graph with these triples? Will replace the default graph if no graph is specified.
@@ -2255,7 +2255,7 @@ class Model:
         :param s: String containing serialized triples.
         :param format: One of "ntriples", "turtle", "trig", "nquads", "rdf/xml", "json-ld" or "cim/xml".
         :param base_iri: Base iri
-        :param parallel: Parse triples in parallel, currently only NTRiples and Turtle. Assumes all prefixes are in the beginning of the document. Defaults to true for NTriples.
+        :param parallel: Parse triples in parallel, currently only N-Triples, N-Quads and Turtle. Assumes all prefixes are in the beginning of the document. Defaults to true for N-Triples and N-Quads.
         :param checked: Check IRIs etc.
         :param graph: The IRI of the graph to read the triples into. If None, the default graph (or, for TriG, N-Quads and JSON-LD, the graphs named in the document).
         :param replace_graph: Replace the graph with these triples? Will replace the default graph if no graph is specified.

@@ -174,3 +174,39 @@ def test_writes_trig_uses_prefixes():
     s = m.writes(format="trig", prefixes={"ex": "http://example.org/"})
     assert "@prefix ex: <http://example.org/> ." in s
     assert "ex:g1 {" in s
+
+
+def big_nquads(n: int) -> str:
+    ex = "http://example.org/"
+    lines = []
+    for i in range(n):
+        g = f" <{ex}g{i % 3}>" if i % 4 else ""
+        lines.append(f'<{ex}s{i}> <{ex}p{i % 5}> "v{i}"{g} .')
+        lines.append(f"<{ex}s{i}> <{ex}link> <{ex}s{(i * 7) % n}>{g} .")
+    return "\n".join(lines) + "\n"
+
+
+@pytest.mark.parametrize("parallel", [None, True, False])
+def test_reads_large_nquads_in_parallel_chunks(tmp_path, parallel):
+    # Large enough to be split into many chunks, with quads in several graphs on each side of the
+    # chunk boundaries. N-Quads are read in parallel by default.
+    path = tmp_path / "big.nq"
+    path.write_text(big_nquads(20_000))
+    m = Model()
+    m.read(path, parallel=parallel)
+    ex = "http://example.org/"
+    expected = {None: 0, ex + "g0": 0, ex + "g1": 0, ex + "g2": 0}
+    for i in range(20_000):
+        expected[ex + f"g{i % 3}" if i % 4 else None] += 2
+    for graph, count in expected.items():
+        df = m.query("SELECT (COUNT(*) AS ?n) WHERE { ?s ?p ?o }", graph=graph)
+        assert df["n"].to_list() == [count], graph
+    df = m.query(f"SELECT ?o WHERE {{ <{ex}s4243> <{ex}p3> ?o }}", graph=ex + "g1")
+    assert df["o"].to_list() == ["v4243"]
+
+
+def test_reads_nquads_parallel_syntax_error():
+    s = big_nquads(5_000) + "<http://example.org/s> <http://example.org/p> .\n"
+    m = Model()
+    with pytest.raises(MaplibException):
+        m.reads(s, format="nquads", parallel=True)

@@ -681,7 +681,7 @@ print(open("records.nt").read())
 |---|---|---|---|
 | N-Triples | `"ntriples"` | yes (parallel) | yes |
 | Turtle | `"turtle"` | yes (parallel) | yes, pretty-printed |
-| N-Quads | `"nquads"` | yes | yes |
+| N-Quads | `"nquads"` | yes (parallel) | yes |
 | TriG | `"trig"` | yes | yes |
 | RDF/XML | `"rdf/xml"` | yes | yes |
 | JSON-LD | `"json-ld"` | yes | yes, compacted |
@@ -712,8 +712,8 @@ s = m2.writes(format="ntriples", graph="urn:copy")
 - `graph=` reads into a named graph (for TriG, N-Quads and JSON-LD, the graphs named in the document
   are used when it is not given), and `replace_graph=True` replaces the graph's triples.
 - `base_iri=` sets the base for relative IRIs.
-- `parallel=` parses N-Triples and Turtle in parallel. It is on by default for N-Triples, and assumes
-  that all prefixes come at the start of the document.
+- `parallel=` parses N-Triples, N-Quads and Turtle in parallel. It is on by default for N-Triples and
+  N-Quads, and for Turtle it assumes that all prefixes come at the start of the document.
 - `checked=False` skips IRI checks.
 - `strict=True` raises on literals that don't parse as their datatype (e.g. `"abc"^^xsd:integer`).
   By default such triples are dropped with a warning.

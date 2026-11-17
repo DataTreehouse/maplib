@@ -13,9 +13,10 @@ use oxrdfio::{
     JsonLdProfileSet, LoadedDocument, RdfFormat, RdfParser, RdfSyntaxError, SliceQuadParser,
 };
 use oxrdfxml::{RdfXmlParser, SliceRdfXmlParser};
+use oxttl::nquads::SliceNQuadsParser;
 use oxttl::ntriples::SliceNTriplesParser;
 use oxttl::turtle::SliceTurtleParser;
-use oxttl::{NTriplesParser, TurtleParser};
+use oxttl::{NQuadsParser, NTriplesParser, TurtleParser};
 use polars::prelude::{concat, DataFrame, IntoLazy, UnionArgs};
 use polars_core::prelude::IntoColumn;
 use rayon::iter::ParallelIterator;
@@ -250,6 +251,7 @@ impl Triplestore {
             matches!(
                 rdf_format,
                 ExtendedRdfFormat::Normal(RdfFormat::NTriples)
+                    | ExtendedRdfFormat::Normal(RdfFormat::NQuads)
                     | ExtendedRdfFormat::Normal(RdfFormat::RdfXml)
                     | ExtendedRdfFormat::CIMXML
             )
@@ -260,6 +262,8 @@ impl Triplestore {
             parallel_turtle_readers(use_slice, prefixes, checked, base_iri)?
         } else if parallel && rdf_format == ExtendedRdfFormat::Normal(RdfFormat::NTriples) {
             parallel_ntriples_readers(use_slice, checked)
+        } else if parallel && rdf_format == ExtendedRdfFormat::Normal(RdfFormat::NQuads) {
+            parallel_nquads_readers(use_slice, checked)
         } else if parallel
             && matches!(
                 rdf_format,
@@ -711,6 +715,23 @@ fn parallel_ntriples_readers(slice: &[u8], checked: bool) -> Vec<MyFromSliceQuad
         .collect()
 }
 
+fn parallel_nquads_readers(slice: &[u8], checked: bool) -> Vec<MyFromSliceQuadReader<'_>> {
+    let threads = std::thread::available_parallelism()
+        .map(|t| t.get())
+        .unwrap_or(1);
+    let mut parser = NQuadsParser::new();
+    if !checked {
+        parser = parser.lenient();
+    }
+    parser
+        .split_slice_for_parallel_parsing(slice, threads)
+        .into_iter()
+        .map(|r| MyFromSliceQuadReader {
+            parser: MyFromSliceQuadReaderKind::NQuadsPar(r),
+        })
+        .collect()
+}
+
 fn parallel_rdfxml_readers<'a>(
     chunks: &'a [Cow<'a, [u8]>],
     rdf_format: &ExtendedRdfFormat,
@@ -797,6 +818,7 @@ pub enum MyFromSliceQuadReaderKind<'a> {
     CIMXML(SliceQuadParser<'a>, Option<String>),
     TurtlePar(SliceTurtleParser<'a>),
     NTriplesPar(SliceNTriplesParser<'a>),
+    NQuadsPar(SliceNQuadsParser<'a>),
     /// One chunk of a split RDF/XML document. `Some(base_iri)` if the document is CIM/XML.
     RdfXmlPar(SliceRdfXmlParser<'a>, Option<Option<String>>),
 }
@@ -823,6 +845,10 @@ impl Iterator for MyFromSliceQuadReader<'_> {
             },
             MyFromSliceQuadReaderKind::NTriplesPar(parser) => match parser.next()? {
                 Ok(triple) => Ok(triple.in_graph(GraphName::default())),
+                Err(e) => Err(e.into()),
+            },
+            MyFromSliceQuadReaderKind::NQuadsPar(parser) => match parser.next()? {
+                Ok(quad) => Ok(quad),
                 Err(e) => Err(e.into()),
             },
             MyFromSliceQuadReaderKind::RdfXmlPar(parser, cim_base_iri) => match parser.next()? {

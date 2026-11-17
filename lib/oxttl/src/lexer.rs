@@ -13,6 +13,34 @@ use std::collections::HashMap;
 use std::ops::Range;
 use std::str;
 
+// Maplib: byte classes for the ASCII fast paths of prefixed names.
+const STOP: u8 = 0; // ends a prefixed name
+const PN_CHAR: u8 = 1; // ASCII PN_CHARS: [A-Za-z0-9_-]
+const DOT: u8 = 2;
+const COLON: u8 = 3;
+const SLOW: u8 = 4; // '%', '\\' and non-ASCII bytes: handled by the general loop
+
+const ASCII_CLASS: [u8; 256] = {
+    let mut t = [STOP; 256];
+    let mut i = 0;
+    while i < 256 {
+        let b = i as u8;
+        t[i] = if b.is_ascii_alphanumeric() || b == b'_' || b == b'-' {
+            PN_CHAR
+        } else if b == b'.' {
+            DOT
+        } else if b == b':' {
+            COLON
+        } else if b == b'%' || b == b'\\' || b >= 0x80 {
+            SLOW
+        } else {
+            STOP
+        };
+        i += 1;
+    }
+    t
+};
+
 #[derive(Debug, PartialEq, Eq)]
 pub enum N3Token<'a> {
     IriRef(String),
@@ -52,6 +80,23 @@ pub struct N3LexerOptions {
 pub struct N3Lexer {
     mode: N3LexerMode,
     lenient: bool,
+    /// Maplib: recently produced absolute IRIs (no base IRI, no escapes), so that repeated IRIs,
+    /// e.g. predicates and classes, skip the UTF-8 and IRI checks. Only IRIs that this lexer
+    /// accepted with its own `lenient` setting are stored, and empty IRIs never match.
+    iri_cache: [String; IRI_CACHE_SIZE],
+}
+
+const IRI_CACHE_SIZE: usize = 16;
+
+/// The bytes consumed, and the local name with whether it might build an invalid IRI.
+type PnLocalResult<'a> = Option<(usize, Result<(Cow<'a, str>, bool), TokenRecognizerError>)>;
+
+#[inline]
+fn iri_cache_slot(iri: &[u8]) -> usize {
+    let n = iri.len();
+    let last = usize::from(iri[n - 1]);
+    let before_last = usize::from(iri[n.saturating_sub(2)]);
+    (n.wrapping_mul(31) ^ last ^ before_last.wrapping_mul(7)) % IRI_CACHE_SIZE
 }
 
 // TODO: there are a lot of 'None' (missing data) returned even if the stream is ending!!!
@@ -197,15 +242,37 @@ impl TokenRecognizer for N3Lexer {
 
 impl N3Lexer {
     pub fn new(mode: N3LexerMode, lenient: bool) -> Self {
-        Self { mode, lenient }
+        Self {
+            mode,
+            lenient,
+            iri_cache: Default::default(),
+        }
     }
 
     fn recognize_iri(
-        &self,
+        &mut self,
         data: &[u8],
         options: &N3LexerOptions,
     ) -> Option<(usize, Result<N3Token<'static>, TokenRecognizerError>)> {
         // [18] IRIREF  ::=  '<' ([^#x00-#x20<>"{}|^`\] | UCHAR)* '>' /* #x00=NULL #01-#x1F=control codes #x20=space */
+        if options.base_iri.is_none() {
+            // Maplib: absolute IRIs without escapes go through the cache of recent IRIs
+            let end = 1 + memchr2(b'>', b'\\', &data[1..])?;
+            if data[end] == b'>' && end > 1 {
+                let iri = &data[1..end];
+                let slot = iri_cache_slot(iri);
+                if self.iri_cache[slot].as_bytes() == iri {
+                    return Some((end + 1, Ok(N3Token::IriRef(self.iri_cache[slot].clone()))));
+                }
+                let result = self.parse_iri(iri.to_vec(), 0..end + 1, options);
+                if let Ok(N3Token::IriRef(iri)) = &result {
+                    let cached = &mut self.iri_cache[slot];
+                    cached.clear();
+                    cached.push_str(iri);
+                }
+                return Some((end + 1, result));
+            }
+        }
         let mut string = Vec::new();
         let mut i = 1;
         loop {
@@ -249,7 +316,7 @@ impl N3Lexer {
                         .map_err(|e| (position, e.to_string()))?
                 }
                 .into_inner()
-            } else if self.lenient {
+            } else if self.lenient || is_simple_absolute_iri(iri.as_bytes()) {
                 iri
             } else {
                 Iri::parse(iri)
@@ -267,6 +334,38 @@ impl N3Lexer {
         // [139s]  PNAME_NS   ::=  PN_PREFIX? ':'
         // [140s]  PNAME_LN   ::=  PNAME_NS PN_LOCAL
         // [167s]  PN_PREFIX  ::=  PN_CHARS_BASE ((PN_CHARS | '.')* PN_CHARS)?
+
+        // Maplib: ASCII fast path for a valid prefix followed by ':'. Anything else (keywords,
+        // errors, non-ASCII, need-more-data) goes through the general loop below.
+        {
+            let mut j = 0;
+            while let Some(&b) = data.get(j) {
+                if !matches!(ASCII_CLASS[usize::from(b)], PN_CHAR | DOT) {
+                    break;
+                }
+                j += 1;
+            }
+            if data.get(j) == Some(&b':')
+                && (j == 0 || (data[0].is_ascii_alphabetic() && data[j - 1] != b'.'))
+            {
+                // Only ASCII bytes, so this is valid UTF-8
+                let pn_prefix = str::from_utf8(&data[..j]).ok()?;
+                let i = j + 1;
+                let (consumed, pn_local_result) =
+                    self.recognize_optional_pn_local(&data[i..], is_ending)?;
+                return Some((
+                    consumed + i,
+                    pn_local_result.map(|(local, might_be_invalid_iri)| {
+                        N3Token::PrefixedName {
+                            prefix: pn_prefix,
+                            local,
+                            might_be_invalid_iri,
+                        }
+                    }),
+                ));
+            }
+        }
+
         let mut i = 0;
         loop {
             if let Some(r) = Self::recognize_unicode_char(&data[i..], i) {
@@ -369,12 +468,43 @@ impl N3Lexer {
         ))
     }
 
-    fn recognize_optional_pn_local<'a>(
-        &self,
-        data: &'a [u8],
-        is_ending: bool,
-    ) -> Option<(usize, Result<(Cow<'a, str>, bool), TokenRecognizerError>)> {
+    /// Maplib: an ASCII-only fast path for local names. It returns `Some` only for local names made
+    /// of ASCII PN_CHARS, ':' and '.' that end before the end of `data` (or at the end of the
+    /// input), and leaves everything else (escapes, '%', non-ASCII, need-more-data) to the
+    /// general per-character loop, which gives the same result for the inputs accepted here.
+    #[inline]
+    fn recognize_ascii_pn_local<'a>(&self, data: &'a [u8], is_ending: bool) -> PnLocalResult<'a> {
+        let first = *data.first()?;
+        if !(first.is_ascii_alphanumeric() || first == b'_' || first == b':') {
+            return None;
+        }
+        let mut has_colon = false;
+        let mut i = 0;
+        while let Some(&b) = data.get(i) {
+            match ASCII_CLASS[usize::from(b)] {
+                PN_CHAR | DOT => {}
+                COLON => has_colon = true,
+                STOP => break,
+                _ => return None, // '%', '\\' or non-ASCII
+            }
+            i += 1;
+        }
+        if i == data.len() && !is_ending {
+            return None; // We need more data
+        }
+        while i > 0 && data[i - 1] == b'.' {
+            i -= 1;
+        }
+        // Only ASCII bytes, so this is valid UTF-8
+        let local = str::from_utf8(&data[..i]).ok()?;
+        Some((i, Ok((Cow::Borrowed(local), !self.lenient && has_colon))))
+    }
+
+    fn recognize_optional_pn_local<'a>(&self, data: &'a [u8], is_ending: bool) -> PnLocalResult<'a> {
         // [168s]  PN_LOCAL  ::=  (PN_CHARS_U | ':' | [0-9] | PLX) ((PN_CHARS | '.' | ':' | PLX)* (PN_CHARS | ':' | PLX))?
+        if let Some(result) = self.recognize_ascii_pn_local(data, is_ending) {
+            return Some(result);
+        }
         let mut i = 0;
         let mut buffer = None; // Buffer if there are some escaped characters
         let mut position_that_is_already_in_buffer = 0;
@@ -1130,6 +1260,105 @@ impl N3Lexer {
     }
 }
 
+// Maplib: bytes allowed anywhere after the scheme in the fast IRI check: unreserved, sub-delims,
+// ':', '@' and '/'. '?' and '#' are handled separately; '%', '[', ']', non-ASCII and everything
+// else is left to the full oxiri parser.
+const IRI_SIMPLE: [bool; 256] = {
+    let mut t = [false; 256];
+    let mut i = 0;
+    while i < 256 {
+        let b = i as u8;
+        t[i] = b.is_ascii_alphanumeric()
+            || matches!(
+                b,
+                b'-' | b'.'
+                    | b'_'
+                    | b'~'
+                    | b'!'
+                    | b'$'
+                    | b'&'
+                    | b'\''
+                    | b'('
+                    | b')'
+                    | b'*'
+                    | b'+'
+                    | b','
+                    | b';'
+                    | b'='
+                    | b':'
+                    | b'@'
+                    | b'/'
+            );
+        i += 1;
+    }
+    t
+};
+
+/// Maplib: a fast check that accepts only a common subset of absolute IRIs, all of which
+/// `oxiri::Iri::parse` accepts too. `false` means "not sure", not "invalid": the caller then runs
+/// the full parser, so errors and their messages are unchanged.
+///
+/// Accepted: `scheme ":" ["//" authority] rest`, where the authority is a host of unreserved and
+/// sub-delims characters with an optional `:digits` port (no userinfo, IP literal or
+/// percent-encoding), and the rest has only `IRI_SIMPLE` bytes, `'?'`, and at most one `'#'`.
+pub(crate) fn is_simple_absolute_iri(iri: &[u8]) -> bool {
+    // scheme = ALPHA *( ALPHA / DIGIT / "+" / "-" / "." )
+    let Some(first) = iri.first() else {
+        return false;
+    };
+    if !first.is_ascii_alphabetic() {
+        return false;
+    }
+    let mut i = 1;
+    loop {
+        match iri.get(i) {
+            Some(b':') => break,
+            Some(b) if b.is_ascii_alphanumeric() || matches!(b, b'+' | b'-' | b'.') => i += 1,
+            _ => return false,
+        }
+    }
+    i += 1;
+    if iri[i..].starts_with(b"//") {
+        i += 2;
+        // host: unreserved / sub-delims only, then optional ":" *DIGIT
+        while let Some(&b) = iri.get(i) {
+            if matches!(b, b'/' | b'?' | b'#' | b':') {
+                break;
+            }
+            if !IRI_SIMPLE[usize::from(b)] || b == b'@' {
+                return false;
+            }
+            i += 1;
+        }
+        if iri.get(i) == Some(&b':') {
+            i += 1;
+            while let Some(b) = iri.get(i) {
+                if !b.is_ascii_digit() {
+                    break;
+                }
+                i += 1;
+            }
+            if !matches!(iri.get(i), None | Some(b'/' | b'?' | b'#')) {
+                return false;
+            }
+        }
+    }
+    // path, query and fragment
+    let mut seen_hash = false;
+    while let Some(&b) = iri.get(i) {
+        if b == b'#' {
+            if seen_hash {
+                return false;
+            }
+            seen_hash = true;
+        } else if b != b'?' && !IRI_SIMPLE[usize::from(b)] {
+            return false;
+        }
+        i += 1;
+    }
+    true
+}
+
 pub fn resolve_local_name(
     prefix: &str,
     local: &str,
@@ -1137,7 +1366,10 @@ pub fn resolve_local_name(
     prefixes: &HashMap<String, Iri<String>>,
 ) -> Result<NamedNode, String> {
     if let Some(start) = prefixes.get(prefix) {
-        let iri = format!("{start}{local}");
+        let start_str = start.as_str();
+        let mut iri = String::with_capacity(start_str.len() + local.len());
+        iri.push_str(start_str);
+        iri.push_str(local);
         if might_be_invalid_iri || start.path().is_empty() {
             // We validate again. We always validate if the local part might be the IRI authority.
             if let Err(e) = Iri::parse(iri.as_str()) {
