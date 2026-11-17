@@ -59,6 +59,9 @@ create_exception!(exceptions, MaplibUDFError, PyException);
 // Raised when a query or update runs longer than its timeout. A MaplibException, so code that
 // catches those catches timeouts too.
 create_exception!(exceptions, QueryTimeoutError, MaplibException);
+// Raised when a query or update uses more memory than its memory limit (`max_memory_mb`, or the
+// default set with maplib.set_memory_limit(max_query_memory_mb=)). A MaplibException.
+create_exception!(exceptions, QueryMemoryLimitError, MaplibException);
 
 /// The `timeout` argument of a query, in seconds.
 pub fn parse_timeout(timeout: Option<f64>) -> PyResult<Option<std::time::Duration>> {
@@ -72,13 +75,54 @@ pub fn parse_timeout(timeout: Option<f64>) -> PyResult<Option<std::time::Duratio
 }
 
 /// A QueryTimeoutError when the query stopped because its token timed out, a MemoryError when it
-/// stopped because the process used more memory than queries may, otherwise `err`.
+/// stopped because the process used more memory than queries may, a QueryMemoryLimitError when it
+/// went over its own memory limit, otherwise `err`.
 pub fn timeout_error(err: PyErr, token: Option<&utils::cancel::CancelToken>) -> PyErr {
-    match token.and_then(|t| t.stopped()) {
-        Some(c @ utils::cancel::Cancelled::Timeout(_)) => QueryTimeoutError::new_err(c.to_string()),
-        Some(c @ utils::cancel::Cancelled::MemoryLimit(_)) => {
-            pyo3::exceptions::PyMemoryError::new_err(c.to_string())
-        }
-        _ => err,
+    match token.and_then(|t| t.stopped()).and_then(stopped_error) {
+        Some(e) => e,
+        None => err,
     }
+}
+
+/// The Python error for a query that stopped for `c`, None when it was cancelled by its caller.
+pub fn stopped_error(c: utils::cancel::Cancelled) -> Option<PyErr> {
+    use utils::cancel::Cancelled;
+    match c {
+        Cancelled::Timeout(_) => Some(QueryTimeoutError::new_err(c.to_string())),
+        Cancelled::MemoryLimit(_) => Some(pyo3::exceptions::PyMemoryError::new_err(c.to_string())),
+        Cancelled::QueryMemoryLimit(_) => Some(QueryMemoryLimitError::new_err(c.to_string())),
+        Cancelled::Cancelled => None,
+    }
+}
+
+/// The `max_memory_mb` argument of a query in bytes, or the default memory limit of queries.
+pub fn parse_max_memory(max_memory_mb: Option<f64>) -> PyResult<Option<u64>> {
+    match max_memory_mb {
+        None => Ok(utils::cancel::default_query_memory_limit()),
+        Some(m) if m.is_finite() && m > 0.0 => Ok(Some((m * 1e6) as u64)),
+        Some(m) => Err(FunctionArgumentException::new_err(format!(
+            "max_memory_mb must be a positive number of megabytes, not {m}"
+        ))),
+    }
+}
+
+/// The token of a query with `timeout` and a memory limit of `max_memory` bytes. None when it has
+/// neither and the process has no memory limit for queries
+/// (`utils::memory::query_memory_limit`). With a memory limit, a token also lets a large join
+/// run on the streaming engine, where it can be stopped.
+pub fn query_token(
+    timeout: Option<std::time::Duration>,
+    max_memory: Option<u64>,
+) -> Option<utils::cancel::CancelToken> {
+    if timeout.is_none()
+        && max_memory.is_none()
+        && utils::memory::query_memory_limit().is_none()
+    {
+        return None;
+    }
+    Some(utils::cancel::CancelToken::with_memory_limit(
+        timeout,
+        timeout.map(|t| std::time::Instant::now() + t),
+        max_memory,
+    ))
 }

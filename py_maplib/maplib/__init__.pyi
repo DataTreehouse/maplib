@@ -1671,6 +1671,7 @@ class Model:
             endpoint_token: Optional[str] = None,
             cache: bool = True,
             timeout: Optional[float] = None,
+            max_memory_mb: Optional[float] = None,
     ) -> DataFrame | list[DataFrame] | bool | None: ...
     @overload
     def query(
@@ -1690,6 +1691,7 @@ class Model:
             endpoint_token: Optional[str] = None,
             cache: bool = True,
             timeout: Optional[float] = None,
+            max_memory_mb: Optional[float] = None,
     ) -> str: ...
     @overload
     def query(
@@ -1709,6 +1711,7 @@ class Model:
             endpoint_token: Optional[str] = None,
             cache: bool = True,
             timeout: Optional[float] = None,
+            max_memory_mb: Optional[float] = None,
     ) -> str: ...
     @overload
     def query(
@@ -1728,6 +1731,7 @@ class Model:
             endpoint_token: Optional[str] = None,
             cache: bool = True,
             timeout: Optional[float] = None,
+            max_memory_mb: Optional[float] = None,
     ) -> SolutionMappings | list[SolutionMappings] | bool | None: ...
     @overload
     def query(
@@ -1746,6 +1750,7 @@ class Model:
             endpoint_token: Optional[str] = None,
             cache: bool = True,
             timeout: Optional[float] = None,
+            max_memory_mb: Optional[float] = None,
     ) -> DataFrame | SolutionMappings | list[DataFrame] | list[SolutionMappings] | list[DataFrame | SolutionMappings] | bool | str | None:
         """
         Query the contained knowledge graph using SPARQL
@@ -1787,7 +1792,14 @@ class Model:
                         is raised. The query is checked between its operators, while joins produce rows, and in path
                         searches, so it usually stops well within a second of its timeout. None (the default) has
                         no timeout. With endpoint, the server stops the query, and a timeout of the server itself
-                        (Model.serve(query_timeout=)) also applies.
+                        (Model.serve(query_timeout=)) also applies. A timeout does not bound the memory of a query
+                        (a join can produce gigabytes of rows per second): use max_memory_mb for that.
+        :param max_memory_mb: Stop the query and raise QueryMemoryLimitError when the memory used by maplib has grown
+                        by more than this many megabytes (10^6 bytes) since the query started, counting the result.
+                        Checked like the timeout, so the memory can go somewhat over the limit before the query
+                        stops. The memory of maplib is shared by everything it runs, so with other queries
+                        running at the same time the limit is approximate. None (the default) uses the default
+                        set with maplib.set_memory_limit(max_query_memory_mb=), if any. Not used with endpoint.
         :return: DataFrame (Select), list of DataFrames (Construct) containing results or SolutionMappings when solution_mappings is set, or a bool (Ask).
             CONSTRUCT templates can have GRAPH blocks, e.g. CONSTRUCT { ?s ex:p ?o GRAPH ex:g { ?s ex:q ?o } GRAPH ?g { ?o ex:q ?s } } WHERE { ... }.
             The DataFrames of the triples in GRAPH blocks have an extra column, graph, with the IRI of the graph.
@@ -2040,6 +2052,7 @@ class Model:
             return_triples: bool = False,
             solution_mappings: bool = False,
             bindings: Optional[Dict[str, Union[str, IRI, Literal, bool, int, float]]] = None,
+            max_memory_mb: Optional[float] = None,
     ) -> Dict[str, Dict[str, Any]]:
         """
         Execute a SPARQL Update (e.g. INSERT/DELETE ... WHERE) against the graph.
@@ -2073,6 +2086,9 @@ class Model:
         :param return_triples: Also return the inserted and deleted triples, not only how many.
             Costs an extra pass over the affected tables for deletions.
         :param solution_mappings: Return the triples as SolutionMappings with maplib-native formatting and with RDF typing.
+        :param max_memory_mb: Raise QueryMemoryLimitError when the memory used by maplib grows by more than this many
+                        megabytes while the WHERE clauses are evaluated, see Model.query. Like a timeout, it never
+                        stops a write halfway. None uses the default of maplib.set_memory_limit(max_query_memory_mb=).
         :return: A dict from graph IRI (DEFAULT_GRAPH for the default graph) to a dict with the number of
             "inserted" and "deleted" triples. With return_triples, it also has "inserted_triples" and
             "deleted_triples": dicts from predicate IRI to DataFrame (or SolutionMappings) with the triples.
@@ -3116,6 +3132,13 @@ class QueryTimeoutError(MaplibException):
     """
 
 
+class QueryMemoryLimitError(MaplibException):
+    """
+    Raised when a query or update uses more memory than its ``max_memory_mb``, or than the default set
+    with ``maplib.set_memory_limit(max_query_memory_mb=...)``.
+    """
+
+
 class FunctionArgumentException(Exception):
     """
     Raised when a function is called with invalid arguments.
@@ -3150,6 +3173,7 @@ def set_memory_limit(
         spill_dir: Optional[Union[str, Path]] = None,
         max_spill_mb: Optional[int] = None,
         abort_above_mb: Optional[int] = None,
+        max_query_memory_mb: Optional[int] = None,
 ) -> None:
     """Limits the memory used by queries, so that large queries spill to disk instead of
     running out of memory. Over the limit, joins, aggregations, sorts and query results
@@ -3157,7 +3181,7 @@ def set_memory_limit(
     the triples of the models, which are not spilled.
 
     Without a call, the limit is 80% of the system memory (respecting container limits).
-    Each call sets all four settings; arguments left as None get their defaults.
+    Each call sets all five settings; arguments left as None get their defaults.
     The settings apply to the whole process and to queries started after the call.
 
     >>> import maplib
@@ -3167,6 +3191,7 @@ def set_memory_limit(
     :param spill_dir: The folder for spill files. Defaults to the system temporary folder. Set it before running any query: it is fixed at the first spill.
     :param max_spill_mb: The most megabytes to spill to disk. Defaults to 64 GB.
     :param abort_above_mb: Stop the process (with a message on stderr) when maplib uses more than this many megabytes even after spilling. Off by default. This stops the process before the operating system kills it, and is not an exception that can be caught. Before that, a query raises a MemoryError when the process uses more than 90% of this, which is checked as the solutions of its joins are produced and between the steps of the query.
+    :param max_query_memory_mb: The default memory limit of each query and update (see Model.query(max_memory_mb=)), also of the queries of a served model (Model.serve), which then fail with an error instead of exhausting memory. A query stops with QueryMemoryLimitError when the memory used by maplib has grown by more than this many megabytes since it started. Off by default. Applies to queries started after the call.
     """
 
 def memory_usage() -> int:

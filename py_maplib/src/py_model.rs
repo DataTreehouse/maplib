@@ -28,11 +28,13 @@ use server::{serve as serve_model, ArrowCompression, ServerOptions, SnapshotForm
 
 use datalog::python::{PyInferenceResult, PyReasoningResult};
 use external_sparql::federation::{AllowedEndpoints, FederationSettings, ServiceMethod};
-use crate::error::{parse_timeout, timeout_error, QueryTimeoutError};
+use crate::error::{
+    parse_max_memory, parse_timeout, query_token, stopped_error, timeout_error, QueryTimeoutError,
+};
 use external_sparql::maplib_endpoint::{
     query_maplib_endpoint, MaplibEndpointError, MaplibEndpointQuery,
 };
-use utils::cancel::{with_token, CancelToken};
+use utils::cancel::with_token;
 use external_sparql::SparqlMethod;
 use maplib::model::Model as InnerModel;
 use cdf::map_cdf;
@@ -1128,6 +1130,7 @@ impl PyModel {
         endpoint_token=None,
         cache=true,
         timeout=None,
+        max_memory_mb=None,
     ))]
     #[instrument(skip_all)]
     fn query(
@@ -1147,8 +1150,10 @@ impl PyModel {
         endpoint_token: Option<String>,
         cache: bool,
         timeout: Option<f64>,
+        max_memory_mb: Option<f64>,
     ) -> PyResult<Py<PyAny>> {
         let timeout_duration = parse_timeout(timeout)?;
+        let max_memory = parse_max_memory(max_memory_mb)?;
         if let Some(endpoint) = endpoint {
             if parameters.is_some() {
                 return Err(PyMaplibError::FunctionArgumentError(
@@ -1199,10 +1204,8 @@ impl PyModel {
                 py,
             );
         }
-        // The timeout counts from here, and covers formatting the result. With a memory limit, a
-        // token also lets a large join run on the streaming engine, where it can be stopped.
-        let token = (timeout_duration.is_some() || utils::memory::query_memory_limit().is_some())
-            .then(|| CancelToken::new(timeout_duration));
+        // The timeout and the memory limit count from here, and cover formatting the result.
+        let token = query_token(timeout_duration, max_memory);
         let use_cache = cache
             && parameters.is_none()
             && !debug.unwrap_or(false)
@@ -1314,14 +1317,13 @@ impl PyModel {
                 py,
             )
         });
-        match token.as_ref().and_then(|t| t.stopped()) {
-            Some(c @ utils::cancel::Cancelled::Timeout(_)) => {
-                Err(QueryTimeoutError::new_err(c.to_string()))
-            }
-            Some(c @ utils::cancel::Cancelled::MemoryLimit(_)) => {
-                Err(pyo3::exceptions::PyMemoryError::new_err(c.to_string()))
-            }
-            _ => out,
+        match token
+            .as_ref()
+            .and_then(|t| t.stopped())
+            .and_then(stopped_error)
+        {
+            Some(e) => Err(e),
+            None => out,
         }
     }
 
@@ -1491,6 +1493,7 @@ impl PyModel {
             return_triples=None,
             solution_mappings=None,
             bindings=None,
+            max_memory_mb=None,
     ))]
     #[instrument(skip_all)]
     fn update(
@@ -1506,15 +1509,17 @@ impl PyModel {
         return_triples: Option<bool>,
         solution_mappings: Option<bool>,
         bindings: Option<HashMap<String, Py<PyAny>>>,
+        max_memory_mb: Option<f64>,
     ) -> PyResult<HashMap<String, Py<PyAny>>> {
         let mapped_parameters = map_parameters(parameters, py)?;
         let parsed_bindings = maybe_parse_bindings(bindings, py)?;
         let timeout = parse_timeout(timeout)?;
+        let max_memory = parse_max_memory(max_memory_mb)?;
         let (res, cats) = py.detach(|| -> PyResult<_> {
             let mut inner = self.write_inner();
             let cats = inner.triplestore.global_cats.clone();
-            // The timeout counts from when the model is locked for the update.
-            let token = timeout.map(|t| CancelToken::new(Some(t)));
+            // The timeout and the memory limit count from when the model is locked for the update.
+            let token = query_token(timeout, max_memory);
             let res = with_token(token.clone(), || {
                 update_mutex(
                     &mut inner,

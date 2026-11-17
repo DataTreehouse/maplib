@@ -103,18 +103,25 @@ static GLOBAL: polars_ooc::Allocator = polars_ooc::Allocator;
 /// Limits the memory used by queries. Over the limit, the query engine spills intermediate
 /// data to disk instead of growing further. Arguments left as None get their defaults.
 #[pyfunction]
-#[pyo3(signature = (max_memory_mb=None, spill_dir=None, max_spill_mb=None, abort_above_mb=None))]
+#[pyo3(signature = (max_memory_mb=None, spill_dir=None, max_spill_mb=None, abort_above_mb=None, max_query_memory_mb=None))]
 fn set_memory_limit(
     max_memory_mb: Option<u64>,
     spill_dir: Option<PathBuf>,
     max_spill_mb: Option<u64>,
     abort_above_mb: Option<u64>,
+    max_query_memory_mb: Option<u64>,
 ) -> PyResult<()> {
     if max_memory_mb == Some(0) {
         return Err(FunctionArgumentException::new_err(
             "max_memory_mb must be positive",
         ));
     }
+    if max_query_memory_mb == Some(0) {
+        return Err(FunctionArgumentException::new_err(
+            "max_query_memory_mb must be positive",
+        ));
+    }
+    utils::cancel::set_default_query_memory_limit(max_query_memory_mb.map(|mb| mb * 1_000_000));
     utils::memory::set_memory_limits(&utils::memory::MemoryLimits {
         max_memory_mb,
         spill_dir,
@@ -284,6 +291,7 @@ fn _maplib(py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(_check_outbound, m)?)?;
     m.add("MaplibException", py.get_type::<MaplibException>())?;
     m.add("QueryTimeoutError", py.get_type::<QueryTimeoutError>())?;
+    m.add("QueryMemoryLimitError", py.get_type::<QueryMemoryLimitError>())?;
     m.add("TRANSIENT_GRAPH", TRANSIENT_GRAPH_IRI)?;
     m.add("DEFAULT_GRAPH", DEFAULT_GRAPH_IRI)?;
     m.add(

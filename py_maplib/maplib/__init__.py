@@ -51,6 +51,7 @@ __all__ = [
     "generate_templates",
     "MaplibException",
     "QueryTimeoutError",
+    "QueryMemoryLimitError",
     "TRANSIENT_GRAPH",
     "set_memory_limit",
     "memory_usage",

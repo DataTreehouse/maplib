@@ -7,13 +7,21 @@
 //! client of a server went away, or the process uses more memory than queries may
 //! ([crate::memory::query_memory_limit]).
 //!
+//! A token can also have a memory limit of its own: the query stops when the memory allocated by
+//! maplib has grown by more than the limit since the query started (see
+//! [CancelToken::with_memory_limit] and [set_default_query_memory_limit]). A timeout alone does not
+//! bound memory, since a join can produce gigabytes of rows per second. The memory is that counted
+//! by the global allocator (see [crate::memory::memory_usage]), which is shared by all queries of
+//! the process, so with queries running at the same time the limit is approximate. Without that
+//! allocator it never trips.
+//!
 //! Polars' own abort mechanism (used for KeyboardInterrupt) aborts every query in the process,
 //! so it is not used here: a timeout stops only its own query.
 
 use polars::prelude::{DataFrame, LazyFrame, OptFlags, PolarsError, PolarsResult};
 use std::cell::RefCell;
 use std::fmt;
-use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, AtomicU8, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
@@ -21,6 +29,25 @@ const RUNNING: u8 = 0;
 const TIMED_OUT: u8 = 1;
 const CANCELLED: u8 = 2;
 const MEMORY_LIMIT: u8 = 3;
+const QUERY_MEMORY_LIMIT: u8 = 4;
+
+/// The memory limit of queries whose token does not set one, in bytes, 0 for none.
+static DEFAULT_QUERY_MEMORY_LIMIT: AtomicU64 = AtomicU64::new(0);
+
+/// Sets the memory limit of every query that does not set its own (see
+/// [CancelToken::with_memory_limit]), e.g. the queries of a served model. None removes it.
+/// Applies to tokens made afterwards.
+pub fn set_default_query_memory_limit(bytes: Option<u64>) {
+    DEFAULT_QUERY_MEMORY_LIMIT.store(bytes.unwrap_or(0), Ordering::Relaxed);
+}
+
+/// The memory limit of queries that do not set their own, in bytes.
+pub fn default_query_memory_limit() -> Option<u64> {
+    match DEFAULT_QUERY_MEMORY_LIMIT.load(Ordering::Relaxed) {
+        0 => None,
+        b => Some(b),
+    }
+}
 
 /// The message of the Polars error raised by a cancellation check inside a Polars plan.
 pub const CANCELLED_POLARS_MESSAGE: &str = "maplib query cancelled";
@@ -34,6 +61,9 @@ pub enum Cancelled {
     Cancelled,
     /// The process used more than this many bytes, the memory allowed for queries.
     MemoryLimit(u64),
+    /// The memory allocated while the query ran grew by more than this many bytes, the memory
+    /// limit of the query (see [CancelToken::with_memory_limit]).
+    QueryMemoryLimit(u64),
 }
 
 impl fmt::Display for Cancelled {
@@ -46,6 +76,11 @@ impl fmt::Display for Cancelled {
                 "The query was stopped as the process used more than {} MB, 90% of the memory \
                  limit abort_above_mb",
                 limit / 1_000_000
+            ),
+            Cancelled::QueryMemoryLimit(limit) => write!(
+                f,
+                "The query was stopped as it used more than its memory limit of {} MB",
+                limit.div_ceil(1_000_000)
             ),
         }
     }
@@ -69,6 +104,11 @@ struct Inner {
     large_join: AtomicBool,
     timeout: Option<Duration>,
     deadline: Option<Instant>,
+    /// The most bytes the memory allocated by the process may grow by while the query runs, see
+    /// [CancelToken::with_memory_limit].
+    memory_limit: Option<u64>,
+    /// The bytes allocated by the process when the token was made.
+    memory_start: u64,
 }
 
 /// A deadline and a cancel flag shared by everything that evaluates one query. Cloning gives
@@ -77,19 +117,39 @@ struct Inner {
 pub struct CancelToken(Arc<Inner>);
 
 impl CancelToken {
-    /// A token that times out `timeout` from now, or never with None.
+    /// A token that times out `timeout` from now, or never with None. It has the default memory
+    /// limit, see [set_default_query_memory_limit].
     pub fn new(timeout: Option<Duration>) -> CancelToken {
         CancelToken::with_deadline(timeout, timeout.map(|t| Instant::now() + t))
     }
 
     /// A token that times out at `deadline`. `timeout` is the duration reported in the error.
+    /// It has the default memory limit, see [set_default_query_memory_limit].
     pub fn with_deadline(timeout: Option<Duration>, deadline: Option<Instant>) -> CancelToken {
+        CancelToken::with_memory_limit(timeout, deadline, default_query_memory_limit())
+    }
+
+    /// A token that times out at `deadline`, and stops the query when the memory allocated by
+    /// maplib grows by more than `memory_limit` bytes from now. None means no memory limit of
+    /// its own (the process-wide [crate::memory::query_memory_limit] still applies).
+    pub fn with_memory_limit(
+        timeout: Option<Duration>,
+        deadline: Option<Instant>,
+        memory_limit: Option<u64>,
+    ) -> CancelToken {
         CancelToken(Arc::new(Inner {
             state: AtomicU8::new(RUNNING),
             large_join: AtomicBool::new(false),
             timeout,
             deadline,
+            memory_limit,
+            memory_start: memory_limit.map_or(0, |_| crate::memory::memory_usage()),
         }))
+    }
+
+    /// The memory limit of the query in bytes, see [CancelToken::with_memory_limit].
+    pub fn memory_limit(&self) -> Option<u64> {
+        self.0.memory_limit
     }
 
     /// Asks the query to stop as soon as possible.
@@ -110,7 +170,8 @@ impl CancelToken {
         self.0.timeout
     }
 
-    /// Why the query must stop, or None if it may go on. Checks the deadline, which is cheap.
+    /// Why the query must stop, or None if it may go on. Checks the deadline and the memory
+    /// limits, which is cheap (atomic loads).
     pub fn stopped(&self) -> Option<Cancelled> {
         match self.0.state.load(Ordering::Relaxed) {
             RUNNING => {
@@ -136,11 +197,26 @@ impl CancelToken {
                         return self.stopped();
                     }
                 }
+                if let Some(limit) = self.0.memory_limit {
+                    let grown = crate::memory::memory_usage().saturating_sub(self.0.memory_start);
+                    if grown > limit {
+                        let _ = self.0.state.compare_exchange(
+                            RUNNING,
+                            QUERY_MEMORY_LIMIT,
+                            Ordering::Relaxed,
+                            Ordering::Relaxed,
+                        );
+                        return self.stopped();
+                    }
+                }
                 None
             }
             TIMED_OUT => Some(Cancelled::Timeout(self.0.timeout.unwrap_or_default())),
             MEMORY_LIMIT => Some(Cancelled::MemoryLimit(
                 crate::memory::query_memory_limit().unwrap_or_default(),
+            )),
+            QUERY_MEMORY_LIMIT => Some(Cancelled::QueryMemoryLimit(
+                self.0.memory_limit.unwrap_or_default(),
             )),
             _ => Some(Cancelled::Cancelled),
         }
