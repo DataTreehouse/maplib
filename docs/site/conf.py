@@ -92,7 +92,8 @@ PAGES = {
     "CONFIG_GRAPH.md": "config_graph",
     "docs/release_summary.md": "whats_new",
 }
-LINK = re.compile(r"(?<!!)(\[[^\]\n]*\])\(([^)\s#]+)(#[^)\s]*)?\)")
+# Link text may hold one level of brackets, e.g. [`m.set_federation(allowed_endpoints=[...])`](...).
+LINK = re.compile(r"(?<!!)(\[(?:[^\[\]\n]|\[[^\]\n]*\])*\])\(([^)\s#]+)(#[^)\s]*)?\)")
 
 
 def _rewrite_links(app, relative_path, parent_docname, content):
