@@ -2729,14 +2729,13 @@ dependencies = [
 [[package]]
 name = "oxttl"
 version = "0.2.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c2f5a5c0e82734bb66c9e2a82839bafca5cc129531c51b92f428a4f43405793d"
 dependencies = [
  "memchr",
  "oxilangtag",
  "oxiri",
  "oxrdf",
  "thiserror",
+ "tokio",
 ]
 
 [[package]]
