@@ -477,23 +477,34 @@ pub fn unary_minus(
     inner_context: &Context,
     outer_context: &Context,
 ) -> Result<SolutionMappings, QueryProcessingError> {
-    solution_mappings.mappings = solution_mappings //TODO: This is probably wrong
-        .mappings
-        .with_column(
-            (Expr::BinaryExpr {
-                left: Arc::new(Expr::Literal(LiteralValue::Scalar(Scalar::from(0i32)))),
-                op: Operator::Minus,
-                right: Arc::new(col(inner_context.as_str())),
-            })
-            .alias(outer_context.as_str()),
-        );
     let existing_type = solution_mappings
         .rdf_node_types
         .get(inner_context.as_str())
-        .unwrap();
+        .unwrap()
+        .clone();
+    // op:numeric-unary-minus negates: for xs:double and xs:float that is IEEE negation, so
+    // -(0.0e0) is -0.0e0 (and the literal -0.0e0 too), which 0 - x is not. The other numeric
+    // types have no negative zero.
+    let float = !existing_type.is_multi()
+        && existing_type
+            .get_base_type()
+            .is_some_and(|t| t.is_lit_type(xsd::DOUBLE) || t.is_lit_type(xsd::FLOAT));
+    let inner = col(inner_context.as_str());
+    let negated = if float {
+        -inner
+    } else {
+        Expr::BinaryExpr {
+            left: Arc::new(Expr::Literal(LiteralValue::Scalar(Scalar::from(0i32)))),
+            op: Operator::Minus,
+            right: Arc::new(inner),
+        }
+    };
+    solution_mappings.mappings = solution_mappings
+        .mappings
+        .with_column(negated.alias(outer_context.as_str()));
     solution_mappings
         .rdf_node_types
-        .insert(outer_context.as_str().to_string(), existing_type.clone());
+        .insert(outer_context.as_str().to_string(), existing_type);
     solution_mappings = drop_inner_contexts(solution_mappings, &vec![inner_context]);
     Ok(solution_mappings)
 }
