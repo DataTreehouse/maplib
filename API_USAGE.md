@@ -1139,6 +1139,57 @@ They are checked against Jena's own tests for them (`TestStatisticsAggregates`, 
 Jena's ARQ syntax keywords (`STDEV(?x)`, `AGG agg:stdev(?x)`) and its `MEDIAN` and `MODE`, which Jena
 has only as keywords and not in the aggregate namespace, are not supported.
 
+### XPath math functions: math:sqrt, math:pow, math:log, math:sin, ...
+
+The trigonometric and exponential functions of XPath and XQuery Functions and Operators 3.1
+([section 4.8](https://www.w3.org/TR/xpath-functions-31/#trigonometry)) are SPARQL functions in
+their standard namespace, `PREFIX math: <http://www.w3.org/2005/xpath-functions/math#>`:
+
+| Function | Value |
+|---|---|
+| `math:pi()` | π |
+| `math:exp(x)`, `math:exp10(x)` | eˣ, 10ˣ |
+| `math:log(x)`, `math:log10(x)` | the natural and the base 10 logarithm |
+| `math:pow(x, y)` | xʸ (also a negative x with an integer y) |
+| `math:sqrt(x)` | √x |
+| `math:sin(x)`, `math:cos(x)`, `math:tan(x)` | x in radians |
+| `math:asin(x)`, `math:acos(x)`, `math:atan(x)` | the angle in radians |
+| `math:atan2(y, x)` | the angle of the point (x, y), in -π..π |
+
+As the specification says, the arguments of any numeric datatype are cast to `xsd:double`, and the
+result is an `xsd:double` that follows IEEE 754 (`math:sqrt(-1)` is `NaN`, `math:log(0)` is
+`-INF`). An unbound argument, or one that is not a number, leaves the result unbound, as for the
+other numeric functions of SPARQL. The apparent power of equipment from its active and reactive
+power, and the current through a three-phase line from its power and voltage:
+
+```python
+m = Model()
+m.add_prefixes({"ex": EX, "math": "http://www.w3.org/2005/xpath-functions/math#"})
+m.reads(f"""
+@prefix ex: <{EX}> .
+ex:line1 ex:p 30.0 ; ex:q 40.0 ; ex:kv 132.0 .
+""", format="turtle")
+print(m.query("""
+SELECT ?s ?amps WHERE {
+    ?l ex:p ?p ; ex:q ?q ; ex:kv ?kv .
+    BIND(math:sqrt(math:pow(?p, 2) + math:pow(?q, 2)) AS ?s)   # MVA: 50.0
+    BIND(?s * 1000 / (math:sqrt(3) * ?kv) AS ?amps)            # A: about 218.7
+}"""))
+```
+
+The distance in kilometres between two points by the haversine formula:
+
+```sparql
+BIND(math:pi() / 180 AS ?rad)
+BIND(math:pow(math:sin((?lat2 - ?lat1) * ?rad / 2), 2)
+     + math:cos(?lat1 * ?rad) * math:cos(?lat2 * ?rad)
+       * math:pow(math:sin((?lon2 - ?lon1) * ?rad / 2), 2) AS ?h)
+BIND(2 * 6371 * math:atan2(math:sqrt(?h), math:sqrt(1 - ?h)) AS ?km)
+```
+
+Every example of the specification is a test in `py_maplib/tests/test_xpath_math.py`, with the
+special cases of `-0`, `INF` and `NaN`.
+
 The path examples below use this graph: a chain `a -> b -> c -> d` and a shortcut `a -> d` with
 cost on the nodes.
 
