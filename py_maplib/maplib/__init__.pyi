@@ -1862,6 +1862,8 @@ class Model:
         :param allow_load: Allow SPARQL Update LOAD.
         :param arrow: Use maplib's Arrow format with maplib endpoints. Set it to False to query them with SPARQL JSON
             results, as other endpoints.
+        """
+
     def query_pages(
             self,
             query: str,
