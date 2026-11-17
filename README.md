@@ -114,7 +114,7 @@ Features marked **EE** need [maplib Enterprise Edition](#open-source-and-enterpr
 
 | Method | What it does |
 |---|---|
-| `m.query(sparql)` | Runs SPARQL 1.1 `SELECT` (returns a DataFrame), `CONSTRUCT` (a list of DataFrames) or `ASK` (a bool). Options include `bindings=` for parameterised queries, `return_format="json"` or `"turtle"`, `graph=` and `include_graphs=`, and `endpoint=` to send the query to a remote SPARQL endpoint. |
+| `m.query(sparql)` | Runs SPARQL 1.1 `SELECT` (returns a DataFrame), `CONSTRUCT` and `DESCRIBE` (a list of DataFrames of triples) or `ASK` (a bool). Options include `bindings=` for parameterised queries, `return_format="json"` or `"turtle"`, `graph=` and `include_graphs=`, and `endpoint=` to send the query to a remote SPARQL endpoint. |
 | `m.insert(construct)` | Runs a `CONSTRUCT` and adds the resulting triples, returning only the new ones. Use `query` first to inspect the triples, then `insert` the same string to commit them. |
 | `m.update(sparql_update)` | Runs SPARQL 1.1 Update (`INSERT`/`DELETE … WHERE`, `CLEAR`, `DROP`, `LOAD`, …). |
 | `m.query_external(sparql, endpoint)` | Queries another SPARQL endpoint and returns a DataFrame. |

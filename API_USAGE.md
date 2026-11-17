@@ -935,8 +935,8 @@ print(m.size())                                   # 0
 
 ## 8. Querying
 
-`query(query, ...)` runs SPARQL 1.1 `SELECT`, `CONSTRUCT` and `ASK` (`DESCRIBE` is supported by
-`serve` **EE**).
+`query(query, ...)` runs the four SPARQL 1.1 query forms: `SELECT`, `CONSTRUCT`, `ASK` and
+`DESCRIBE`.
 
 ```python
 m = Model()
@@ -955,6 +955,7 @@ ex:bob ex:name "Bob" ; ex:age 25 .
 | `SELECT` | a `DataFrame` |
 | `CONSTRUCT` | a list of DataFrames with columns `subject`, `predicate`, `object`, one per predicate and type combination |
 | `ASK` | a `bool` |
+| `DESCRIBE` | as `CONSTRUCT`: a list of DataFrames with columns `subject`, `predicate`, `object` (see [DESCRIBE](#describe)) |
 
 ```python
 df = m.query("SELECT ?p ?name ?age WHERE { ?p ex:name ?name ; ex:age ?age } ORDER BY ?age")
@@ -967,10 +968,29 @@ print(triples[0])
 print(m.query("ASK { ex:alice ex:knows ex:bob }"))   # True
 ```
 
+### DESCRIBE
+
+`DESCRIBE` gives the triples whose subject is a described IRI, as a `CONSTRUCT` result. The
+described IRIs are the constant IRIs after `DESCRIBE`, the IRIs the listed variables are bound to by
+the `WHERE` pattern, or the IRIs every variable of the pattern is bound to with `DESCRIBE *`.
+Blank nodes are not described, and triples where the resource is only the object are not included.
+
+```python
+print(m.query("DESCRIBE ex:alice"))                             # alice's name, age and knows triples
+d = m.query("DESCRIBE ?p WHERE { ?p ex:age ?a FILTER(?a < 30) }")
+print(sum(df.height for df in d))                               # 2: bob's name and age
+d = m.query("DESCRIBE * WHERE { ex:alice ex:knows ?f }")        # bob's triples (?f is bob)
+print(m.query("DESCRIBE ex:bob", return_format="turtle"))
+```
+
+`DESCRIBE` reads the queried graph (`graph=`, `include_graphs=` and `FROM` apply as for `CONSTRUCT`),
+and the SPARQL endpoint of `Model.serve()` **EE** gives the same triples. `query_external` refuses
+`DESCRIBE`.
+
 ### return_format
 
 `return_format="json"` gives SPARQL JSON results (SELECT and ASK), and `"turtle"` gives Turtle
-(CONSTRUCT):
+(CONSTRUCT and DESCRIBE):
 
 ```python
 print(m.query("SELECT ?name WHERE { ?p ex:name ?name }", return_format="json"))
@@ -1044,8 +1064,9 @@ and returns exactly what `query` returns on the served model (as Arrow over HTTP
 types). `endpoint_token` gives the server's `auth_token`. `parameters` and `debug` can't be used
 with an endpoint.
 
-`query_external(query, endpoint, method="GET", ...)` queries any SPARQL 1.1 endpoint and returns a
-DataFrame (or SolutionMappings, JSON or Turtle, as `query` does). `headers` is a list of
+`query_external(query, endpoint, method="GET", ...)` runs a SELECT, CONSTRUCT or ASK query on any
+SPARQL 1.1 endpoint and returns a DataFrame (or SolutionMappings, JSON or Turtle, as `query` does).
+It refuses DESCRIBE. `headers` is a list of
 `(name, value)` pairs.
 
 <!-- skip: needs an external endpoint -->

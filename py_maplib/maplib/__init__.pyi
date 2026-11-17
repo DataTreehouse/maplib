@@ -1755,7 +1755,8 @@ class Model:
         """
         Query the contained knowledge graph using SPARQL
         SELECT, CONSTRUCT, ASK and DESCRIBE are supported. DESCRIBE gives the triples whose subject is a
-        described IRI, as CONSTRUCT results (blank nodes are not described).
+        described IRI (a constant IRI, an IRI a described variable is bound to, or with DESCRIBE * an IRI
+        any variable is bound to), as CONSTRUCT results (blank nodes are not described).
         A SELECT without variables that matches gives one row with no columns.
         Usage:
 
@@ -1771,7 +1772,7 @@ class Model:
         :param solution_mappings: Returns SolutionMappings with maplib-native formatting and with RDF typing. Useful for round-trips.
         :param graph: The IRI of the graph to query.
         :param return_json: Return JSON string.
-        :param return_format: One of "dataframe" (default), "json" (SELECT and ASK only), "turtle" or "trig" (CONSTRUCT only).
+        :param return_format: One of "dataframe" (default), "json" (SELECT and ASK only), "turtle" or "trig" (CONSTRUCT and DESCRIBE only).
             "turtle" raises an error when the CONSTRUCT result has triples in named graphs (from GRAPH blocks in the template).
             Ignored when return_json is set.
         :param include_graphs: IRIs of graphs whose triples are merged into the queried graph, as with FROM.
@@ -1800,7 +1801,7 @@ class Model:
                         stops. The memory of maplib is shared by everything it runs, so with other queries
                         running at the same time the limit is approximate. None (the default) uses the default
                         set with maplib.set_memory_limit(max_query_memory_mb=), if any. Not used with endpoint.
-        :return: DataFrame (Select), list of DataFrames (Construct) containing results or SolutionMappings when solution_mappings is set, or a bool (Ask).
+        :return: DataFrame (Select), list of DataFrames (Construct and Describe) containing results or SolutionMappings when solution_mappings is set, or a bool (Ask).
             CONSTRUCT templates can have GRAPH blocks, e.g. CONSTRUCT { ?s ex:p ?o GRAPH ex:g { ?s ex:q ?o } GRAPH ?g { ?o ex:q ?s } } WHERE { ... }.
             The DataFrames of the triples in GRAPH blocks have an extra column, graph, with the IRI of the graph.
             When the graph is a variable, there is one DataFrame per graph that it is bound to.
@@ -2016,7 +2017,7 @@ class Model:
     ) -> DataFrame | SolutionMappings | list[DataFrame] | list[SolutionMappings] | list[DataFrame | SolutionMappings] | str | None:
         """
         Query an external endpoint using SPARQL
-        Currently SELECT is supported. Uses GET unless method is set to POST.
+        SELECT, CONSTRUCT and ASK are supported, DESCRIBE is not. Uses GET unless method is set to POST.
         Usage:
 
         >>> df = model.query_external('''
