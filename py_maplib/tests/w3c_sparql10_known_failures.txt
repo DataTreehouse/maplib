@@ -51,7 +51,6 @@ distinct/distinct-9  # values with different lexical forms are one term, so DIST
 syntax-sparql1/syntax-expr-05  # a call of an unknown function is an error at query time, not only at evaluation
 syntax-sparql1/syntax-order-05  # a call of an unknown function is an error at query time, not only at evaluation
 syntax-sparql1/syntax-order-06  # a call of an unknown function is an error at query time, not only at evaluation
-syntax-sparql2/syntax-general-07  # panics (SchemaMismatch) on a triple pattern with the object +1.0
 syntax-sparql2/syntax-function-01  # a call of an unknown function is an error at query time, not only at evaluation
 syntax-sparql2/syntax-function-02  # a call of an unknown function is an error at query time, not only at evaluation
 syntax-sparql2/syntax-function-03  # a call of an unknown function is an error at query time, not only at evaluation

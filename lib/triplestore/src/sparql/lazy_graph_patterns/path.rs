@@ -230,58 +230,42 @@ impl Triplestore {
             lookup_dtypes.get(VALUE_COLUMN).unwrap().clone(),
         );
 
-        if lookup_dtypes.get(VALUE_COLUMN).unwrap().is_multi() {
-            if let TermPattern::NamedNode(_) = subject {
-                out_df = force_convert_multicol_to_single_col(
-                    out_df.lazy(),
-                    SUBJECT_COL_NAME,
-                    &BaseRDFNodeType::IRI,
-                )
-                .collect()
-                .unwrap();
-                dtypes.insert(
-                    SUBJECT_COL_NAME.to_string(),
-                    BaseRDFNodeType::IRI.into_default_stored_rdf_node_state(),
-                );
-            }
-            if let TermPattern::NamedNode(_) = object {
-                out_df = force_convert_multicol_to_single_col(
-                    out_df.lazy(),
-                    OBJECT_COL_NAME,
-                    &BaseRDFNodeType::IRI,
-                )
-                .collect()
-                .unwrap();
-                dtypes.insert(
-                    OBJECT_COL_NAME.to_string(),
-                    BaseRDFNodeType::IRI.into_default_stored_rdf_node_state(),
-                );
-            }
-            if let TermPattern::Literal(l) = subject {
-                out_df = force_convert_multicol_to_single_col(
-                    out_df.lazy(),
-                    SUBJECT_COL_NAME,
-                    &BaseRDFNodeType::from_literal(l),
-                )
-                .collect()
-                .unwrap();
-                dtypes.insert(
-                    SUBJECT_COL_NAME.to_string(),
-                    BaseRDFNodeType::from_literal(l).into_default_stored_rdf_node_state(),
-                );
-            }
-            if let TermPattern::Literal(l) = object {
-                out_df = force_convert_multicol_to_single_col(
-                    out_df.lazy(),
-                    OBJECT_COL_NAME,
-                    &BaseRDFNodeType::from_literal(l),
-                )
-                .collect()
-                .unwrap();
-                dtypes.insert(
-                    OBJECT_COL_NAME.to_string(),
-                    BaseRDFNodeType::from_literal(l).into_default_stored_rdf_node_state(),
-                );
+        let value_state = lookup_dtypes.get(VALUE_COLUMN).unwrap().clone();
+        if value_state.is_multi() {
+            // A constant end keeps only the values of its type. When the values have no such
+            // type there are no solutions, and the column is left as it is: converting it to a
+            // type it does not have would fail.
+            for (term, column) in [(subject, SUBJECT_COL_NAME), (object, OBJECT_COL_NAME)] {
+                let wanted = match term {
+                    TermPattern::NamedNode(_) => Some(BaseRDFNodeType::IRI),
+                    TermPattern::Literal(l) => {
+                        let exact = BaseRDFNodeType::from_literal(l);
+                        Some(if value_state.map.contains_key(&exact) {
+                            exact
+                        } else {
+                            // The same datatype with another time zone
+                            value_state
+                                .map
+                                .keys()
+                                .find(|t| matches!(t, BaseRDFNodeType::Literal(dt, _) if dt.as_ref() == l.datatype()))
+                                .cloned()
+                                .unwrap_or(exact)
+                        })
+                    }
+                    _ => None,
+                };
+                let Some(wanted) = wanted else { continue };
+                if value_state.map.contains_key(&wanted) {
+                    out_df = force_convert_multicol_to_single_col(out_df.lazy(), column, &wanted)
+                        .collect()
+                        .unwrap();
+                    dtypes.insert(
+                        column.to_string(),
+                        wanted.into_default_stored_rdf_node_state(),
+                    );
+                } else {
+                    out_df = out_df.clear();
+                }
             }
         }
         (out_df, dtypes) = compress_actual_multitypes(out_df, dtypes);
@@ -296,11 +280,16 @@ impl Triplestore {
         let cats = self.global_cats.read().unwrap();
         match subject {
             TermPattern::NamedNode(nn) => {
-                let e = named_node_enc(nn, &cats);
-                let e = e.unwrap_or(lit(false));
+                // A column of other types (e.g. only literals, or none at all when nothing
+                // matched) has no IRIs, and cannot be compared with one.
+                let e = if has_only_type(&out_dt_subj, &BaseRDFNodeType::IRI) {
+                    named_node_enc(nn, &cats).map(|e| col(SUBJECT_COL_NAME).eq(e))
+                } else {
+                    None
+                };
                 out_df = out_df
                     .lazy()
-                    .filter(col(SUBJECT_COL_NAME).eq(e))
+                    .filter(e.unwrap_or(lit(false)))
                     .collect()
                     .unwrap();
                 out_df = out_df.drop(SUBJECT_COL_NAME).unwrap();
@@ -312,12 +301,15 @@ impl Triplestore {
                 rename_trg.push(bname);
             }
             TermPattern::Literal(l) => {
-                let (l, ..) = literal_enc(l, &cats)?;
-                out_df = out_df
-                    .lazy()
-                    .filter(col(SUBJECT_COL_NAME).eq(l))
-                    .collect()
-                    .unwrap();
+                // Comparing a column of another type with the literal fails (e.g. the Boolean
+                // column of a path without solutions with 1.0): such a column has no match.
+                let e = if has_only_literal_datatype(&out_dt_subj, l) {
+                    let (l, ..) = literal_enc(l, &cats)?;
+                    col(SUBJECT_COL_NAME).eq(l)
+                } else {
+                    lit(false)
+                };
+                out_df = out_df.lazy().filter(e).collect().unwrap();
                 out_df = out_df.drop(SUBJECT_COL_NAME).unwrap();
             }
             TermPattern::Variable(v) => {
@@ -331,11 +323,16 @@ impl Triplestore {
 
         match object {
             TermPattern::NamedNode(nn) => {
-                let e = named_node_enc(nn, &cats);
-                let e = e.unwrap_or(lit(false));
+                // A column of other types (e.g. only literals, or none at all when nothing
+                // matched) has no IRIs, and cannot be compared with one.
+                let e = if has_only_type(&out_dt_obj, &BaseRDFNodeType::IRI) {
+                    named_node_enc(nn, &cats).map(|e| col(OBJECT_COL_NAME).eq(e))
+                } else {
+                    None
+                };
                 out_df = out_df
                     .lazy()
-                    .filter(col(OBJECT_COL_NAME).eq(e))
+                    .filter(e.unwrap_or(lit(false)))
                     .collect()
                     .unwrap();
                 constant_match_height = out_df.height();
@@ -352,12 +349,15 @@ impl Triplestore {
                 rename_trg.push(bname);
             }
             TermPattern::Literal(l) => {
-                let (l, ..) = literal_enc(l, &cats)?;
-                out_df = out_df
-                    .lazy()
-                    .filter(col(OBJECT_COL_NAME).eq(l))
-                    .collect()
-                    .unwrap();
+                // Comparing a column of another type with the literal fails (e.g. the Boolean
+                // column of a path without solutions with 1.0): such a column has no match.
+                let e = if has_only_literal_datatype(&out_dt_obj, l) {
+                    let (l, ..) = literal_enc(l, &cats)?;
+                    col(OBJECT_COL_NAME).eq(l)
+                } else {
+                    lit(false)
+                };
+                out_df = out_df.lazy().filter(e).collect().unwrap();
                 constant_match_height = out_df.height();
                 out_df = out_df.drop(OBJECT_COL_NAME).unwrap();
             }
@@ -1646,4 +1646,16 @@ fn difference_sorted(a: &[u32], b: &[u32]) -> Vec<u32> {
         }
     }
     out
+}
+
+/// True if every value of a column of this type is of the given type.
+fn has_only_type(state: &RDFNodeState, t: &BaseRDFNodeType) -> bool {
+    !state.is_multi() && state.get_base_type() == Some(t)
+}
+
+/// True if every value of a column of this type is a literal with the datatype of the literal
+/// (the time zones of the values may differ).
+fn has_only_literal_datatype(state: &RDFNodeState, l: &oxrdf::Literal) -> bool {
+    !state.is_multi()
+        && matches!(state.get_base_type(), Some(BaseRDFNodeType::Literal(dt, _)) if dt.as_ref() == l.datatype())
 }
