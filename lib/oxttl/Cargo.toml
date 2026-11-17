@@ -25,3 +25,7 @@ oxiri = "0.2.11"
 oxilangtag = "0.1"
 thiserror = ">=1.0.50, <3.0"
 tokio = { version = "1.29", optional = true, features = ["io-util"] }
+
+[dev-dependencies]
+# the split_*_for_parallel_parsing doctests use rayon, as in oxttl upstream
+rayon = "1.12.0"

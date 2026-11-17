@@ -363,9 +363,11 @@ impl Triplestore {
     /// FILTER (NOT) EXISTS { P } over `{ A } { B }`, where A and B share no variables (a cross
     /// product) and P mentions variables of both, e.g. BSBM BI Q4:
     ///
-    ///     { SELECT DISTINCT ?feature { ... } }                          # A: 431 rows
-    ///     ?product a %ProductType% . ?offer bsbm:product ?product ...  # B: 2,357 rows
-    ///     FILTER NOT EXISTS { ?product bsbm:productFeature ?feature }
+    /// ```text
+    /// { SELECT DISTINCT ?feature { ... } }                          # A: 431 rows
+    /// ?product a %ProductType% . ?offer bsbm:product ?product ...  # B: 2,357 rows
+    /// FILTER NOT EXISTS { ?product bsbm:productFeature ?feature }
+    /// ```
     ///
     /// Whether P has a solution depends only on the key values from A (?feature) and from B
     /// (?product). The distinct key pairs (431 × 121) are answered first, and the pairs that

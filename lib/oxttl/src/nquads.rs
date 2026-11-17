@@ -220,7 +220,7 @@ impl NQuadsParser {
     /// use oxrdf::NamedNodeRef;
     /// use oxttl::NTriplesParser;
     /// use rayon::iter::{IntoParallelIterator, ParallelIterator};
-    /// # let path = tempfile::NamedTempFile::new()?;
+    /// # let path = std::env::temp_dir().join("oxttl_doctest.nt");
     /// # std::fs::write(&path, r#"<http://example.com/foo> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://schema.org/Person> .
     /// # <http://example.com/foo> <http://schema.org/name> "Foo" .
     /// # <http://example.com/bar> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://schema.org/Person> .

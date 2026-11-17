@@ -2735,6 +2735,7 @@ dependencies = [
  "oxilangtag",
  "oxiri",
  "oxrdf",
+ "rayon",
  "thiserror",
  "tokio",
 ]
