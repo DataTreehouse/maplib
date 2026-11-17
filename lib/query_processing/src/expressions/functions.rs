@@ -43,4 +43,5 @@ mod struuid_v5;
 mod time_zone;
 mod udf;
 mod uuid_v5;
+pub mod xpath_math;
 mod xsd_cast_literal;

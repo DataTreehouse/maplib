@@ -6,6 +6,7 @@ use crate::errors::QueryProcessingError;
 use crate::expressions::functions::struuid_v5::struuid_v5;
 use crate::expressions::functions::udf::udf;
 use crate::expressions::functions::uuid_v5::uuid_v5;
+use crate::expressions::functions::xpath_math::{xpath_math, xpath_math_function};
 use crate::expressions::functions::xsd_cast_literal::xsd_cast_literal;
 use crate::udf::UdfRegistry;
 use oxrdf::vocab::xsd;
@@ -32,6 +33,17 @@ pub fn custom_(
     global_cats: LockedCats,
     udf_registry: Option<&UdfRegistry>,
 ) -> Result<SolutionMappings, QueryProcessingError> {
+    if let Some((name, arity)) = xpath_math_function(nn) {
+        return xpath_math(
+            name,
+            arity,
+            solution_mappings,
+            func,
+            args,
+            args_contexts,
+            outer_context,
+        );
+    }
     if matches!(
         nn.as_ref(),
         xsd::INT
