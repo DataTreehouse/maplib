@@ -1,7 +1,8 @@
 # Vendored from oxigraph's oxrdfxml 0.2.5 (https://github.com/oxigraph/oxigraph/tree/main/lib/oxrdfxml),
 # licensed MIT OR Apache-2.0. Patched in via [patch.crates-io] in the workspace Cargo.toml, so oxrdfio
-# uses this copy too. Maplib additions: parallel parsing (src/parallel.rs), and a port to quick-xml 0.41
-# (from upstream commits 7b37e7eb37 and 822b7c9462) to fix RUSTSEC-2026-0194 and RUSTSEC-2026-0195.
+# uses this copy too. Maplib additions: parallel parsing (src/parallel.rs), cheaper name, IRI and
+# whitespace handling in the parser, and a port to quick-xml 0.41 (from upstream commits 7b37e7eb37
+# and 822b7c9462) to fix RUSTSEC-2026-0194 and RUSTSEC-2026-0195.
 [package]
 name = "oxrdfxml"
 version = "0.2.5"
@@ -20,6 +21,7 @@ rdf-12 = ["oxrdf/rdf-12"]
 async-tokio = ["dep:tokio", "quick-xml/async-tokio"]
 
 [dependencies]
+memchr = "2.7"
 oxilangtag = "0.1"
 oxiri = "0.2.11"
 oxrdf = "=0.3.5"

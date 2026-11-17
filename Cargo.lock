@@ -2708,6 +2708,7 @@ dependencies = [
 name = "oxrdfxml"
 version = "0.2.5"
 dependencies = [
+ "memchr",
  "oxilangtag",
  "oxiri",
  "oxrdf",

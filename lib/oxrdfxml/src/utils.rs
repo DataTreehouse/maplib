@@ -1,5 +1,15 @@
 pub fn is_name(name: &str) -> bool {
     // NameStartChar (NameChar)*
+    if name.is_ascii() {
+        // The same check on bytes, for the common ASCII case (maplib addition)
+        let mut b = name.bytes();
+        return b
+            .next()
+            .is_some_and(|c| matches!(c, b':' | b'A'..=b'Z' | b'_' | b'a'..=b'z'))
+            && b.all(|c| {
+                matches!(c, b':' | b'A'..=b'Z' | b'_' | b'a'..=b'z' | b'-' | b'.' | b'0'..=b'9')
+            });
+    }
     let mut c = name.chars();
     if !c.next().is_some_and(is_name_start_char) {
         return false;

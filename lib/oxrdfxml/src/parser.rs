@@ -289,6 +289,8 @@ impl RdfXmlParser {
             lenient: self.lenient,
             xml_version: XmlVersion::Implicit1_0,
             text_buffer: None,
+            name_cache: RefCell::new(HashMap::new()),
+            name_key: RefCell::new(Vec::new()),
         }
     }
 }
@@ -899,7 +901,37 @@ struct InternalRdfXmlParser<R> {
     lenient: bool,
     xml_version: XmlVersion,
     text_buffer: Option<String>,
+    /// Element and attribute names resolved to IRIs (maplib addition), see `resolve_ns_name`.
+    name_cache: RefCell<HashMap<Vec<u8>, ResolvedName>>,
+    /// Scratch buffer for the `name_cache` keys.
+    name_key: RefCell<Vec<u8>>,
 }
+
+/// An element or attribute name resolved to an IRI, and whether it is known to be a valid IRI
+/// (or does not need to be, when parsing leniently).
+#[derive(Clone)]
+struct ResolvedName {
+    iri: String,
+    valid: bool,
+}
+
+impl std::ops::Deref for ResolvedName {
+    type Target = str;
+
+    fn deref(&self) -> &str {
+        &self.iri
+    }
+}
+
+impl std::fmt::Display for ResolvedName {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.iri)
+    }
+}
+
+/// Names are cached up to this many distinct ones, so that a document with very many distinct
+/// names does not grow the cache without bounds.
+const MAX_CACHED_NAMES: usize = 100_000;
 
 impl<R> InternalRdfXmlParser<R> {
     fn parse_event(
@@ -944,6 +976,20 @@ impl<R> InternalRdfXmlParser<R> {
             }
             Event::Empty(_) => unreachable!("The expand_empty_elements option must be enabled",),
             Event::Text(event) => {
+                // Whitespace between elements is ignored outside of property elements, so it is
+                // skipped without copying it (maplib addition).
+                if self.text_buffer.is_none()
+                    && !matches!(
+                        self.state.last(),
+                        Some(
+                            RdfXmlState::PropertyElt { .. }
+                                | RdfXmlState::ParseTypeLiteralPropertyElt { .. }
+                        )
+                    )
+                    && event.as_ref().iter().copied().all(is_whitespace)
+                {
+                    return Ok(());
+                }
                 self.text_buffer
                     .get_or_insert_default()
                     .push_str(&event.xml_content(self.xml_version)?);
@@ -1225,7 +1271,7 @@ impl<R> InternalRdfXmlParser<R> {
                     {
                         annotation_node_id_attr = Some(attribute);
                     }
-                } else if attribute_url == rdf::TYPE.as_str() {
+                } else if *attribute_url == *rdf::TYPE.as_str() {
                     type_attr = Some(attribute);
                 } else if RESERVED_RDF_ATTRIBUTES.contains(&&*attribute_url) {
                     return Err(RdfXmlSyntaxError::msg(format!(
@@ -1234,7 +1280,7 @@ impl<R> InternalRdfXmlParser<R> {
                     .into());
                 } else {
                     property_attrs.push((
-                        self.parse_iri(attribute_url)?,
+                        self.parse_name(attribute_url)?,
                         self.convert_attribute(&attribute)?.into(),
                     ));
                 }
@@ -1362,7 +1408,7 @@ impl<R> InternalRdfXmlParser<R> {
                     .into());
                 } else {
                     self.build_node_elt(
-                        self.parse_iri(tag_name)?,
+                        self.parse_name(tag_name)?,
                         base_iri,
                         language,
                         #[cfg(feature = "rdf-12")]
@@ -1386,7 +1432,7 @@ impl<R> InternalRdfXmlParser<R> {
                     .into());
                 }
                 self.build_node_elt(
-                    self.parse_iri(tag_name)?,
+                    self.parse_name(tag_name)?,
                     base_iri,
                     language,
                     #[cfg(feature = "rdf-12")]
@@ -1422,7 +1468,7 @@ impl<R> InternalRdfXmlParser<R> {
                     ))
                     .into());
                 } else {
-                    self.parse_iri(tag_name)?
+                    self.parse_name(tag_name)?
                 };
                 match parse_type {
                     RdfXmlParseType::Default => {
@@ -1637,17 +1683,41 @@ impl<R> InternalRdfXmlParser<R> {
         &self,
         namespace: ResolveResult<'_>,
         local_name: LocalName<'_>,
-    ) -> Result<String, RdfXmlParseError> {
+    ) -> Result<ResolvedName, RdfXmlParseError> {
         match namespace {
             ResolveResult::Bound(ns) => {
+                // Documents use the same few names over and over, so the resolved and validated
+                // IRI of each is cached. Names with entity references are not cached, so that
+                // their expansion counts toward the entity expansion limits every time.
+                let cacheable =
+                    !ns.as_ref().contains(&b'&') && !local_name.as_ref().contains(&b'&');
+                if cacheable {
+                    let mut key = self.name_key.borrow_mut();
+                    key.clear();
+                    key.extend_from_slice(local_name.as_ref());
+                    key.push(b' ');
+                    key.extend_from_slice(ns.as_ref());
+                    if let Some(name) = self.name_cache.borrow().get(key.as_slice()) {
+                        return Ok(name.clone());
+                    }
+                }
                 let mut value = Vec::with_capacity(ns.as_ref().len() + local_name.as_ref().len());
                 value.extend_from_slice(ns.as_ref());
                 value.extend_from_slice(local_name.as_ref());
-                Ok(unescape_with(&self.reader.decoder().decode(&value)?, |e| {
+                let iri = unescape_with(&self.reader.decoder().decode(&value)?, |e| {
                     self.resolve_entity(e)
                 })
                 .map_err(Error::from)?
-                .to_string())
+                .to_string();
+                let valid = self.lenient || Iri::parse(iri.as_str()).is_ok();
+                let name = ResolvedName { iri, valid };
+                if cacheable {
+                    let mut cache = self.name_cache.borrow_mut();
+                    if cache.len() < MAX_CACHED_NAMES {
+                        cache.insert(self.name_key.borrow().clone(), name.clone());
+                    }
+                }
+                Ok(name)
             }
             ResolveResult::Unbound => {
                 Err(RdfXmlSyntaxError::msg("XML namespaces are required in RDF/XML").into())
@@ -1657,6 +1727,15 @@ impl<R> InternalRdfXmlParser<R> {
                 self.reader.decoder().decode(&v)?
             ))
             .into()),
+        }
+    }
+
+    /// The IRI of a resolved name, checked as `parse_iri` does unless it is known to be valid.
+    fn parse_name(&self, name: ResolvedName) -> Result<NamedNode, RdfXmlSyntaxError> {
+        if name.valid {
+            Ok(NamedNode::new_unchecked(name.iri))
+        } else {
+            self.parse_iri(name.iri)
         }
     }
 
@@ -2093,6 +2172,9 @@ impl<R> InternalRdfXmlParser<R> {
         relative_iri: Cow<'_, str>,
     ) -> Result<NamedNode, RdfXmlSyntaxError> {
         if let Some(base_iri) = base_iri.or_else(|| self.current_base_iri()) {
+            if let Some(iri) = resolve_fragment_reference(base_iri, &relative_iri) {
+                return Ok(NamedNode::new_unchecked(iri));
+            }
             Ok(NamedNode::new_unchecked(
                 if self.lenient {
                     base_iri.resolve_unchecked(&relative_iri)
@@ -2257,6 +2339,49 @@ impl<R> InternalRdfXmlParser<R> {
         self.text_buffer.get_or_insert_default().push_str(&value);
         Ok(())
     }
+}
+
+/// Resolves a same-document reference `#fragment` against `base` (maplib addition), as RDF/XML
+/// documents such as CIM/XML do for every `rdf:ID` and most `rdf:resource` values. This is the
+/// base without its fragment followed by the reference, which is what `Iri::resolve` returns too.
+/// Returns `None` unless every character of the fragment is an ASCII character that is valid in
+/// an IRI fragment as it is, so that `Iri::resolve` handles anything that needs checking.
+fn resolve_fragment_reference(base: &Iri<String>, reference: &str) -> Option<String> {
+    let fragment = reference.strip_prefix('#')?;
+    if !fragment.bytes().all(|b| {
+        b.is_ascii_alphanumeric()
+            || matches!(
+                b,
+                b'-' | b'.'
+                    | b'_'
+                    | b'~'
+                    | b'!'
+                    | b'$'
+                    | b'&'
+                    | b'\''
+                    | b'('
+                    | b')'
+                    | b'*'
+                    | b'+'
+                    | b','
+                    | b';'
+                    | b'='
+                    | b':'
+                    | b'@'
+                    | b'/'
+                    | b'?'
+            )
+    }) {
+        return None;
+    }
+    let base = match base.fragment() {
+        Some(base_fragment) => &base.as_str()[..base.as_str().len() - base_fragment.len() - 1],
+        None => base.as_str(),
+    };
+    let mut iri = String::with_capacity(base.len() + reference.len());
+    iri.push_str(base);
+    iri.push_str(reference);
+    Some(iri)
 }
 
 fn is_object_defined(object: &Option<NodeOrText>) -> bool {

@@ -76,59 +76,92 @@ struct Layout {
 }
 
 fn find_layout(slice: &[u8], chunk_size: usize) -> Option<Layout> {
+    // The prolog and the root start tag are read with quick-xml, which handles the XML
+    // declaration, the DOCTYPE and its internal subset.
     let mut reader = Reader::from_reader(slice);
     reader.config_mut().check_end_names = false;
-    let mut depth = 0usize;
-    let mut prolog_end = 0usize;
-    let mut boundaries = Vec::new();
-    let mut next_split = chunk_size;
-    loop {
-        let before = usize::try_from(reader.buffer_position()).ok()?;
+    let prolog_end = loop {
         let event = reader.read_event().ok()?;
         let after = usize::try_from(reader.buffer_position()).ok()?;
         match event {
             Event::Start(e) => {
-                if depth == 0 {
-                    if !is_rdf_root(&e) {
-                        return None;
-                    }
-                    prolog_end = after;
-                    next_split = after + chunk_size;
-                }
-                depth += 1;
-            }
-            Event::Empty(_) => {
-                if depth == 0 {
+                if !is_rdf_root(&e) {
                     return None;
                 }
-                if depth == 1 && after >= next_split {
-                    boundaries.push(after);
-                    next_split = after + chunk_size;
-                }
+                break after;
             }
-            Event::End(_) => {
-                if depth == 0 {
+            Event::Empty(_) | Event::End(_) | Event::Eof => return None,
+            _ => {}
+        }
+    };
+    scan_content(slice, prolog_end, chunk_size)
+}
+
+/// Finds the end of the root element's content and the split points in it by scanning for
+/// markup, without tokenizing the text and attributes. Start tags are scanned to their `>`
+/// outside of quoted attribute values, comments, CDATA sections and processing instructions
+/// are skipped, and anything else (or the end of the input before the root end tag) gives
+/// `None`, so the document is not split and the parser reports what is wrong with it.
+fn scan_content(slice: &[u8], prolog_end: usize, chunk_size: usize) -> Option<Layout> {
+    let mut depth = 1usize;
+    let mut pos = prolog_end;
+    let mut boundaries = Vec::new();
+    let mut next_split = prolog_end + chunk_size;
+    loop {
+        let lt = pos + memchr::memchr(b'<', &slice[pos..])?;
+        let rest = &slice[lt..];
+        match *rest.get(1)? {
+            b'!' => {
+                pos = if rest.starts_with(b"<!--") {
+                    lt + 4 + memchr::memmem::find(&rest[4..], b"-->")? + 3
+                } else if rest.starts_with(b"<![CDATA[") {
+                    lt + 9 + memchr::memmem::find(&rest[9..], b"]]>")? + 3
+                } else {
                     return None;
-                }
+                };
+            }
+            b'?' => pos = lt + 2 + memchr::memmem::find(&rest[2..], b"?>")? + 2,
+            b'/' => {
+                pos = lt + memchr::memchr(b'>', rest)? + 1;
                 depth -= 1;
                 if depth == 0 {
                     // Do not split right before the end tag.
-                    if boundaries.last() == Some(&before) {
+                    if boundaries.last() == Some(&lt) {
                         boundaries.pop();
                     }
                     return Some(Layout {
                         prolog_end,
-                        content_end: before,
+                        content_end: lt,
                         boundaries,
                     });
                 }
-                if depth == 1 && after >= next_split {
-                    boundaries.push(after);
-                    next_split = after + chunk_size;
+                if depth == 1 && pos >= next_split {
+                    boundaries.push(pos);
+                    next_split = pos + chunk_size;
                 }
             }
-            Event::Eof => return None,
-            _ => {}
+            b'>' | b' ' | b'\t' | b'\r' | b'\n' => return None,
+            _ => {
+                // A start or empty-element tag, where attribute values may contain '>'.
+                let mut i = lt + 1;
+                let gt = loop {
+                    i += memchr::memchr3(b'>', b'"', b'\'', &slice[i..])?;
+                    let quote = slice[i];
+                    if quote == b'>' {
+                        break i;
+                    }
+                    i += 1 + memchr::memchr(quote, &slice[i + 1..])? + 1;
+                };
+                pos = gt + 1;
+                if slice[gt - 1] == b'/' {
+                    if depth == 1 && pos >= next_split {
+                        boundaries.push(pos);
+                        next_split = pos + chunk_size;
+                    }
+                } else {
+                    depth += 1;
+                }
+            }
         }
     }
 }
