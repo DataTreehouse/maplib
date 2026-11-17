@@ -1,5 +1,5 @@
 use super::{QuerySettings, Triplestore};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use crate::sparql::errors::SparqlError;
 use oxrdf::vocab::xsd;
@@ -16,7 +16,7 @@ use representation::dataset::QueryGraph;
 use representation::query_context::{Context, PathEntry};
 use representation::solution_mapping::{EagerSolutionMappings, SolutionMappings};
 use representation::BaseRDFNodeType;
-use spargebra::algebra::{Expression, Function};
+use spargebra::algebra::{Expression, Function, GraphPattern};
 
 impl Triplestore {
     #[allow(clippy::too_many_arguments)]
@@ -514,39 +514,15 @@ impl Triplestore {
             }
             Expression::Exists(inner) => {
                 let exists_context = context.extension_with(PathEntry::Exists);
-                let mut output_solution_mappings = solution_mappings;
-                output_solution_mappings.mappings = output_solution_mappings
-                    .mappings
-                    .with_row_index(exists_context.as_str(), None);
-                output_solution_mappings.rdf_node_types.insert(
-                    exists_context.as_str().to_string(),
-                    BaseRDFNodeType::Literal(xsd::UNSIGNED_INT.into_owned(), None)
-                        .into_default_input_rdf_node_state(),
-                );
-
-                //Workaround for issue in Polars
-                output_solution_mappings.mappings =
-                    output_solution_mappings.mappings.collect().unwrap().lazy();
-
-                let SolutionMappings {
-                    mappings: exists_lf,
-                    rdf_node_types,
-                    ..
-                } = self.lazy_graph_pattern(
+                self.lazy_exists(
                     inner,
-                    Some(output_solution_mappings.clone()),
-                    &exists_context,
-                    parameters,
-                    pushdowns.cloned().unwrap_or(Pushdowns::new()),
-                    query_settings,
-                    dataset,
-                )?;
-                exists(
-                    output_solution_mappings,
-                    exists_lf,
-                    rdf_node_types,
+                    solution_mappings,
                     &exists_context,
                     context,
+                    parameters,
+                    pushdowns,
+                    query_settings,
+                    dataset,
                 )?
             }
             Expression::Bound(v) => bound(solution_mappings, v, context)?,
@@ -689,4 +665,85 @@ impl Triplestore {
         };
         Ok(output_solution_mappings)
     }
+}
+
+impl Triplestore {
+    /// EXISTS evaluated with each incoming solution substituted into the pattern: the
+    /// solutions get a row number, the pattern is evaluated with them as its input, and a
+    /// solution's answer is whether its row number is among the pattern's solutions.
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn lazy_exists(
+        &self,
+        inner: &GraphPattern,
+        solution_mappings: SolutionMappings,
+        exists_context: &Context,
+        context: &Context,
+        parameters: Option<&HashMap<String, EagerSolutionMappings>>,
+        pushdowns: Option<&Pushdowns>,
+        query_settings: &QuerySettings,
+        dataset: &QueryGraph,
+    ) -> Result<SolutionMappings, SparqlError> {
+        let mut output_solution_mappings = solution_mappings;
+        output_solution_mappings.mappings = output_solution_mappings
+            .mappings
+            .with_row_index(exists_context.as_str(), None);
+        output_solution_mappings.rdf_node_types.insert(
+            exists_context.as_str().to_string(),
+            BaseRDFNodeType::Literal(xsd::UNSIGNED_INT.into_owned(), None)
+                .into_default_input_rdf_node_state(),
+        );
+
+        //Workaround for issue in Polars
+        output_solution_mappings.mappings =
+            output_solution_mappings.mappings.collect().unwrap().lazy();
+
+        let SolutionMappings {
+            mappings: exists_lf,
+            rdf_node_types,
+            ..
+        } = self.lazy_graph_pattern(
+            inner,
+            Some(output_solution_mappings.clone()),
+            exists_context,
+            parameters,
+            pushdowns.cloned().unwrap_or(Pushdowns::new()),
+            query_settings,
+            dataset,
+        )?;
+        Ok(exists(
+            output_solution_mappings,
+            exists_lf,
+            rdf_node_types,
+            exists_context,
+            context,
+        )?)
+    }
+}
+
+/// The names of the variables written anywhere in the pattern, its expressions and nested
+/// patterns included. The pattern's own text is scanned, so no kind of pattern is missed; a
+/// name that only looks like a variable (inside a literal) just makes the set larger.
+pub(crate) fn mentioned_variable_names(gp: &GraphPattern) -> HashSet<String> {
+    let text = gp.to_string();
+    let mut names = HashSet::new();
+    let mut chars = text.char_indices().peekable();
+    while let Some((i, c)) = chars.next() {
+        if c != '?' && c != '$' {
+            continue;
+        }
+        let start = i + c.len_utf8();
+        let mut end = start;
+        while let Some(&(j, d)) = chars.peek() {
+            if d.is_alphanumeric() || d == '_' || d == '\u{B7}' {
+                end = j + d.len_utf8();
+                chars.next();
+            } else {
+                break;
+            }
+        }
+        if end > start {
+            names.insert(text[start..end].to_string());
+        }
+    }
+    names
 }

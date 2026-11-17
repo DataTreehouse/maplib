@@ -5,9 +5,11 @@ use tracing::{instrument, trace};
 use crate::sparql::lazy_graph_patterns::geo_filter::{
     binds_variable_in_triple, conjunction, conjuncts, split_for_spatial_join,
 };
+use crate::sparql::lazy_expressions::mentioned_variable_names;
+use crate::sparql::lazy_graph_patterns::join::certainly_bound_variables;
 use crate::sparql::lazy_graph_patterns::lateral::lateral_seed;
 use crate::sparql::QuerySettings;
-use polars::prelude::JoinType;
+use polars::prelude::{col, Expr, IntoLazy, JoinArgs, JoinType, UniqueKeepStrategy};
 use query_processing::expressions::{contains_graph_pattern, effective_boolean_value};
 use query_processing::find_query_variables::find_all_used_variables_in_expression;
 use query_processing::graph_patterns::{extend, filter, join};
@@ -279,8 +281,47 @@ impl Triplestore {
                 dataset,
             )?
         };
+        // FILTER EXISTS and FILTER NOT EXISTS conjuncts become semi and anti joins on the
+        // variables the pattern shares with the solutions (see lazy_exists_join).
+        let certain = certainly_bound_variables(inner);
+        let mut residual_conjuncts = vec![];
+        let mut exists_joins = vec![];
+        for c in conjuncts(expression) {
+            if let Some((pattern, negated)) = exists_conjunct(c) {
+                let mentioned = mentioned_variable_names(pattern);
+                let mut keys: Vec<String> = output_solution_mappings
+                    .rdf_node_types
+                    .keys()
+                    .filter(|k| mentioned.contains(k.as_str()))
+                    .cloned()
+                    .collect();
+                if !keys.is_empty() && keys.iter().all(|k| certain.contains(k)) {
+                    keys.sort();
+                    exists_joins.push((pattern, negated, keys));
+                    continue;
+                }
+            }
+            residual_conjuncts.push(c);
+        }
+        for (pattern, negated, keys) in exists_joins {
+            output_solution_mappings = self.lazy_exists_join(
+                output_solution_mappings,
+                inner,
+                pattern,
+                negated,
+                &keys,
+                &expression_context,
+                parameters,
+                expression_pushdowns.as_ref(),
+                query_settings,
+                dataset,
+            )?;
+        }
+        let Some(expression) = conjunction(residual_conjuncts) else {
+            return Ok(output_solution_mappings);
+        };
         output_solution_mappings = self.lazy_expression(
-            expression,
+            &expression,
             output_solution_mappings,
             &expression_context,
             parameters,
@@ -295,6 +336,114 @@ impl Triplestore {
         );
         output_solution_mappings = filter(output_solution_mappings, &expression_context)?;
         Ok(output_solution_mappings)
+    }
+
+    /// Keeps the solutions for which the pattern has a solution (EXISTS), or has none (NOT
+    /// EXISTS, `negated`), with the solutions substituted into it.
+    ///
+    /// Whether it has one depends only on the values of `keys`, the variables of the solutions
+    /// that the pattern mentions, which the caller has checked are bound in every solution. The
+    /// pattern is evaluated once for each distinct combination of their values, and the
+    /// solutions are then semi or anti joined with the combinations that have one. EXISTS as an
+    /// expression instead evaluates the pattern once for each solution, carrying all of its
+    /// columns through the pattern, and then joins a boolean column back and filters on it. BSBM
+    /// BI Q4's FILTER NOT EXISTS { ?product bsbm:productFeature ?feature } over a million
+    /// feature × offer solutions asks about 52 thousand feature × product pairs.
+    #[allow(clippy::too_many_arguments)]
+    fn lazy_exists_join(
+        &self,
+        solution_mappings: SolutionMappings,
+        inner: &GraphPattern,
+        pattern: &GraphPattern,
+        negated: bool,
+        keys: &[String],
+        context: &Context,
+        parameters: Option<&HashMap<String, EagerSolutionMappings>>,
+        pushdowns: Option<&Pushdowns>,
+        query_settings: &QuerySettings,
+        dataset: &QueryGraph,
+    ) -> Result<SolutionMappings, SparqlError> {
+        let SolutionMappings {
+            mappings,
+            rdf_node_types,
+            height_estimate,
+        } = solution_mappings;
+        // The solutions are read twice, for their keys and for the join. Collecting them first
+        // would keep a copy of them alive during the join, which doubled the peak memory of
+        // BSBM BI Q4, so they are evaluated twice instead, unless that may give other values.
+        let mappings = if may_change_between_evaluations(inner) {
+            mappings.collect().unwrap().lazy()
+        } else {
+            mappings
+        };
+        let key_columns: Vec<Expr> = keys.iter().map(|k| col(k)).collect();
+        let key_types: HashMap<_, _> = keys
+            .iter()
+            .map(|k| (k.clone(), rdf_node_types.get(k).unwrap().clone()))
+            .collect();
+        let distinct_keys = SolutionMappings::new(
+            mappings
+                .clone()
+                .select(key_columns.clone())
+                .unique(None, UniqueKeepStrategy::Any),
+            key_types,
+            height_estimate,
+        );
+        let answers = self.lazy_exists(
+            pattern,
+            distinct_keys,
+            &context.extension_with(PathEntry::Exists),
+            context,
+            parameters,
+            pushdowns,
+            query_settings,
+            dataset,
+        )?;
+        let matching_keys = answers
+            .mappings
+            .filter(col(context.as_str()))
+            .select(key_columns.clone());
+        let how = if negated {
+            JoinType::Anti
+        } else {
+            JoinType::Semi
+        };
+        let mappings = mappings
+            .join(
+                matching_keys,
+                key_columns.as_slice(),
+                key_columns.as_slice(),
+                JoinArgs::new(how),
+            )
+            .unwrap();
+        Ok(SolutionMappings::new(
+            mappings,
+            rdf_node_types,
+            height_estimate,
+        ))
+    }
+}
+
+/// Whether evaluating the pattern twice may give different solutions: it calls RAND(), UUID(),
+/// STRUUID(), BNODE(), NOW() or a custom function, or queries a SERVICE. The pattern's text is
+/// scanned, as in [mentioned_variable_names], so no kind of pattern is missed; a false match only
+/// costs memory.
+fn may_change_between_evaluations(gp: &GraphPattern) -> bool {
+    let text = gp.to_string().to_lowercase();
+    ["rand(", "uuid(", "bnode(", "now(", "service", ">("]
+        .iter()
+        .any(|s| text.contains(s))
+}
+
+/// The pattern of `EXISTS { pattern }` (false) or `NOT EXISTS { pattern }` (true).
+fn exists_conjunct(expression: &Expression) -> Option<(&GraphPattern, bool)> {
+    match expression {
+        Expression::Exists(pattern) => Some((pattern.as_ref(), false)),
+        Expression::Not(inner) => match inner.as_ref() {
+            Expression::Exists(pattern) => Some((pattern.as_ref(), true)),
+            _ => None,
+        },
+        _ => None,
     }
 }
 
