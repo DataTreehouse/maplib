@@ -76,6 +76,8 @@ TOP_MANIFESTS = [
     "manifest-sparql11-update.ttl",
     "manifest-sparql11-results.ttl",
 ]
+# Manifests of the suite that no top manifest includes, collected as well.
+EXTRA_MANIFESTS: List[str] = []
 
 SUPPORTED_TYPES = {
     MF.QueryEvaluationTest,
@@ -222,6 +224,15 @@ class Manifest:
         objs = self.objects(s, p)
         return objs[0] if objs else None
 
+    def manifest_nodes(self) -> list:
+        """The manifest of the file, and any other node typed mf:Manifest in it. Some manifests
+        are a blank node (``[] rdf:type mf:Manifest``) instead of the file itself."""
+        nodes = [self.iri]
+        for s, preds in self.index.items():
+            if s != self.iri and MF.Manifest in preds.get(RDF.type, []):
+                nodes.append(s)
+        return nodes
+
     def collection(self, node) -> list:
         items = []
         while node is not None and node != RDF.nil:
@@ -231,25 +242,42 @@ class Manifest:
 
 
 def collect_tests():
-    tests = []
+    subs = []
     for top in TOP_MANIFESTS:
         g = Manifest(top)
         for include in g.objects(g.iri, MF.include):
             for sub in g.collection(include):
                 rel = sub[1][len(BASE) :]
-                if not (SUITE_DIR / rel).exists():
-                    continue
-                sg = Manifest(rel)
-                directory = rel.rsplit("/", 1)[0]
-                for entries in sg.objects(sg.iri, MF.entries):
-                    for entry in sg.collection(entries):
-                        tests.append((directory, sg, entry))
+                if (SUITE_DIR / rel).exists():
+                    subs.append(rel)
+    subs.extend(EXTRA_MANIFESTS)
+    tests = []
+    for rel in subs:
+        sg = Manifest(rel)
+        directory = rel.rsplit("/", 1)[0]
+        for node in sg.manifest_nodes():
+            for entries in sg.objects(node, MF.entries):
+                for entry in sg.collection(entries):
+                    tests.append((directory, sg, entry))
     return tests
 
 
-def make_test_id(directory: str, entry) -> str:
-    name = entry[1].rsplit("#", 1)[-1].rsplit("/", 1)[-1]
+def make_test_id(directory: str, entry, g: Optional["Manifest"] = None) -> str:
+    if is_bnode(entry) and g is not None:
+        # A blank node entry has no stable name of its own; use its mf:name.
+        name = re.sub(r"[^A-Za-z0-9_.-]+", "-", g.value(entry, MF.name)[1])
+    else:
+        name = entry[1].rsplit("#", 1)[-1].rsplit("/", 1)[-1]
     return f"{directory}/{name}"
+
+
+def entry_types(g: "Manifest", entry) -> set:
+    """The test types of an entry. An entry without a type but with an action is a query
+    evaluation test, as in the DAWG manifests."""
+    types = set(g.objects(entry, RDF.type))
+    if not types and g.value(entry, MF.action) is not None:
+        types = {MF.QueryEvaluationTest}
+    return types
 
 
 def load_known_failures() -> Dict[str, str]:
@@ -268,13 +296,18 @@ def build_params():
     known = load_known_failures()
     params = []
     for directory, g, entry in collect_tests():
-        types = set(g.objects(entry, RDF.type))
-        tid = make_test_id(directory, entry)
+        types = entry_types(g, entry)
+        tid = make_test_id(directory, entry, g)
         marks = []
         supported = types & SUPPORTED_TYPES
+        action = g.value(entry, MF.action)
+        query = g.value(action, QT.query) if action is not None and is_bnode(action) else None
         if not supported:
             names = sorted(t[1] for t in types)
             marks.append(pytest.mark.skip(reason=f"unsupported test type {names}"))
+        elif query is not None and not iri_to_path(query).exists():
+            # The manifest names a query that is not in the test suite.
+            marks.append(pytest.mark.skip(reason=f"query file not in the suite: {query[1]}"))
         elif tid in known:
             # Nondeterministic failures are tagged [flaky] and are not strict.
             strict = "[flaky]" not in known[tid]
@@ -953,7 +986,7 @@ def urlparse_host(iri: str) -> str:
 
 @pytest.mark.parametrize("manifest,entry", build_params())
 def test_w3c_sparql11(manifest: Manifest, entry):
-    types = set(manifest.objects(entry, RDF.type))
+    types = entry_types(manifest, entry)
     if MF.QueryEvaluationTest in types:
         check_query_evaluation(manifest, entry)
     elif MF.CSVResultFormatTest in types:

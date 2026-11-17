@@ -5,7 +5,10 @@ The test data in ``testdata/w3c_sparql10`` is an unmodified copy of ``sparql/spa
 https://github.com/w3c/rdf-tests (commit 7b5afb91), see ``testdata/w3c_sparql10/LICENSE.md``.
 These are the query evaluation tests (``manifest-evaluation.ttl``: basic graph patterns,
 OPTIONAL, FILTER, type promotion, casts, the builtin functions, ORDER BY, DISTINCT, REDUCED,
-CONSTRUCT, ASK and datasets) and the syntax tests (``manifest-syntax.ttl``).
+CONSTRUCT, ASK and datasets), the syntax tests (``manifest-syntax.ttl``) and the extended
+evaluation tests (``extended-manifest-evaluation.ttl``: sort-11, the relative order of plain
+literals and xsd:strings). ``open-world/sameTerm-manifest.ttl`` is included by no other manifest
+and is collected as well, so every test of the suite is run (491 entries).
 
 The tests are run with the machinery of ``test_w3c_sparql11.py``, which is loaded here as a
 separate module with the base IRI, directory and manifests of this suite, so the two suites
@@ -46,7 +49,13 @@ s = _load_sparql11_machinery()
 s.SUITE_DIR = TESTS_DIR / "testdata" / "w3c_sparql10"
 s.KNOWN_FAILURES_FILE = TESTS_DIR / "w3c_sparql10_known_failures.txt"
 s.BASE = "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/"
-s.TOP_MANIFESTS = ["manifest-evaluation.ttl", "manifest-syntax.ttl"]
+s.TOP_MANIFESTS = [
+    "manifest-evaluation.ttl",
+    "manifest-syntax.ttl",
+    "extended-manifest-evaluation.ttl",
+]
+# sameTerm and mf:StringSimpleLiteralCmp: a manifest of the suite that no other one includes.
+s.EXTRA_MANIFESTS = ["open-world/sameTerm-manifest.ttl"]
 s.SUPPORTED_TYPES = {
     s.MF.QueryEvaluationTest,
     s.MF.PositiveSyntaxTest,
@@ -56,7 +65,7 @@ s.SUPPORTED_TYPES = {
 
 @pytest.mark.parametrize("manifest,entry", s.build_params())
 def test_w3c_sparql10(manifest, entry):
-    types = set(manifest.objects(entry, s.RDF.type))
+    types = s.entry_types(manifest, entry)
     if s.MF.QueryEvaluationTest in types:
         s.check_query_evaluation(manifest, entry)
     elif s.MF.PositiveSyntaxTest in types:

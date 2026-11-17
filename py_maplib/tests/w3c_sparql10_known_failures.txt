@@ -53,3 +53,4 @@ syntax-sparql2/syntax-function-02  # a call of an unknown function is an error a
 syntax-sparql2/syntax-function-03  # a call of an unknown function is an error at query time, not only at evaluation
 syntax-sparql2/syntax-function-04  # a call of an unknown function is an error at query time, not only at evaluation
 syntax-sparql3/syn-bad-26  # "FILTER (?x<?a&&?b>?y)" is accepted but must be rejected
+sort/dawg-sort-11  # RDF 1.0 ordering of plain literals before xsd:strings; in RDF 1.1 "Eve" and "Eve"^^xsd:string are the same term, so they sort together (extended-manifest-evaluation.ttl)
