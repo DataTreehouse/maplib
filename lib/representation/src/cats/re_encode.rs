@@ -6,6 +6,7 @@ use crate::{
     SUBJECT_COL_NAME,
 };
 use nohash_hasher::NoHashHasher;
+use uuid::Uuid;
 use polars::datatypes::{AnyValue, PlSmallStr};
 use polars::error::{ErrString, PolarsError, PolarsResult};
 use polars::frame::column::ScalarColumn;
@@ -188,26 +189,46 @@ impl CatEncs {
 }
 
 impl Cats {
-    //Re enc is for right hand side
-    pub fn join(left: LockedCats, right: LockedCats) -> CatReEnc {
-        let left = left.read().unwrap();
-        let right = right.read().unwrap();
-        let rencs: Vec<_> = left
-            .cat_map
-            .iter()
-            .filter_map(|(t, left_enc)| {
-                right
-                    .cat_map
-                    .get(t)
-                    .map(|right_enc| left_enc.inner_join_re_enc(right_enc))
-            })
-            .collect();
-        let renc_map: HashMap<_, _, BuildHasherDefault<NoHashHasher<u32>>> =
-            rencs.into_iter().flatten().collect();
-
-        CatReEnc {
-            cat_map: Arc::new(renc_map),
-        }
+    /// The local dictionary of values of type `t` from two local dictionaries, as for a join,
+    /// and the re-encoding of the right codes into it (the left codes stay as they are).
+    ///
+    /// The right values that the left dictionary does not have get new codes. Two local
+    /// dictionaries may give different values the same code (a local code starts at the
+    /// global counter), so a right code must not be kept as it is: it would join with a
+    /// different left value.
+    pub fn join(
+        left: &LockedCats,
+        right: &LockedCats,
+        t: &BaseRDFNodeType,
+        global_cats: &LockedCats,
+    ) -> (LockedCats, CatReEnc) {
+        let ct = CatType::from_base_rdf_node_type(t);
+        let no_renc = || CatReEnc {
+            cat_map: Arc::new(HashMap::default()),
+        };
+        let mut joined = {
+            let l = left.read().unwrap();
+            let r = right.read().unwrap();
+            if l.uuid == r.uuid || !r.cat_map.contains_key(&ct) {
+                return (left.clone(), no_renc());
+            }
+            let mut joined = l.clone();
+            joined.uuid = Uuid::new_v4().to_string();
+            // new codes after every code in use: the global ones and those of both sides
+            let counter = joined
+                .get_counter(&ct)
+                .max(r.get_counter(&ct))
+                .max(global_cats.read().unwrap().get_counter(&ct));
+            joined.set_counter(counter, &ct);
+            joined
+        };
+        let mut rencs = joined.merge(vec![right.clone()]);
+        let renc = rencs
+            .values_mut()
+            .next()
+            .and_then(|m| m.remove(&ct))
+            .unwrap_or_else(no_renc);
+        (LockedCats::new(joined), renc)
     }
 
     pub fn merge(

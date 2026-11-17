@@ -151,12 +151,24 @@ pub fn prepare_group_by(
 pub fn minus(
     mut left_solution_mappings: SolutionMappings,
     right_solution_mappings: SolutionMappings,
+    global_cats: LockedCats,
 ) -> Result<SolutionMappings, QueryProcessingError> {
     let SolutionMappings {
-        mappings: mut right_mappings,
+        mappings: right_mappings,
         rdf_node_types: right_datatypes,
         ..
     } = right_solution_mappings;
+    // the right values in the codes of the left ones, as for a join: local codes of the two
+    // sides may give different values the same code
+    let (left_mappings, mut right_mappings, target_cat_state) = join::create_join_compatible_cats(
+        left_solution_mappings.mappings,
+        &left_solution_mappings.rdf_node_types,
+        right_mappings,
+        &right_datatypes,
+        global_cats,
+    );
+    left_solution_mappings.mappings = left_mappings;
+    join::update_state(&mut left_solution_mappings.rdf_node_types, target_cat_state);
 
     let right_column_set: HashSet<_> = right_datatypes.keys().collect();
     let left_column_set: HashSet<_> = left_solution_mappings.rdf_node_types.keys().collect();

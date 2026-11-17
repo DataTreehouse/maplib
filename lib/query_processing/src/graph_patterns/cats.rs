@@ -56,6 +56,8 @@ impl CatOperation {
 pub fn create_compatible_cats(
     left: &BaseCatState,
     right: &BaseCatState,
+    base_type: &BaseRDFNodeType,
+    global_cats: &LockedCats,
 ) -> (BaseCatState, Option<CatOperation>, Option<CatOperation>) {
     match left {
         BaseCatState::CategoricalNative(None) => match right {
@@ -79,9 +81,10 @@ pub fn create_compatible_cats(
                 None,
             ),
             BaseCatState::CategoricalNative(Some(right_local_cats)) => {
-                let re_enc = Cats::join(left_local_cats.clone(), right_local_cats.clone());
+                let (joined, re_enc) =
+                    Cats::join(left_local_cats, right_local_cats, base_type, global_cats);
                 (
-                    BaseCatState::CategoricalNative(Some(left_local_cats.clone())),
+                    BaseCatState::CategoricalNative(Some(joined)),
                     None,
                     Some(CatOperation::ReEnc(re_enc)),
                 )

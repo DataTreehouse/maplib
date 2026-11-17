@@ -48,6 +48,10 @@ impl Triplestore {
             dataset,
         )?;
 
-        Ok(minus(left_solution_mappings, right_solution_mappings)?)
+        Ok(minus(
+            left_solution_mappings,
+            right_solution_mappings,
+            self.global_cats.clone(),
+        )?)
     }
 }

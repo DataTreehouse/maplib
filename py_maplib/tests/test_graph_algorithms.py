@@ -461,10 +461,6 @@ SELECT ?n ?part WHERE {{ {edges}
     assert avoided["n"].null_count() == 0
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="maplib:avoid does not match nodes whose IRIs are only in VALUES (not in the model, nor made by BIND)",
-)
 def test_avoid_iris_that_are_only_in_values():
     m = Model()
     rows = m.query(
@@ -476,3 +472,17 @@ SELECT ?n WHERE { VALUES (?a ?b) { (<urn:u:a> <urn:u:b>) (<urn:u:b> <urn:u:c>) }
 }"""
     )
     assert sorted(strip(rows)["n"].to_list()) == ["urn:u:a", "urn:u:c"]
+
+
+def test_avoid_an_iri_in_no_edge_avoids_nothing():
+    # an avoided IRI that is not in the model nor an edge end leaves every node in the graph
+    m = Model()
+    rows = m.query(
+        PREFIXES
+        + """
+SELECT ?n WHERE { VALUES (?a ?b) { (<urn:u:a> <urn:u:b>) (<urn:u:b> <urn:u:c>) }
+  ?n maplib:component ?o .
+  ?o maplib:edgeSource ?a ; maplib:edgeTarget ?b ; maplib:avoid <urn:u:zz> ; maplib:componentId ?part .
+}"""
+    )
+    assert sorted(strip(rows)["n"].to_list()) == ["urn:u:a", "urn:u:b", "urn:u:c"]

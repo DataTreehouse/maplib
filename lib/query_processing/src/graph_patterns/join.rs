@@ -331,7 +331,7 @@ pub fn join_workaround(
     ))
 }
 
-fn create_join_compatible_cats(
+pub(crate) fn create_join_compatible_cats(
     mut left_mappings: LazyFrame,
     left_types: &HashMap<String, RDFNodeState>,
     mut right_mappings: LazyFrame,
@@ -345,7 +345,12 @@ fn create_join_compatible_cats(
             for left_base in left_state.get_sorted_types() {
                 if let Some(right_state) = right_state.map.get(left_base) {
                     let (new_state, left_oper, right_oper) =
-                        create_compatible_cats(left_state.map.get(left_base).unwrap(), right_state);
+                        create_compatible_cats(
+                            left_state.map.get(left_base).unwrap(),
+                            right_state,
+                            left_base,
+                            &global_cats,
+                        );
                     if let Some(left_oper) = left_oper {
                         left_mappings = left_oper.apply(
                             left_mappings,
@@ -393,7 +398,7 @@ fn create_join_compatible_cats(
     (left_mappings, right_mappings, state_map)
 }
 
-fn update_state(
+pub(crate) fn update_state(
     types: &mut HashMap<String, RDFNodeState>,
     target_types: HashMap<String, RDFNodeState>,
 ) {
