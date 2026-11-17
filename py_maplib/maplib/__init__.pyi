@@ -3,7 +3,6 @@ from pathlib import Path
 from typing import Any, overload, Union, List, Dict, Optional, Callable, Iterable, Literal as LiteralType, Tuple, BinaryIO, TextIO, ContextManager
 
 import polars as pl
-from maplib.maplib import rdf
 from maplib.opcua import OPCUA
 
 DEFAULT_GRAPH: str
@@ -1425,7 +1424,7 @@ class Model:
         :param graph: The IRI of the graph to add the Asset Framework triples to.
         :param base_iri: The prefix of the IRIs of servers, databases, templates, elements and attributes. Defaults to urn:maplib_osipi:
         :param read_static_values: Read the current values of attributes without data references into osipi:value.
-        :param default_start_time: The PI time (e.g. "*-7d" or "2024-01-01T00:00:00Z") to read from when a query has no lower bound on the timestamp.
+        :param default_start_time: The PI time (e.g. ``"*-7d"`` or "2024-01-01T00:00:00Z") to read from when a query has no lower bound on the timestamp.
         :param default_end_time: The PI time to read to when a query has no upper bound on the timestamp. Defaults to now ("*").
         :param page_size: The maxCount of each PI Web API request; larger results are paged.
         :param max_concurrency: The maximum number of concurrent PI Web API requests.
@@ -1610,7 +1609,7 @@ class Model:
         :param verify_ssl: Verify the certificate of the PI Web API.
         :param graph: The IRI of the graph to add the data servers and points to.
         :param base_iri: The prefix of the IRIs of data servers and points. Defaults to urn:maplib_osipi:
-        :param default_start_time: The PI time (e.g. "*-7d" or "2024-01-01T00:00:00Z") to read from when a query has no lower bound on the timestamp.
+        :param default_start_time: The PI time (e.g. ``"*-7d"`` or "2024-01-01T00:00:00Z") to read from when a query has no lower bound on the timestamp.
         :param default_end_time: The PI time to read to when a query has no upper bound on the timestamp. Defaults to now ("*").
         :param page_size: The maxCount of each PI Web API request; larger results are paged.
         :param max_concurrency: The maximum number of concurrent PI Web API requests.
@@ -2590,6 +2589,7 @@ class Model:
         changes made from Python, and updates through the endpoints are seen from Python.
 
         The SPARQL endpoints (on port):
+
         - /sparql: SPARQL 1.1 Protocol query and update, and the service description on GET.
           SELECT and ASK results as JSON, XML, CSV, TSV or Arrow IPC (application/vnd.apache.arrow.stream),
           CONSTRUCT and DESCRIBE results as Turtle, N-Triples, RDF/XML, JSON-LD, N-Quads or TriG.
@@ -2601,6 +2601,7 @@ class Model:
         - /: a query page. /health and /status.
 
         The Arrow Flight endpoint (on flight_port), for pyarrow.flight:
+
         - do_get(Ticket(query)): the result as with Model.query(), the query is SPARQL text or JSON
           {"query": ..., "graph": ..., "default_graph_uris": [...], "named_graph_uris": [...], "native_dataframe": false,
           "compression": "zstd" | "none" | "auto"}.
@@ -2740,10 +2741,10 @@ class Model:
 
         Profiles:
 
-        * ``"owl-rl"``: the OWL 2 RL/RDF rules of OWL 2 Profiles (section 4.3): equality (eq-*), properties (prp-*,
-          including owl:propertyChainAxiom and owl:hasKey), classes (cls-*, including owl:intersectionOf,
+        * ``"owl-rl"``: the OWL 2 RL/RDF rules of OWL 2 Profiles (section 4.3): equality (``eq-*``), properties (``prp-*``,
+          including owl:propertyChainAxiom and owl:hasKey), classes (``cls-*``, including owl:intersectionOf,
           owl:unionOf, owl:oneOf, owl:someValuesFrom, owl:allValuesFrom, owl:hasValue and max (qualified)
-          cardinality 1), class axioms (cax-*), schema (scm-*) and the axiomatic dt-type1 triples. The rules with
+          cardinality 1), class axioms (``cax-*``), schema (``scm-*``) and the axiomatic dt-type1 triples. The rules with
           ``false`` in the head are checked after inference, and their matches are reported as violations.
           Not included: eq-ref (every term owl:sameAs itself) and the datatype rules dt-type2, dt-eq, dt-diff and
           dt-not-type.
@@ -2799,7 +2800,7 @@ class Model:
         The inferred triples are put in the transient graph (TRANSIENT_GRAPH), so they are not written unless
         that graph is written explicitly.
         :param graph: Apply rdfs inferencing to this graph, defaults to the default graph, or the graph specified in the rules.
-        :return number of inferred triples
+        :return: number of inferred triples
         """
 
     def size(self, graph: Optional[str] = None) -> int:
@@ -2860,7 +2861,7 @@ class Model:
         ... BIND(<urn:maplib:findabc>(?s1) AS ?found)
         ... }
         ... ''')
-    ... print(result)
+        >>> print(result)
 
         :param iri: IRI of the UDF, e.g. "urn:maplib:myfunc"
         :param func: A callable (DataFrame) -> DataFrame
@@ -3243,7 +3244,7 @@ def set_outbound_policy(
         loopback, private, link-local or other local addresses) or "allowlist" (only the hosts in
         allow). Or a function check(scheme, host, port), the mode then being "any". None restores
         the default.
-    :param allow: Host names, "*.domain" (the domain and the hosts under it), addresses and CIDR
+    :param allow: Host names, ``"*.domain"`` (the domain and the hosts under it), addresses and CIDR
         ranges, allowed in every mode but never for metadata services. A range allows a host when
         all its addresses are in listed ranges.
     :param check: Called as check(scheme, host, port) for every connection made from Python,
