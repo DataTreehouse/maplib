@@ -6,14 +6,16 @@ use crate::sparql::lazy_graph_patterns::geo_filter::{
     binds_variable_in_triple, conjunction, conjuncts, split_for_spatial_join,
 };
 use crate::sparql::lazy_expressions::mentioned_variable_names;
-use crate::sparql::lazy_graph_patterns::join::certainly_bound_variables;
+use crate::sparql::lazy_graph_patterns::join::{
+    certainly_bound_variables, maybe_unbound_variables,
+};
 use crate::sparql::lazy_graph_patterns::lateral::lateral_seed;
 use crate::sparql::QuerySettings;
-use polars::prelude::{col, Expr, IntoLazy, JoinArgs, JoinType, UniqueKeepStrategy};
+use polars::prelude::{col, Expr, JoinArgs, JoinType, UniqueKeepStrategy};
 use query_processing::expressions::{contains_graph_pattern, effective_boolean_value};
 use query_processing::find_query_variables::find_all_used_variables_in_expression;
 use query_processing::graph_patterns::{extend, filter, join};
-use query_processing::pushdowns::Pushdowns;
+use query_processing::pushdowns::{ExpressionInput, Pushdowns};
 use representation::dataset::QueryGraph;
 use representation::query_context::{Context, PathEntry};
 use representation::solution_mapping::{EagerSolutionMappings, SolutionMappings};
@@ -137,7 +139,12 @@ impl Triplestore {
             return Ok(sm);
         }
         let expression_pushdowns = if contains_graph_pattern(expression) {
-            Some(pushdowns.clone())
+            Some(pushdowns_for_expression(
+                &pushdowns,
+                inner,
+                input_solution_mappings.as_ref(),
+                parameters,
+            ))
         } else {
             None
         };
@@ -430,7 +437,9 @@ impl Triplestore {
         };
         conjuncts.remove(i);
 
-        // Each side is read twice, for its keys and for the join, so it is collected once.
+        // Each side is read twice, for its keys and for the join. It is evaluated twice, which
+        // costs less than a cache in the plan, unless that may give other values.
+        let may_change = may_change_between_evaluations(inner);
         let side = |gp: &GraphPattern, entry: PathEntry| -> Result<SolutionMappings, SparqlError> {
             let mut sm = self.lazy_graph_pattern(
                 gp,
@@ -441,7 +450,9 @@ impl Triplestore {
                 query_settings,
                 dataset,
             )?;
-            sm.mappings = sm.mappings.collect().unwrap().lazy();
+            if may_change {
+                sm.mappings = sm.mappings.cache();
+            }
             Ok(sm)
         };
         let left_sm = side(left, PathEntry::JoinLeftSide)?;
@@ -467,13 +478,16 @@ impl Triplestore {
             self.global_cats.clone(),
             query_settings.max_rows,
         )?;
-        pairs.mappings = pairs.mappings.collect().unwrap().lazy();
+        if may_change {
+            pairs.mappings = pairs.mappings.cache();
+        }
         let mut keys: Vec<String> = left_keys.iter().chain(&right_keys).cloned().collect();
         keys.sort();
         let key_columns: Vec<Expr> = keys.iter().map(|k| col(k)).collect();
-        let answers = self.lazy_exists(
+        let matching = self.lazy_exists_matching_keys(
             pattern,
             pairs.clone(),
+            may_change,
             &expression_context.extension_with(PathEntry::Exists),
             expression_context,
             parameters,
@@ -481,10 +495,6 @@ impl Triplestore {
             query_settings,
             dataset,
         )?;
-        let matching = answers
-            .mappings
-            .filter(col(expression_context.as_str()))
-            .select(key_columns.clone());
         let how = if negated {
             JoinType::Anti
         } else {
@@ -549,11 +559,11 @@ impl Triplestore {
             rdf_node_types,
             height_estimate,
         } = solution_mappings;
-        // The solutions are read twice, for their keys and for the join. Collecting them first
-        // would keep a copy of them alive during the join, which doubled the peak memory of
-        // BSBM BI Q4, so they are evaluated twice instead, unless that may give other values.
+        // The solutions are read twice, for their keys and for the join. Caching them would keep
+        // a copy of them alive during the join, which doubled the peak memory of BSBM BI Q4, so
+        // they are evaluated twice instead, unless that may give other values.
         let mappings = if may_change_between_evaluations(inner) {
-            mappings.collect().unwrap().lazy()
+            mappings.cache()
         } else {
             mappings
         };
@@ -570,9 +580,10 @@ impl Triplestore {
             key_types,
             height_estimate,
         );
-        let answers = self.lazy_exists(
+        let matching_keys = self.lazy_exists_matching_keys(
             pattern,
             distinct_keys,
+            may_change_between_evaluations(inner),
             &context.extension_with(PathEntry::Exists),
             context,
             parameters,
@@ -580,10 +591,6 @@ impl Triplestore {
             query_settings,
             dataset,
         )?;
-        let matching_keys = answers
-            .mappings
-            .filter(col(context.as_str()))
-            .select(key_columns.clone());
         let how = if negated {
             JoinType::Anti
         } else {
@@ -614,6 +621,40 @@ fn may_change_between_evaluations(gp: &GraphPattern) -> bool {
     ["rand(", "uuid(", "bnode(", "now(", "service", ">("]
         .iter()
         .any(|s| text.contains(s))
+}
+
+/// The pushdowns for the graph patterns (EXISTS) of an expression evaluated on the solutions of
+/// `inner`, joined with `incoming`. The variables that may be unbound in them are those of
+/// `inner` that it may leave unbound and the incoming variables it does not bind in every
+/// solution. Inside a LATERAL, the substituted bindings may be unbound too, so nothing is known.
+pub(crate) fn pushdowns_for_expression(
+    pushdowns: &Pushdowns,
+    inner: &GraphPattern,
+    incoming: Option<&SolutionMappings>,
+    parameters: Option<&HashMap<String, EagerSolutionMappings>>,
+) -> Pushdowns {
+    let mut pushdowns = pushdowns.clone();
+    pushdowns.expression_input = if lateral_seed(parameters).is_some() {
+        None
+    } else {
+        let mut maybe_unbound = maybe_unbound_variables(inner);
+        if let Some(incoming) = incoming {
+            let certain = certainly_bound_variables(inner);
+            maybe_unbound.extend(
+                incoming
+                    .rdf_node_types
+                    .keys()
+                    .filter(|v| !certain.contains(*v))
+                    .cloned(),
+            );
+        }
+        Some(ExpressionInput {
+            maybe_unbound,
+            // Where the incoming solutions come from is not known here.
+            may_change: incoming.is_some() || may_change_between_evaluations(inner),
+        })
+    };
+    pushdowns
 }
 
 /// The pattern of `EXISTS { pattern }` (false) or `NOT EXISTS { pattern }` (true).

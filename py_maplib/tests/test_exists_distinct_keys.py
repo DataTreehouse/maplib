@@ -200,7 +200,21 @@ QUERIES = {
     # Two incoming variables in the pattern, and incoming variables it does not mention.
     "two_keys": "SELECT ?s ?o ?v WHERE { ?s ex:p ?o . ?t ex:q ?v FILTER NOT EXISTS { ?o ex:r ?s } }",
     # An incoming variable that is unbound in some solutions.
+    # ?o is unbound for ex:c, so it stays a variable in the pattern (SPARQL 1.1 18.6: only the
+    # bound variables are substituted): NOT EXISTS { ?o ex:r ex:c } matches ex:y ex:r ex:c.
     "unbound_key": "SELECT ?s ?o WHERE { ?s ex:q ?v OPTIONAL { ?s ex:p ?o } FILTER NOT EXISTS { ?o ex:r ?s } }",
+    "unbound_key_exists": "SELECT ?s ?o WHERE { ?s ex:q ?v OPTIONAL { ?s ex:p ?o } FILTER EXISTS { ?o ex:r ?s } }",
+    "unbound_key_bind": "SELECT ?s ?o ?e WHERE { ?s ex:q ?v OPTIONAL { ?s ex:p ?o } BIND(EXISTS { ?o ex:r ?s } AS ?e) }",
+    "unbound_key_projected": "SELECT ?s (EXISTS { ?o ex:r ?s } AS ?e) WHERE { ?s ex:q ?v OPTIONAL { ?s ex:p ?o } }",
+    "unbound_key_union": "SELECT ?s ?o WHERE { { ?s ex:q ?v } UNION { ?s ex:p ?o } FILTER NOT EXISTS { ?o ex:r ?s } }",
+    "unbound_key_values": "SELECT ?s ?o WHERE { VALUES (?s ?o) { (ex:a ex:x) (ex:c UNDEF) (ex:b UNDEF) } FILTER NOT EXISTS { ?o ex:r ?s } }",
+    "unbound_two_keys": "SELECT ?s ?o ?n WHERE { ?s ex:q ?v OPTIONAL { ?s ex:p ?o } OPTIONAL { ?s ex:name ?n } FILTER NOT EXISTS { ?o ex:r ?s . ?s ex:name ?n } }",
+    "unbound_nested": "SELECT ?s WHERE { ?s ex:q ?v OPTIONAL { ?s ex:p ?o } FILTER EXISTS { ?t ex:q ?w FILTER NOT EXISTS { ?o ex:r ?t } } }",
+    "unbound_in_inner_filter": "SELECT ?s WHERE { ?s ex:q ?v OPTIONAL { ?s ex:p ?o } FILTER EXISTS { ?t ex:q ?w FILTER(BOUND(?o)) } }",
+    # Two FILTER NOT EXISTS in a row: the solutions are numbered for each, and the numbers must
+    # be the same where the pattern reads them and where its answers are joined back.
+    "double_not_exists": "SELECT ?s ?v WHERE { ?s ex:q ?v FILTER NOT EXISTS { ?s ex:p ex:y } FILTER NOT EXISTS { ?x ex:r ?s } }",
+    "double_not_exists_join": "SELECT ?s ?t WHERE { ?s ex:q ?v . ?t ex:q ?w FILTER NOT EXISTS { ?s ex:p ?o } FILTER NOT EXISTS { ?t ex:r ?u } }",
     # An incoming variable only as a predicate of the pattern.
     "variable_predicate": "SELECT ?s ?pr WHERE { ?s ex:q ?v . VALUES ?pr { ex:p ex:name ex:r } FILTER EXISTS { ?s ?pr ?o } }",
     # An incoming variable only inside a FILTER of the pattern.
@@ -249,21 +263,7 @@ def _term(t):
     return ("literal", value, None if dt in (None, XSD + "string") else dt)
 
 
-# ?o is unbound for ex:c, so NOT EXISTS { ?o ex:r ex:c } matches ex:y ex:r ex:c and removes it.
-# maplib keeps ex:c on main as well: the per-solution evaluation does not treat an unbound
-# incoming variable as free. Such a variable is not bound in every solution, so it is not a key.
-KNOWN_FAILURES = {"unbound_key"}
-
-
-@pytest.mark.parametrize(
-    "name",
-    [
-        pytest.param(n, marks=pytest.mark.xfail(strict=True, reason="unbound variable in EXISTS"))
-        if n in KNOWN_FAILURES
-        else n
-        for n in sorted(QUERIES)
-    ],
-)
+@pytest.mark.parametrize("name", sorted(QUERIES))
 def test_exists_matches_oxigraph(name):
     q = f"PREFIX ex: <{EX}>\n" + QUERIES[name]
     m = Model()

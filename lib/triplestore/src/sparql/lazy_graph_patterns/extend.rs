@@ -1,5 +1,6 @@
 use super::Triplestore;
 use crate::sparql::errors::SparqlError;
+use crate::sparql::lazy_graph_patterns::filter::pushdowns_for_expression;
 use oxrdf::Variable;
 use tracing::{instrument, trace};
 
@@ -41,11 +42,6 @@ impl Triplestore {
         if window {
             pushdowns = Pushdowns::new();
         }
-        let expression_pushdowns = if contains_graph_pattern(expression) {
-            Some(pushdowns.clone())
-        } else {
-            None
-        };
         // The expression is evaluated in the scope of the inner pattern (the group of the BIND),
         // so it must not see variables that only the incoming solution mappings bind. When it
         // uses such a variable, the group is evaluated on its own and joined afterwards.
@@ -57,6 +53,16 @@ impl Triplestore {
             }
         } else {
             (None, None)
+        };
+        let expression_pushdowns = if contains_graph_pattern(expression) {
+            Some(pushdowns_for_expression(
+                &pushdowns,
+                inner,
+                input_solution_mappings.as_ref(),
+                parameters,
+            ))
+        } else {
+            None
         };
         let mut output_solution_mappings = self.lazy_graph_pattern(
             inner,

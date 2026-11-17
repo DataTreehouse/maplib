@@ -85,7 +85,11 @@ impl Triplestore {
         let expression_pushdowns = if let Some(expr) = expression {
             pushdowns.add_filter_variable_pushdowns(expr, None);
             if contains_graph_pattern(expr) {
-                Some(pushdowns.clone())
+                // The condition is evaluated on the right side's solutions or on the merged
+                // ones, so which variables may be unbound is not known here.
+                let mut expression_pushdowns = pushdowns.clone();
+                expression_pushdowns.expression_input = None;
+                Some(expression_pushdowns)
             } else {
                 None
             }

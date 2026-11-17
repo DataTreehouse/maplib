@@ -4,20 +4,23 @@ use std::collections::{HashMap, HashSet};
 use crate::sparql::errors::SparqlError;
 use oxrdf::vocab::xsd;
 use oxrdf::{Literal, NamedNode};
-use polars::prelude::IntoLazy;
+use polars::prelude::{by_name, col, len, lit, Expr, JoinType, LazyFrame, UniqueKeepStrategy};
 use query_processing::expressions::functions::func_expression::func_expression;
 use query_processing::expressions::functions::xsd_cast_literal::{
     is_xsd_cast_function, xsd_cast_chain_on_codes,
 };
 use query_processing::expressions::{
-    binary_expression, bound, can_use_in_iris, coalesce_contexts, effective_boolean_value, exists,
+    binary_expression, bound, can_use_in_iris, coalesce_contexts, effective_boolean_value,
     if_expression, in_expression, in_integers_expression, in_integers_values, in_iris_expression,
     literal, named_node, not_expression, unary_minus, unary_plus, variable,
 };
-use query_processing::pushdowns::Pushdowns;
+use query_processing::graph_patterns::{join, union};
+use query_processing::pushdowns::{ExpressionInput, Pushdowns};
+use representation::cats::LockedCats;
 use representation::dataset::QueryGraph;
+use representation::null::expr_is_null_workaround;
 use representation::query_context::{Context, PathEntry};
-use representation::solution_mapping::{EagerSolutionMappings, SolutionMappings};
+use representation::solution_mapping::{BaseCatState, EagerSolutionMappings, SolutionMappings};
 use representation::{BaseRDFNodeType, RDFNodeState};
 use spargebra::algebra::{Expression, Function, GraphPattern};
 
@@ -520,6 +523,7 @@ impl Triplestore {
                 self.lazy_exists(
                     inner,
                     solution_mappings,
+                    pushdowns.and_then(|p| p.expression_input.as_ref()),
                     &exists_context,
                     context,
                     parameters,
@@ -684,14 +688,27 @@ impl Triplestore {
 }
 
 impl Triplestore {
-    /// EXISTS evaluated with each incoming solution substituted into the pattern: the
-    /// solutions get a row number, the pattern is evaluated with them as its input, and a
-    /// solution's answer is whether its row number is among the pattern's solutions.
+    /// EXISTS { P } for each incoming solution μ: whether eval(substitute(P, μ)) has a solution
+    /// (SPARQL 1.1 18.6), as a boolean column named `context`.
+    ///
+    /// The answer depends only on the values μ gives the variables P mentions (the keys). P is
+    /// evaluated with the distinct key values as its incoming solutions, and the answers are
+    /// joined back to the solutions on the keys. substitute replaces only the variables μ
+    /// binds: a key that μ leaves unbound (e.g. by OPTIONAL) stays free in P and matches any
+    /// value. So the solutions are split by which keys they leave unbound, among those `input`
+    /// says may be (all if it is not known), and each part is evaluated and joined without them.
+    ///
+    /// Joining on values instead of numbering the solutions lets them be evaluated more than
+    /// once: by P's pushdowns, which collect small incoming solutions to look their values up,
+    /// and by the join. The numbers did not match between two evaluations when the solutions
+    /// came in another order, which needed the solutions collected first. Solutions that may
+    /// change between evaluations are cached and given to P without collecting them.
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn lazy_exists(
         &self,
         inner: &GraphPattern,
         solution_mappings: SolutionMappings,
+        input: Option<&ExpressionInput>,
         exists_context: &Context,
         context: &Context,
         parameters: Option<&HashMap<String, EagerSolutionMappings>>,
@@ -699,40 +716,121 @@ impl Triplestore {
         query_settings: &QuerySettings,
         dataset: &QueryGraph,
     ) -> Result<SolutionMappings, SparqlError> {
-        let mut output_solution_mappings = solution_mappings;
-        output_solution_mappings.mappings = output_solution_mappings
+        let may_change = input.is_none_or(|i| i.may_change);
+        let mut incoming = solution_mappings;
+        let mut inner_pushdowns = pushdowns.cloned().unwrap_or_default();
+        inner_pushdowns.expression_input = None;
+        if may_change {
+            incoming.mappings = incoming.mappings.cache();
+            inner_pushdowns.keep_lazy = true;
+        }
+        let mentioned = mentioned_variable_names(inner);
+        let mut keys: Vec<String> = incoming
+            .rdf_node_types
+            .keys()
+            .filter(|v| mentioned.contains(v.as_str()))
+            .cloned()
+            .collect();
+        keys.sort();
+        let unbound: Vec<String> = keys
+            .iter()
+            .filter(|v| input.is_none_or(|i| i.maybe_unbound.contains(v.as_str())))
+            .cloned()
+            .collect();
+        // The semi and anti joins of FILTER (NOT) EXISTS give the distinct keys alone.
+        let key_columns = incoming
             .mappings
-            .with_row_index(exists_context.as_str(), None);
-        output_solution_mappings.rdf_node_types.insert(
-            exists_context.as_str().to_string(),
-            BaseRDFNodeType::Literal(xsd::UNSIGNED_INT.into_owned(), None)
-                .into_default_input_rdf_node_state(),
+            .clone()
+            .select(keys.iter().map(|k| col(k)).collect::<Vec<_>>());
+        let only_keys = incoming.rdf_node_types.len() == keys.len();
+        let distinct = SolutionMappings::new(
+            if only_keys {
+                key_columns
+            } else {
+                key_columns.unique(None, UniqueKeepStrategy::Any)
+            },
+            keys.iter()
+                .map(|k| (k.clone(), incoming.rdf_node_types.get(k).unwrap().clone()))
+                .collect(),
+            incoming.height_estimate,
         );
-
-        //Workaround for issue in Polars
-        output_solution_mappings.mappings =
-            output_solution_mappings.mappings.collect().unwrap().lazy();
-
-        let SolutionMappings {
-            mappings: exists_lf,
-            rdf_node_types,
-            ..
-        } = self.lazy_graph_pattern(
-            inner,
-            Some(output_solution_mappings.clone()),
-            exists_context,
-            parameters,
-            pushdowns.cloned().unwrap_or(Pushdowns::new()),
-            query_settings,
-            dataset,
-        )?;
-        Ok(exists(
-            output_solution_mappings,
-            exists_lf,
-            rdf_node_types,
-            exists_context,
-            context,
-        )?)
+        let mut parts = vec![];
+        for (condition, unbound_here) in bound_masks(&incoming, &unbound) {
+            // The incoming solutions with this combination of bound and unbound keys keep all
+            // their columns; the keys given to P leave the unbound ones out.
+            let mut solutions = incoming.clone();
+            let mut part_keys = distinct.clone();
+            if let Some(condition) = &condition {
+                solutions.mappings = solutions.mappings.filter(condition.clone());
+                part_keys.mappings = part_keys.mappings.filter(condition.clone());
+            }
+            part_keys.mappings =
+                part_keys
+                    .mappings
+                    .drop(by_name(unbound_here.clone(), true, false));
+            for v in &unbound_here {
+                part_keys.rdf_node_types.remove(v);
+            }
+            let bound_keys: Vec<String> = keys
+                .iter()
+                .filter(|k| !unbound_here.contains(k))
+                .cloned()
+                .collect();
+            let evaluated = self.lazy_graph_pattern(
+                inner,
+                if bound_keys.is_empty() {
+                    None
+                } else {
+                    Some(part_keys)
+                },
+                exists_context,
+                parameters,
+                inner_pushdowns.clone(),
+                query_settings,
+                dataset,
+            )?;
+            let boolean = BaseRDFNodeType::Literal(xsd::BOOLEAN.into_owned(), None)
+                .into_default_input_rdf_node_state();
+            let answers = if bound_keys.is_empty() {
+                // No key is bound here: P has a solution for all of these or for none.
+                SolutionMappings::new(
+                    evaluated
+                        .mappings
+                        .select([len().gt(lit(0)).alias(context.as_str())]),
+                    HashMap::from([(context.as_str().to_string(), boolean.clone())]),
+                    1,
+                )
+            } else {
+                let mut types: HashMap<_, _> = bound_keys
+                    .iter()
+                    .map(|k| (k.clone(), evaluated.rdf_node_types.get(k).unwrap().clone()))
+                    .collect();
+                types.insert(context.as_str().to_string(), boolean.clone());
+                SolutionMappings::new(
+                    evaluated
+                        .mappings
+                        .select(bound_keys.iter().map(|k| col(k)).collect::<Vec<_>>())
+                        .unique(None, UniqueKeepStrategy::Any)
+                        .with_column(lit(true).alias(context.as_str())),
+                    types,
+                    evaluated.height_estimate,
+                )
+            };
+            let mut part = join(
+                solutions,
+                answers,
+                JoinType::Left,
+                self.global_cats.clone(),
+                query_settings.max_rows,
+            )?;
+            part.mappings = part
+                .mappings
+                .with_column(col(context.as_str()).fill_null(lit(false)));
+            part.rdf_node_types
+                .insert(context.as_str().to_string(), boolean);
+            parts.push(part);
+        }
+        Ok(union(parts, false, self.global_cats.clone())?)
     }
 }
 
@@ -790,4 +888,127 @@ pub(crate) fn mentioned_variable_names(gp: &GraphPattern) -> HashSet<String> {
         }
     }
     names
+}
+
+impl Triplestore {
+    /// The distinct key tuples of `keys` (solutions of bound key variables alone) for which
+    /// the pattern has a solution, encoded as in `keys`, for the semi and anti joins of FILTER
+    /// (NOT) EXISTS. They are the key columns of the pattern's solutions with `keys` as its
+    /// incoming solutions: no answer per tuple is joined back, as lazy_exists does. If the
+    /// pattern encodes a key otherwise (e.g. it joined it with values of other dictionaries),
+    /// the answers of lazy_exists are used.
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn lazy_exists_matching_keys(
+        &self,
+        inner: &GraphPattern,
+        keys: SolutionMappings,
+        may_change: bool,
+        exists_context: &Context,
+        context: &Context,
+        parameters: Option<&HashMap<String, EagerSolutionMappings>>,
+        pushdowns: Option<&Pushdowns>,
+        query_settings: &QuerySettings,
+        dataset: &QueryGraph,
+    ) -> Result<LazyFrame, SparqlError> {
+        let mut keys = keys;
+        let mut names: Vec<String> = keys.rdf_node_types.keys().cloned().collect();
+        names.sort();
+        let key_columns: Vec<Expr> = names.iter().map(|k| col(k)).collect();
+        let mut inner_pushdowns = pushdowns.cloned().unwrap_or_default();
+        inner_pushdowns.expression_input = None;
+        if may_change {
+            keys.mappings = keys.mappings.cache();
+            inner_pushdowns.keep_lazy = true;
+        }
+        let evaluated = self.lazy_graph_pattern(
+            inner,
+            Some(keys.clone()),
+            exists_context,
+            parameters,
+            inner_pushdowns,
+            query_settings,
+            dataset,
+        )?;
+        if names
+            .iter()
+            .all(|k| same_encoding(evaluated.rdf_node_types.get(k), keys.rdf_node_types.get(k)))
+        {
+            return Ok(evaluated
+                .mappings
+                .select(key_columns)
+                .unique(None, UniqueKeepStrategy::Any));
+        }
+        let answers = self.lazy_exists(
+            inner,
+            keys,
+            Some(&ExpressionInput {
+                maybe_unbound: HashSet::new(),
+                may_change,
+            }),
+            exists_context,
+            context,
+            parameters,
+            pushdowns,
+            query_settings,
+            dataset,
+        )?;
+        Ok(answers
+            .mappings
+            .filter(col(context.as_str()))
+            .select(key_columns))
+    }
+}
+
+/// Whether two states of a variable have the same types, each encoded the same way, so that
+/// their columns can be joined as they are.
+fn same_encoding(a: Option<&RDFNodeState>, b: Option<&RDFNodeState>) -> bool {
+    let (Some(a), Some(b)) = (a, b) else {
+        return false;
+    };
+    a.map.len() == b.map.len()
+        && a.map.iter().all(|(t, s)| match (s, b.map.get(t)) {
+            (BaseCatState::String, Some(BaseCatState::String))
+            | (BaseCatState::NonString, Some(BaseCatState::NonString))
+            | (
+                BaseCatState::CategoricalNative(None),
+                Some(BaseCatState::CategoricalNative(None)),
+            ) => true,
+            (
+                BaseCatState::CategoricalNative(Some(x)),
+                Some(BaseCatState::CategoricalNative(Some(y))),
+            ) => LockedCats::ptr_eq(x, y),
+            _ => false,
+        })
+}
+
+/// The combinations of bound and unbound values of `vars` in `sm`: a filter for each (`None`
+/// for the only one if `vars` is empty), with the variables it leaves unbound. As
+/// query_processing's split_by_bound, without dropping the columns.
+fn bound_masks(sm: &SolutionMappings, vars: &[String]) -> Vec<(Option<Expr>, Vec<String>)> {
+    if vars.is_empty() {
+        return vec![(None, vec![])];
+    }
+    let is_null: Vec<Expr> = vars
+        .iter()
+        .map(|v| expr_is_null_workaround(col(v), sm.rdf_node_types.get(v).unwrap()))
+        .collect();
+    (0usize..(1 << vars.len()))
+        .map(|mask| {
+            let mut condition: Option<Expr> = None;
+            let mut unbound = vec![];
+            for (i, v) in vars.iter().enumerate() {
+                let c = if mask & (1 << i) != 0 {
+                    is_null[i].clone().not()
+                } else {
+                    unbound.push(v.clone());
+                    is_null[i].clone()
+                };
+                condition = Some(match condition {
+                    Some(condition) => condition.and(c),
+                    None => c,
+                });
+            }
+            (condition, unbound)
+        })
+        .collect()
 }

@@ -33,6 +33,22 @@ pub const OWL_REAL: &str = "http://www.w3.org/2002/07/owl#real";
 pub struct Pushdowns {
     pub variables_values: HashMap<String, HashSet<Term>>,
     pub variables_type_constraints: HashMap<String, PossibleTypes>,
+    /// For the graph patterns of an expression (EXISTS): what is known about the solutions the
+    /// expression is evaluated on, from the pattern that gave them. `None` if nothing is.
+    pub expression_input: Option<ExpressionInput>,
+    /// Use the incoming solutions of a pattern as they are, without collecting them to push
+    /// their values down: they are then evaluated once, within the query's plan.
+    pub keep_lazy: bool,
+}
+
+/// What the pattern that gave some solutions says about them (see [Pushdowns]).
+#[derive(Clone, Debug)]
+pub struct ExpressionInput {
+    /// The variables that may be unbound in some of the solutions.
+    pub maybe_unbound: HashSet<String>,
+    /// Whether evaluating the solutions again may give other values (RAND(), UUID(), BNODE(),
+    /// NOW(), SERVICE or a custom function).
+    pub may_change: bool,
 }
 
 impl Pushdowns {
@@ -53,6 +69,8 @@ impl Pushdowns {
         Pushdowns {
             variables_values: Default::default(),
             variables_type_constraints: Default::default(),
+            expression_input: None,
+            keep_lazy: false,
         }
     }
 }
@@ -73,7 +91,7 @@ impl Pushdowns {
             Some(t) => MEDIUM_HEIGHT.min(t / MEDIUM_TABLE_FACTOR),
             None => MEDIUM_HEIGHT,
         };
-        if sm.height_estimate > CHECK_SMALL_HEIGHT {
+        if self.keep_lazy || sm.height_estimate > CHECK_SMALL_HEIGHT {
             return sm;
         }
         // Variables with more known values than rows of `sm` would be constrained further.

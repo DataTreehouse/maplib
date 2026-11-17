@@ -1,5 +1,9 @@
 # Change log
 
+## Unreleased
+### Bug fixes
+- `EXISTS` and `NOT EXISTS` with a variable that a solution leaves unbound, e.g. from an OPTIONAL, UNION or `VALUES` with `UNDEF`, treated the unbound value as matching nothing, so `?s ex:q ?v OPTIONAL { ?s ex:p ?o } FILTER NOT EXISTS { ?o ex:r ?s }` kept solutions whose `?o` is unbound although `?o ex:r ?s` has a solution. SPARQL 1.1 substitutes only the variables a solution binds, so an unbound variable stays free in the pattern and matches any value; the solutions are now split by which of the pattern's variables they leave unbound, and each part is evaluated without them. EXISTS no longer collects its incoming solutions to number them, which kept them all in memory: it is answered for the distinct values of the variables the pattern mentions and joined back on them, within the query's plan
+
 ## v0.23.0
 ### Breaking changes
 - `Model.reason(profile, ...)` (maplib Enterprise Edition) is now `Model.infer(profile=..., ...)`, with the same parameters (`graph`, `target_graph`, `include_graphs`, `max_violations`, `max_rows`), and still returns a `ReasoningResult`. `Model.infer` takes either `rulesets` or `profile`, and raises if it gets both or neither, or `target_graph` or `max_violations` with rulesets. `Model.reason` is removed. In Rust, `Model::reason` is unchanged
