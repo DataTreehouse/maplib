@@ -141,9 +141,17 @@ pub fn cast_literal(
 ) -> Expr {
     // Dictionary-encoded values are decoded to their lexical forms first. Only xsd:string and
     // durations were decoded, so a literal of another dictionary-encoded datatype, such as
-    // "5389.96"^^bsbm:USD, was cast from its code: xsd:string() gave "1795".
-    if !src_bt.is_lang_string() {
-        c = maybe_decode_expr(c, src_bt, src_bs, global_cats);
+    // "5389.96"^^bsbm:USD, was cast from its code: xsd:string() gave "1795". For a
+    // language-tagged string, `c` is its value (see xsd_cast_literal).
+    c = maybe_decode_expr(c, src_bt, src_bs, global_cats);
+    if src_bt.is_lang_string() {
+        // A language-tagged string casts to xsd:string, its lexical form, and to nothing else
+        // (SPARQL 1.1 17.5): any other cast is an error, which leaves the result unbound.
+        return if trg == xsd::STRING {
+            c.cast(DataType::String)
+        } else {
+            null_of(trg_type)
+        };
     }
     if trg == xsd::STRING {
         // Same lexical form as STR(), e.g. without padding zeros on decimals

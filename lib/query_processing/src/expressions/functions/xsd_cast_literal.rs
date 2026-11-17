@@ -9,7 +9,7 @@ use polars::prelude::{
 };
 use representation::cats::LockedCats;
 use representation::solution_mapping::BaseCatState;
-use representation::{BaseRDFNodeType, RDFNodeState};
+use representation::{BaseRDFNodeType, RDFNodeState, LANG_STRING_VALUE_FIELD};
 use std::collections::HashMap;
 
 /// Whether `nn(x)` is a cast to an XSD datatype (SPARQL 1.1 17.5).
@@ -161,7 +161,13 @@ pub fn xsd_cast_literal(
             }
             BaseRDFNodeType::BlankNode => Ok(lit(LiteralValue::untyped_null()).cast(trg_type)),
             BaseRDFNodeType::Literal(src_nn, _) => Ok(cast_literal(
-                col(c),
+                // A language-tagged string is a struct of its value and its language; its value
+                // is cast. In a column of several types, above, the value is a field of its own.
+                if t.is_lang_string() {
+                    col(c).struct_().field_by_name(LANG_STRING_VALUE_FIELD)
+                } else {
+                    col(c)
+                },
                 t,
                 s,
                 global_cats.clone(),
