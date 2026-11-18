@@ -326,20 +326,22 @@ impl Triplestore {
                     .collect();
                 if !keys.is_empty() && keys.iter().all(|k| certain.contains(k)) {
                     keys.sort();
-                    exists_joins.push((pattern, negated, keys));
+                    let exists_expression_context =
+                        exists_expression_context(expression, c, negated, &expression_context);
+                    exists_joins.push((pattern, negated, keys, exists_expression_context));
                     continue;
                 }
             }
             residual_conjuncts.push(c);
         }
-        for (pattern, negated, keys) in exists_joins {
+        for (pattern, negated, keys, exists_expression_context) in exists_joins {
             output_solution_mappings = self.lazy_exists_join(
                 output_solution_mappings,
                 inner,
                 pattern,
                 negated,
                 &keys,
-                &expression_context,
+                &exists_expression_context,
                 parameters,
                 expression_pushdowns.as_ref(),
                 query_settings,
@@ -435,6 +437,8 @@ impl Triplestore {
         let Some((i, pattern, negated, left_keys, right_keys)) = found else {
             return Ok(None);
         };
+        let exists_expression_context =
+            exists_expression_context(expression, conjuncts[i], negated, expression_context);
         conjuncts.remove(i);
 
         // Each side is read twice, for its keys and for the join. It is evaluated twice, which
@@ -488,8 +492,8 @@ impl Triplestore {
             pattern,
             pairs.clone(),
             may_change,
-            &expression_context.extension_with(PathEntry::Exists),
-            expression_context,
+            &exists_expression_context.extension_with(PathEntry::Exists),
+            &exists_expression_context,
             parameters,
             expression_pushdowns,
             query_settings,
@@ -655,6 +659,37 @@ pub(crate) fn pushdowns_for_expression(
         })
     };
     pushdowns
+}
+
+/// The context that lazy_expression gives the EXISTS of `conjunct`, a conjunct of the filter
+/// `expression` evaluated at `expression_context`: the AndLeft and AndRight entries down to it,
+/// then Not for NOT EXISTS. The pattern is evaluated at this context extended with Exists, as
+/// lazy_expression evaluates it, so that what was prepared for the pattern at that context (the
+/// virtualized queries of chrontext) is found.
+fn exists_expression_context(
+    expression: &Expression,
+    conjunct: &Expression,
+    negated: bool,
+    expression_context: &Context,
+) -> Context {
+    fn path_to(e: &Expression, target: &Expression, context: &Context) -> Option<Context> {
+        if std::ptr::eq(e, target) {
+            return Some(context.clone());
+        }
+        if let Expression::And(left, right) = e {
+            path_to(left, target, &context.extension_with(PathEntry::AndLeft))
+                .or_else(|| path_to(right, target, &context.extension_with(PathEntry::AndRight)))
+        } else {
+            None
+        }
+    }
+    let context = path_to(expression, conjunct, expression_context)
+        .unwrap_or_else(|| expression_context.clone());
+    if negated {
+        context.extension_with(PathEntry::Not)
+    } else {
+        context
+    }
 }
 
 /// The pattern of `EXISTS { pattern }` (false) or `NOT EXISTS { pattern }` (true).

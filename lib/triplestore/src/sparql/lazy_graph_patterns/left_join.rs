@@ -3,7 +3,7 @@ use super::Triplestore;
 use crate::sparql::errors::SparqlError;
 use tracing::{instrument, trace};
 
-use super::filter::uses_variables_out_of_scope;
+use super::filter::{pushdowns_for_expression, uses_variables_out_of_scope};
 use super::join::maybe_unbound_variables;
 use crate::sparql::QuerySettings;
 use oxrdf::Variable;
@@ -66,6 +66,12 @@ impl Triplestore {
         let left_context = context.extension_with(PathEntry::LeftJoinLeftSide);
         let right_context = context.extension_with(PathEntry::LeftJoinRightSide);
         let expression_context = context.extension_with(PathEntry::LeftJoinExpression);
+        // The incoming variables, for what the EXISTS of the expression may see unbound.
+        let expression_incoming = if expression.as_ref().is_some_and(contains_graph_pattern) {
+            solution_mappings.clone()
+        } else {
+            None
+        };
         let left_solution_mappings = self.lazy_graph_pattern(
             left,
             solution_mappings,
@@ -86,10 +92,8 @@ impl Triplestore {
             pushdowns.add_filter_variable_pushdowns(expr, None);
             if contains_graph_pattern(expr) {
                 // The condition is evaluated on the right side's solutions or on the merged
-                // ones, so which variables may be unbound is not known here.
-                let mut expression_pushdowns = pushdowns.clone();
-                expression_pushdowns.expression_input = None;
-                Some(expression_pushdowns)
+                // ones; which variables may be unbound in them is set below.
+                Some(pushdowns.clone())
             } else {
                 None
             }
@@ -115,6 +119,9 @@ impl Triplestore {
         } else {
             (left_solution_mappings, None)
         };
+        let right_expression_pushdowns = expression_pushdowns
+            .as_ref()
+            .map(|p| pushdowns_for_expression(p, right, right_incoming.as_ref(), parameters));
         let mut right_solution_mappings = self.lazy_graph_pattern(
             right,
             right_incoming,
@@ -138,23 +145,34 @@ impl Triplestore {
                         .rdf_node_types
                         .contains_key(v.as_str())
             }) {
+                let merged = GraphPattern::Join {
+                    left: Box::new(left.clone()),
+                    right: Box::new(right.clone()),
+                };
+                let merged_expression_pushdowns = expression_pushdowns.as_ref().map(|p| {
+                    pushdowns_for_expression(p, &merged, expression_incoming.as_ref(), parameters)
+                });
                 return self.left_join_filtering_merged_solutions(
                     left_solution_mappings,
                     right_solution_mappings,
                     expr,
                     &expression_context,
                     parameters,
-                    expression_pushdowns.as_ref(),
+                    merged_expression_pushdowns.as_ref(),
                     query_settings,
                     dataset,
                 );
             }
+            // Without these, every variable the EXISTS patterns share with the solutions would
+            // count as maybe unbound, and each pattern would be evaluated once for the bound and
+            // once for the unbound values, at the same context (which chrontext prepares for one
+            // evaluation).
             right_solution_mappings = self.filter_on_expression(
                 right_solution_mappings,
                 expr,
                 &expression_context,
                 parameters,
-                expression_pushdowns.as_ref(),
+                right_expression_pushdowns.as_ref(),
                 query_settings,
                 dataset,
             )?;
