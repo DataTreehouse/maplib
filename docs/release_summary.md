@@ -1,3 +1,7 @@
+# What's new in v0.23.1
+
+A fix release for v0.23.0: `FILTER (NOT) EXISTS` over virtualized time series (maplib Enterprise Edition) works again, and the Linux wheels that were missing from PyPI for v0.23.0 are published. See [CHANGES.md](../CHANGES.md).
+
 # What's new in v0.23.0
 
 A short guide to v0.23.0, which adds features and fixes to v0.22.1 and changes some APIs (see Breaking changes). Features marked **EE** need [maplib Enterprise Edition](../README.md#open-source-and-enterprise-edition); everything else is in the open-source core. [CHANGES.md](../CHANGES.md) has the full details, [API_USAGE.md](../API_USAGE.md) has worked examples, and the [documentation site](https://datatreehouse.github.io/maplib/) has both with the API reference.
