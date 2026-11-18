@@ -2,7 +2,7 @@ use super::Triplestore;
 use crate::errors::TriplestoreError;
 use oxrdf::{GraphName, NamedNode};
 use oxrdfio::{RdfFormat, RdfSerializer};
-use polars::prelude::{by_name, col};
+use polars::prelude::{by_name, col, IdxSize, LazyFrame};
 use polars_core::datatypes::DataType;
 use polars_core::frame::DataFrame;
 use polars_core::runtime::THREAD_POOL;
@@ -24,6 +24,29 @@ mod pretty_turtle;
 mod serializers;
 
 const CHUNK_SIZE: usize = 1_024;
+/// Rows of a table that are decoded at a time when it is written triple by triple, so that only
+/// a part of a large table is held as strings or terms.
+const WRITE_SLICE_ROWS: usize = 64 * 1024;
+
+/// The lazy frame in slices of WRITE_SLICE_ROWS rows, in order. The last slice has no end, so
+/// no rows are lost if `height` is too low.
+fn row_slices(lf: LazyFrame, height: usize) -> impl Iterator<Item = (LazyFrame, usize)> {
+    let n = height.div_ceil(WRITE_SLICE_ROWS).max(1);
+    (0..n).map(move |i| {
+        let offset = i * WRITE_SLICE_ROWS;
+        if i + 1 == n {
+            (
+                lf.clone().slice(offset as i64, IdxSize::MAX),
+                height.saturating_sub(offset),
+            )
+        } else {
+            (
+                lf.clone().slice(offset as i64, WRITE_SLICE_ROWS as IdxSize),
+                WRITE_SLICE_ROWS,
+            )
+        }
+    })
+}
 
 impl Triplestore {
     pub fn write_triples<W: Write>(
@@ -62,7 +85,11 @@ impl Triplestore {
                             (OBJECT_COL_NAME.to_string(), object_type.clone()),
                         ])
                     };
-                    for (mut lf, height) in tt.get_lazy_frames(&None, &None)? {
+                    let slices = tt
+                        .get_lazy_frames(&None, &None)?
+                        .into_iter()
+                        .flat_map(|(lf, height)| row_slices(lf, height));
+                    for (mut lf, height) in slices {
                         lf = lf.with_columns([
                             maybe_decode_complex_expr(
                                 col(SUBJECT_COL_NAME),
@@ -121,7 +148,11 @@ impl Triplestore {
 
             for (predicate, df_map) in self.graph_triples_map.get(graph).unwrap() {
                 for ((subject_type, object_type), tt) in df_map {
-                    for (lf, height) in tt.get_lazy_frames(&None, &None)? {
+                    let slices = tt
+                        .get_lazy_frames(&None, &None)?
+                        .into_iter()
+                        .flat_map(|(lf, height)| row_slices(lf, height));
+                    for (lf, height) in slices {
                         let triples = global_df_as_triples(
                             collect_sized(lf, height).map_err(TriplestoreError::LazyLoadError)?,
                             subject_type.clone(),
@@ -202,7 +233,11 @@ impl Triplestore {
             let graph_name = GraphName::from(graph);
             for (predicate, df_map) in self.graph_triples_map.get(graph).unwrap() {
                 for ((subject_type, object_type), tt) in df_map {
-                    for (lf, height) in tt.get_lazy_frames(&None, &None)? {
+                    let slices = tt
+                        .get_lazy_frames(&None, &None)?
+                        .into_iter()
+                        .flat_map(|(lf, height)| row_slices(lf, height));
+                    for (lf, height) in slices {
                         let triples = global_df_as_triples(
                             collect_sized(lf, height).map_err(TriplestoreError::LazyLoadError)?,
                             subject_type.clone(),

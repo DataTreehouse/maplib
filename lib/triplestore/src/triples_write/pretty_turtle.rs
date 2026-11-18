@@ -19,11 +19,22 @@ use spargebra::Query;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::io::Write;
 use std::sync::{Arc, LazyLock};
+use utils::polars::collect_in_memory;
 
 mod jsonld;
 mod rdfxml;
 
+/// The most dictionary strings in a segment of subjects (a string range that is made into
+/// blocks by one thread).
 const STRIDE: usize = 20_000;
+/// The fewest dictionary strings in a segment, so that the fixed cost of a segment (a lookup and
+/// a collect per table) stays small next to its triples.
+const MIN_STRIDE: usize = 256;
+/// About this many triples are made into blocks at a time, over all threads. The blocks of a
+/// triple take a few hundred bytes until they are written, so this bounds the memory of the
+/// writer whatever the size of the graph. The whole batch of segments used to be as large as
+/// the number of threads times STRIDE, which for most graphs is all of it.
+const TRIPLES_IN_FLIGHT: usize = 64 * 1024;
 
 /// Threads for the pretty writer's own parallelism, separate from polars' and rayon's global pools
 /// (see write_pretty).
@@ -749,19 +760,40 @@ impl Triplestore {
             // collects) that need free rayon workers. Running it on polars' pool or rayon's global
             // pool deadlocks when all their threads are blocked in this loop, so it gets its own.
             let n_threads = PRETTY_WRITER_POOL.current_num_threads();
-            let mut spaced_strings = self
-                .global_cats
-                .read()?
-                .get_spaced_strings(STRIDE, &subject_type);
+            let n_triples: usize = map
+                .values()
+                .flat_map(|m| m.iter())
+                .filter(|((s, _), _)| s.is_iri() == is_iri)
+                .map(|(_, t)| t.len())
+                .sum();
+            let mut spaced_strings = {
+                let cats = self.global_cats.read()?;
+                let spaced = cats.get_spaced_strings(STRIDE, &subject_type);
+                let stride = segment_stride(n_triples, spaced.len(), n_threads);
+                if stride < STRIDE {
+                    cats.get_spaced_strings(stride, &subject_type)
+                } else {
+                    spaced
+                }
+            };
             spaced_strings.reverse();
+            // The triples per segment seen so far, which decide how many segments are made into
+            // blocks at a time: the segments of a dense part of the dictionary hold more triples
+            // than the average the stride is chosen by.
+            let (mut seen_triples, mut seen_segments) = (0usize, 0usize);
             while !spaced_strings.is_empty() {
                 let use_used_subjects = if is_iri {
                     &used_iri_subjects
                 } else {
                     &used_blank_subjects
                 };
-                let mut thread_strings = Vec::with_capacity(n_threads);
-                for _ in 0..n_threads {
+                let n_segments = if seen_triples == 0 {
+                    n_threads
+                } else {
+                    (TRIPLES_IN_FLIGHT * seen_segments / seen_triples).clamp(1, n_threads)
+                };
+                let mut thread_strings = Vec::with_capacity(n_segments);
+                for _ in 0..n_segments {
                     if !spaced_strings.is_empty() {
                         thread_strings.push(spaced_strings.pop().unwrap());
                     }
@@ -786,6 +818,13 @@ impl Triplestore {
                 });
 
                 let r = r?;
+                seen_segments += r.len();
+                seen_triples += r
+                    .iter()
+                    .flat_map(|m| m.values())
+                    .flat_map(|b| b.pred_term_map.values())
+                    .map(|v| v.len())
+                    .sum::<usize>();
 
                 let written: Result<(Vec<_>, Vec<_>), TriplestoreError> = PRETTY_WRITER_POOL
                     .install(|| {
@@ -890,7 +929,9 @@ impl Triplestore {
                     string_ends,
                     self.global_cats.clone(),
                 )? {
-                    let other_df = lf.collect().unwrap();
+                    // A few small slices: the in-memory engine, as the streaming engine's fixed
+                    // cost per collect would dominate.
+                    let other_df = collect_in_memory(lf).unwrap();
                     update_blocks_map(
                         &mut blocks_map,
                         &other_df,
@@ -1276,6 +1317,19 @@ impl Triplestore {
         }
         Ok((zero_out_set, out_one))
     }
+}
+
+/// The number of dictionary strings per segment, so that a batch of `n_threads` segments holds
+/// about TRIPLES_IN_FLIGHT triples. `n_ranges` is the number of segments at STRIDE strings each.
+/// The triples are assumed to be spread evenly over the dictionary; where they are not, the
+/// number of segments per batch is lowered as the writer goes.
+fn segment_stride(n_triples: usize, n_ranges: usize, n_threads: usize) -> usize {
+    if n_triples == 0 || n_ranges == 0 {
+        return STRIDE;
+    }
+    let per_segment = (TRIPLES_IN_FLIGHT / n_threads.max(1)).max(1);
+    let per_range = n_triples.div_ceil(n_ranges);
+    (STRIDE.saturating_mul(per_segment) / per_range).clamp(MIN_STRIDE, STRIDE)
 }
 
 /// Returns the nodes of `nodes` that lie on a cycle when following `parent` edges, where the

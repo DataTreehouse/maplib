@@ -244,3 +244,52 @@ def test_pretty_writers_keep_malformed_lists(data, format):
     ORDER BY ?v
     """
     assert m2.query(lists)["v"].to_list() == m.query(lists)["v"].to_list()
+
+
+def _segmented_turtle(n):
+    """Turtle with more subjects than one segment of the pretty writer, each with nested blank
+    nodes, a list, a shared blank node and a language string."""
+    out = ["@prefix ex: <http://example.org/> ."]
+    for i in range(n):
+        out.append(
+            f'ex:s{i:06d} ex:addr [ ex:no {i} ; ex:inner [ ex:z "y{i % 13}" ] ] ; '
+            f'ex:list ( ex:a "b{i % 5}" {i % 11} ) ; ex:shared _:sh{i // 2} ; ex:lbl "l {i}"@en .'
+        )
+        out.append(f"_:sh{i // 2} ex:val {i // 2} .")
+    return "\n".join(out)
+
+
+@pytest.mark.parametrize("format", ["turtle", "rdf/xml", "json-ld"])
+def test_pretty_writers_many_segments(format):
+    """The pretty writers make blocks a few segments at a time: the subjects are written once
+    each, in order, and the graph survives a round trip."""
+    n = 30_000
+    m = Model()
+    m.reads(_segmented_turtle(n), format="turtle")
+    out = m.writes(format=format)
+    m2 = Model()
+    m2.reads(out, format=format)
+    count = "SELECT (COUNT(*) AS ?n) WHERE { ?s ?p ?o }"
+    assert m2.query(count)["n"][0] == m.query(count)["n"][0]
+    if format == "turtle":
+        subjects = [
+            l.split(" ", 1)[0] for l in out.splitlines() if l.startswith("<http://example.org/s")
+        ]
+        assert len(subjects) == n
+        assert subjects == sorted(subjects)
+
+
+@pytest.mark.parametrize("format", ["ntriples", "nquads", "trig"])
+def test_line_writers_tables_over_one_slice(format):
+    """Tables larger than the rows decoded at a time are written whole, in order."""
+    n = 150_000
+    m = Model()
+    nt = "\n".join(f"<http://example.org/s{i}> <http://example.org/p> \"{i}\" ." for i in range(n))
+    m.reads(nt, format="ntriples")
+    out = m.writes(format=format)
+    m2 = Model()
+    m2.reads(out, format=format)
+    q = "SELECT (COUNT(DISTINCT ?o) AS ?n) WHERE { ?s ?p ?o }"
+    assert m2.query(q)["n"][0] == n
+    if format == "ntriples":
+        assert out.count("\n") == n

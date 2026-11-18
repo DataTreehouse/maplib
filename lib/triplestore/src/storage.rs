@@ -727,14 +727,15 @@ impl TriplesSegment {
             let subjects_start = global_cats
                 .read()?
                 .decode_of_type(
-                    lf_subj
-                        .clone()
-                        .slice(from_i as i64, (OFFSET_STEP * 2) as u32)
-                        .collect()
-                        .unwrap()
-                        .column(SUBJECT_COL_NAME)
-                        .unwrap()
-                        .as_materialized_series(),
+                    collect_in_memory(
+                        lf_subj
+                            .clone()
+                            .slice(from_i as i64, (OFFSET_STEP * 2) as u32),
+                    )
+                    .unwrap()
+                    .column(SUBJECT_COL_NAME)
+                    .unwrap()
+                    .as_materialized_series(),
                     subject_type,
                     None,
                 )
@@ -745,9 +746,7 @@ impl TriplesSegment {
             let subjects_end = global_cats
                 .read()?
                 .decode_of_type(
-                    lf_subj
-                        .slice(to_i as i64, (OFFSET_STEP * 2 + 1) as u32)
-                        .collect()
+                    collect_in_memory(lf_subj.slice(to_i as i64, (OFFSET_STEP * 2 + 1) as u32))
                         .unwrap()
                         .column(SUBJECT_COL_NAME)
                         .unwrap()
@@ -794,7 +793,7 @@ impl TriplesSegment {
                 return Ok(None);
             }
 
-            let ret = lf.slice(from_i as i64, height as u32).collect().unwrap();
+            let ret = collect_in_memory(lf.slice(from_i as i64, height as u32)).unwrap();
             Ok(Some(ret))
         } else {
             Ok(None)
