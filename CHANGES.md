@@ -7,6 +7,7 @@
 ### Performance
 - A small `DELETE DATA` (or a DELETE that removes few triples) takes time in proportion to the triples it deletes instead of to the size of their tables: the rows are found through the subject and object indices and cut out in place, instead of an anti-join, a sort and a rebuild of the whole table. Deleting one triple from a model of 1.4M triples takes about 2 ms in memory, hybrid and disk storage, down from 16, 41 and 52 ms, and no longer grows with the model
 - Writing Turtle, RDF/XML and JSON-LD keeps a bounded number of triples (about 64k) in memory at a time instead of the dictionary strings of the whole graph, and N-Triples, N-Quads and TriG are written from slices of each table. Writing 117 MB of N-Triples as Turtle peaks at 68 MB above the model instead of 587 MB. The output is the same
+- Reading files with many predicates has no fixed cost per predicate: string columns are built without polars' minimum reservation per parser thread and predicate, the builders of the threads are appended per table, and deduplication is eager. Reading a file with 2,000 predicates keeps 204 MB instead of 507 MB (139 MB for the same triples with 4 predicates), and is 2.3 to 3.4 times faster
 
 ## v0.23.0
 ### Breaking changes
