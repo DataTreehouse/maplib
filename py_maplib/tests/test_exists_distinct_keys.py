@@ -25,6 +25,7 @@ import json
 import subprocess
 import sys
 import textwrap
+import threading
 import time
 from collections import Counter
 from decimal import Decimal
@@ -93,6 +94,8 @@ CHILD = textwrap.dedent(
     """
 )
 
+# The child builds the model in about a second; it is killed if not ready after this.
+READY_TIMEOUT_S = 300
 # The child is killed above this.
 HARD_CEILING_MB = 1500
 # The query's peak above the model's memory (macOS physical footprint). Per incoming solution it
@@ -153,7 +156,20 @@ def test_bsbm_bi4_not_exists_answers_and_memory():
         stderr=subprocess.STDOUT,
         text=True,
     )
-    line = p.stdout.readline().strip()
+    # Read on a thread, so that a child that never gets ready fails the test with its output
+    # instead of blocking the run (CI cancels it after 90 minutes without saying where).
+    first = []
+    reader = threading.Thread(target=lambda: first.append(p.stdout.readline()), daemon=True)
+    reader.start()
+    reader.join(READY_TIMEOUT_S)
+    if not first:
+        p.kill()
+        reader.join(10)
+        out = first[0] if first else ""
+        if not reader.is_alive():
+            out += p.stdout.read()
+        pytest.fail(f"the child was not ready after {READY_TIMEOUT_S} s:\n{out}")
+    line = first[0].strip()
     assert line == "ready", line + p.stdout.read()
     time.sleep(0.2)
     base = _footprint_mb(p.pid)
