@@ -57,5 +57,7 @@ jobs:
         run: |
           source ../.venv/bin/activate
           python fetch_hdt_reference.py
-          pytest -v
+          # A test still running after 10 minutes prints every thread's stack, even while one
+          # holds the GIL, so a hung run says where it is stuck before it is cancelled.
+          pytest -v -o faulthandler_timeout=600
         working-directory: ./py_maplib/tests
