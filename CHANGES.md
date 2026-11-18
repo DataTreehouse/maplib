@@ -4,6 +4,8 @@
 ### Bug fixes
 - maplib Enterprise Edition: `FILTER EXISTS` and `FILTER NOT EXISTS` over virtualized time series (chrontext) failed with "Parts of the query were not evaluated" or, for an EXISTS in the condition of an OPTIONAL, gave wrong results, since v0.23.0. The EXISTS pattern is again evaluated where the virtualized parts of the query are found, and only once
 - The source distribution of v0.23.0 left out the vendored `oxttl` and `sparesults` crates, so the Linux wheels could not be built and are missing from PyPI for v0.23.0; v0.23.1 has wheels for every platform
+### Performance
+- A small `DELETE DATA` (or a DELETE that removes few triples) takes time in proportion to the triples it deletes instead of to the size of their tables: the rows are found through the subject and object indices and cut out in place, instead of an anti-join, a sort and a rebuild of the whole table. Deleting one triple from a model of 1.4M triples takes about 2 ms in memory, hybrid and disk storage, down from 16, 41 and 52 ms, and no longer grows with the model
 
 ## v0.23.0
 ### Breaking changes
