@@ -3,6 +3,7 @@
 ## Unreleased
 ### Performance
 - maplib Enterprise Edition: hybrid and disk storage keep their dictionaries out of memory. A 64-bit hash of each string replaces the unique index on the strings, new strings are appended in 64 MiB chunks, DuckDB's blocks are released after bulk merges, and the cache of recent strings is bounded in bytes and skips bulk lookups. After reading 800k strings, maplib and DuckDB hold 56 MB instead of 273 MB in hybrid storage (about a quarter of memory storage), the process keeps about 0.7 to 0.9 GB instead of 2 GB, and the read takes 1.8 s instead of 4.2 s. Dictionaries written by v0.23.1 or earlier keep their string index until `compact()` rebuilds them. With the cache turned off, lookups of single strings are about 0.1 ms slower
+- Dropping a model gives its memory back to the operating system: the allocator's freed pages are purged when a `Model` is dropped, instead of staying resident until the allocator is used again. Loading and dropping a model eight times now keeps about 90 MB after each drop instead of growing from 217 to 329 MB. On platforms that use mimalloc instead of jemalloc nothing changes
 
 ## v0.23.1
 ### Bug fixes
