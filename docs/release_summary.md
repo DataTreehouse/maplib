@@ -1,6 +1,6 @@
 # What's new in v0.23.1
 
-A fix release for v0.23.0: `FILTER (NOT) EXISTS` over virtualized time series (maplib Enterprise Edition) works again, and the Linux wheels that were missing from PyPI for v0.23.0 are published. See [CHANGES.md](../CHANGES.md).
+A fix release for v0.23.0: `FILTER (NOT) EXISTS` over virtualized time series (maplib Enterprise Edition) works again, and the Linux wheels that were missing from PyPI for v0.23.0 are published. It also uses less memory and time in three places: a small `DELETE DATA` no longer takes time in proportion to the model (about 2 ms for one triple in a model of 1.4M triples, in every storage mode), writing Turtle, RDF/XML and JSON-LD no longer holds the whole output in memory (68 MB instead of 587 MB above the model for 117 MB of N-Triples), and reading files with many predicates has no fixed cost per predicate (204 MB instead of 507 MB for 2,000 predicates, and 2 to 3 times faster). See [CHANGES.md](../CHANGES.md).
 
 # What's new in v0.23.0
 
