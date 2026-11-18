@@ -4,7 +4,6 @@ use super::Triplestore;
 use crate::errors::TriplestoreError;
 use crate::{NewTriples, TriplesToAdd};
 use std::cmp;
-use utils::polars::collect_in_memory;
 
 use cimxml_import::{fix_cim_quad, Remapper};
 use memmap2::MmapOptions;
@@ -17,7 +16,7 @@ use oxttl::nquads::SliceNQuadsParser;
 use oxttl::ntriples::SliceNTriplesParser;
 use oxttl::turtle::SliceTurtleParser;
 use oxttl::{NQuadsParser, NTriplesParser, TurtleParser};
-use polars::prelude::{concat, DataFrame, IntoLazy, UnionArgs};
+use polars::prelude::DataFrame;
 use polars_core::prelude::IntoColumn;
 use rayon::iter::ParallelIterator;
 use rayon::prelude::IntoParallelIterator;
@@ -309,15 +308,13 @@ impl Triplestore {
             }
             readers = updated_readers;
 
-            let mut all_builders: Vec<(
-                NamedGraph,
-                NamedNode,
-                BaseRDFNodeType,
-                BaseRDFNodeType,
-                SeriesBuilder,
-                SeriesBuilder,
-            )> = Vec::new();
-
+            // The builders of the same graph, predicate and types from all readers are
+            // appended to each other below, so each table is built from one pair of columns
+            // rather than from a frame per reader that is then concatenated.
+            let mut grouped: HashMap<
+                (NamedGraph, NamedNode, BaseRDFNodeType, BaseRDFNodeType),
+                Vec<(SeriesBuilder, SeriesBuilder)>,
+            > = HashMap::new();
             for map in predicate_maps.into_iter() {
                 for (gr, pred_map) in map {
                     let use_graph = if matches!(graph, NamedGraph::DefaultGraph) {
@@ -329,14 +326,8 @@ impl Triplestore {
                         let pred_nn = NamedNode::new_unchecked(pred);
                         for (subj, bot) in bst {
                             for (obj, (subjects, objects)) in bot {
-                                all_builders.push((
-                                    use_graph.clone(),
-                                    pred_nn.clone(),
-                                    subj.clone(),
-                                    obj.clone(),
-                                    subjects,
-                                    objects,
-                                ));
+                                let k = (use_graph.clone(), pred_nn.clone(), subj.clone(), obj);
+                                grouped.entry(k).or_default().push((subjects, objects));
                             }
                         }
                     }
@@ -348,10 +339,16 @@ impl Triplestore {
             );
 
             let start_tripleproc_now = Instant::now();
-            let triples_to_add: Vec<_> = all_builders
+            let ttas: Vec<_> = grouped
                 .into_par_iter()
                 .map(
-                    |(graph, predicate, subject_type, object_type, subjects, objects)| {
+                    |((graph, predicate, subject_type, object_type), builders)| {
+                        let mut builders = builders.into_iter();
+                        let (mut subjects, mut objects) = builders.next().unwrap();
+                        for (s, o) in builders {
+                            subjects.append(s);
+                            objects.append(o);
+                        }
                         let l = subjects.len();
                         let df = DataFrame::new(
                             l,
@@ -363,73 +360,16 @@ impl Triplestore {
                         .unwrap();
                         TriplesToAdd {
                             df,
-                            subject_type: subject_type.clone(),
-                            object_type: object_type.clone(),
+                            subject_cat_state: subject_type.default_input_cat_state(),
+                            object_cat_state: object_type.default_input_cat_state(),
+                            subject_type,
+                            object_type,
                             predicate: Some(predicate),
                             graph,
-                            subject_cat_state: subject_type.default_input_cat_state(),
                             predicate_cat_state: None,
-                            object_cat_state: subject_type.default_input_cat_state(),
                         }
                     },
                 )
-                .collect();
-
-            let mut tta_map = HashMap::new();
-            for triple in triples_to_add.into_iter() {
-                let k = (
-                    triple.graph.clone(),
-                    triple.predicate.clone(),
-                    triple.subject_type.clone(),
-                    triple.object_type.clone(),
-                );
-                if !tta_map.contains_key(&k) {
-                    tta_map.insert(k.clone(), Vec::new());
-                }
-                tta_map.get_mut(&k).unwrap().push(triple);
-            }
-
-            let ttas: Vec<_> = tta_map
-                .into_par_iter()
-                .map(|(k, mut ttas)| {
-                    if ttas.len() == 1 {
-                        ttas.pop().unwrap()
-                    } else {
-                        let (graph, predicate, subject_type, object_type) = k;
-                        let mut lfs = Vec::with_capacity(ttas.len());
-                        for tta in ttas {
-                            lfs.push(tta.df.lazy());
-                        }
-                        let df = collect_in_memory(
-                            concat(
-                                lfs,
-                                UnionArgs {
-                                    parallel: true,
-                                    rechunk: false,
-                                    to_supertypes: false,
-                                    diagonal: false,
-                                    strict: false,
-                                    from_partitioned_ds: false,
-                                    maintain_order: false,
-                                },
-                            )
-                            .unwrap(),
-                        )
-                        .unwrap();
-                        let subject_cat_state = subject_type.default_input_cat_state();
-                        let object_cat_state = object_type.default_input_cat_state();
-                        TriplesToAdd {
-                            df,
-                            subject_type,
-                            object_type,
-                            predicate,
-                            graph,
-                            subject_cat_state,
-                            object_cat_state,
-                            predicate_cat_state: None,
-                        }
-                    }
-                })
                 .collect();
 
             debug!(

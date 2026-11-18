@@ -36,8 +36,8 @@ use vector::VectorIndex;
 use oxrdf::vocab::{rdf, rdfs};
 use oxrdf::NamedNode;
 use polars::prelude::{
-    as_struct, col, lit, AnyValue, DataFrame, Expr, IntoLazy, PlSmallStr, RankMethod,
-    RankOptions,
+    as_struct, col, lit, AnyValue, BooleanChunked, ChunkCompareEq, DataFrame, Expr, IntoLazy,
+    PlSmallStr, PolarsError, RankMethod, RankOptions, SeriesRank,
 };
 use polars_core::frame::column::ScalarColumn;
 use polars_core::prelude::IntoSeries;
@@ -1303,6 +1303,17 @@ pub fn add_rank_sort_triples(
     assert!(subject_local_cat_uuid.is_none());
     assert!(object_local_cat_uuid.is_none());
 
+    if !subj_type.is_lang_string() && !obj_type.is_lang_string() {
+        let df = rank_sort_deduplicate_eager(df, subj_type, obj_type, &global_cats)?;
+        return Ok(EncodedTriples {
+            df,
+            subject,
+            subject_local_cat_uuid,
+            object,
+            object_local_cat_uuid,
+        });
+    }
+
     let subj_rank_expr = create_rank_expr(&df, SUBJECT_COL_NAME, subj_type, global_cats.clone())?
         .alias(SUBJECT_RANK_COL_NAME);
     let obj_rank_expr = create_rank_expr(&df, OBJECT_COL_NAME, obj_type, global_cats.clone())?
@@ -1336,6 +1347,76 @@ pub fn add_rank_sort_triples(
         object,
         object_local_cat_uuid,
     })
+}
+
+/// Adds the rank columns, sorts by them and removes repeated triples, as the lazy version in
+/// [`add_rank_sort_triples`] does, with eager operations. Every table read or added goes
+/// through here, and planning a lazy query for each costs many allocations, which dominated
+/// loading models with thousands of predicates.
+fn rank_sort_deduplicate_eager(
+    mut df: DataFrame,
+    subj_type: &BaseRDFNodeType,
+    obj_type: &BaseRDFNodeType,
+    global_cats: &LockedCats,
+) -> Result<DataFrame, TriplestoreError> {
+    let subj_rank = rank_column(&df, SUBJECT_COL_NAME, subj_type, global_cats)?;
+    let obj_rank = rank_column(&df, OBJECT_COL_NAME, obj_type, global_cats)?;
+    df.with_column(subj_rank.with_name(SUBJECT_RANK_COL_NAME.into()).into_column())
+        .map_err(TriplestoreError::LazyLoadError)?;
+    df.with_column(obj_rank.with_name(OBJECT_RANK_COL_NAME.into()).into_column())
+        .map_err(TriplestoreError::LazyLoadError)?;
+    let mut df = df
+        .sort(
+            [SUBJECT_RANK_COL_NAME, OBJECT_RANK_COL_NAME],
+            SortMultipleOptions {
+                descending: vec![false, false],
+                nulls_last: vec![false, false],
+                multithreaded: true,
+                maintain_order: false,
+                limit: None,
+            },
+        )
+        .map_err(TriplestoreError::LazyLoadError)?;
+    let repeated = |c: &str| -> Result<BooleanChunked, PolarsError> {
+        let s = df.column(c)?.as_materialized_series();
+        let previous = s.shift(1);
+        Ok(previous.is_not_null() & previous.equal(s)?)
+    };
+    let subject_repeated = repeated(SUBJECT_COL_NAME).map_err(TriplestoreError::LazyLoadError)?;
+    let object_repeated = repeated(OBJECT_COL_NAME).map_err(TriplestoreError::LazyLoadError)?;
+    let repeated = subject_repeated & object_repeated;
+    if repeated.any() || repeated.null_count() > 0 {
+        df = df
+            .filter(&!&repeated)
+            .map_err(TriplestoreError::LazyLoadError)?;
+    }
+    Ok(df)
+}
+
+/// The ranks of the values of a column that is not a lang string, see [`create_rank_expr`].
+fn rank_column(
+    df: &DataFrame,
+    c: &str,
+    t: &BaseRDFNodeType,
+    global_cats: &LockedCats,
+) -> Result<Series, TriplestoreError> {
+    let column = df.column(c).unwrap();
+    if t.stored_cat() {
+        let mut codes = Vec::new();
+        extend_codes(&mut codes, column);
+        let codes = distinct_codes(codes);
+        let rank_map = global_cats.read()?.sort_ranks(&codes, t);
+        let codes = column.u32().map_err(TriplestoreError::LazyLoadError)?;
+        Ok(codes_to_ranks(codes, &rank_map).into_series())
+    } else {
+        Ok(column.as_materialized_series().rank(
+            RankOptions {
+                method: RankMethod::Min,
+                descending: false,
+            },
+            None,
+        ))
+    }
 }
 
 fn create_rank_expr(

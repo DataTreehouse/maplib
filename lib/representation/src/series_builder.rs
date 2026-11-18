@@ -2,14 +2,18 @@ use crate::errors::RepresentationError;
 use crate::rdf_to_polars::{
     default_decimal_precision, default_decimal_scale, default_time_unit, default_time_zone,
 };
-use crate::{BaseRDFNodeType, LANG_STRING_LANG_FIELD, LANG_STRING_VALUE_FIELD, OBJECT_COL_NAME};
+use crate::{BaseRDFNodeType, LANG_STRING_LANG_FIELD, LANG_STRING_VALUE_FIELD};
 use chrono::{DateTime, NaiveDate, NaiveDateTime, Utc};
 use memchr::memchr;
 use oxrdf::vocab::{rdf, xsd};
 use oxrdf::{NamedOrBlankNode, Term};
-use polars::prelude::{as_struct, col, DataType, IntoLazy, NamedFrom, PlSmallStr, Series};
-use polars_core::frame::DataFrame;
-use polars_core::prelude::{Int128Chunked, IntoSeries, NewChunkedArray, StringChunkedBuilder};
+use polars::prelude::{DataType, NamedFrom, PlSmallStr, Series};
+use polars_arrow::array::{Utf8ViewArray, View};
+use polars_arrow::bitmap::{Bitmap, MutableBitmap};
+use polars_arrow::datatypes::ArrowDataType;
+use polars_core::prelude::{
+    Int128Chunked, IntoSeries, NewChunkedArray, StringChunked, StructChunked,
+};
 use std::collections::HashMap;
 use std::str::FromStr;
 
@@ -18,8 +22,134 @@ pub type ByObjectType = HashMap<BaseRDFNodeType, SubjectObjectBuilders>;
 pub type BySubjectType = HashMap<BaseRDFNodeType, ByObjectType>;
 pub type PredMap = HashMap<String, BySubjectType>;
 
+/// Builds a string column, as Polars' string builder does, but keeps its bytes in one buffer
+/// that grows from empty. Polars' builder reserves at least 8 KiB for its first buffer, and the
+/// parsers keep a builder for each predicate and parser thread, so files with many predicates
+/// used most of their read memory for these reservations.
+#[derive(Default)]
+pub struct StringColumnBuilder {
+    views: Vec<View>,
+    /// The bytes of the values longer than [`View::MAX_INLINE_SIZE`]. The last buffer is being
+    /// filled; a new one is started when it would grow past what a view can address.
+    buffers: Vec<Vec<u8>>,
+    /// Only set once a null is appended.
+    validity: Option<MutableBitmap>,
+}
+
+impl StringColumnBuilder {
+    pub fn with_capacity(cap: usize) -> Self {
+        Self {
+            views: Vec::with_capacity(cap),
+            ..Default::default()
+        }
+    }
+
+    pub fn len(&self) -> usize {
+        self.views.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.views.is_empty()
+    }
+
+    pub fn append_value(&mut self, s: &str) {
+        let bytes = s.as_bytes();
+        let view = if bytes.len() <= View::MAX_INLINE_SIZE as usize {
+            View::new_inline(bytes)
+        } else {
+            let fits = self
+                .buffers
+                .last()
+                .is_some_and(|b| b.len() + bytes.len() <= u32::MAX as usize);
+            if !fits {
+                self.buffers.push(Vec::new());
+            }
+            let buffer_idx = self.buffers.len() - 1;
+            let buffer = &mut self.buffers[buffer_idx];
+            let offset = buffer.len() as u32;
+            buffer.extend_from_slice(bytes);
+            View::new_from_bytes(bytes, buffer_idx as u32, offset)
+        };
+        self.views.push(view);
+        if let Some(validity) = &mut self.validity {
+            validity.push(true);
+        }
+    }
+
+    pub fn append_null(&mut self) {
+        let len = self.views.len();
+        self.validity
+            .get_or_insert_with(|| {
+                let mut validity = MutableBitmap::with_capacity(self.views.capacity());
+                validity.extend_constant(len, true);
+                validity
+            })
+            .push(false);
+        self.views.push(View::default());
+    }
+
+    /// Appends the values of `other`, copying its bytes into this builder's buffer.
+    pub fn append(&mut self, other: StringColumnBuilder) {
+        if self.is_empty() && self.validity.is_none() {
+            *self = other;
+            return;
+        }
+        self.views.reserve(other.views.len());
+        match (&mut self.validity, other.validity) {
+            (Some(v), Some(o)) => v.extend_from_bitmap(&Bitmap::from(o)),
+            (Some(v), None) => v.extend_constant(other.views.len(), true),
+            (None, Some(o)) => {
+                let mut v = MutableBitmap::with_capacity(self.views.len() + o.len());
+                v.extend_constant(self.views.len(), true);
+                v.extend_from_bitmap(&Bitmap::from(o));
+                self.validity = Some(v);
+            }
+            (None, None) => {}
+        }
+        // The validity is already extended above.
+        let validity = self.validity.take();
+        for view in other.views {
+            if view.length <= View::MAX_INLINE_SIZE {
+                self.views.push(view);
+            } else {
+                let buffer = &other.buffers[view.buffer_idx as usize];
+                let start = view.offset as usize;
+                let bytes = &buffer[start..start + view.length as usize];
+                // Safety: the bytes are a value appended to `other` as a str.
+                self.append_value(unsafe { std::str::from_utf8_unchecked(bytes) });
+            }
+        }
+        self.validity = validity;
+    }
+
+    pub fn finish(self, name: &str) -> StringChunked {
+        let mut views = self.views;
+        views.shrink_to_fit();
+        let buffers: Vec<_> = self
+            .buffers
+            .into_iter()
+            .map(|mut b| {
+                b.shrink_to_fit();
+                b.into()
+            })
+            .collect();
+        // Safety: the views point into the buffers at values that were appended as strs, and
+        // the validity, if any, has a bit for every view.
+        let array = unsafe {
+            Utf8ViewArray::new_unchecked_unknown_md(
+                ArrowDataType::Utf8View,
+                views.into(),
+                buffers.into(),
+                self.validity.map(|v| v.into()),
+                None,
+            )
+        };
+        StringChunked::with_chunk(name.into(), array)
+    }
+}
+
 pub enum SeriesBuilder {
-    String(StringChunkedBuilder, usize),
+    String(StringColumnBuilder),
     Bool(Vec<Option<bool>>),
     U8(Vec<Option<u8>>),
     U16(Vec<Option<u16>>),
@@ -35,9 +165,8 @@ pub enum SeriesBuilder {
     Datetime(Vec<Option<i64>>),
     Decimal(Vec<Option<i128>>),
     LangString {
-        values: StringChunkedBuilder,
-        langs: StringChunkedBuilder,
-        len: usize,
+        values: StringColumnBuilder,
+        langs: StringColumnBuilder,
     },
 }
 
@@ -49,7 +178,7 @@ impl SeriesBuilder {
     pub fn new_with_capacity(dt: &BaseRDFNodeType, cap: usize) -> Self {
         match dt {
             BaseRDFNodeType::IRI | BaseRDFNodeType::BlankNode => {
-                SeriesBuilder::String(StringChunkedBuilder::new("s".into(), cap), 0)
+                SeriesBuilder::String(StringColumnBuilder::with_capacity(cap))
             }
             BaseRDFNodeType::Literal(l, _) => match l.as_ref() {
                 xsd::BOOLEAN => SeriesBuilder::Bool(Vec::with_capacity(cap)),
@@ -68,11 +197,10 @@ impl SeriesBuilder {
                 xsd::DATE_TIME_STAMP => SeriesBuilder::Datetime(Vec::with_capacity(cap)),
                 xsd::DECIMAL => SeriesBuilder::Decimal(Vec::with_capacity(cap)),
                 rdf::LANG_STRING => SeriesBuilder::LangString {
-                    values: StringChunkedBuilder::new(LANG_STRING_VALUE_FIELD.into(), cap),
-                    langs: StringChunkedBuilder::new(LANG_STRING_LANG_FIELD.into(), cap),
-                    len: 0,
+                    values: StringColumnBuilder::with_capacity(cap),
+                    langs: StringColumnBuilder::with_capacity(cap),
                 },
-                _ => SeriesBuilder::String(StringChunkedBuilder::new("s".into(), cap), 0),
+                _ => SeriesBuilder::String(StringColumnBuilder::with_capacity(cap)),
             },
             BaseRDFNodeType::None => {
                 unreachable!("Should never happen")
@@ -82,7 +210,7 @@ impl SeriesBuilder {
 
     pub fn len(&self) -> usize {
         match self {
-            SeriesBuilder::String(_, l) => *l,
+            SeriesBuilder::String(v) => v.len(),
             SeriesBuilder::Bool(v) => v.len(),
             SeriesBuilder::U8(v) => v.len(),
             SeriesBuilder::U16(v) => v.len(),
@@ -97,7 +225,7 @@ impl SeriesBuilder {
             SeriesBuilder::Date(v) => v.len(),
             SeriesBuilder::Datetime(v) => v.len(),
             SeriesBuilder::Decimal(v) => v.len(),
-            SeriesBuilder::LangString { len, .. } => *len,
+            SeriesBuilder::LangString { values, .. } => values.len(),
         }
     }
 
@@ -105,9 +233,40 @@ impl SeriesBuilder {
         self.len() == 0
     }
 
+    /// Appends the values of `other`, a builder of the same type.
+    pub fn append(&mut self, other: SeriesBuilder) {
+        match (self, other) {
+            (SeriesBuilder::String(v), SeriesBuilder::String(o)) => v.append(o),
+            (SeriesBuilder::Bool(v), SeriesBuilder::Bool(o)) => v.extend(o),
+            (SeriesBuilder::U8(v), SeriesBuilder::U8(o)) => v.extend(o),
+            (SeriesBuilder::U16(v), SeriesBuilder::U16(o)) => v.extend(o),
+            (SeriesBuilder::U32(v), SeriesBuilder::U32(o)) => v.extend(o),
+            (SeriesBuilder::U64(v), SeriesBuilder::U64(o)) => v.extend(o),
+            (SeriesBuilder::I8(v), SeriesBuilder::I8(o)) => v.extend(o),
+            (SeriesBuilder::I16(v), SeriesBuilder::I16(o)) => v.extend(o),
+            (SeriesBuilder::I32(v), SeriesBuilder::I32(o)) => v.extend(o),
+            (SeriesBuilder::I64(v), SeriesBuilder::I64(o)) => v.extend(o),
+            (SeriesBuilder::F32(v), SeriesBuilder::F32(o)) => v.extend(o),
+            (SeriesBuilder::F64(v), SeriesBuilder::F64(o)) => v.extend(o),
+            (SeriesBuilder::Date(v), SeriesBuilder::Date(o)) => v.extend(o),
+            (SeriesBuilder::Datetime(v), SeriesBuilder::Datetime(o)) => v.extend(o),
+            (SeriesBuilder::Decimal(v), SeriesBuilder::Decimal(o)) => v.extend(o),
+            (
+                SeriesBuilder::LangString { values, langs },
+                SeriesBuilder::LangString {
+                    values: o_values,
+                    langs: o_langs,
+                },
+            ) => {
+                values.append(o_values);
+                langs.append(o_langs);
+            }
+            _ => panic!("Should never append builders of different types"),
+        }
+    }
+
     pub fn push_str(&mut self, s: &str) {
-        if let SeriesBuilder::String(v, l) = self {
-            *l += 1;
+        if let SeriesBuilder::String(v) = self {
             v.append_value(s);
         } else {
             panic!("Should never be used for non string builder")
@@ -141,9 +300,8 @@ impl SeriesBuilder {
 
     pub fn push_none(&mut self) {
         match self {
-            SeriesBuilder::String(b, len) => {
+            SeriesBuilder::String(b) => {
                 b.append_null();
-                *len += 1;
             }
             SeriesBuilder::Bool(v) => {
                 v.push(None);
@@ -187,8 +345,7 @@ impl SeriesBuilder {
             SeriesBuilder::Decimal(v) => {
                 v.push(None);
             }
-            SeriesBuilder::LangString { values, langs, len } => {
-                *len += 1;
+            SeriesBuilder::LangString { values, langs } => {
                 values.append_null();
                 langs.append_null();
             }
@@ -223,8 +380,7 @@ impl SeriesBuilder {
         lang: Option<&str>,
     ) -> Result<(), RepresentationError> {
         match self {
-            SeriesBuilder::String(v, l) => {
-                *l += 1;
+            SeriesBuilder::String(v) => {
                 v.append_value(lex);
             }
             SeriesBuilder::Bool(v) => {
@@ -302,11 +458,10 @@ impl SeriesBuilder {
                 let i = parse_xsd_decimal(lex)?;
                 v.push(Some(i));
             }
-            SeriesBuilder::LangString { values, langs, len } => {
+            SeriesBuilder::LangString { values, langs } => {
                 if let Some(lang) = lang {
                     values.append_value(lex);
                     langs.append_value(lang);
-                    *len += 1;
                 } else {
                     return Err(RepresentationError::LiteralParseError(
                         "Lang string missing language tag".to_string(),
@@ -319,12 +474,7 @@ impl SeriesBuilder {
 
     pub fn into_series(self, name: &str) -> Series {
         match self {
-            SeriesBuilder::String(v, ..) => {
-                let s = v.finish();
-                let mut s = s.into_series();
-                s.rename(name.into());
-                s
-            }
+            SeriesBuilder::String(v) => v.finish(name).into_series(),
             SeriesBuilder::Bool(v) => Series::new(name.into(), v),
             SeriesBuilder::U8(v) => Series::new(name.into(), v),
             SeriesBuilder::U16(v) => Series::new(name.into(), v),
@@ -352,29 +502,13 @@ impl SeriesBuilder {
                 ser.rename(PlSmallStr::from_str(name));
                 ser
             }
-            SeriesBuilder::LangString { values, langs, len } => {
-                let mut val_ser = values.finish().into_series();
-                val_ser.rename(LANG_STRING_VALUE_FIELD.into());
-                let mut lang_ser = langs.finish().into_series();
-                lang_ser.rename(LANG_STRING_LANG_FIELD.into());
-                let mut df = DataFrame::new(len, vec![val_ser.into(), lang_ser.into()])
+            SeriesBuilder::LangString { values, langs } => {
+                let len = values.len();
+                let val_ser = values.finish(LANG_STRING_VALUE_FIELD).into_series();
+                let lang_ser = langs.finish(LANG_STRING_LANG_FIELD).into_series();
+                StructChunked::from_series(name.into(), len, [val_ser, lang_ser].iter())
                     .unwrap()
-                    .lazy()
-                    .with_column(
-                        as_struct(vec![
-                            col(LANG_STRING_VALUE_FIELD),
-                            col(LANG_STRING_LANG_FIELD),
-                        ])
-                        .alias(OBJECT_COL_NAME),
-                    )
-                    .collect()
-                    .unwrap();
-                let mut ser = df
-                    .drop_in_place(OBJECT_COL_NAME)
-                    .unwrap()
-                    .take_materialized_series();
-                ser.rename(PlSmallStr::from_str(name));
-                ser
+                    .into_series()
             }
         }
     }
