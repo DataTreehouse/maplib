@@ -1,4 +1,5 @@
 mod deduplication;
+mod delete;
 pub mod remote_segments;
 pub mod so_index;
 
@@ -1030,6 +1031,9 @@ fn can_index(t: &BaseRDFNodeType) -> bool {
 pub enum StoredTriples {
     TriplesInMemory(Box<TriplesInMemory>),
     TriplesOnDisk(Arc<TriplesOnDisk>),
+    /// The rows of a table on disk that remain after triples were deleted from it, see
+    /// [`delete`].
+    TriplesOnDiskView(Box<delete::DiskView>),
 }
 
 impl StoredTriples {
@@ -1041,6 +1045,7 @@ impl StoredTriples {
         match self {
             StoredTriples::TriplesInMemory(mem) => mem.get_lazy_frame(),
             StoredTriples::TriplesOnDisk(disk) => disk.get_lazy_frame(),
+            StoredTriples::TriplesOnDiskView(view) => view.get_lazy_frame(),
         }
     }
 
@@ -1048,6 +1053,7 @@ impl StoredTriples {
         match self {
             StoredTriples::TriplesInMemory(mem) => mem.df.as_ref().unwrap().height(),
             StoredTriples::TriplesOnDisk(disk) => disk.height,
+            StoredTriples::TriplesOnDiskView(view) => view.height(),
         }
     }
 
@@ -1126,12 +1132,18 @@ impl StoredTriples {
             };
             return Ok(vec![(out.lazy(), rows)]);
         }
-        let StoredTriples::TriplesOnDisk(disk) = self else {
-            unreachable!()
-        };
         if offsets.is_empty() {
             return Ok(vec![]);
         }
+        let disk = match self {
+            StoredTriples::TriplesOnDisk(disk) => disk,
+            StoredTriples::TriplesOnDiskView(view) => {
+                let df = view.read_ranges(&offsets)?;
+                let rows = df.height();
+                return Ok(vec![(df.lazy(), rows)]);
+            }
+            StoredTriples::TriplesInMemory(_) => unreachable!(),
+        };
         // Read the ranges eagerly: a lazy scan per range plans and opens the file and parses
         // its footer every time, which costs more than reading the few row groups needed.
         let df = disk.read_ranges(&offsets)?;
