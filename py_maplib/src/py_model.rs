@@ -75,6 +75,20 @@ pub struct PyModel {
     pub inner: Arc<RwLock<InnerModel>>,
     // The query result cache of the inner model, used without locking it.
     query_cache: Arc<QueryCache>,
+    // Last, so that it is dropped after the model: gives the freed memory back.
+    _release_memory: ReleaseMemoryOnDrop,
+}
+
+/// Gives the memory freed by a dropped model back to the operating system. jemalloc keeps freed
+/// pages and returns them after a decay time, but only when the allocator is used again, so the
+/// memory of a model that was dropped could stay with the process for good and add up over
+/// loads and drops.
+struct ReleaseMemoryOnDrop;
+
+impl Drop for ReleaseMemoryOnDrop {
+    fn drop(&mut self) {
+        crate::release_freed_memory();
+    }
 }
 
 impl PyModel {
@@ -82,6 +96,7 @@ impl PyModel {
         PyModel {
             query_cache: inner.query_cache(),
             inner: Arc::new(RwLock::new(inner)),
+            _release_memory: ReleaseMemoryOnDrop,
         }
     }
 

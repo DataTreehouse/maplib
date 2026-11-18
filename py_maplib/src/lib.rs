@@ -100,6 +100,34 @@ use virtualized_query::python::{
 #[global_allocator]
 static GLOBAL: polars_ooc::Allocator = polars_ooc::Allocator;
 
+// The jemalloc that polars_ooc::Allocator uses on Unix, built with the `_rjem_` prefix.
+#[cfg(all(target_family = "unix", not(target_os = "emscripten")))]
+extern "C" {
+    #[link_name = "_rjem_mallctl"]
+    fn jemalloc_mallctl(
+        name: *const std::ffi::c_char,
+        oldp: *mut std::ffi::c_void,
+        oldlenp: *mut usize,
+        newp: *mut std::ffi::c_void,
+        newlen: usize,
+    ) -> std::ffi::c_int;
+}
+
+/// Returns the pages that the allocator holds but are no longer used to the operating system.
+pub(crate) fn release_freed_memory() {
+    // Purges all arenas (4096 is MALLCTL_ARENAS_ALL).
+    #[cfg(all(target_family = "unix", not(target_os = "emscripten")))]
+    unsafe {
+        jemalloc_mallctl(
+            c"arena.4096.purge".as_ptr(),
+            std::ptr::null_mut(),
+            std::ptr::null_mut(),
+            std::ptr::null_mut(),
+            0,
+        );
+    }
+}
+
 /// Limits the memory used by queries. Over the limit, the query engine spills intermediate
 /// data to disk instead of growing further. Arguments left as None get their defaults.
 #[pyfunction]
