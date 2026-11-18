@@ -1,5 +1,10 @@
 # Change log
 
+## v0.23.1
+### Bug fixes
+- maplib Enterprise Edition: `FILTER EXISTS` and `FILTER NOT EXISTS` over virtualized time series (chrontext) failed with "Parts of the query were not evaluated" or, for an EXISTS in the condition of an OPTIONAL, gave wrong results, since v0.23.0. The EXISTS pattern is again evaluated where the virtualized parts of the query are found, and only once
+- The source distribution of v0.23.0 left out the vendored `oxttl` and `sparesults` crates, so the Linux wheels could not be built and are missing from PyPI for v0.23.0; v0.23.1 has wheels for every platform
+
 ## v0.23.0
 ### Breaking changes
 - `Model.reason(profile, ...)` (maplib Enterprise Edition) is now `Model.infer(profile=..., ...)`, with the same parameters (`graph`, `target_graph`, `include_graphs`, `max_violations`, `max_rows`), and still returns a `ReasoningResult`. `Model.infer` takes either `rulesets` or `profile`, and raises if it gets both or neither, or `target_graph` or `max_violations` with rulesets. `Model.reason` is removed. In Rust, `Model::reason` is unchanged
