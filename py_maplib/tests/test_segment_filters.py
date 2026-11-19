@@ -90,6 +90,15 @@ QUERIES += [
     f"""SELECT ?s ?x WHERE {{
         VALUES ?s {{ <{EX}s10> <{EX}s4010> <{EX}s6150> <{EX}o2> }}
         ?s <{EX}next>/<{EX}next> ?x }} ORDER BY ?s ?x""",
+    # More subjects and objects than are checked against the filters, most of them present.
+    f"""SELECT ?s ?o WHERE {{
+        VALUES ?s {{ {' '.join(f'<{EX}s{i}>' for i in range(0, 6190, 20))} <{EX}o3> <{EX}absent_iri> }}
+        ?s <{EX}p> ?o }} ORDER BY ?s ?o""",
+    f"""SELECT ?s ?o WHERE {{
+        VALUES ?o {{ {' '.join(f'<{EX}s{i}>' for i in range(1, 6190, 30))} <{EX}absent_iri> }}
+        ?s <{EX}next> ?o }} ORDER BY ?s ?o""",
+    f"""SELECT ?o (COUNT(?s) AS ?n) WHERE {{ ?s <{EX}q3> ?x . ?s <{EX}p> ?o }}
+        GROUP BY ?o ORDER BY ?o""",
     "SELECT (COUNT(*) AS ?n) WHERE { ?s ?p ?o }",
 ]
 
@@ -211,6 +220,36 @@ def test_remote_lookups_of_absent_subjects_avoid_downloads(tmp_path):
     # tables that hold s4001 (and rare false positives).
     assert counts[0] > N_Q
     assert counts[10] <= 6, counts
+
+
+@pytest.mark.skipif(not is_maplib_ee(), reason="disk storage needs maplib_ee")
+def test_remote_joins_with_many_pushed_subjects(tmp_path):
+    # Joins push hundreds of subjects into the lookups of a remote table: more than are checked
+    # against the filters of local segments, fewer than the limit for remote ones. Results must
+    # not depend on the filters, and they must not cause more downloads.
+    m = build("memory", False, 10)
+    remote = tmp_path / "remote"
+    remote.mkdir()
+    url = f"file://{remote}/model"
+    m.serialize(url, single_file=False)
+    # Subjects of q4 (and of p), none of which is a subject of q3.
+    absent = " ".join(f"<{EX}s{i}>" for i in range(4, 6190, 30)[:200])
+    queries = [
+        f"SELECT ?s ?o WHERE {{ VALUES ?s {{ {absent} }} ?s <{EX}q3> ?o }}",
+        f"SELECT ?s ?o WHERE {{ ?s <{EX}q4> ?x . ?s <{EX}q3> ?o }}",
+        f"SELECT ?s ?o WHERE {{ VALUES ?s {{ {absent} }} ?s <{EX}p> ?o }} ORDER BY ?s ?o",
+    ]
+    got, counts = {}, {}
+    for bits in [10, 0]:
+        folder = tmp_path / f"disk{bits}"
+        with filter_bits(bits):
+            d = Model.deserialize(url, storage="disk", storage_folder=str(folder))
+            got[bits] = [d.query(q) for q in queries]
+            counts[bits] = downloaded(folder)
+    for q, x, y in zip(queries, got[10], got[0]):
+        assert_frame_equal(x, y, check_row_order=False)
+    assert got[10][0].height == 0 and got[10][1].height == 0 and got[10][2].height == 200
+    assert counts[10] <= counts[0], counts
 
 
 @pytest.mark.parametrize("object_index", [False, True])

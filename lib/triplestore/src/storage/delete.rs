@@ -46,6 +46,11 @@ pub struct DiskView {
 }
 
 impl DiskView {
+    /// Whether the table under the view is in object storage and not downloaded.
+    pub(crate) fn is_remote_only(&self) -> bool {
+        self.disk.is_remote_only()
+    }
+
     pub(crate) fn height(&self) -> usize {
         self.height
     }

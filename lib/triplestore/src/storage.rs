@@ -694,6 +694,12 @@ impl Triples {
         self.segments.iter().any(|s| s.code_filter(by_object).is_some())
     }
 
+    /// Whether a lookup of subjects (or objects, if `by_object`) may have to download a segment
+    /// from object storage, which a segment filter that leaves it out saves.
+    pub(crate) fn has_remote_segments(&self, by_object: bool) -> bool {
+        self.segments.iter().any(|s| s.is_remote_only(by_object))
+    }
+
     /// False if the table can not hold a subject (or object, if `by_object`) with `code`: no
     /// segment's filter holds it and the write buffer, which has no filter, is empty.
     pub(crate) fn may_hold_code(&self, code: u32, by_object: bool) -> bool {
@@ -1139,6 +1145,17 @@ impl TriplesSegment {
         }
     }
 
+    /// Whether the sort that lookups of subjects (or objects, if `by_object`) read is in object
+    /// storage and not downloaded yet.
+    fn is_remote_only(&self, by_object: bool) -> bool {
+        let sort = if by_object {
+            &self.object_sort
+        } else {
+            &self.subject_sort
+        };
+        sort.as_ref().is_some_and(|s| s.is_remote_only())
+    }
+
     /// False if the segment holds no subject (or object, if `by_object`) with `code`.
     #[inline]
     pub(crate) fn may_hold_code(&self, code: u32, by_object: bool) -> bool {
@@ -1539,6 +1556,15 @@ impl StoredTriples {
             StoredTriples::TriplesInMemory(mem) => mem.get_lazy_frame(),
             StoredTriples::TriplesOnDisk(disk) => disk.get_lazy_frame(),
             StoredTriples::TriplesOnDiskView(view) => view.get_lazy_frame(),
+        }
+    }
+
+    /// Whether reading the triples needs a download from object storage first.
+    fn is_remote_only(&self) -> bool {
+        match self {
+            StoredTriples::TriplesInMemory(_) => false,
+            StoredTriples::TriplesOnDisk(disk) => disk.is_remote_only(),
+            StoredTriples::TriplesOnDiskView(view) => view.is_remote_only(),
         }
     }
 

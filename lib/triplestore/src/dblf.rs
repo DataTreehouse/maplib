@@ -595,6 +595,28 @@ fn partial_check_need_multi(
     false
 }
 
+/// The most subjects (or objects) of a lookup whose dictionary codes are found to check them
+/// against the segments' Bloom filters, when every segment the lookup reads is local. Finding a
+/// code clones and hashes the term and looks its string up in the dictionary, which for the
+/// thousands of subjects that a join pushes down costs more than the lookup itself (e.g. 28,880
+/// subjects pushed into `rdf:type` doubled the time of a GROUP BY over that join). With more
+/// targets the filters seldom leave a segment out: at about 1% false positives, a segment that
+/// holds none of 128 targets is left out 27% of the time.
+const MAX_FILTERED_TARGETS: usize = 128;
+
+/// The same for a lookup that may download a segment from object storage: a download left out
+/// saves milliseconds, far more than finding the codes of a few hundred targets.
+const MAX_FILTERED_REMOTE_TARGETS: usize = 1024;
+
+/// Whether to find the codes of `n` lookup targets for the segment filters of `triples`.
+fn find_target_codes(triples: &Triples, n: usize, by_object: bool) -> bool {
+    if !triples.has_code_filters(by_object) {
+        return false;
+    }
+    n <= MAX_FILTERED_TARGETS
+        || (n <= MAX_FILTERED_REMOTE_TARGETS && triples.has_remote_segments(by_object))
+}
+
 fn single_triples_to_lf(
     triples: &Triples,
     subjects: &Option<Vec<&NamedOrBlankNode>>,
@@ -637,16 +659,16 @@ fn single_triples_to_lf(
         }
     }
     // The codes of the constants, for the segments' filters to leave out the segments (and the
-    // whole table) that can not hold them.
+    // whole table) that can not hold them. Only for a few constants (see [find_target_codes]).
     let subject_codes = match subjects {
-        Some(s) if triples.has_code_filters(false) => {
+        Some(s) if find_target_codes(triples, s.len(), false) => {
             let terms: Vec<Term> = s.iter().map(|x| Term::from((*x).clone())).collect();
             Some(encodings.term_codes(&terms, global_cats))
         }
         _ => None,
     };
     let object_codes = match objects {
-        Some(o) if triples.has_code_filters(true) => {
+        Some(o) if find_target_codes(triples, o.len(), true) => {
             let terms: Vec<Term> = o.iter().map(|x| (*x).clone()).collect();
             Some(encodings.term_codes(&terms, global_cats))
         }
