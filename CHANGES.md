@@ -5,6 +5,10 @@
 - maplib Enterprise Edition: hybrid and disk storage keep their dictionaries out of memory. A 64-bit hash of each string replaces the unique index on the strings, new strings are appended in 64 MiB chunks, DuckDB's blocks are released after bulk merges, and the cache of recent strings is bounded in bytes and skips bulk lookups. After reading 800k strings, maplib and DuckDB hold 56 MB instead of 273 MB in hybrid storage (about a quarter of memory storage), the process keeps about 0.7 to 0.9 GB instead of 2 GB, and the read takes 1.8 s instead of 4.2 s. Dictionaries written by v0.23.1 or earlier keep their string index until `compact()` rebuilds them. With the cache turned off, lookups of single strings are about 0.1 ms slower
 - Dropping a model gives its memory back to the operating system: the allocator's freed pages are purged when a `Model` is dropped, instead of staying resident until the allocator is used again. Loading and dropping a model eight times now keeps about 90 MB after each drop instead of growing from 217 to 329 MB. On platforms that use mimalloc instead of jemalloc nothing changes
 - `COUNT` queries over the whole graph are answered from the stored triple tables without building the triples: the number of triples, of distinct subjects, predicates and objects, of the triples of one predicate, and of literal or blank node terms. On a model of 1.6M triples, counting the distinct predicates, literals or blank nodes takes 0.2 ms instead of 4 to 14 ms, and distinct subjects and objects 5 to 8 ms instead of 22 to 91 ms
+- A triple pattern with a bound subject, e.g. `<s> ?p ?o`, leaves the predicate tables without that subject out of the query plan. On a model of 1.6M triples with 150 predicates it takes 0.8 ms instead of 3.7 ms
+
+### Bug fixes
+- `MINUS` with a variable on its right side that is never bound, e.g. `MINUS { ?s ex:nonexistent ?o }` inside a `LATERAL` evaluated per row, failed with a join key type mismatch. Variables that are never bound on the right side are now left out of the join
 
 ## v0.23.1
 ### Bug fixes
