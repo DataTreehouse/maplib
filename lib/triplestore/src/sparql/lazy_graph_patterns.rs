@@ -1,3 +1,4 @@
+mod bgp_types;
 mod count;
 mod distinct;
 mod extend;
@@ -203,7 +204,15 @@ impl Triplestore {
                     length_path::extract_length_path_patterns(&patterns)?;
                 self.check_maplib_predicates(&patterns)?;
                 pushdowns.add_patterns_pushdowns(&patterns);
-                let mut updated_solution_mappings = solution_mappings;
+                // A pattern whose variables can have no stored type has no solutions: nothing is
+                // read, and the solutions so far are not collected.
+                let proven_empty = self.bgp_proven_empty(&patterns, dataset);
+                let mut updated_solution_mappings = if proven_empty {
+                    Some(self.empty_bgp_solution_mappings(&patterns, solution_mappings))
+                } else {
+                    solution_mappings
+                };
+                let patterns = if proven_empty { vec![] } else { patterns };
                 let bgp_context = context.extension_with(PathEntry::BGP);
                 let ordered_patterns =
                     order_triple_patterns(&patterns, &updated_solution_mappings, &pushdowns);
