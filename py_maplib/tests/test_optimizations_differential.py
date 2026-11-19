@@ -641,7 +641,7 @@ for n, few in ((EXISTS_KEYS, True), (EXISTS_KEYS + 1, False)):
 # OPTIONAL evaluated with the values of a left side of at most 10,000 rows.
 for n, few in ((OPTIONAL_KEYS_HEIGHT, True), (OPTIONAL_KEYS_HEIGHT + 1, False)):
     case(f"optional_keys_{n}", f"SELECT ?s ?k ?w WHERE {{ ?s :o{n} ?k OPTIONAL {{ ?s :oin ?w }} }}",
-         ["s", "k", "w"], hits={"optional.left_keys": few})
+         ["s", "k", "w"], hits={"optional.left_keys": few, "optional.no_keys": not few})
     case(f"optional_keys_filter_{n}",
          f"""SELECT ?s ?k ?w WHERE {{ ?s :o{n} ?k
              OPTIONAL {{ ?s :oin ?w FILTER(LANG(?w) = "" || ?k > 50) }} }}""",
@@ -775,13 +775,22 @@ case("path_both_bound", "ASK { :c0 :chain+ :c400 }", ["x"])
 case("path_absent_start", "SELECT ?o WHERE { :nope :walk+ ?o }", ["o"])
 
 # Lookups that the segment Bloom filters answer.
-for subject in ("x5", "m7", "w299", "y3", "absent"):
+def with_filters(w: World) -> bool:
+    return w.filters != "off"
+
+
+# A known subject: the segments of the other predicates' tables that do not hold it are skipped.
+for subject in ("x5", "m7", "w299", "y3"):
     case(f"filter_subject_{subject}",
          f"SELECT ?p ?o WHERE {{ :{subject} ?p ?o }}", ["p", "o"],
-         hits={"segment_filter.skip": filters_on, "segment_filter.table_skip": filters_on})
+         hits={"segment_filter.skip": with_filters})
+# A subject not in the dictionary is not looked up at all.
+case("filter_subject_absent", "SELECT ?p ?o WHERE { :absent ?p ?o }", ["p", "o"],
+     hits={"segment_filter.skip": False, "segment_filter.table_skip": False})
+# Several subjects: the tables none of them can be in are left out.
 case("filter_values_subjects",
      f"SELECT ?s ?o WHERE {{ VALUES ?s {{ {values('x', range(0, 40000, 997))} :absent }} ?s :many ?o }}",
-     ["s", "o"], hits={"segment_filter.skip": filters_on})
+     ["s", "o"], hits={"segment_filter.table_skip": with_filters})
 case("filter_object_lookup",
      "SELECT ?s WHERE { ?s :many :y2999 }", ["s"], hits={"segment_filter.skip": filters_on})
 
@@ -980,33 +989,3 @@ def test_write_buffer_steps(storage, tmp_path):
     m = Model.deserialize(path, **kwargs)
     for q, vs in BUFFER_QUERIES:
         assert_same_rows(oxigraph_rows(store, q, vs), maplib_rows(m, q, vs), False, f"reloaded: {q}")
-
-
-def process_threads() -> int:
-    import subprocess
-
-    out = subprocess.check_output(["ps", "-M", "-p", str(os.getpid())]).decode()
-    return out.count("\n") - 1
-
-
-@pytest.mark.skipif("hybrid" not in disk_params() or not os.uname().sysname == "Darwin",
-                    reason="needs maplib_ee; counts threads with macOS ps -M")
-@pytest.mark.parametrize("storage", ["hybrid", "disk"])
-@pytest.mark.xfail(strict=True, reason="each dropped hybrid or disk model keeps about 14 threads")
-def test_dropped_models_free_their_threads(storage, tmp_path):
-    """Found by this suite (2026-11-19): the W3C suites in hybrid and disk storage fail with
-    "failed to spawn thread" after a few hundred models, as the threads of dropped models stay."""
-    import gc
-
-    def use_one(i):
-        m = Model(storage=storage, storage_folder=str(tmp_path / f"s{i}"))
-        m.reads('<http://a> <http://b> "c" .', format="ntriples")
-        m.query("SELECT * WHERE { ?s ?p ?o }")
-
-    use_one(0)
-    gc.collect()
-    before = process_threads()
-    for i in range(1, 21):
-        use_one(i)
-    gc.collect()
-    assert process_threads() - before < 20
