@@ -28,6 +28,10 @@ const DISK_MIN_SEGMENT_HEIGHT: usize = DISK_ROW_GROUP_SIZE;
 /// hold the subjects of the new triples, unless that is more than this many row groups or covers
 /// more than half of the segment, in which case the whole segment is read.
 const MAX_LOOKUP_ROW_GROUPS: usize = 256;
+/// Inserts of at most this many new triples go to the unsorted write buffer of the table, which
+/// is merged into a sorted segment when it holds more than this many triples. Reads include the
+/// whole buffer, so it is kept small.
+pub(crate) const MAX_BUFFER_HEIGHT: usize = 4096;
 
 impl Triples {
     pub fn deduplicate_and_insert(
@@ -58,6 +62,27 @@ impl Triples {
         self.height += new_height;
         self.generation = super::next_generation();
 
+        // A small insert goes to the buffer: no sort, no sparse index, no compaction.
+        let buffered = self.buffer_height() + new_height;
+        if !self.segments.is_empty() && buffered <= MAX_BUFFER_HEIGHT {
+            let so = new_df.select([SUBJECT_COL_NAME, OBJECT_COL_NAME]).unwrap();
+            match &mut self.buffer {
+                Some(buffer) => {
+                    buffer
+                        .vstack_mut_owned(so)
+                        .map_err(TriplestoreError::LazyLoadError)?;
+                    if buffer.max_n_chunks() > 16 {
+                        buffer.rechunk_mut();
+                    }
+                }
+                None => self.buffer = Some(so),
+            }
+            return Ok(Some(new_df));
+        }
+        // The buffer is merged with the new triples (and possibly trailing segments).
+        let buffer = self.buffer.take();
+        let new_height = buffered;
+
         // The trailing segments to merge with the new triples: segments[first..].
         let n = self.segments.len();
         let mut first = n;
@@ -73,7 +98,7 @@ impl Triples {
             .segment_folder(first == 0, merged_height)
             .map(|x| x.to_owned());
 
-        let segment = if first == n {
+        let segment = if first == n && buffer.is_none() {
             TriplesSegment::new(
                 new_df.clone(),
                 &self.subject_type,
@@ -92,6 +117,7 @@ impl Triples {
                         .map_err(TriplestoreError::LazyLoadError)?,
                 );
             }
+            dfs.extend(buffer);
             dfs.push(new_df.select([SUBJECT_COL_NAME, OBJECT_COL_NAME]).unwrap());
             let segment = compact_segments(
                 dfs,
@@ -236,6 +262,9 @@ impl Triples {
                 index.insert(&stored);
             }
         }
+        if let Some(buffer) = &self.buffer {
+            index.insert(buffer);
+        }
         Ok(Some(index))
     }
 
@@ -270,6 +299,9 @@ impl Triples {
                 }
             }
             lfs.push(seg.get_subject_sort_lazy_frame()?);
+        }
+        if let Some((lf, _)) = self.buffer_lazy_frame() {
+            lfs.push(lf);
         }
         if !lfs.is_empty() {
             let lf = concat_lfs(lfs);

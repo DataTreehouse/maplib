@@ -112,6 +112,13 @@ pub struct Triples {
     triples_folder: Option<PathBuf>,
     /// Changes whenever the triples change, for caches of data derived from them.
     generation: u64,
+    /// Triples added by small inserts that are not in a sorted segment yet: the subject and
+    /// object columns, unsorted, and deduplicated against the segments and each other. Merged
+    /// into a segment when it grows past `MAX_BUFFER_HEIGHT` (see `deduplicate_and_insert`), so
+    /// that a small update neither sorts nor indexes. Always in memory, also in disk storage
+    /// mode. Every read of the triples includes it; reads that need the sorted order of the
+    /// segments (the sparse indices) read it whole, as it is small.
+    buffer: Option<DataFrame>,
 }
 
 static NEXT_GENERATION: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
@@ -181,6 +188,7 @@ impl Triples {
             subject_object_index: None,
             triples_folder: triples_folder.map(|x| x.to_owned()),
             generation: next_generation(),
+            buffer: None,
         })
     }
 
@@ -228,6 +236,9 @@ impl Triples {
         let mut subject_sorts = Vec::new();
         for seg in &self.segments {
             subject_sorts.push(seg.subject_sort.as_ref().unwrap().get_lazy_frame()?);
+        }
+        if let Some((lf, _)) = self.buffer_lazy_frame() {
+            subject_sorts.push(lf);
         }
         let need_sort = subject_sorts.len() > 1;
         let mut lf = if subject_sorts.len() > 1 {
@@ -372,11 +383,24 @@ impl Triples {
     }
 
     pub fn get_height(&self) -> usize {
-        let mut h = 0;
+        let mut h = self.buffer_height();
         for s in &self.segments {
             h += s.height;
         }
         h
+    }
+
+    /// The number of triples in the write buffer.
+    pub(crate) fn buffer_height(&self) -> usize {
+        self.buffer.as_ref().map(|b| b.height()).unwrap_or(0)
+    }
+
+    /// The write buffer as a lazy frame with its height, if it holds triples.
+    fn buffer_lazy_frame(&self) -> Option<(LazyFrame, usize)> {
+        self.buffer
+            .as_ref()
+            .filter(|b| b.height() > 0)
+            .map(|b| (b.clone().lazy(), b.height()))
     }
 
     pub fn get_u32s(&self) -> Result<Vec<(BaseRDFNodeType, HashSet<u32>)>, TriplestoreError> {
@@ -520,6 +544,7 @@ impl Triples {
             subject_object_index: None,
             triples_folder: triples_folder.map(|x| x.to_owned()),
             generation: next_generation(),
+            buffer: None,
         })
     }
 
@@ -557,6 +582,7 @@ impl Triples {
             subject_object_index,
             triples_folder: triples_folder.map(|x| x.to_owned()),
             generation: next_generation(),
+            buffer: None,
         })
     }
 
@@ -574,6 +600,9 @@ impl Triples {
                 &self.object_type,
             )?);
         }
+        // The segments give (at least) the rows of the subjects or objects, and so does the
+        // whole buffer.
+        all_sms.extend(self.buffer_lazy_frame());
         Ok(all_sms)
     }
 
@@ -632,6 +661,21 @@ impl Triples {
                             .map_err(TriplestoreError::LazyLoadError)?,
                     );
                 }
+            }
+        }
+        if let Some(buffer) = self.buffer.as_ref().filter(|b| b.height() > 0) {
+            let mask = buffer
+                .column(SUBJECT_COL_NAME)
+                .map_err(TriplestoreError::LazyLoadError)?
+                .u32()
+                .map_err(TriplestoreError::LazyLoadError)?
+                .equal(code);
+            if mask.any() {
+                out.push(
+                    buffer
+                        .filter_seq(&mask)
+                        .map_err(TriplestoreError::LazyLoadError)?,
+                );
             }
         }
         Ok(Some(out))
@@ -714,6 +758,11 @@ impl Triples {
                 }
             }
         }
+        // The buffer is in neither order. Serialization compacts the tables first, which merges
+        // the buffer into the single segment.
+        if subject_sort || self.object_indexing_enabled {
+            all_lfs.extend(self.buffer_lazy_frame().map(|(lf, _)| lf));
+        }
         Ok(all_lfs)
     }
 
@@ -725,6 +774,7 @@ impl Triples {
                 all_lfs.push(lf);
             }
         }
+        all_lfs.extend(self.buffer_lazy_frame().map(|(lf, _)| lf));
         if all_lfs.is_empty() {
             Ok(None)
         } else {
@@ -770,6 +820,11 @@ impl Triples {
                 use_lfs.push(df.lazy());
             }
         }
+        if let Some(df) =
+            self.buffer_between_subject_strings(from, to, global_cats, &self.subject_type)?
+        {
+            use_lfs.push(df.lazy());
+        }
         if use_lfs.is_empty() {
             Ok(None)
         } else {
@@ -788,6 +843,44 @@ impl Triples {
             .unwrap();
             Ok(Some(lf))
         }
+    }
+
+    /// The rows of the buffer whose subject string is in `[from, to]`.
+    fn buffer_between_subject_strings(
+        &self,
+        from: &str,
+        to: &str,
+        global_cats: LockedCats,
+        subject_type: &BaseRDFNodeType,
+    ) -> Result<Option<DataFrame>, TriplestoreError> {
+        let Some(buffer) = self.buffer.as_ref().filter(|b| b.height() > 0) else {
+            return Ok(None);
+        };
+        let subjects = global_cats
+            .read()?
+            .decode_of_type(
+                buffer
+                    .column(SUBJECT_COL_NAME)
+                    .unwrap()
+                    .as_materialized_series(),
+                subject_type,
+                None,
+            )
+            .map_err(TriplestoreError::DecodeError)?;
+        let mask: polars_core::prelude::BooleanChunked = subjects
+            .str()
+            .unwrap()
+            .iter()
+            .map(|s| s.map(|s| from <= s && s <= to))
+            .collect();
+        if !mask.any() {
+            return Ok(None);
+        }
+        Ok(Some(
+            buffer
+                .filter_seq(&mask)
+                .map_err(TriplestoreError::LazyLoadError)?,
+        ))
     }
 
     #[instrument(skip_all)]

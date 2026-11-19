@@ -248,6 +248,8 @@ impl SparseIndex {
 pub(crate) struct RowsToDelete {
     /// By segment: the segment, its rows in the subject sort and in the object sort.
     segments: Vec<(usize, Vec<usize>, Option<Vec<usize>>)>,
+    /// The rows of the write buffer.
+    buffer_rows: Vec<usize>,
     /// The subject and object columns of the triples that are deleted.
     triples: DataFrame,
 }
@@ -322,6 +324,25 @@ impl Triples {
             segments.push((i, subject_rows, object_rows));
             found.push(triples);
         }
+        let mut buffer_rows = vec![];
+        if let Some(buffer) = self.buffer.as_ref().filter(|b| b.height() > 0) {
+            let height = buffer.height();
+            let (rows, triples) = matching_rows(
+                &StoredTriples::TriplesInMemory(Box::new(super::TriplesInMemory::new(
+                    buffer.clone(),
+                ))),
+                &SparseIndex {
+                    map: Default::default(),
+                },
+                height,
+                None,
+                &to_delete,
+            )?;
+            if !rows.is_empty() {
+                buffer_rows = rows;
+                found.push(triples);
+            }
+        }
         let mut found = found.into_iter();
         let Some(mut triples) = found.next() else {
             return Ok(None);
@@ -331,12 +352,26 @@ impl Triples {
                 .vstack_mut_owned(other)
                 .map_err(TriplestoreError::LazyLoadError)?;
         }
-        Ok(Some(RowsToDelete { segments, triples }))
+        Ok(Some(RowsToDelete {
+            segments,
+            buffer_rows,
+            triples,
+        }))
     }
 
     /// Deletes the rows found by [`Triples::find_rows_to_delete`].
     pub(crate) fn delete_rows(&mut self, rows: RowsToDelete) -> Result<(), TriplestoreError> {
-        let RowsToDelete { segments, triples } = rows;
+        let RowsToDelete {
+            segments,
+            buffer_rows,
+            triples,
+        } = rows;
+        if !buffer_rows.is_empty() {
+            let buffer = self.buffer.take().expect("The rows are in the buffer");
+            if buffer_rows.len() < buffer.height() {
+                self.buffer = Some(remove_rows_df(buffer, &buffer_rows));
+            }
+        }
         for (i, subject_rows, object_rows) in segments.into_iter().rev() {
             let seg: &mut TriplesSegment = &mut self.segments[i];
             let height = seg.height - subject_rows.len();

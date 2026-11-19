@@ -449,26 +449,18 @@ impl Triplestore {
             }
             match u {
                 GraphUpdateOperation::InsertData { data } => {
-                    // Blank nodes are scoped to this operation, as when parsing a document.
-                    let parser_call = self.parser_call.to_string();
-                    self.parser_call += 1;
                     let mut triples_by_graph: HashMap<NamedGraph, Vec<Triple>> = HashMap::new();
                     for q in data {
-                        let g = target(graph_name_to_named_graph(&q.graph_name));
-                        triples_by_graph.entry(g).or_default().push(Triple::new(
-                            subject_to_oxrdf_subject(q.subject.clone(), &parser_call),
-                            q.predicate.clone(),
-                            term_to_oxrdf_term(q.object.clone(), &parser_call),
-                        ));
+                        triples_by_graph
+                            .entry(target(graph_name_to_named_graph(&q.graph_name)))
+                            .or_default()
+                            .push(Triple::new(
+                                q.subject.clone(),
+                                q.predicate.clone(),
+                                q.object.clone(),
+                            ));
                     }
-                    for (g, triples) in triples_by_graph {
-                        changes.touch(&g);
-                        let new_triples = self
-                            .add_triples(triples, &g)
-                            .map_err(SparqlError::TriplestoreError)?;
-                        changes.add_inserted(new_triples);
-                    }
-                    self.maybe_garbage_collect()?;
+                    self.insert_data(triples_by_graph, &mut changes)?;
                 }
                 GraphUpdateOperation::DeleteData { data } => {
                     let mut triples_by_graph: HashMap<NamedGraph, Vec<Triple>> = HashMap::new();
@@ -482,43 +474,7 @@ impl Triplestore {
                                 Term::from(q.object.clone()),
                             ));
                     }
-                    for (g, triples) in triples_by_graph {
-                        changes.touch(&g);
-                        if !self.does_graph_exist(&g) {
-                            continue;
-                        }
-                        // Triples with values that cannot be parsed cannot be stored, so there is
-                        // nothing to delete for them.
-                        let (ttas, _dropped) = triples_to_triples_to_add(triples, &g);
-                        let sms: Vec<_> = ttas
-                            .into_iter()
-                            .map(|tta| {
-                                let rdf_node_types = HashMap::from([
-                                    (
-                                        SUBJECT_COL_NAME.to_string(),
-                                        RDFNodeState::from_bases(
-                                            tta.subject_type,
-                                            tta.subject_cat_state,
-                                        ),
-                                    ),
-                                    (
-                                        OBJECT_COL_NAME.to_string(),
-                                        RDFNodeState::from_bases(
-                                            tta.object_type,
-                                            tta.object_cat_state,
-                                        ),
-                                    ),
-                                ]);
-                                (
-                                    EagerSolutionMappings::new(tta.df, rdf_node_types),
-                                    tta.predicate,
-                                )
-                            })
-                            .collect();
-                        let deleted = self.delete_construct_result(sms, &g, keep_triples)?;
-                        changes.add_deleted(&g, deleted);
-                    }
-                    self.maybe_garbage_collect()?;
+                    self.delete_data(triples_by_graph, keep_triples, &mut changes)?;
                 }
                 GraphUpdateOperation::DeleteInsert {
                     delete,
@@ -526,6 +482,18 @@ impl Triplestore {
                     using,
                     pattern,
                 } => {
+                    if !debug_no_results && using.is_none() {
+                        // DELETE { .. } INSERT { .. } WHERE {} without variables in the
+                        // templates is DELETE DATA followed by INSERT DATA: the empty pattern has
+                        // one solution, so the query is not needed.
+                        if let Some((delete_data, insert_data)) =
+                            ground_templates_of_empty_pattern(delete, insert, pattern, &target)
+                        {
+                            self.delete_data(delete_data, keep_triples, &mut changes)?;
+                            self.insert_data(insert_data, &mut changes)?;
+                            continue;
+                        }
+                    }
                     if !debug_no_results && insert.is_empty() && using.is_none() {
                         if let Some(deleted) = self.delete_whole_tables(
                             delete,
@@ -740,6 +708,149 @@ impl Triplestore {
         let res = UpdateResult { debug, changes };
         Ok(res)
     }
+}
+
+impl Triplestore {
+    /// INSERT DATA: adds the triples to their graphs, with blank nodes scoped to the operation,
+    /// as when parsing a document.
+    fn insert_data(
+        &mut self,
+        triples_by_graph: HashMap<NamedGraph, Vec<Triple>>,
+        changes: &mut Changes,
+    ) -> Result<(), SparqlError> {
+        let parser_call = self.parser_call.to_string();
+        self.parser_call += 1;
+        for (g, triples) in triples_by_graph {
+            changes.touch(&g);
+            let triples = triples
+                .into_iter()
+                .map(|t| {
+                    Triple::new(
+                        subject_to_oxrdf_subject(t.subject, &parser_call),
+                        t.predicate,
+                        term_to_oxrdf_term(t.object, &parser_call),
+                    )
+                })
+                .collect();
+            let new_triples = self
+                .add_triples(triples, &g)
+                .map_err(SparqlError::TriplestoreError)?;
+            changes.add_inserted(new_triples);
+        }
+        self.maybe_garbage_collect()?;
+        Ok(())
+    }
+
+    /// DELETE DATA: removes the triples from their graphs.
+    fn delete_data(
+        &mut self,
+        triples_by_graph: HashMap<NamedGraph, Vec<Triple>>,
+        keep_triples: bool,
+        changes: &mut Changes,
+    ) -> Result<(), SparqlError> {
+        for (g, triples) in triples_by_graph {
+            changes.touch(&g);
+            if !self.does_graph_exist(&g) {
+                continue;
+            }
+            // Triples with values that cannot be parsed cannot be stored, so there is nothing
+            // to delete for them.
+            let (ttas, _dropped) = triples_to_triples_to_add(triples, &g);
+            let sms: Vec<_> = ttas
+                .into_iter()
+                .map(|tta| {
+                    let rdf_node_types = HashMap::from([
+                        (
+                            SUBJECT_COL_NAME.to_string(),
+                            RDFNodeState::from_bases(tta.subject_type, tta.subject_cat_state),
+                        ),
+                        (
+                            OBJECT_COL_NAME.to_string(),
+                            RDFNodeState::from_bases(tta.object_type, tta.object_cat_state),
+                        ),
+                    ]);
+                    (
+                        EagerSolutionMappings::new(tta.df, rdf_node_types),
+                        tta.predicate,
+                    )
+                })
+                .collect();
+            let deleted = self.delete_construct_result(sms, &g, keep_triples)?;
+            changes.add_deleted(&g, deleted);
+        }
+        self.maybe_garbage_collect()?;
+        Ok(())
+    }
+}
+
+type TriplesByGraph = HashMap<NamedGraph, Vec<Triple>>;
+
+/// The triples to delete and to insert by graph, when the WHERE pattern of DELETE/INSERT is
+/// empty (one solution without bindings) and the templates have no variables. None otherwise,
+/// and when a template triple would not be a valid triple (e.g. a literal subject), which the
+/// general path drops.
+fn ground_templates_of_empty_pattern(
+    delete: &[GroundQuadPattern],
+    insert: &[QuadPattern],
+    pattern: &GraphPattern,
+    target: &impl Fn(NamedGraph) -> NamedGraph,
+) -> Option<(TriplesByGraph, TriplesByGraph)> {
+    let GraphPattern::Bgp { patterns } = pattern else {
+        return None;
+    };
+    if !patterns.is_empty() {
+        return None;
+    }
+    let graph = |g: &GraphNamePattern| -> Option<NamedGraph> {
+        match g {
+            GraphNamePattern::NamedNode(nn) => {
+                Some(target(NamedGraph::from_maybe_named_node(Some(nn))))
+            }
+            GraphNamePattern::DefaultGraph => Some(target(NamedGraph::DefaultGraph)),
+            GraphNamePattern::Variable(_) => None,
+        }
+    };
+    let predicate = |p: &NamedNodePattern| -> Option<NamedNode> {
+        match p {
+            NamedNodePattern::NamedNode(nn) => Some(nn.clone()),
+            NamedNodePattern::Variable(_) => None,
+        }
+    };
+    let mut deletes: TriplesByGraph = HashMap::new();
+    for d in delete {
+        let subject = match &d.subject {
+            GroundTermPattern::NamedNode(nn) => oxrdf::NamedOrBlankNode::NamedNode(nn.clone()),
+            _ => return None,
+        };
+        let object = match &d.object {
+            GroundTermPattern::NamedNode(nn) => Term::NamedNode(nn.clone()),
+            GroundTermPattern::Literal(l) => Term::Literal(l.clone()),
+            _ => return None,
+        };
+        deletes
+            .entry(graph(&d.graph_name)?)
+            .or_default()
+            .push(Triple::new(subject, predicate(&d.predicate)?, object));
+    }
+    let mut inserts: TriplesByGraph = HashMap::new();
+    for i in insert {
+        let subject = match &i.subject {
+            TermPattern::NamedNode(nn) => oxrdf::NamedOrBlankNode::NamedNode(nn.clone()),
+            TermPattern::BlankNode(bn) => oxrdf::NamedOrBlankNode::BlankNode(bn.clone()),
+            _ => return None,
+        };
+        let object = match &i.object {
+            TermPattern::NamedNode(nn) => Term::NamedNode(nn.clone()),
+            TermPattern::BlankNode(bn) => Term::BlankNode(bn.clone()),
+            TermPattern::Literal(l) => Term::Literal(l.clone()),
+            _ => return None,
+        };
+        inserts
+            .entry(graph(&i.graph_name)?)
+            .or_default()
+            .push(Triple::new(subject, predicate(&i.predicate)?, object));
+    }
+    Some((deletes, inserts))
 }
 
 impl Triplestore {
