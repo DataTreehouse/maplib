@@ -11,6 +11,7 @@
 
 ### Bug fixes
 - `MINUS` with a variable on its right side that is never bound, e.g. `MINUS { ?s ex:nonexistent ?o }` inside a `LATERAL` evaluated per row, failed with a join key type mismatch. Variables that are never bound on the right side are now left out of the join
+- `MINUS`, `FILTER EXISTS` and `FILTER NOT EXISTS` after a pattern without solutions, e.g. a type with no instances joined with a `UNION`, failed with "datatypes of join keys don't match - `lim`: bool on left does not match `lim`: u32 on right". Variables that are never bound on the left side are now left out of the `MINUS` join, and an EXISTS on a variable that is never bound keeps the (empty) solutions without a join. The Model portal's Grid › Served power failed on the Nordic44 grid, which has no apparent power limits. The W3C SPARQL 1.1 test `negation/partial-minuend` now passes
 
 ## v0.23.1
 ### Bug fixes
