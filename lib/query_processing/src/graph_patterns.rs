@@ -22,8 +22,7 @@ use oxrdf::Variable;
 use polars::frame::DataFrame;
 use polars::frame::UniqueKeepStrategy;
 use polars::prelude::{
-    by_name, col, len, lit, Expr, IntoLazy, JoinArgs, JoinType, LazyFrame, LazyGroupBy,
-    LiteralValue, SortMultipleOptions,
+    by_name, col, len, lit, Expr, IntoLazy, JoinType, LazyFrame, LazyGroupBy, LiteralValue,
 };
 use representation::cats::LockedCats;
 use representation::multitype::unnest_multicols;
@@ -147,80 +146,26 @@ pub fn prepare_group_by(
     (solution_mappings, by, dummy_varname)
 }
 
-//TODO: Fix datatypes??!?!?
+/// SPARQL MINUS: an anti join on the shared variables, built on [`join_with_unbound`] as the
+/// inner and left joins are, so that keys of several types on either side are made compatible
+/// the same way. Variables that may be unbound in some solutions of a side are given, so that
+/// each solution is compared only on the variables bound in both (SPARQL 1.1, 18.5).
 pub fn minus(
-    mut left_solution_mappings: SolutionMappings,
+    left_solution_mappings: SolutionMappings,
+    left_maybe_unbound: &HashSet<String>,
     right_solution_mappings: SolutionMappings,
+    right_maybe_unbound: &HashSet<String>,
     global_cats: LockedCats,
 ) -> Result<SolutionMappings, QueryProcessingError> {
-    let SolutionMappings {
-        mappings: right_mappings,
-        rdf_node_types: right_datatypes,
-        ..
-    } = right_solution_mappings;
-    // the right values in the codes of the left ones, as for a join: local codes of the two
-    // sides may give different values the same code
-    let (left_mappings, mut right_mappings, target_cat_state) = join::create_join_compatible_cats(
-        left_solution_mappings.mappings,
-        &left_solution_mappings.rdf_node_types,
-        right_mappings,
-        &right_datatypes,
+    join_with_unbound(
+        left_solution_mappings,
+        left_maybe_unbound,
+        right_solution_mappings,
+        right_maybe_unbound,
+        JoinType::Anti,
         global_cats,
-    );
-    left_solution_mappings.mappings = left_mappings;
-    join::update_state(&mut left_solution_mappings.rdf_node_types, target_cat_state);
-
-    // A variable that is never bound on either side (e.g. from a pattern without solutions) is
-    // in the domain of no solution of that side, so MINUS does not compare on it (SPARQL 1.1,
-    // 18.5). Joining on it would also compare an untyped column (Boolean in polars) with a typed
-    // one.
-    let right_column_set: HashSet<_> = right_datatypes
-        .iter()
-        .filter(|(_, t)| !t.is_none())
-        .map(|(k, _)| k)
-        .collect();
-    let left_column_set: HashSet<_> = left_solution_mappings
-        .rdf_node_types
-        .iter()
-        .filter(|(_, t)| !t.is_none())
-        .map(|(k, _)| k)
-        .collect();
-
-    let mut join_on: Vec<_> = left_column_set
-        .intersection(&right_column_set)
-        .cloned()
-        .collect();
-    join_on.sort();
-
-    if join_on.is_empty() {
-        Ok(left_solution_mappings)
-    } else {
-        let join_on_cols: Vec<Expr> = join_on.iter().map(|x| col(*x)).collect();
-        right_mappings = right_mappings.sort_by_exprs(
-            join_on_cols.as_slice(),
-            SortMultipleOptions::default()
-                .with_maintain_order(false)
-                .with_nulls_last(true)
-                .with_order_descending(false),
-        );
-        left_solution_mappings.mappings = left_solution_mappings.mappings.sort_by_exprs(
-            join_on_cols.as_slice(),
-            SortMultipleOptions::default()
-                .with_maintain_order(false)
-                .with_nulls_last(true)
-                .with_order_descending(false),
-        );
-        left_solution_mappings.mappings = left_solution_mappings
-            .mappings
-            .join(
-                right_mappings,
-                join_on_cols.as_slice(),
-                join_on_cols.as_slice(),
-                JoinArgs::new(JoinType::Anti),
-            )
-            .unwrap();
-        Ok(left_solution_mappings)
-    }
+        None,
+    )
 }
 
 pub fn project(

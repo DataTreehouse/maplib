@@ -13,7 +13,9 @@ use representation::multitype::{
 };
 use representation::null::expr_is_null_workaround;
 use representation::solution_mapping::SolutionMappings;
-use representation::{BaseRDFNodeType, RDFNodeState};
+use representation::{
+    BaseRDFNodeType, RDFNodeState, LANG_STRING_LANG_FIELD, LANG_STRING_VALUE_FIELD,
+};
 use std::cmp;
 use std::collections::{HashMap, HashSet};
 use tracing::debug;
@@ -39,14 +41,18 @@ pub fn join(
 
     // A shared variable that is unbound in every solution of one side (e.g. a projected variable
     // the pattern does not bind) is compatible with any value on the other side, so it is not a
-    // join key: drop it from that side and keep the other side's values.
+    // join key: drop it from that side and keep the other side's values. An anti join (MINUS)
+    // keeps the left columns, and does not compare on the variable, so it is dropped from the
+    // right side either way.
     let shared: Vec<String> = left_datatypes
         .keys()
         .filter(|k| right_datatypes.contains_key(*k))
         .cloned()
         .collect();
     for k in shared {
-        if right_datatypes.get(&k).unwrap().is_none() {
+        if right_datatypes.get(&k).unwrap().is_none()
+            || (join_type == JoinType::Anti && left_datatypes.get(&k).unwrap().is_none())
+        {
             right_mappings = right_mappings.drop(by_name([k.as_str()], true, false));
             right_datatypes.remove(&k);
         } else if left_datatypes.get(&k).unwrap().is_none() {
@@ -99,20 +105,33 @@ pub fn join_workaround(
     join_type: JoinType,
     max_rows: Option<usize>,
 ) -> Result<SolutionMappings, QueryProcessingError> {
-    assert!(matches!(join_type, JoinType::Left | JoinType::Inner));
+    assert!(matches!(
+        join_type,
+        JoinType::Left | JoinType::Inner | JoinType::Anti
+    ));
+    let anti = join_type == JoinType::Anti;
 
     let (mut left_mappings, mut left_exploded) = unnest_multicols(left_mappings, &left_datatypes);
+    // Single-type left columns unnested below. An anti join has no right columns to nest them
+    // with, so it keeps the original column and drops the unnested ones afterwards.
+    let mut left_unnested_singles = vec![];
 
     //Fixes "unnesting" where only one side is multi.
     for (c, s) in &right_datatypes {
         if s.is_multi() {
             if let Some(sl) = left_datatypes.get(c) {
                 if !sl.is_multi() {
-                    let lbt = sl.get_base_type().unwrap();
-                    let fcn = lbt.field_col_name();
-                    let colname = unnested_field_col_name(c, &fcn);
-                    left_mappings = left_mappings.rename([c], [&colname], true);
-                    left_exploded.insert(c.clone(), (vec![fcn], vec![colname]));
+                    let (lf, exploded) = unnest_single_col(
+                        left_mappings,
+                        c,
+                        sl.get_base_type().unwrap(),
+                        anti,
+                    );
+                    left_mappings = lf;
+                    if anti {
+                        left_unnested_singles.push((c.clone(), exploded.1.clone()));
+                    }
+                    left_exploded.insert(c.clone(), exploded);
                 }
             }
         }
@@ -126,11 +145,10 @@ pub fn join_workaround(
         if s.is_multi() {
             if let Some(sr) = right_datatypes.get(c) {
                 if !sr.is_multi() && !sr.is_none() {
-                    let rbt = sr.get_base_type().unwrap();
-                    let fcn = rbt.field_col_name();
-                    let colname = unnested_field_col_name(c, &fcn);
-                    right_mappings = right_mappings.rename([c], [&colname], true);
-                    right_exploded.insert(c.clone(), (vec![fcn], vec![colname]));
+                    let (lf, exploded) =
+                        unnest_single_col(right_mappings, c, sr.get_base_type().unwrap(), false);
+                    right_mappings = lf;
+                    right_exploded.insert(c.clone(), exploded);
                 }
             }
         }
@@ -167,7 +185,9 @@ pub fn join_workaround(
             }
         }
     }
-    let height_upper_bound = if no_join {
+    let height_upper_bound = if anti {
+        left_height
+    } else if no_join {
         0
     } else if on.is_empty() {
         let left_cols: Vec<_> = left_datatypes.keys().cloned().collect();
@@ -187,7 +207,7 @@ pub fn join_workaround(
         new_height.trunc() as usize
     };
 
-    if let Some(max_rows) = max_rows {
+    if let Some(max_rows) = max_rows.filter(|_| !anti) {
         if height_upper_bound >= max_rows {
             let left_cols: Vec<_> = left_datatypes.keys().cloned().collect();
             let right_cols: Vec<_> = right_datatypes.keys().cloned().collect();
@@ -200,7 +220,25 @@ pub fn join_workaround(
         }
     }
 
-    if no_join {
+    if anti {
+        // MINUS removes the left solutions that are compatible with a right solution sharing a
+        // variable with it. Without shared keys, or with keys of no common type, no right
+        // solution qualifies and the left side is kept as it is.
+        if !no_join && !on.is_empty() {
+            let join_args = JoinArgs {
+                how: JoinType::Anti,
+                validation: Default::default(),
+                suffix: None,
+                slice: None,
+                nulls_equal: true,
+                coalesce: Default::default(),
+                maintain_order: MaintainOrderJoin::None,
+                build_side: None,
+            };
+            let right_keys = right_mappings.select(on.clone());
+            left_mappings = left_mappings.join(right_keys, &on, &on, join_args).unwrap();
+        }
+    } else if no_join {
         let dummycol = uuid::Uuid::new_v4().to_string();
         left_mappings = left_mappings.with_column(lit(false).alias(&dummycol));
         right_mappings = right_mappings.with_column(lit(true).alias(&dummycol));
@@ -291,6 +329,18 @@ pub fn join_workaround(
     left_mappings = utils::cancel::cancel_check_node(left_mappings);
     // Keeps the join order chosen from the graph patterns (see keep_join_order).
     left_mappings = utils::polars::keep_join_order(left_mappings);
+    if anti {
+        for (c, colnames) in left_unnested_singles {
+            left_exploded.remove(&c);
+            left_mappings = left_mappings.drop(by_name(colnames, true, false));
+        }
+        left_mappings = nest_multicolumns(left_mappings, left_exploded);
+        return Ok(SolutionMappings::new(
+            left_mappings,
+            left_datatypes,
+            height_upper_bound,
+        ));
+    }
     // The height estimate assumes joins on keys with few matches each. A join on a key that many
     // rows share gives up to the product of the input heights, e.g. `?s :kind ?k . ?t :kind ?k`.
     if height_upper_bound > utils::polars::SMALL_COLLECT_HEIGHT
@@ -329,6 +379,49 @@ pub fn join_workaround(
         left_datatypes,
         height_upper_bound,
     ))
+}
+
+/// The columns a single-type column `c` of type `t` has when unnested as part of a multi-type
+/// column, as [`unnest_multicols`] gives them: a language-tagged string has a value and a language
+/// field. With `keep`, the column itself is kept beside them.
+fn unnest_single_col(
+    lf: LazyFrame,
+    c: &str,
+    t: &BaseRDFNodeType,
+    keep: bool,
+) -> (LazyFrame, (Vec<String>, Vec<String>)) {
+    let fcn = t.field_col_name();
+    let colname = unnested_field_col_name(c, &fcn);
+    if t.is_lang_string() {
+        let langname = unnested_field_col_name(c, LANG_STRING_LANG_FIELD);
+        let mut lf = lf.with_columns([
+            col(c)
+                .struct_()
+                .field_by_name(LANG_STRING_LANG_FIELD)
+                .alias(&langname),
+            col(c)
+                .struct_()
+                .field_by_name(LANG_STRING_VALUE_FIELD)
+                .alias(&colname),
+        ]);
+        if !keep {
+            lf = lf.drop(by_name([c], true, false));
+        }
+        (
+            lf,
+            (
+                vec![LANG_STRING_LANG_FIELD.to_string(), fcn],
+                vec![langname, colname],
+            ),
+        )
+    } else {
+        let lf = if keep {
+            lf.with_column(col(c).alias(&colname))
+        } else {
+            lf.rename([c], [&colname], true)
+        };
+        (lf, (vec![fcn], vec![colname]))
+    }
 }
 
 pub(crate) fn create_join_compatible_cats(
@@ -523,7 +616,7 @@ pub fn create_join_compatible_solution_mappings(
                                         .insert(v.to_string(), RDFNodeState::from_map(right_map));
                                 }
                             }
-                            JoinType::Left => {
+                            JoinType::Left | JoinType::Anti => {
                                 let mut right_keep: Vec<_> =
                                     left_set.intersection(&right_set).cloned().collect();
                                 right_keep.sort();
@@ -582,7 +675,7 @@ pub fn create_join_compatible_solution_mappings(
                                         .insert(v.to_string(), RDFNodeState::from_map(right_map));
                                 }
                             }
-                            _ => unreachable!("join_type is Inner or Left"),
+                            _ => unreachable!("join_type is Inner, Left or Anti"),
                         }
                     } else {
                         //right not multi
@@ -624,7 +717,7 @@ pub fn create_join_compatible_solution_mappings(
                                     );
                                 }
                             }
-                            JoinType::Left => {
+                            JoinType::Left | JoinType::Anti => {
                                 if left_dt.map.contains_key(base_right) {
                                     //Do nothing
                                 } else {
@@ -642,7 +735,7 @@ pub fn create_join_compatible_solution_mappings(
                                     );
                                 }
                             }
-                            _ => unreachable!("join_type is Inner or Left"),
+                            _ => unreachable!("join_type is Inner, Left or Anti"),
                         }
                     }
                 } else {
@@ -692,7 +785,7 @@ pub fn create_join_compatible_solution_mappings(
                                     );
                                 }
                             }
-                            JoinType::Left => {
+                            JoinType::Left | JoinType::Anti => {
                                 if right_dt.map.contains_key(left_basic_dt) {
                                     right_mappings = multicol_to_single_type(
                                         right_mappings,
@@ -722,7 +815,7 @@ pub fn create_join_compatible_solution_mappings(
                                     );
                                 }
                             }
-                            _ => unreachable!("join_type is Inner or Left"),
+                            _ => unreachable!("join_type is Inner, Left or Anti"),
                         }
                     } else {
                         //Right not multi
@@ -751,7 +844,7 @@ pub fn create_join_compatible_solution_mappings(
                                     BaseRDFNodeType::None.into_default_input_rdf_node_state(),
                                 );
                             }
-                            JoinType::Left => {
+                            JoinType::Left | JoinType::Anti => {
                                 right_mappings = right_mappings.filter(lit(false)).with_column(
                                     lit(LiteralValue::untyped_null())
                                         .cast(
@@ -764,7 +857,7 @@ pub fn create_join_compatible_solution_mappings(
                                     BaseRDFNodeType::None.into_default_input_rdf_node_state(),
                                 );
                             }
-                            _ => unreachable!("join_type is Inner or Left"),
+                            _ => unreachable!("join_type is Inner, Left or Anti"),
                         }
                     }
                 }
@@ -815,7 +908,8 @@ fn multicol_to_single_type(
 /// with nulls. Each side is split by which of its possibly unbound shared variables are bound,
 /// the unbound columns are dropped from each part, and the parts are joined pairwise on the
 /// variables that are bound in both. A left join only splits the left side, since splitting the
-/// right side would keep left rows that only fail to match one of its parts.
+/// right side would keep left rows that only fail to match one of its parts. An anti join
+/// (MINUS) splits both sides, and removes from each left part the rows matching any right part.
 pub fn join_with_unbound(
     left_solution_mappings: SolutionMappings,
     left_maybe_unbound: &HashSet<String>,
@@ -835,7 +929,7 @@ pub fn join_with_unbound(
         .filter(|x| shared.contains(x))
         .cloned()
         .collect();
-    let mut right_split: Vec<_> = if join_type == JoinType::Inner {
+    let mut right_split: Vec<_> = if matches!(join_type, JoinType::Inner | JoinType::Anti) {
         right_maybe_unbound
             .iter()
             .filter(|x| shared.contains(x))
@@ -858,6 +952,17 @@ pub fn join_with_unbound(
     let left_parts = split_by_bound(left_solution_mappings, &left_split);
     let right_parts = split_by_bound(right_solution_mappings, &right_split);
     let mut sms = vec![];
+    if join_type == JoinType::Anti {
+        // A left solution is removed by any part of the right side, each compared on the
+        // variables bound in both.
+        for mut l in left_parts {
+            for r in &right_parts {
+                l = join(l, r.clone(), JoinType::Anti, global_cats.clone(), max_rows)?;
+            }
+            sms.push(l);
+        }
+        return union(sms, false, global_cats);
+    }
     for l in &left_parts {
         for r in &right_parts {
             sms.push(join(

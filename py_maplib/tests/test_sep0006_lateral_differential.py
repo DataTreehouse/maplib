@@ -260,8 +260,7 @@ CASES = [
 # Cases that fail for reasons outside of LATERAL, as strict xfails.
 KNOWN_FAILURES = {
     "unbound_left_variable_in_bgp": "maplib's joins do not treat unbound variables as compatible "
-    "with bound ones, also without LATERAL (as the W3C tests bindings/values7 and "
-    "negation/full-minuend)",
+    "with bound ones, also without LATERAL (as the W3C test bindings/values7)",
 }
 
 

@@ -1,3 +1,4 @@
+use super::join::maybe_unbound_variables;
 use super::Triplestore;
 use crate::sparql::errors::SparqlError;
 use tracing::{instrument, trace};
@@ -50,7 +51,9 @@ impl Triplestore {
 
         Ok(minus(
             left_solution_mappings,
+            &maybe_unbound_variables(left),
             right_solution_mappings,
+            &maybe_unbound_variables(right),
             self.global_cats.clone(),
         )?)
     }

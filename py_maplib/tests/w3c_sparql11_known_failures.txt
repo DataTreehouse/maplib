@@ -13,7 +13,6 @@ cast/cast-string  # Results differ: "0"^^xsd:boolean is stored as a boolean valu
 csv-tsv-res/csv03  # CSV differs: doubles are not written in the canonical form (1.0E6 is written as 1000000.0)
 csv-tsv-res/csv04  # CSV differs.
 delete/dawg-delete-07  # MaplibException: Variable ?o not found. maplib deliberately rejects update templates with variables that are not bound by the WHERE clause
-negation/full-minuend  # Results differ (ordered): MINUS does not treat unbound variables as compatible
 syntax-query/test_4  # MaplibException: Custom function not found: <http://example/function>, it is possible to define a fu
 
 # Numeric literals from the data are returned in canonical form (they are stored as values),
