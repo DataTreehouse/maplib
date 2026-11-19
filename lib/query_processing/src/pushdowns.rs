@@ -19,13 +19,16 @@ pub const CHECK_SMALL_HEIGHT: usize = 100_000;
 /// The values of every variable of solution mappings with at most this many rows are pushed down.
 pub const SMALL_HEIGHT: usize = 500;
 /// The values of the variables of the pattern being evaluated are pushed down from solution
-/// mappings with at most this many rows. Converting values to terms costs time proportional to
-/// the number of distinct values, which is small compared with scanning large triple tables.
+/// mappings with at most this many rows. Pushing values down costs time proportional to the
+/// number of distinct values, which is small compared with scanning large triple tables.
 pub const MEDIUM_HEIGHT: usize = 100_000;
 /// Values are pushed down from more than [SMALL_HEIGHT] rows only if the triple table the
-/// pattern reads has at least this many times more rows. Otherwise converting the values to
-/// terms and looking them up costs more than reading the table and joining.
-pub const MEDIUM_TABLE_FACTOR: usize = 16;
+/// pattern reads has at least this many times more rows. Otherwise sorting the values, looking
+/// them up and joining the rows found costs more than joining the whole table within the plan:
+/// e.g. 28,880 subjects pushed into a table of 528,699 rows (18 times larger) took 6 ms against
+/// 1.6 ms for the join. Between 32 and 128 the difference is within measurement noise; a lower
+/// factor keeps pushing into large tables, which saves reading them in disk storage.
+pub const MEDIUM_TABLE_FACTOR: usize = 64;
 /// Solutions estimated to have at most this many rows are not collected to push their values down
 /// into a pattern whose triple table has at most this many rows: joining the whole table within
 /// the query's plan costs less than a collect, and a star or chain of such patterns is then
