@@ -97,3 +97,55 @@ def test_long_and_deep_queries_do_not_overflow_the_stack(kind):
     code = f"from maplib import Model\nModel().query({q})\n"
     r = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True)
     assert r.returncode == 0, r.stderr[-500:]
+
+
+# Queries with few enough brackets and operators are evaluated on the stack of the calling
+# thread (see on_query_stack in model.rs), when it has 2 MB plus 64 kB per such token left.
+# These nest as deeply as that allows on the 8 MB main thread (about 90 tokens) and on a thread
+# with a 4 MB stack (about 30 tokens).
+def _nested_queries(tokens):
+    n = tokens - 4
+    return {
+        "parens": "SELECT * WHERE { ?s ?p ?o FILTER(" + "(" * n + "?o" + ")" * n + ") }",
+        # Nested negations take time exponential in their depth, so these are not as deep.
+        "not": "SELECT * WHERE { ?s ?p ?o FILTER(" + "!(" * 12 + "BOUND(?o)" + ")" * 12 + ") }",
+        "or": "SELECT * WHERE { ?s ?p ?o FILTER("
+        + " || ".join(f"?o = {i}" for i in range(n // 3))
+        + ") }",
+        "plus": "SELECT * WHERE { ?s ?p ?o BIND(" + " + ".join(["1"] * n) + " AS ?x) }",
+        "groups": "SELECT * WHERE " + "{ " * n + "?s ?p ?o" + " }" * n,
+        "optionals": "SELECT * WHERE { ?s ?p ?o "
+        + "OPTIONAL { ?s ?p ?o " * n
+        + "}" * n
+        + " }",
+        "subselects": "SELECT * WHERE " + "{ SELECT * WHERE " * (n // 2) + "{ ?s ?p ?o }" + " }" * (n // 2),
+        "unions": "SELECT * WHERE { " + " UNION ".join("{ ?s ?p ?o }" for _ in range(n // 2)) + " }",
+        "patterns": "SELECT * WHERE { "
+        + " . ".join(f"?s{i} <http://p/{i}> ?s{i + 1}" for i in range(n))
+        + " }",
+    }
+
+
+@pytest.mark.parametrize("stack", ["main", "4mb"])
+def test_queries_evaluated_on_the_calling_threads_stack_do_not_overflow_it(stack):
+    tokens = 90 if stack == "main" else 30
+    queries = _nested_queries(tokens)
+    code = f"""
+import threading
+from maplib import Model
+m = Model()
+m.update('INSERT DATA {{ <http://s> <http://p> 1 . <http://s> <http://p/0> <http://s> }}')
+def run():
+    for q in {list(queries.values())!r}:
+        m.query(q)
+    print("ok")
+if {stack == "main"!r}:
+    run()
+else:
+    threading.stack_size(4 * 1024 * 1024)
+    t = threading.Thread(target=run)
+    t.start()
+    t.join()
+"""
+    r = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True)
+    assert r.returncode == 0 and r.stdout.strip() == "ok", r.stderr[-1000:]

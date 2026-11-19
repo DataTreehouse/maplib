@@ -860,8 +860,9 @@ SELECT ?loc ?crs ?seq ?x ?y ?z WHERE {{
             federation,
             evaluation_hook: None,
         };
-        on_big_stack(|| {
-            if let Some(chrontext_settings) = &self.chrontext_settings {
+        if let Some(chrontext_settings) = &self.chrontext_settings {
+            // Virtualized queries are rewritten and translated for each database as well.
+            on_big_stack(|| {
                 let engine = Engine::new(
                     chrontext_settings,
                     &self.triplestore,
@@ -874,7 +875,9 @@ SELECT ?loc ?crs ?seq ?x ?y ?z WHERE {{
                     .query_blocking(query, Some(&self.prefixes), bindings)
                     .map_err(MaplibError::from)?;
                 Ok(qr)
-            } else {
+            })
+        } else {
+            on_query_stack(query, || {
                 self.triplestore
                     .query(
                         query,
@@ -886,8 +889,8 @@ SELECT ?loc ?crs ?seq ?x ?y ?z WHERE {{
                         bindings,
                     )
                     .map_err(|x| x.into())
-            }
-        })
+            })
+        }
     }
 
     /// The query result cache of this model, shared by everything that queries it.
@@ -919,7 +922,7 @@ SELECT ?loc ?crs ?seq ?x ?y ?z WHERE {{
         bindings: Option<&HashMap<String, GroundTerm>>,
     ) -> CachePlan {
         // Parsing and planning recurse like the query itself.
-        on_big_stack(|| {
+        on_query_stack(query, || {
             let Ok(parsed) = spargebra::Query::parse(query, None, Some(&self.prefixes)) else {
                 return CachePlan::Bypass("error");
             };
@@ -977,7 +980,7 @@ SELECT ?loc ?crs ?seq ?x ?y ?z WHERE {{
             federation,
             evaluation_hook: None,
         };
-        on_big_stack(|| {
+        on_query_stack(query, || {
             self.triplestore
                 .query_page(
                     query,
@@ -1026,7 +1029,7 @@ SELECT ?loc ?crs ?seq ?x ?y ?z WHERE {{
             federation: None,
             evaluation_hook: None,
         };
-        on_big_stack(|| {
+        on_query_stack(query, || {
             self.triplestore
                 .insert(
                     query,
@@ -1136,7 +1139,7 @@ SELECT ?loc ?crs ?seq ?x ?y ?z WHERE {{
             federation,
             evaluation_hook: None,
         };
-        on_big_stack(|| {
+        on_query_stack(update, || {
             self.triplestore
                 .update_keep_triples(
                     update,
@@ -1534,11 +1537,112 @@ SELECT ?loc ?crs ?seq ?x ?y ?z WHERE {{
     }
 }
 
+/// Below this much stack left, work is moved to a big stack, see [on_big_stack].
+const BIG_STACK_RED_ZONE: usize = 64 * 1024 * 1024;
+const BIG_STACK_SIZE: usize = 1024 * 1024 * 1024;
+
 /// Queries are processed recursively, so long chains of UNION or || and deeply nested
 /// expressions can need far more stack than a thread has (8 MB on the main thread).
 /// The work is moved to a larger stack on the same thread, so Python signal checks still work.
 pub fn on_big_stack<R>(f: impl FnOnce() -> R) -> R {
-    const RED_ZONE: usize = 64 * 1024 * 1024;
-    const STACK_SIZE: usize = 1024 * 1024 * 1024;
-    stacker::maybe_grow(RED_ZONE, STACK_SIZE, f)
+    stacker::maybe_grow(BIG_STACK_RED_ZONE, BIG_STACK_SIZE, f)
+}
+
+/// Like [on_big_stack] for parsing and evaluating the SPARQL query or update `text`, but only
+/// moves to a big stack when the thread may not have enough left for it.
+///
+/// A big stack is mapped and unmapped again for every call, and the pages it uses are faulted
+/// in anew, which took up to a third of the time of the smallest queries. How deeply parsing
+/// and evaluation recurse is bounded by how deeply `text` nests, so a query with few nesting
+/// tokens (see [nesting_tokens]) stays on the current stack when [query_red_zone] of it is left.
+pub fn on_query_stack<R>(text: &str, f: impl FnOnce() -> R) -> R {
+    let red_zone = query_red_zone(text).min(BIG_STACK_RED_ZONE);
+    stacker::maybe_grow(red_zone, BIG_STACK_SIZE, f)
+}
+
+/// The stack needed to parse and evaluate `text`: a base, plus a generous allowance for every
+/// token that may add a level of recursion. Debug builds use many times the stack per level.
+fn query_red_zone(text: &str) -> usize {
+    #[cfg(debug_assertions)]
+    const BASE: usize = 8 * 1024 * 1024;
+    #[cfg(debug_assertions)]
+    const PER_LEVEL: usize = 1024 * 1024;
+    #[cfg(not(debug_assertions))]
+    const BASE: usize = 2 * 1024 * 1024;
+    #[cfg(not(debug_assertions))]
+    const PER_LEVEL: usize = 64 * 1024;
+    BASE.saturating_add(nesting_tokens(text).saturating_mul(PER_LEVEL))
+}
+
+/// An upper bound of how deeply the algebra and expressions of the SPARQL `text` nest: the
+/// number of brackets, operators and separators (also those of triple patterns, which may be
+/// joined one by one) outside of IRIs, strings and comments. Every level of nesting needs one.
+fn nesting_tokens(text: &str) -> usize {
+    let b = text.as_bytes();
+    let mut n = 0;
+    let mut i = 0;
+    while i < b.len() {
+        match b[i] {
+            b'#' => {
+                while i < b.len() && b[i] != b'\n' {
+                    i += 1;
+                }
+            }
+            q @ (b'"' | b'\'') => {
+                let long = b[i..].starts_with(&[q, q, q]);
+                i += if long { 3 } else { 1 };
+                while i < b.len() {
+                    if b[i] == b'\\' {
+                        i += 2;
+                        continue;
+                    }
+                    if b[i] == q && (!long || b[i..].starts_with(&[q, q, q])) {
+                        // To the last quote, which the loop below steps over.
+                        i += if long { 2 } else { 0 };
+                        break;
+                    }
+                    i += 1;
+                }
+            }
+            b'<' => {
+                // An IRI has no spaces, unlike a < comparison.
+                let end = b[i + 1..].iter().position(|c| {
+                    matches!(c, b'>' | b'<' | b'"' | b'{' | b'}' | b'|' | b'^' | b'`' | b'\\')
+                        || c.is_ascii_whitespace()
+                });
+                match end {
+                    Some(e) if b[i + 1 + e] == b'>' => i += e + 1,
+                    _ => n += 1,
+                }
+            }
+            // The ^^ before the datatype of a literal.
+            b'^' if b.get(i + 1) == Some(&b'^') => i += 1,
+            b'(' | b'{' | b'[' | b'|' | b'&' | b'!' | b'=' | b'>' | b'+' | b'-' | b'*' | b'/'
+            | b',' | b'^' | b'.' | b';' => n += 1,
+            _ => {}
+        }
+        i += 1;
+    }
+    n
+}
+
+#[cfg(test)]
+mod stack_tests {
+    use super::nesting_tokens;
+
+    #[test]
+    fn counts_nesting_tokens_outside_iris_strings_and_comments() {
+        assert_eq!(nesting_tokens("SELECT * WHERE { VALUES ?x { 1 } }"), 3);
+        // ( ( { ( > and nothing in the IRIs, the comment, the string or the datatype.
+        assert_eq!(
+            nesting_tokens(
+                "PREFIX ex: <http://ex.org/a-b/> SELECT (SUM(?o) AS ?s) WHERE { ?s <http://ex.org/p-q/r> ?o # a (comment) {\n FILTER(?o > \"a (b) || c\"^^<http://ex.org/dt>) }"
+            ),
+            5
+        );
+        // Comparisons with < are not IRIs.
+        assert_eq!(nesting_tokens("FILTER(?a < 3 || ?b<?c)"), 5);
+        assert_eq!(nesting_tokens("'''x ' ( '''(\"a\\\"(\")"), 1);
+        assert_eq!(nesting_tokens(&"?a = 1 || ".repeat(1000)), 3000);
+    }
 }
