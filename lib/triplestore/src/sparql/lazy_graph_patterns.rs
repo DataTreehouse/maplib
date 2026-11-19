@@ -1,3 +1,4 @@
+mod count;
 mod distinct;
 mod extend;
 mod filter;

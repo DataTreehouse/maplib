@@ -11,8 +11,6 @@ use polars::prelude::{
 };
 use polars_core::prelude::UniqueKeepStrategy;
 use polars_core::df;
-use polars_core::frame::DataFrame;
-use polars_core::prelude::Column;
 use query_processing::aggregates::AggregateReturn;
 use query_processing::graph_patterns::{group_by, join, prepare_group_by};
 use query_processing::pushdowns::Pushdowns;
@@ -20,8 +18,7 @@ use representation::dataset::QueryGraph;
 use representation::query_context::{Context, PathEntry};
 use representation::solution_mapping::{EagerSolutionMappings, SolutionMappings};
 use representation::BaseRDFNodeType;
-use spargebra::algebra::{AggregateExpression, AggregateFunction, Expression, GraphPattern};
-use spargebra::term::{NamedNodePattern, TermPattern};
+use spargebra::algebra::{AggregateExpression, AggregateFunction, GraphPattern};
 use std::collections::HashMap;
 use uuid::Uuid;
 
@@ -44,7 +41,7 @@ impl Triplestore {
         // Inside the right side of a LATERAL, each substituted binding is grouped on its own.
         let lateral_keys = lateral_key_columns(parameters);
         if variables.is_empty() && lateral_keys.is_empty() {
-            if let Some(grouped) = self.count_all_triples(inner, aggregates, dataset) {
+            if let Some(grouped) = self.count_from_tables(inner, aggregates, dataset)? {
                 return Ok(if let Some(solution_mappings) = solution_mappings {
                     join(
                         solution_mappings,
@@ -248,74 +245,5 @@ impl Triplestore {
             grouped
         };
         Ok(solution_mappings)
-    }
-}
-
-impl Triplestore {
-    /// Fast path for counting all triples of a graph, e.g.
-    /// `SELECT (COUNT(*) AS ?c) WHERE { ?s ?p ?o }`: the triple tables are deduplicated and
-    /// disjoint, so the count is the sum of their heights. Applies to COUNT(*) and COUNT of one
-    /// of the variables (not DISTINCT) over a single triple pattern with three different
-    /// variables, queried in a single graph.
-    fn count_all_triples(
-        &self,
-        inner: &GraphPattern,
-        aggregates: &[(Variable, AggregateExpression)],
-        dataset: &QueryGraph,
-    ) -> Option<SolutionMappings> {
-        let QueryGraph::NamedGraph(graph) = dataset else {
-            return None;
-        };
-        let GraphPattern::Bgp { patterns } = inner else {
-            return None;
-        };
-        let [tp] = patterns.as_slice() else {
-            return None;
-        };
-        let (TermPattern::Variable(s), NamedNodePattern::Variable(p), TermPattern::Variable(o)) =
-            (&tp.subject, &tp.predicate, &tp.object)
-        else {
-            return None;
-        };
-        if s == p || s == o || p == o || aggregates.is_empty() {
-            return None;
-        }
-        for (_, a) in aggregates {
-            let ok = match a {
-                AggregateExpression::CountSolutions { distinct } => !distinct,
-                AggregateExpression::FunctionCall {
-                    name: AggregateFunction::Count,
-                    expr: Expression::Variable(v),
-                    distinct,
-                } => !distinct && (v == s || v == p || v == o),
-                _ => false,
-            };
-            if !ok {
-                return None;
-            }
-        }
-        let mut n = 0usize;
-        if let Some(m) = self.graph_triples_map.get(graph) {
-            for tables in m.values() {
-                for t in tables.values() {
-                    n += t.get_height();
-                }
-            }
-        }
-        let mut columns = vec![];
-        let mut types = HashMap::new();
-        for (v, _) in aggregates {
-            columns.push(Column::new(v.as_str().into(), [n as i64]));
-            types.insert(
-                v.as_str().to_string(),
-                BaseRDFNodeType::Literal(xsd::INTEGER.into_owned(), None)
-                    .into_default_input_rdf_node_state(),
-            );
-        }
-        Some(SolutionMappings::new(
-            DataFrame::new(1, columns).unwrap().lazy(),
-            types,
-            1,
-        ))
     }
 }
