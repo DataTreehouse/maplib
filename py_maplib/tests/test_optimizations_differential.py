@@ -1045,6 +1045,17 @@ for name, body, outcome in [
 case("inl_chain", "SELECT * WHERE { :x0 :many ?y . ?s :t16384 ?y . ?s :sa ?a }", ["a", "s", "y"],
      hits={"inl.taken|inl.declined_estimate": lambda w: inl_on(w) and w.storage == "memory",
            "inl.declined_storage": lambda w: inl_on(w) and w.storage != "memory"})
+# MAPLIB_INL_COST_RATIO (read per query) scales INL's estimated time against the Polars path's:
+# 0 makes INL always the cheaper, a huge ratio never.
+in_memory = lambda w: inl_on(w) and w.storage == "memory"
+case("inl_chain_ratio_0", "SELECT * WHERE { :x0 :many ?y . ?s :t16384 ?y . ?s :sa ?a }",
+     ["a", "s", "y"], env={"MAPLIB_INL_COST_RATIO": "0"},
+     hits={"inl.taken": in_memory, "inl.declined_estimate": False})
+for name, body in [("star", ":x6 :sa ?a . :x6 :t16384 ?y . ?y ^:t16385 ?z"),
+                   ("chain_by_subjects", ":c5 :chain ?a . ?a :chain ?b . ?b :chain ?c")]:
+    case(f"inl_{name}_ratio_huge", f"SELECT * WHERE {{ {body} }}",
+         sorted(set(re.findall(r"\?(\w+)", body))), env={"MAPLIB_INL_COST_RATIO": "1000000000"},
+         hits={"inl.declined_estimate": in_memory, "inl.taken": False})
 case("inl_work_limit", "SELECT * WHERE { :x0 :many ?y . ?s :t16384 ?y }", ["y", "s"],
      env={"MAPLIB_INL_MAX_WORK": "50"},
      hits={"inl.declined_estimate": lambda w: inl_on(w) and w.storage == "memory",
