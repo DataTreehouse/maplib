@@ -34,6 +34,7 @@
 - A `FILTER` on a `RANK` that maplib answers without ranking the rows, e.g. keeping only `?rank = 1`, gave the rank column the type Int32 instead of Int64, so a `UNION` or `LATERAL` that combined it with ranked solutions failed with a type mismatch
 - maplib Enterprise Edition: validating a model in hybrid or disk storage a second time panicked with "not yet implemented" when the on-disk dictionary already had strings cached in memory. The strings of the codes that are not cached yet are now added to the cache
 - maplib Enterprise Edition: a dropped model in hybrid or disk storage kept its on-disk dictionary's DuckDB database open, with one thread per core, so a process that created a few hundred such models (a server, a test suite) failed with "failed to spawn thread". The database is now closed when the last model or table using its file is dropped
+- maplib Enterprise Edition: SHACL-SPARQL constraints that use a pre-bound variable (`$this`, `$currentShape`, `$shapesGraph`, `$PATH`) on the right side of `MINUS` are rejected as unsupported, as SHACL 5.3.1 requires. They used to fail with a MINUS type error, and with the MINUS fix above they would have run with the wrong semantics
 
 ## v0.23.1
 ### Bug fixes
