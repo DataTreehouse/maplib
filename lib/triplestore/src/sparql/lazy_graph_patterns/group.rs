@@ -41,7 +41,11 @@ impl Triplestore {
         // Inside the right side of a LATERAL, each substituted binding is grouped on its own.
         let lateral_keys = lateral_key_columns(parameters);
         if variables.is_empty() && lateral_keys.is_empty() {
-            if let Some(grouped) = self.count_from_tables(inner, aggregates, dataset)? {
+            let counted = match self.count_from_tables(inner, aggregates, dataset)? {
+                Some(c) => Some(c),
+                None => self.count_joins_from_codes(inner, aggregates, dataset)?,
+            };
+            if let Some(grouped) = counted {
                 return Ok(if let Some(solution_mappings) = solution_mappings {
                     join(
                         solution_mappings,
