@@ -60,6 +60,16 @@ fast_paths! {
     LookupWalk => "lookup.walk",
     // The Bloom filter in front of the on-disk dictionary (maplib Enterprise Edition).
     DiskDictionaryBloomAbsent => "disk_dictionary_bloom.absent",
+    // Table statistics: the order of a BGP's triple patterns, its join estimates, and where a
+    // table's statistics come from.
+    BgpOrderStatistics => "bgp_order.statistics",
+    BgpOrderWritten => "bgp_order.written",
+    BgpOrderNoStatistics => "bgp_order.no_statistics",
+    BgpEstimateTypeDisjoint => "bgp_estimate.type_disjoint",
+    TableStatsDeep => "table_stats.deep",
+    TableStatsMerged => "table_stats.merged",
+    TableStatsAssumed => "table_stats.assumed",
+    TableStatsExactDistinct => "table_stats.exact_distinct",
     // Basic graph patterns on codes.
     BgpSmallTableInPlan => "bgp.small_table_in_plan",
     BgpValuesPushed => "bgp.values_pushed",

@@ -23,6 +23,7 @@ use representation::BaseRDFNodeType;
 use spargebra::term::{NamedNodePattern, TermPattern, TriplePattern};
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
+use utils::fast_path::{self, FastPath};
 
 /// More constant values than this for a subject or object are estimated from their number
 /// alone, not one by one.
@@ -138,6 +139,7 @@ impl JoinEstimate {
             if let Some(ds) = self.distinct.get(v) {
                 if let (Some(a), Some(b)) = (self.types.get(v), p.types.get(v)) {
                     if a.is_disjoint(b) {
+                        fast_path::hit(FastPath::BgpEstimateTypeDisjoint);
                         return 0.0;
                     }
                 }
@@ -529,6 +531,7 @@ impl Triplestore {
         let mut state = JoinEstimate::start(sm);
         let mut remaining: Vec<usize> = (0..tps.len()).collect();
         let mut ordered = Vec::with_capacity(tps.len());
+        let mut overruled = false;
         while !remaining.is_empty() {
             let any_connected = !state.distinct.is_empty()
                 && remaining
@@ -559,10 +562,12 @@ impl Triplestore {
             } else {
                 first_pos
             };
+            overruled |= pos != first_pos;
             let i = remaining.remove(pos);
             state.join(&estimates[i]);
             ordered.push(tps[i].clone());
         }
+        fast_path::hit_if(overruled, FastPath::BgpOrderStatistics, FastPath::BgpOrderWritten);
         ordered
     }
 }

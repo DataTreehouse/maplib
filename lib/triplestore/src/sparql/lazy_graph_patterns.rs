@@ -221,6 +221,10 @@ impl Triplestore {
                 // One pattern on its own needs no order.
                 let statistics = estimate::statistics_enabled();
                 let estimated = statistics && patterns.len() > 1;
+                fast_path::hit_when(
+                    !statistics && patterns.len() > 1,
+                    FastPath::BgpOrderNoStatistics,
+                );
                 let ordered_patterns = if estimated {
                     self.order_triple_patterns_by_estimates(
                         &patterns,

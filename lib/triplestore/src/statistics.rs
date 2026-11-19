@@ -30,6 +30,7 @@ use representation::{BaseRDFNodeType, OBJECT_COL_NAME, SUBJECT_COL_NAME};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use sketch::ColumnSketch;
+use utils::fast_path::{self, FastPath};
 use utils::polars::collect_in_memory;
 
 /// The statistics of a deep [Triplestore::analyze] are kept until the number of triples of a
@@ -408,6 +409,7 @@ pub(crate) fn merged_table_stats(
     // The table's own exact count where it has one (one segment and an empty write buffer).
     let distinct_subjects = t
         .exact_distinct(false)
+        .inspect(|_| fast_path::hit(FastPath::TableStatsExactDistinct))
         .map(|d| d.clamp(1, rows))
         .unwrap_or_else(|| distinct(&subject_sketch, &|s| s.subject_distinct));
     let distinct_objects = t
@@ -485,6 +487,7 @@ impl Triplestore {
         let key: TableKey = (graph.clone(), predicate.clone(), types.0.clone(), types.1.clone());
         if let Some(s) = get(&self.stats_cache.deep, &key) {
             if !is_stale(&s, rows) {
+                fast_path::hit(FastPath::TableStatsDeep);
                 return if s.generation == t.generation() {
                     s
                 } else {
@@ -494,12 +497,15 @@ impl Triplestore {
         }
         if let Some(s) = get(&self.stats_cache.merged, &key) {
             if s.generation == t.generation() {
+                fast_path::hit(FastPath::TableStatsMerged);
                 return s;
             }
         }
         let Some(sketches) = t.segment_sketches(read && t.in_memory()) else {
+            fast_path::hit(FastPath::TableStatsAssumed);
             return Arc::new(TableStats::assumed(rows));
         };
+        fast_path::hit(FastPath::TableStatsMerged);
         let stats = Arc::new(merged_table_stats(t, &sketches, self.global_cats.clone()));
         put(&self.stats_cache.merged, key, stats.clone());
         stats

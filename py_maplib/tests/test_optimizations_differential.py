@@ -348,9 +348,13 @@ def expected_rows(query: str, variables: Tuple[str, ...]):
 # The states
 # ---------------------------------------------------------------------------
 
-STATES = ["fresh", "object_index", "segments", "compacted", "buffered", "reloaded"]
+STATES = ["fresh", "object_index", "analyzed", "segments", "compacted", "buffered", "reloaded"]
 # The states built again with the segment Bloom filters off.
 FILTER_OFF_STATES = ["segments", "buffered", "reloaded"]
+# The states also queried with the table statistics off (MAPLIB_TABLE_STATISTICS=off, read for
+# every basic graph pattern).
+STATISTICS_OFF_STATES = ["fresh", "analyzed", "buffered"]
+STATISTICS_ENV = "MAPLIB_TABLE_STATISTICS"
 
 
 def junk_lines(rng: random.Random, n: int, tag: str) -> List[str]:
@@ -424,11 +428,13 @@ def build_state(state: str, model_kwargs: dict, folder: str) -> Model:
     lines, pinned = dataset()
     lines, pinned = list(lines), list(pinned)
     rng = random.Random(11)
-    if state in ("fresh", "object_index"):
+    if state in ("fresh", "object_index", "analyzed"):
         if state == "object_index":
             model_kwargs = dict(model_kwargs, indexing_options=IndexingOptions(object_sort_all=True))
         m = Model(**model_kwargs)
         m.reads(nquads(pinned + lines), format="nquads")
+        if state == "analyzed":
+            m.analyze(deep=True)
         return m
     shuffled = lines[:]
     rng.shuffle(shuffled)
@@ -489,7 +495,8 @@ WORLDS = [
     (storage, state, filters)
     for storage in selected("MAPLIB_DIFFERENTIAL_STORAGE", disk_params())
     for state in selected("MAPLIB_DIFFERENTIAL_STATES", STATES)
-    for filters in (["on", "off"] if state in FILTER_OFF_STATES else ["on"])
+    for filters in (["on"] + (["off"] if state in FILTER_OFF_STATES else [])
+                    + (["stats_off"] if state in STATISTICS_OFF_STATES else []))
 ]
 
 
@@ -911,6 +918,32 @@ case("count_joins_graph_var",
      "SELECT ?g (COUNT(*) AS ?c) WHERE { GRAPH ?g { ?s :mix ?o . ?s :label ?l } } GROUP BY ?g",
      ["g", "c"])
 
+# Table statistics order the triple patterns of a basic graph pattern only where a join is
+# estimated clearly (2x) cheaper than the written order.
+def statistics_on(w: World) -> bool:
+    return w.filters != "stats_off"
+
+
+ORDER_STATS, ORDER_WRITTEN, ORDER_OFF = "bgp_order.statistics", "bgp_order.written", "bgp_order.no_statistics"
+case("statistics_reorder_star",
+     "SELECT ?s ?o ?a WHERE { ?s :cd65537 ?o . ?s :sa ?a }", ["s", "o", "a"],
+     hits={ORDER_STATS: statistics_on, ORDER_OFF: lambda w: not statistics_on(w)})
+case("statistics_reorder_chain",
+     "SELECT ?x ?s ?y WHERE { ?x :t16385 ?y . ?s :many ?y . ?s :sa ?a }", ["x", "s", "y"])
+case("statistics_written_near_equal",
+     "SELECT ?s ?y ?z WHERE { ?s :t16384 ?y . ?s :t16385 ?z }", ["s", "y", "z"],
+     hits={ORDER_STATS: False, ORDER_WRITTEN: statistics_on,
+           ORDER_OFF: lambda w: not statistics_on(w)})
+case("statistics_single_pattern", "SELECT ?s ?o WHERE { ?s :sa ?o }", ["s", "o"],
+     hits={ORDER_STATS: False, ORDER_WRITTEN: False, ORDER_OFF: False})
+case("statistics_disjoint_incoming",
+     'SELECT ?s ?y ?a WHERE { VALUES ?y { "lit" } ?s :t16384 ?y . ?s :sa ?a }', ["s", "y", "a"])
+case("statistics_mixed_star",
+     "SELECT ?s ?o ?n ?l WHERE { ?s :mix ?o . ?s :num ?n . OPTIONAL { ?s :label ?l } }",
+     ["s", "o", "n", "l"])
+case("statistics_graph_star",
+     "SELECT ?g ?s ?w WHERE { GRAPH ?g { ?s :mix ?o . ?s :walk ?w } }", ["g", "s", "w"])
+
 # Mixed types, named graphs and duplicates through the general paths.
 case("mixed_all", "SELECT ?s ?o WHERE { ?s :mix ?o }", ["s", "o"])
 case("mixed_graphs", "SELECT ?g ?s ?o WHERE { GRAPH ?g { ?s :mix ?o } }", ["g", "s", "o"])
@@ -941,7 +974,16 @@ def test_against_oxigraph(world: World, c: Case):
     if c.only is not None and not c.only(world):
         pytest.skip("not applicable")
     expected = expected_rows(c.reference, c.variables)
-    actual, counts = counted(lambda: maplib_rows(world.model, c.query, list(c.variables)))
+    old = os.environ.get(STATISTICS_ENV)
+    if world.filters == "stats_off":
+        os.environ[STATISTICS_ENV] = "off"
+    try:
+        actual, counts = counted(lambda: maplib_rows(world.model, c.query, list(c.variables)))
+    finally:
+        if old is None:
+            os.environ.pop(STATISTICS_ENV, None)
+        else:
+            os.environ[STATISTICS_ENV] = old
     report(world.storage, world.state, world.filters, c.name, counts, c.expected_hits(world))
     assert_same_rows(expected, actual, c.ordered, c.name)
     check_hits(counts, c.expected_hits(world), c.name)
