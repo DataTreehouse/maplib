@@ -271,7 +271,7 @@ pub fn ordering_exprs_with_lang(
                     order_exprs.push(numeric_value_expr(c, numeric_types, &global_cats, true));
                     asc_bools.push(a);
                     is_lang.push(false);
-                    if let Some(e) = exact_remainder_expr(c, numeric_types, &global_cats, true) {
+                    for e in exact_remainder_exprs(c, numeric_types, &global_cats, true) {
                         order_exprs.push(e);
                         asc_bools.push(a);
                         is_lang.push(false);
@@ -315,7 +315,7 @@ pub fn ordering_exprs_with_lang(
             order_exprs.push(numeric_value_expr(c, &types, &global_cats, false));
             asc_bools.push(a);
             is_lang.push(false);
-            if let Some(e) = exact_remainder_expr(c, &types, &global_cats, false) {
+            for e in exact_remainder_exprs(c, &types, &global_cats, false) {
                 order_exprs.push(e);
                 asc_bools.push(a);
                 is_lang.push(false);
@@ -384,30 +384,122 @@ fn numeric_value_expr(
     )
 }
 
+const TWO_63: f64 = 9_223_372_036_854_775_808.0;
+const TWO_64: f64 = 18_446_744_073_709_551_616.0;
+
 /// Breaks ties of [`numeric_value_expr`] between integers and decimals that a double can not
-/// tell apart: the exact value minus that of its double, zero for floats and doubles. Integers
-/// and decimals are compared exactly, and numbers are compared with floats and doubles as
-/// doubles (XPath numeric type promotion), so a number equal to a double as a double is equal
-/// to it. None if there are no integers or decimals among `types`.
-fn exact_remainder_expr(
+/// tell apart. Integers and decimals are compared exactly, and numbers are compared with floats
+/// and doubles as doubles (XPath numeric type promotion), so a number equal to a double as a
+/// double is equal to it.
+///
+/// The keys are the deviation of the exact value from a base, which is the same for all values
+/// with the same double, and zero for floats and doubles: a double of the deviation, then for
+/// decimals the rest of the deviation, exactly. Integers of 64 bits are computed without
+/// decimals: their double is a whole number, which is their base, and their deviation from it
+/// is a whole number of at most 2^11, exact as a double. The base of decimals is their double
+/// too when it is a whole number, so they are ordered exactly among such integers. Integers of
+/// at most 32 bits are exact as doubles, with no deviation. No keys if there are only floats and
+/// doubles among `types`.
+fn exact_remainder_exprs(
     c: &str,
     types: &[(&BaseRDFNodeType, &BaseCatState)],
     global_cats: &LockedCats,
     multi: bool,
-) -> Option<Expr> {
+) -> Vec<Expr> {
     let exact = default_decimal_type();
-    let remainders: Vec<_> = types
-        .iter()
-        .filter(|(t, _)| !t.is_lit_type(xsd::DOUBLE) && !t.is_lit_type(xsd::FLOAT))
-        .map(|(t, s)| {
-            let f = numeric_field_expr(c, t, s, global_cats, multi);
-            f.clone().cast(exact.clone()) - f.cast(DataType::Float64).cast(exact.clone())
-        })
-        .collect();
-    if remainders.is_empty() {
-        return None;
+    let mut coarse = vec![];
+    let mut fine = vec![];
+    for (t, s) in types {
+        let BaseRDFNodeType::Literal(dt, _) = t else {
+            continue;
+        };
+        let native = matches!(s, BaseCatState::NonString);
+        match dt.as_ref() {
+            xsd::DOUBLE | xsd::FLOAT => {}
+            xsd::INT
+            | xsd::SHORT
+            | xsd::BYTE
+            | xsd::UNSIGNED_INT
+            | xsd::UNSIGNED_SHORT
+            | xsd::UNSIGNED_BYTE
+                if native => {}
+            xsd::INTEGER | xsd::LONG if native => {
+                let x = numeric_field_expr(c, t, s, global_cats, multi);
+                coarse.push(int64_deviation(x));
+            }
+            xsd::UNSIGNED_LONG if native => {
+                let x = numeric_field_expr(c, t, s, global_cats, multi);
+                coarse.push(uint64_deviation(x));
+            }
+            _ => {
+                // Decimals, and the derived integer types, which are stored as their lexical
+                // forms and may not fit 64 bits.
+                let f = numeric_field_expr(c, t, s, global_cats, multi);
+                let v = f.clone().cast(DataType::Float64);
+                let r = f.cast(exact.clone()) - exact_base(v, &exact);
+                coarse.push(r.clone().cast(DataType::Float64));
+                fine.push(r.clone() - r.cast(DataType::Float64).cast(exact.clone()));
+            }
+        }
     }
-    Some(coalesce(&remainders).fill_null(lit(0).cast(exact)))
+    let mut keys = vec![];
+    if !coarse.is_empty() {
+        keys.push(coalesce(&coarse).fill_null(lit(0.0)));
+    }
+    if !fine.is_empty() {
+        keys.push(coalesce(&fine).fill_null(lit(0).cast(exact)));
+    }
+    keys
+}
+
+/// The deviation of a 64 bit integer from its double, as a double (exact, at most 2^10). The
+/// double of integers close to 2^63 is 2^63, which is not a 64 bit integer.
+fn int64_deviation(x: Expr) -> Expr {
+    let v = x.clone().cast(DataType::Float64);
+    when(v.clone().gt_eq(lit(TWO_63)))
+        .then((x.clone() - lit(i64::MAX)).cast(DataType::Float64) - lit(1.0))
+        .otherwise((x - v.cast(DataType::Int64)).cast(DataType::Float64))
+}
+
+/// As [`int64_deviation`] for unsigned 64 bit integers, whose double may be 2^64. The
+/// subtraction that is not chosen may wrap around, which is harmless.
+fn uint64_deviation(x: Expr) -> Expr {
+    let v = x.clone().cast(DataType::Float64);
+    let base = v.clone().cast(DataType::UInt64);
+    when(v.gt_eq(lit(TWO_64)))
+        .then(lit(-1.0) - (lit(u64::MAX) - x.clone()).cast(DataType::Float64))
+        .when(x.clone().gt_eq(base.clone()))
+        .then((x.clone() - base.clone()).cast(DataType::Float64))
+        .otherwise(lit(0.0) - (base - x).cast(DataType::Float64))
+}
+
+/// The base of a decimal with the double `v`, as a decimal: `v` exactly when it is a whole
+/// number of 64 bits (the base of integers with that double), else `v` rounded to the scale.
+/// Doubles beyond the range of decimals give null, as do the decimals.
+fn exact_base(v: Expr, exact: &DataType) -> Expr {
+    let whole = v.clone().floor().eq(v.clone());
+    // Doubles out of the range are not cast, as the cast may overflow.
+    let in_range = v.clone().abs().lt(lit(1e22));
+    let bounded = when(in_range.clone())
+        .then(v.clone())
+        .otherwise(lit(0.0))
+        .cast(exact.clone());
+    when(
+        whole
+            .clone()
+            .and(v.clone().gt_eq(lit(-TWO_63)))
+            .and(v.clone().lt(lit(TWO_63))),
+    )
+    .then(v.clone().cast(DataType::Int64).cast(exact.clone()))
+    .when(
+        whole
+            .and(v.clone().gt_eq(lit(0.0)))
+            .and(v.clone().lt(lit(TWO_64))),
+    )
+    .then(v.cast(DataType::UInt64).cast(exact.clone()))
+    .when(in_range)
+    .then(bounded)
+    .otherwise(lit(NULL).cast(exact.clone()))
 }
 
 /// The UTC instant of the dateTime in any of the fields of `types`, null for other rows.

@@ -210,3 +210,66 @@ def test_large_integers_next_to_decimals_and_ties():
             "SELECT ?s WHERE { ?s :o ?o } ORDER BY DESC(?o) ?s",
         ],
     )
+
+
+def test_integers_and_doubles_with_ties():
+    # Without decimals, the exact order of integers is kept without decimal arithmetic.
+    no_decimals = [o for o in TIES if "decimal" not in o]
+    check(
+        triples(no_decimals),
+        [
+            "SELECT ?s WHERE { ?s :o ?o } ORDER BY ?o ?s",
+            "SELECT ?s WHERE { ?s :o ?o } ORDER BY DESC(?o) DESC(?s)",
+        ],
+    )
+
+
+# Integers close to 2^63 and 2^64, whose doubles are 2^63 and 2^64, next to unsigned longs and
+# decimals with the same doubles. Oxigraph's integers have 64 bits with a sign, so these are
+# compared with their exact order.
+BIG = [
+    ("9223372036854775807", "integer"),
+    ("9223372036854775806", "long"),
+    ("9223372036854775296", "integer"),
+    ("9223372036854775808", "unsignedLong"),
+    ("9223372036854775809", "unsignedLong"),
+    ("9223372036854775807.5", "decimal"),
+    ("9223372036854775808", "decimal"),
+    ("18446744073709551615", "unsignedLong"),
+    ("18446744073709551614", "unsignedLong"),
+    ("18446744073709550000", "unsignedLong"),
+    ("18446744073709551614.5", "decimal"),
+    ("-9223372036854775808", "integer"),
+    ("-9223372036854775807", "long"),
+    ("-9223372036854775807.5", "decimal"),
+    ("9007199254740993", "integer"),
+    ("9007199254740992", "integer"),
+    ("9007199254740992.5", "decimal"),
+    ("9007199254740993", "decimal"),
+    ("9007199254740993", "unsignedLong"),
+    ("12345678901234567890123", "nonNegativeInteger"),
+]
+
+
+@pytest.mark.parametrize("desc", [False, True])
+def test_integers_close_to_64_bits_in_exact_order(desc):
+    from decimal import Decimal
+
+    data = triples([lit(v, t) for v, t in BIG])
+    m = Model()
+    m.reads(data, format="ntriples")
+    n = len(BIG)
+    order = [(i * 7 + 3) % n for i in range(n)]
+    subject = {i: f"{EX}s{order[i]:02d}" for i in range(n)}
+    # Equal values (9007199254740993 three times, 9223372036854775808 twice) by subject.
+    expected = sorted(
+        range(n), key=lambda i: (Decimal(BIG[i][0]), subject[i]), reverse=desc
+    )
+    expected = [subject[i] for i in expected]
+    q = (
+        "SELECT ?s WHERE { ?s :o ?o } ORDER BY DESC(?o) DESC(?s)"
+        if desc
+        else "SELECT ?s WHERE { ?s :o ?o } ORDER BY ?o ?s"
+    )
+    # 12345678901234567890123 does not fit a decimal, it is ordered by its double, last.
+    assert subjects_maplib(m, q) == expected
