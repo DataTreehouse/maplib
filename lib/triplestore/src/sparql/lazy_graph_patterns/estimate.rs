@@ -82,6 +82,9 @@ pub(crate) struct PatternEstimate {
     pub distinct: HashMap<String, f64>,
     /// The sketches of the columns each variable is bound from, when they have them.
     pub sketches: HashMap<String, Sketches>,
+    /// The stored types each variable can have: a join on a variable whose two sides have no
+    /// type in common has no solutions.
+    pub types: HashMap<String, HashSet<BaseRDFNodeType>>,
     /// Whether all the tables the estimate comes from were read for statistics.
     pub analyzed: bool,
 }
@@ -92,6 +95,7 @@ pub(crate) struct JoinEstimate {
     pub rows: f64,
     pub distinct: HashMap<String, f64>,
     pub sketches: HashMap<String, Sketches>,
+    pub types: HashMap<String, HashSet<BaseRDFNodeType>>,
     pub analyzed: bool,
 }
 
@@ -103,6 +107,7 @@ impl JoinEstimate {
                 rows: 1.0,
                 distinct: HashMap::new(),
                 sketches: HashMap::new(),
+                types: HashMap::new(),
                 analyzed: true,
             },
             Some(sm) => {
@@ -115,6 +120,8 @@ impl JoinEstimate {
                         .map(|k| (k.clone(), rows.max(1.0)))
                         .collect(),
                     sketches: HashMap::new(),
+                    // The types of the incoming solutions are not looked at.
+                    types: HashMap::new(),
                     // The incoming estimate is the best there is for the solutions so far.
                     analyzed: true,
                 }
@@ -129,6 +136,11 @@ impl JoinEstimate {
         let mut best: Option<f64> = None;
         for (v, dp) in &p.distinct {
             if let Some(ds) = self.distinct.get(v) {
+                if let (Some(a), Some(b)) = (self.types.get(v), p.types.get(v)) {
+                    if a.is_disjoint(b) {
+                        return 0.0;
+                    }
+                }
                 let from_sketches = match (self.sketches.get(v), p.sketches.get(v)) {
                     (Some(a), Some(b)) => sketch_join_rows(self.rows, p.rows, a, b),
                     _ => None,
@@ -163,6 +175,13 @@ impl JoinEstimate {
                 }
             }
             self.distinct.insert(v.clone(), d);
+            if let Some(pt) = p.types.get(v) {
+                let t = match self.types.get(v) {
+                    Some(st) => st.intersection(pt).cloned().collect(),
+                    None => pt.clone(),
+                };
+                self.types.insert(v.clone(), t);
+            }
         }
         for d in self.distinct.values_mut() {
             *d = d.min(rows).max(1.0);
@@ -298,6 +317,8 @@ impl Triplestore {
         let mut analyzed = true;
         let mut subject_sketches: Sketches = vec![];
         let mut object_sketches: Sketches = vec![];
+        let mut subject_types: HashSet<BaseRDFNodeType> = HashSet::new();
+        let mut object_types: HashSet<BaseRDFNodeType> = HashSet::new();
         for (p, (st, ot), s) in self.pattern_tables(tp, pushdowns, dataset) {
             if s.rows == 0 {
                 continue;
@@ -372,6 +393,8 @@ impl Triplestore {
             // Distinct values of the ends: at most the solutions they are in.
             subject_distinct += subject_k.min(r);
             object_distinct += object_k.min(r);
+            subject_types.insert(st.clone());
+            object_types.insert(ot.clone());
             if let Some(sk) = &s.subject_sketch {
                 subject_sketches.push(sk.clone());
             }
@@ -407,10 +430,25 @@ impl Triplestore {
                 }
             }
         }
+        let mut types = HashMap::new();
+        if let Some(sn) = &subject_name {
+            types.insert(sn.clone(), subject_types.clone());
+        }
+        if let Some(on) = &object_name {
+            let t = match types.get(on) {
+                Some(st) => object_types.intersection(st).cloned().collect(),
+                None => object_types,
+            };
+            types.insert(on.clone(), t);
+        }
+        if let NamedNodePattern::Variable(v) = &tp.predicate {
+            types.insert(v.as_str().to_string(), HashSet::from([BaseRDFNodeType::IRI]));
+        }
         PatternEstimate {
             rows,
             distinct,
             sketches,
+            types,
             analyzed,
         }
     }
@@ -469,5 +507,37 @@ impl Triplestore {
             ordered.push(tps[i].clone());
         }
         ordered
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use oxrdf::vocab::xsd;
+
+    fn pattern(rows: f64, var: &str, types: &[BaseRDFNodeType]) -> PatternEstimate {
+        PatternEstimate {
+            rows,
+            distinct: HashMap::from([(var.to_string(), rows)]),
+            sketches: HashMap::new(),
+            types: HashMap::from([(var.to_string(), types.iter().cloned().collect())]),
+            analyzed: true,
+        }
+    }
+
+    #[test]
+    fn joins_on_variables_with_no_common_type_are_empty() {
+        // ?a :hasEmergencyPlan ?v (booleans) . ?v :crossSectionArea ?x (IRI subjects)
+        let boolean = BaseRDFNodeType::Literal(xsd::BOOLEAN.into_owned(), None);
+        let mut state = JoinEstimate::start(&None);
+        state.join(&pattern(1_000.0, "v", &[boolean.clone()]));
+        assert_eq!(state.joined_rows(&pattern(5_000.0, "v", &[BaseRDFNodeType::IRI])), 0.0);
+        // A column with both types still joins on the shared one.
+        let mixed = pattern(5_000.0, "v", &[BaseRDFNodeType::IRI, boolean.clone()]);
+        assert!(state.joined_rows(&mixed) > 0.0);
+        // After joining with the mixed column, only booleans are left for ?v.
+        state.join(&mixed);
+        assert_eq!(state.types["v"], HashSet::from([boolean]));
+        assert_eq!(state.joined_rows(&pattern(10.0, "v", &[BaseRDFNodeType::IRI])), 0.0);
     }
 }

@@ -65,6 +65,8 @@ QUERIES = [
     "SELECT ?s ?n ?a WHERE { ?s :rare ?r . OPTIONAL { ?s :name ?n . ?s :age ?a } }",
     # Disconnected patterns (a cross product of two small sides).
     "SELECT ?a ?b WHERE { ?a :rare ?x . ?b rdf:type :Rare0 }",
+    # A chain through a variable whose two sides share no type (integers, then IRI subjects).
+    "SELECT ?s ?o WHERE { ?s :age ?a . ?a :link ?o . ?o rdf:type ?c }",
     # A pattern with no solutions in a large star.
     "SELECT ?s WHERE { ?s rdf:type ?c . ?s :link ?o . ?s :missing ?m }",
 ]
