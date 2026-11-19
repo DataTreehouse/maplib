@@ -461,7 +461,25 @@ impl Triplestore {
         };
         let left_sm = side(left, PathEntry::JoinLeftSide)?;
         let right_sm = side(right, PathEntry::JoinRightSide)?;
-        let distinct = |sm: &SolutionMappings, keys: &[String]| {
+        // The keys are bound in every solution of their side, so a key that is never bound
+        // (typed None, an untyped column) means that side has no solutions, and neither has the
+        // join: the EXISTS pattern need not be asked. Joining its untyped column with the
+        // pattern's typed one would fail.
+        let unbound = |sm: &SolutionMappings, keys: &[String]| {
+            keys.iter()
+                .any(|k| sm.rdf_node_types.get(k).is_some_and(|t| t.is_none()))
+        };
+        if unbound(&left_sm, &left_keys) || unbound(&right_sm, &right_keys) {
+            let sm = join(
+                left_sm,
+                right_sm,
+                JoinType::Inner,
+                self.global_cats.clone(),
+                query_settings.max_rows,
+            )?;
+            return Ok(Some((sm, conjuncts)));
+        }
+        let distinct =|sm: &SolutionMappings, keys: &[String]| {
             SolutionMappings::new(
                 sm.mappings
                     .clone()
@@ -563,6 +581,19 @@ impl Triplestore {
             rdf_node_types,
             height_estimate,
         } = solution_mappings;
+        // The keys are bound in every solution, so a key that is never bound (typed None, an
+        // untyped column) means there are no solutions: nothing to keep or remove. Joining its
+        // untyped column with the pattern's typed one would fail.
+        if keys
+            .iter()
+            .any(|k| rdf_node_types.get(k).is_some_and(|t| t.is_none()))
+        {
+            return Ok(SolutionMappings::new(
+                mappings,
+                rdf_node_types,
+                height_estimate,
+            ));
+        }
         // The solutions are read twice, for their keys and for the join. Caching them would keep
         // a copy of them alive during the join, which doubled the peak memory of BSBM BI Q4, so
         // they are evaluated twice instead, unless that may give other values.
