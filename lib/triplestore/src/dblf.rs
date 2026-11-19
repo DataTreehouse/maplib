@@ -192,6 +192,22 @@ impl Triplestore {
                         &QueryGraph::NamedGraph(NamedGraph::from_maybe_named_node(Some(nn))),
                     )?);
                 }
+                // A graph without matching triples gives an empty result with untyped (None)
+                // columns. Merged with the typed results of the other graphs, they would make
+                // every variable a multi-type that may be unbound, which joins with the same
+                // variable elsewhere (e.g. a virtualized time series' external id) can not match.
+                // They add no solutions, so they are left out, unless every graph is empty.
+                if sms.len() > 1 {
+                    let empty = |sm: &SolutionMappings| {
+                        !sm.rdf_node_types.is_empty()
+                            && sm.rdf_node_types.values().all(|t| t.is_none())
+                    };
+                    if sms.iter().any(|sm| !empty(sm)) {
+                        sms.retain(|sm| !empty(sm));
+                    } else {
+                        sms.truncate(1);
+                    }
+                }
                 return if sms.is_empty() {
                     Ok(create_empty_lf_datatypes(
                         subject_keep_rename,
