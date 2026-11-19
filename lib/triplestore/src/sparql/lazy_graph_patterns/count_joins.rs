@@ -41,6 +41,7 @@ use spargebra::term::{NamedNodePattern, TermPattern};
 use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
 use std::hash::{BuildHasherDefault, Hasher};
+use utils::fast_path::{self, FastPath};
 
 /// The largest number of UNION terms the pattern may expand to.
 const MAX_TERMS: usize = 16;
@@ -1389,6 +1390,7 @@ impl Triplestore {
                     .into_default_input_rdf_node_state(),
             );
         }
+        fast_path::hit(FastPath::CountJoinsOnCodes);
         Ok(Some(SolutionMappings::new(
             DataFrame::new(1, columns).unwrap().lazy(),
             types,

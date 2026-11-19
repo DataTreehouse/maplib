@@ -65,6 +65,7 @@ MAX_FILTERED_TARGETS = 128  # dblf.rs (1,024 when a segment is in object storage
 # storage.rs: seek in the sparse index when targets * log2(keys) <= keys, with a key per 100 rows.
 # The 65,537-row :cd65537 table has 656 keys (10 bits): seek up to 65 targets.
 SEEK_TARGETS = 65
+MAX_COUNT_TERMS = 16  # count_joins.rs MAX_TERMS: UNION terms a counted pattern may expand to
 
 
 # ---------------------------------------------------------------------------
@@ -861,6 +862,53 @@ for n, few in ((MAX_FILTERED_TARGETS, True), (MAX_FILTERED_TARGETS + 1, False)):
          ["s", "o"],
          hits={"segment_filter.target_codes": lambda w, few=few: few and with_filters(w),
                "segment_filter.too_many_targets": lambda w, few=few: (not few) and with_filters(w)})
+
+# COUNT over joins of constant-predicate patterns, counted on dictionary codes (no threshold
+# but the 16 UNION terms; taken or not by shape).
+JOINS = "count.joins_on_codes"
+for name, body in [
+    ("star", "?s :sa ?a . ?s :t16384 ?y"),
+    ("star_large", "?s :o10001 ?k . ?s :cd65537 ?y"),
+    ("chain", "?s :many ?y . ?x :t16385 ?s"),
+    ("exists", "?s :e501 ?y FILTER EXISTS { ?s :ein ?v }"),
+    ("not_exists", "?s :e500 ?y FILTER NOT EXISTS { ?s :oin ?v }"),
+    ("optional", "?s :o10000 ?k OPTIONAL { ?s :oin ?w }"),
+    ("minus", "?s :sa ?a MINUS { ?s :lit ?l }"),
+    ("minus_one_shared", "?a :walk ?b MINUS { ?b :walk2 ?c }"),
+    ("union", "{ ?s :sa ?a } UNION { ?s :lit ?a } . ?s :t16384 ?y"),
+]:
+    case(f"count_joins_{name}", f"SELECT (COUNT(*) AS ?c) WHERE {{ {body} }}", ["c"],
+         hits={JOINS: True})
+case("count_joins_count_var",
+     "SELECT (COUNT(?y) AS ?c) WHERE { ?s :sa ?a . ?s :t16384 ?y }", ["c"], hits={JOINS: True})
+TERM_PREDICATES = ["sa", "sb", "lit", "one", "many", "e500", "e501", "ein", "oin", "t16384",
+                   "t16385", "o10000", "o10001", "cd65536", "chain", "tw", "walk2"]
+for n, taken in ((MAX_COUNT_TERMS, True), (MAX_COUNT_TERMS + 1, False)):
+    union = " UNION ".join(f"{{ ?s :{p} ?o }}" for p in TERM_PREDICATES[:n])
+    case(f"count_joins_union_{n}_terms", f"SELECT (COUNT(*) AS ?c) WHERE {{ {union} }}", ["c"],
+         hits={JOINS: taken})
+for name, body in [
+    ("cycle", "?a :walk ?b . ?b :walk ?c . ?c :walk ?a"),
+    ("minus_two_shared", "?a :walk ?b MINUS { ?a :walk2 ?b }"),
+    ("filter_true", "?s :sa ?a . ?s :t16384 ?y FILTER(true)"),
+    ("constant", "?s :sa ?a . ?s :t16384 :y3"),
+    ("variable_predicate", "?s :sa ?a . ?s ?p ?y"),
+    ("optional_filter", '?s :o10000 ?k OPTIONAL { ?s :oin ?w FILTER(?k > 3) }'),
+]:
+    case(f"count_joins_not_{name}", f"SELECT (COUNT(*) AS ?c) WHERE {{ {body} }}", ["c"],
+         hits={JOINS: False})
+case("count_joins_not_distinct",
+     "SELECT (COUNT(DISTINCT ?y) AS ?c) WHERE { ?s :sa ?a . ?s :t16384 ?y }", ["c"],
+     hits={JOINS: False})
+# Keys of several types, blank nodes, named graphs: results only.
+case("count_joins_mixed_key", "SELECT (COUNT(*) AS ?c) WHERE { ?s :mix ?o . ?o :label ?l }", ["c"])
+case("count_joins_mixed_subject", "SELECT (COUNT(*) AS ?c) WHERE { ?s :mix ?o . ?s :num ?n }", ["c"])
+case("count_joins_blank_starts", "SELECT (COUNT(*) AS ?c) WHERE { ?b :walk ?w . ?w :walk ?x }", ["c"])
+case("count_joins_named_graph",
+     "SELECT (COUNT(*) AS ?c) WHERE { GRAPH :g1 { ?s :mix ?o . ?s :walk ?x } }", ["c"])
+case("count_joins_graph_var",
+     "SELECT ?g (COUNT(*) AS ?c) WHERE { GRAPH ?g { ?s :mix ?o . ?s :label ?l } } GROUP BY ?g",
+     ["g", "c"])
 
 # Mixed types, named graphs and duplicates through the general paths.
 case("mixed_all", "SELECT ?s ?o WHERE { ?s :mix ?o }", ["s", "o"])

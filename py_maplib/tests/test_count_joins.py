@@ -7,6 +7,7 @@ import itertools
 import pytest
 import rdflib
 from maplib import Model
+from maplib import maplib as native
 
 EX = "http://ex.org/"
 
@@ -146,29 +147,56 @@ def g():
     return g
 
 
-def check(m, g, body, agg="COUNT(*)"):
+def taken(m, q):
+    """The result of `q`, and whether it was counted on the codes."""
+    native._reset_fast_path_counts()
+    df = m.query(q)
+    return df, native._fast_path_counts()["count.joins_on_codes"] > 0
+
+
+def check(m, g, body, agg="COUNT(*)", on_codes=None):
     q = query(body, False, agg)
-    fast = m.query(q)
+    fast, hit = taken(m, q)
+    if on_codes is not None:
+        assert hit == on_codes, body
     expected = [int(r[-1]) for r in g.query(q)]
     assert fast["c"].to_list() == expected, body
-    general = m.query(query(body, True, agg))
+    general, hit = taken(m, query(body, True, agg))
+    assert not hit, body
     assert fast["c"].to_list() == general["c"].to_list(), body
     assert fast["c"].dtype == general["c"].dtype, body
 
 
+# Joins and attachments on a key that some surviving table stores uncoded fall back to the general
+# path: the objects of :q include xsd:integer and xsd:double literals, those of :r xsd:date
+# literals. An OPTIONAL keeps all the tables of its own patterns, so it falls back too.
+UNCODED_KEYS = {
+    "?a :q ?b . ?c :q ?b",
+    "?a :r ?b . ?c :r ?b",
+    "?a :p ?b OPTIONAL { ?c :r ?a }",
+    "?a :q ?b OPTIONAL { ?c :q ?a }",
+    "?a :q ?b OPTIONAL { ?c :r ?a }",
+    "?a :r ?b OPTIONAL { ?c :r ?a }",
+}
+
+
 @pytest.mark.parametrize("body", list(bodies(TWO, 2)))
 def test_two_patterns(m, g, body):
-    check(m, g, body)
+    check(m, g, body, on_codes=body not in UNCODED_KEYS)
+
+
+def test_uncoded_keys_are_two_pattern_shapes():
+    assert UNCODED_KEYS <= set(bodies(TWO, 2))
 
 
 @pytest.mark.parametrize("body", list(bodies(THREE, 3)))
 def test_three_patterns(m, g, body):
-    check(m, g, body)
+    check(m, g, body, on_codes=True)
 
 
 @pytest.mark.parametrize("body", list(bodies(OTHER, 3)))
 def test_other_shapes(m, g, body):
-    check(m, g, body)
+    check(m, g, body, on_codes=False)
 
 
 def test_count_of_a_variable(m, g):
