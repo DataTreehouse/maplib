@@ -48,6 +48,8 @@ import rdflib
 
 from maplib import Model
 
+from .disk import suite_storage_kwargs
+
 # Keep the lexical forms of literals as written, so that expected results are not canonicalized.
 rdflib.NORMALIZE_LITERALS = False
 
@@ -710,7 +712,7 @@ def format_graph(triples: List[tuple], limit=30) -> str:
 
 def model_with_dataset(g: Manifest, action) -> Model:
     note_data_literals(g.objects(action, QT.data) + g.objects(action, QT.graphData))
-    m = Model()
+    m = Model(**suite_storage_kwargs())
     for data in g.objects(action, QT.data):
         load_into_model(m, data)
     for named in g.objects(action, QT.graphData):
@@ -834,7 +836,7 @@ def check_update_evaluation(g: Manifest, entry):
     request_iri = g.value(action, UT.request)
     default, named = update_dataset(g, action)
     note_data_literals(list(default) + list(named.values()))
-    m = Model()
+    m = Model(**suite_storage_kwargs())
     for d in default:
         load_into_model(m, d)
     for name, file in named.items():
@@ -950,7 +952,7 @@ def test_w3c_sparql11_service(manifest: Manifest, entry, fmt: str):
                 base_iri=data[1],
             )
             mock.add(name, em, fmt)
-        m = Model()
+        m = Model(**suite_storage_kwargs())
         for data in manifest.objects(action, QT.data):
             path = iri_to_path(data)
             m.reads(
