@@ -14,7 +14,6 @@ csv-tsv-res/csv03  # CSV differs: doubles are not written in the canonical form 
 csv-tsv-res/csv04  # CSV differs.
 delete/dawg-delete-07  # MaplibException: Variable ?o not found. maplib deliberately rejects update templates with variables that are not bound by the WHERE clause
 negation/full-minuend  # Results differ (ordered): MINUS does not treat unbound variables as compatible
-property-path/pp16  # Results differ (ordered): zero length paths between two variables only include the nodes of the path, not all nodes of the graph
 syntax-query/test_4  # MaplibException: Custom function not found: <http://example/function>, it is possible to define a fu
 
 # Numeric literals from the data are returned in canonical form (they are stored as values),

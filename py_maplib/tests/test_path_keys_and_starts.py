@@ -60,19 +60,9 @@ def normalise(pairs):
     return {tuple("_" if v.startswith("_:") else v for v in p) for p in pairs}
 
 
-# maplib's `?s :p* ?o` matches a node to itself only if it has a :p edge; SPARQL matches every
-# node of the graph. Not changed here (and not changed by the keying), so expected to fail where
-# the random graph has nodes without :next edges.
-ZERO_LENGTH_ALL_NODES = pytest.mark.xfail(
-    reason="zero-length matches of ?s :p* ?o leave out nodes without :p edges", strict=False
-)
-
-
 @pytest.mark.parametrize("seed", [1, 2, 3])
 @pytest.mark.parametrize("blank_nodes", [False, True])
-@pytest.mark.parametrize(
-    "path", [pytest.param(p, marks=ZERO_LENGTH_ALL_NODES) if p == ":next*" else p for p in PATHS]
-)
+@pytest.mark.parametrize("path", PATHS)
 def test_unbound_matches_rdflib(seed, blank_nodes, path):
     data = graph(seed, blank_nodes)
     m = Model()

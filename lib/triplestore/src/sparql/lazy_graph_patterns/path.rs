@@ -537,28 +537,33 @@ impl Triplestore {
                     .find(|v| pushdowns.variables_values.contains_key(*v))
                     .cloned()
             });
-            if let Some(b) = bound {
+            // With neither end bound, every node of the graph (each subject and object) is a
+            // zero length match, as in Oxigraph and Jena.
+            let zero_length = if let Some(b) = bound {
                 let sm = if in_mappings.is_some() {
                     solution_mappings.as_ref()
                 } else {
                     None
                 };
-                if let Some(zero_length) = self.zero_length_nodes(
+                self.zero_length_nodes(
                     &b,
                     &s,
                     &o,
                     sm,
-                    &pushdowns,
+                    Some(&pushdowns),
                     context,
                     query_settings,
                     dataset,
-                )? {
-                    path_solution_mappings = distinct(union(
-                        vec![path_solution_mappings, zero_length],
-                        false,
-                        self.global_cats.clone(),
-                    )?)?;
-                }
+                )?
+            } else {
+                self.zero_length_nodes(&s, &s, &o, None, None, context, query_settings, dataset)?
+            };
+            if let Some(zero_length) = zero_length {
+                path_solution_mappings = distinct(union(
+                    vec![path_solution_mappings, zero_length],
+                    false,
+                    self.global_cats.clone(),
+                )?)?;
             }
         }
         if let Some(mappings) = solution_mappings {
@@ -577,7 +582,8 @@ impl Triplestore {
 impl Triplestore {
     /// The values of the variable `b` that are nodes of the queried graph, as (`s`, `o`) pairs of
     /// zero length paths. The values are those of `b` in `solution_mappings`, or else those pushed
-    /// down for it. None if there are none to check.
+    /// down for it, or else (without `pushdowns`) all nodes of the graph. None if there are none
+    /// to check.
     #[allow(clippy::too_many_arguments)]
     fn zero_length_nodes(
         &self,
@@ -585,7 +591,7 @@ impl Triplestore {
         s: &str,
         o: &str,
         solution_mappings: Option<&SolutionMappings>,
-        pushdowns: &Pushdowns,
+        pushdowns: Option<&Pushdowns>,
         context: &Context,
         query_settings: &QuerySettings,
         dataset: &QueryGraph,
@@ -607,13 +613,13 @@ impl Triplestore {
             let height = df.height();
             let candidates = SolutionMappings::new(df.lazy(), candidates.rdf_node_types, height);
             // Small sets of values restrict the scan for nodes below.
-            node_pushdowns.add_from_solution_mappings(
+            Some(node_pushdowns.add_from_solution_mappings(
                 candidates,
                 self.global_cats.clone(),
                 &[b],
                 None,
-            )
-        } else {
+            ))
+        } else if let Some(pushdowns) = pushdowns {
             let Some(values) = pushdowns.variables_values.get(b) else {
                 return Ok(None);
             };
@@ -631,7 +637,7 @@ impl Triplestore {
             node_pushdowns
                 .variables_values
                 .insert(b.to_string(), values.clone());
-            self.lazy_graph_pattern(
+            Some(self.lazy_graph_pattern(
                 &GraphPattern::Values {
                     variables: vec![var.clone()],
                     bindings,
@@ -642,7 +648,9 @@ impl Triplestore {
                 Pushdowns::new(),
                 query_settings,
                 dataset,
-            )?
+            )?)
+        } else {
+            None
         };
         // The values that occur as the subject or the object of a triple.
         let fresh = || {
@@ -688,13 +696,17 @@ impl Triplestore {
             query_settings,
             dataset,
         )?;
-        let mut zero_length = join(
-            nodes,
-            candidates,
-            JoinType::Inner,
-            self.global_cats.clone(),
-            query_settings.max_rows,
-        )?;
+        let mut zero_length = if let Some(candidates) = candidates {
+            join(
+                nodes,
+                candidates,
+                JoinType::Inner,
+                self.global_cats.clone(),
+                query_settings.max_rows,
+            )?
+        } else {
+            nodes
+        };
         let state = zero_length.rdf_node_types.remove(b).unwrap();
         let mut exprs = vec![col(b).alias(s)];
         let mut types = HashMap::from([(s.to_string(), state.clone())]);
