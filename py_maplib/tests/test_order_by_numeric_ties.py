@@ -251,10 +251,17 @@ BIG = [
 ]
 
 
+# The same without decimals and lexical integers, where integers are ordered without decimal
+# arithmetic.
+BIG_INTEGERS = [(v, t) for v, t in BIG if t in ("integer", "long", "unsignedLong")]
+
+
 @pytest.mark.parametrize("desc", [False, True])
-def test_integers_close_to_64_bits_in_exact_order(desc):
+@pytest.mark.parametrize("values", [BIG, BIG_INTEGERS], ids=["with_decimals", "integers"])
+def test_integers_close_to_64_bits_in_exact_order(desc, values):
     from decimal import Decimal
 
+    BIG = values
     data = triples([lit(v, t) for v, t in BIG])
     m = Model()
     m.reads(data, format="ntriples")
