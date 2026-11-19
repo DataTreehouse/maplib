@@ -385,8 +385,15 @@ pub(crate) fn merged_table_stats(
         }
         .clamp(1, rows)
     };
-    let distinct_subjects = distinct(&subject_sketch, &|s| s.subject_distinct);
-    let distinct_objects = distinct(&object_sketch, &|s| s.object_distinct);
+    // The table's own exact count where it has one (one segment and an empty write buffer).
+    let distinct_subjects = t
+        .exact_distinct(false)
+        .map(|d| d.clamp(1, rows))
+        .unwrap_or_else(|| distinct(&subject_sketch, &|s| s.subject_distinct));
+    let distinct_objects = t
+        .exact_distinct(true)
+        .map(|d| d.clamp(1, rows))
+        .unwrap_or_else(|| distinct(&object_sketch, &|s| s.object_distinct));
     let max_rows = |sk: &Option<Arc<ColumnSketch>>, d: usize| match sk {
         _ if d == rows => 1,
         Some(sk) => sk.max_rows_per_key().max(1),
