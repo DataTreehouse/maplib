@@ -1888,9 +1888,57 @@ fn get_object_strings<'a>(objects: &[&'a Term]) -> Vec<&'a str> {
 ///
 /// For a target, the range starts at the indexed row of the last key before the target (or at
 /// the start), and ends at the indexed row of the first key after the target (or at the end),
-/// inclusive. The targets MUST be sorted. The targets and the keys of the index are walked
-/// together, so the cost is linear in the number of targets plus the size of the index.
+/// inclusive. The targets MUST be sorted. With few targets, each one seeks in the index, at a
+/// cost logarithmic in the size of the index. With many, the targets and the keys of the index
+/// are walked together, at a cost linear in the number of targets plus the size of the index.
 fn get_lookup_offsets(
+    trgs: &[&str],
+    sparse_map: &BTreeMap<Arc<String>, usize>,
+    height: usize,
+) -> Vec<(usize, usize)> {
+    if lookup_offsets_should_seek(trgs.len(), sparse_map.len()) {
+        lookup_offsets_seek(trgs, sparse_map, height)
+    } else {
+        lookup_offsets_walk(trgs, sparse_map, height)
+    }
+}
+
+/// Seeking costs about log2(keys) comparisons per target, walking about one per key.
+fn lookup_offsets_should_seek(n_trgs: usize, n_keys: usize) -> bool {
+    let log2_keys = (usize::BITS - n_keys.leading_zeros()) as usize;
+    n_trgs.saturating_mul(log2_keys) <= n_keys
+}
+
+/// [get_lookup_offsets] by two seeks in the index per target.
+fn lookup_offsets_seek(
+    trgs: &[&str],
+    sparse_map: &BTreeMap<Arc<String>, usize>,
+    height: usize,
+) -> Vec<(usize, usize)> {
+    use std::ops::Bound::{Excluded, Unbounded};
+    let mut out_offsets: Vec<(usize, usize)> = vec![];
+    // The keys are `Arc<String>`, which borrows as `String` but not as `str`.
+    let mut trg_buf = String::new();
+    for trg in trgs {
+        trg_buf.clear();
+        trg_buf.push_str(trg);
+        let from = sparse_map
+            .range::<String, _>(..&trg_buf)
+            .next_back()
+            .map(|(_, offset)| cmp::min(*offset, height))
+            .unwrap_or(0);
+        let to = sparse_map
+            .range::<String, _>((Excluded(&trg_buf), Unbounded))
+            .next()
+            .map(|(_, offset)| *offset)
+            .unwrap_or(height - 1);
+        push_lookup_range(&mut out_offsets, from, to);
+    }
+    finish_lookup_ranges(out_offsets)
+}
+
+/// [get_lookup_offsets] by walking the targets and the keys of the index together.
+fn lookup_offsets_walk(
     trgs: &[&str],
     sparse_map: &BTreeMap<Arc<String>, usize>,
     height: usize,
@@ -1918,22 +1966,34 @@ fn get_lookup_offsets(
                 None => break height - 1,
             }
         };
-        // Ranges are exclusive in Polars slice.
-        let exclusive_to = to + 1;
-        assert!(from <= exclusive_to, "Out of order should never happen");
-        if let Some(last) = out_offsets.last_mut() {
-            if from <= last.1 {
-                last.1 = last.1.max(exclusive_to);
-                continue;
-            }
-        }
-        out_offsets.push((from, exclusive_to));
+        push_lookup_range(&mut out_offsets, from, to);
     }
+    finish_lookup_ranges(out_offsets)
+}
+
+/// Adds the inclusive row range `from..=to`, merged into the last range if they overlap.
+fn push_lookup_range(out_offsets: &mut Vec<(usize, usize)>, from: usize, to: usize) {
+    // Ranges are exclusive in Polars slice.
+    let exclusive_to = to + 1;
+    assert!(from <= exclusive_to, "Out of order should never happen");
+    if let Some(last) = out_offsets.last_mut() {
+        if from <= last.1 {
+            last.1 = last.1.max(exclusive_to);
+            return;
+        }
+    }
+    out_offsets.push((from, exclusive_to));
+}
+
+fn finish_lookup_ranges(out_offsets: Vec<(usize, usize)>) -> Vec<(usize, usize)> {
     out_offsets
         .into_iter()
         .map(|(from, to)| (from, to - from))
         .collect()
 }
+
+#[cfg(test)]
+mod lookup_offsets_tests;
 
 /// Reading more than this many separate ranges of a table is slower than reading ranges with
 /// small gaps between them merged.
