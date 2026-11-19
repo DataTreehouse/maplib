@@ -450,6 +450,9 @@ fn matching_rows(
     let ranges = targets
         .map(|t| get_lookup_offsets(t, &sparse.map, height))
         .filter(|r| r.iter().map(|(_, len)| len).sum::<usize>() * 2 <= height);
+    if let Some(found) = matching_code_rows(stored, ranges.as_deref(), height, to_delete)? {
+        return Ok(found);
+    }
     let (lf, ranges) = match ranges {
         Some(ranges) if ranges.is_empty() => {
             return Ok((vec![], to_delete.clear()));
@@ -534,6 +537,67 @@ fn matching_rows(
     }
     let triples = found.drop(ROW_COL_NAME).unwrap();
     Ok((rows, triples))
+}
+
+/// [`matching_rows`] for triples in memory whose subjects and objects are both dictionary codes
+/// (the common case: IRIs, blank nodes and string literals): the rows are found by looking the
+/// code pairs up in a hash set, without planning a join, which costs more than the lookup for the
+/// few triples of an update. None when the fast path does not apply.
+fn matching_code_rows(
+    stored: &StoredTriples,
+    ranges: Option<&[(usize, usize)]>,
+    height: usize,
+    to_delete: &DataFrame,
+) -> Result<Option<(Vec<usize>, DataFrame)>, TriplestoreError> {
+    let StoredTriples::TriplesInMemory(mem) = stored else {
+        return Ok(None);
+    };
+    let Some(df) = mem.df.as_ref() else {
+        return Ok(None);
+    };
+    let codes = |df: &DataFrame, c: &str| -> Option<polars_core::prelude::UInt32Chunked> {
+        df.column(c).ok()?.u32().ok().cloned()
+    };
+    let (Some(ds), Some(dobj), Some(ss), Some(so)) = (
+        codes(to_delete, SUBJECT_COL_NAME),
+        codes(to_delete, OBJECT_COL_NAME),
+        codes(df, SUBJECT_COL_NAME),
+        codes(df, OBJECT_COL_NAME),
+    ) else {
+        return Ok(None);
+    };
+    let wanted: std::collections::HashSet<(u32, u32)> = ds
+        .iter()
+        .zip(dobj.iter())
+        .filter_map(|(s, o)| Some((s?, o?)))
+        .collect();
+    let full = [(0, height)];
+    let ranges = ranges.unwrap_or(&full);
+    let mut rows = vec![];
+    for &(offset, len) in ranges {
+        let len = len.min(df.height().saturating_sub(offset));
+        let ss = ss.slice(offset as i64, len);
+        let so = so.slice(offset as i64, len);
+        for (i, (s, o)) in ss.iter().zip(so.iter()).enumerate() {
+            if let (Some(s), Some(o)) = (s, o) {
+                if wanted.contains(&(s, o)) {
+                    rows.push(offset + i);
+                }
+            }
+        }
+    }
+    rows.sort_unstable();
+    rows.dedup();
+    let idx = polars::prelude::IdxCa::from_vec(
+        "".into(),
+        rows.iter().map(|r| *r as polars::prelude::IdxSize).collect(),
+    );
+    let triples = df
+        .select([SUBJECT_COL_NAME, OBJECT_COL_NAME])
+        .map_err(TriplestoreError::LazyLoadError)?
+        .take(&idx)
+        .map_err(TriplestoreError::LazyLoadError)?;
+    Ok(Some((rows, triples)))
 }
 
 #[cfg(test)]
