@@ -290,13 +290,13 @@ def test_optional_left_unbound_and_new_values(seed):
     check(seed, "SELECT * WHERE { ?s :a :n3 . ?s :b ?y OPTIONAL { OPTIONAL { ?s :d ?y } ?s :h ?z } }")
 
 
-# Wrong before this change too (2026-11-19), left for their own fixes.
-@pytest.mark.xfail(strict=True, reason="MINUS joins an IRI column with an IRI-or-blank-node column")
-@pytest.mark.parametrize("seed", [1])
+@pytest.mark.parametrize("seed", [1, 2])
 def test_minus_in_optional_multi_type(seed):
+    # MINUS on a variable with IRIs on one side and IRIs or blank nodes on the other.
     check(seed, "SELECT * WHERE { ?s :a :n3 OPTIONAL { ?s :b ?y MINUS { ?y :a :n1 } } }")
 
 
+# Wrong before this change too (2026-11-19), left for its own fix.
 @pytest.mark.xfail(strict=True, reason="OPTIONAL over a UNION that leaves a shared variable unbound")
 @pytest.mark.parametrize("seed", [2])
 def test_optional_union_unbound_shared(seed):
