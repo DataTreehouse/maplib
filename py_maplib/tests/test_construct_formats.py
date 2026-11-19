@@ -10,6 +10,8 @@ import pytest
 
 from maplib import Model
 
+from .disk import is_maplib_ee
+
 DATA = r"""@prefix ex: <http://example.org/> .
 @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
 ex:a ex:name "Alice" ;
@@ -111,6 +113,7 @@ def test_turtle_uses_the_prefixes_of_the_model():
     assert parsed(ttl, ox.RdfFormat.TURTLE) == expected(QUERIES["all"])
 
 
+@pytest.mark.skipif(not is_maplib_ee(), reason="disk storage needs maplib_ee")
 def test_on_disk_model(tmp_path):
     m = Model(storage="disk", storage_folder=str(tmp_path / "disk"))
     m.reads(DATA, format="turtle")
