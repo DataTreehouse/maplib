@@ -229,17 +229,23 @@ impl Triples {
         self.triples_folder.is_none()
     }
 
-    /// The sketches of every segment, see [TriplesSegment::sketch]; None when a segment has none.
+    /// The sketches of every segment, see [TriplesSegment::sketch], and of the write buffer when
+    /// it holds triples (sketched each time: it has at most `MAX_BUFFER_HEIGHT` rows, and the
+    /// statistics merged from these are kept per generation); None when a segment has none.
     pub(crate) fn segment_sketches(&self, compute: bool) -> Option<Vec<Arc<SegmentSketch>>> {
-        self.segments
+        let mut sketches: Vec<Arc<SegmentSketch>> = self
+            .segments
             .iter()
             .map(|s| s.sketch(&self.subject_type, &self.object_type, compute))
-            .collect()
-    }
-
-    /// The number of segments.
-    pub(crate) fn n_segments(&self) -> usize {
-        self.segments.len()
+            .collect::<Option<_>>()?;
+        if let Some(buffer) = self.buffer.as_ref().filter(|b| b.height() > 0) {
+            sketches.push(Arc::new(crate::statistics::sketch_segment(
+                buffer,
+                &self.subject_type,
+                &self.object_type,
+            )));
+        }
+        Some(sketches)
     }
 
     /// Creates triples from serialized parquet files. In disk storage mode (`triples_folder` set)

@@ -201,17 +201,6 @@ fn is_stale(stats: &TableStats, rows: usize) -> bool {
     d > STALE_FRACTION * (stats.rows.max(1) as f64)
 }
 
-/// Reads the statistics of a table from its stored columns.
-pub(crate) fn compute_table_stats(
-    t: &Triples,
-    global_cats: LockedCats,
-) -> Result<TableStats, TriplestoreError> {
-    match table_columns(t)? {
-        Some(df) => stats_of_columns(t, &df, global_cats),
-        None => Ok(TableStats::assumed(t.height())),
-    }
-}
-
 /// The subject and object columns of a table, collected; None when it has no triples.
 fn table_columns(t: &Triples) -> Result<Option<polars::prelude::DataFrame>, TriplestoreError> {
     if t.height() == 0 {
@@ -235,14 +224,8 @@ fn table_columns(t: &Triples) -> Result<Option<polars::prelude::DataFrame>, Trip
 /// The sorted codes of a table's subject and object columns, where they hold codes.
 type SortedCodes = (Option<Vec<u32>>, Option<Vec<u32>>);
 
-fn stats_of_columns(
-    t: &Triples,
-    df: &polars::prelude::DataFrame,
-    global_cats: LockedCats,
-) -> Result<TableStats, TriplestoreError> {
-    Ok(stats_and_codes(t, df, global_cats)?.0)
-}
-
+/// Reads the statistics of a table from its stored columns, and returns the sorted codes of
+/// its sketched columns too.
 fn stats_and_codes(
     t: &Triples,
     df: &polars::prelude::DataFrame,
