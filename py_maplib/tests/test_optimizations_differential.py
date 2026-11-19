@@ -27,6 +27,7 @@ import functools
 import json
 import os
 import random
+import re
 import shutil
 import tempfile
 from collections import Counter
@@ -356,6 +357,10 @@ FILTER_OFF_STATES = ["segments", "buffered", "reloaded"]
 # every basic graph pattern).
 STATISTICS_OFF_STATES = ["fresh", "analyzed", "buffered"]
 STATISTICS_ENV = "MAPLIB_TABLE_STATISTICS"
+# The states also queried with index nested loops off (MAPLIB_INL=0, read per query).
+INL_OFF_STATES = ["fresh", "buffered"]
+# Environment variables set while a world's queries run, by toggle.
+QUERY_ENV = {"stats_off": {STATISTICS_ENV: "off"}, "inl_off": {"MAPLIB_INL": "0"}}
 
 
 def junk_lines(rng: random.Random, n: int, tag: str) -> List[str]:
@@ -497,7 +502,8 @@ WORLDS = [
     for storage in selected("MAPLIB_DIFFERENTIAL_STORAGE", disk_params())
     for state in selected("MAPLIB_DIFFERENTIAL_STATES", STATES)
     for filters in (["on"] + (["off"] if state in FILTER_OFF_STATES else [])
-                    + (["stats_off"] if state in STATISTICS_OFF_STATES else []))
+                    + (["stats_off"] if state in STATISTICS_OFF_STATES else [])
+                    + (["inl_off"] if state in INL_OFF_STATES else []))
 ]
 
 
@@ -538,7 +544,7 @@ def world(request):
 
 class Case:
     def __init__(self, name, query, variables, hits=None, ordered=False, reference=None,
-                 only=None):
+                 only=None, env=None):
         """`hits`: fast path label -> whether the case must take it (True) or must not (False);
         a value may also be a function of the world. `reference`: the query to run on Oxigraph
         when it differs (e.g. for maplib's window functions). `only`: a function of the world
@@ -548,6 +554,7 @@ class Case:
         self.ordered = ordered
         self.reference = reference or query
         self.only = only
+        self.env = env or {}
 
     def expected_hits(self, w: World) -> Dict[str, bool]:
         out = {}
@@ -993,6 +1000,58 @@ json_rows_case(JSON_CHUNK_ROWS + 1, False)
 case("sparql_json_limit_10", "SELECT ?s ?n WHERE { ?s :num ?n } ORDER BY ?s LIMIT 10", ["s", "n"],
      ordered=True, hits={"sparql_json.one_chunk": True, "sparql_json.chunks": False})
 
+# Index nested loops on codes (storage/inl.rs): a BGP without incoming solutions, from its
+# constant with the fewest matches, in memory storage; declined for other shapes, types, storage,
+# and above the work and row limits (MAPLIB_INL_MAX_WORK / MAPLIB_INL_MAX_ROWS, read per query).
+INL_LABELS = ["inl.taken", "inl.empty", "inl.declined_shape", "inl.declined_types",
+              "inl.declined_storage", "inl.declined_estimate", "inl.aborted"]
+
+
+def inl_on(w: World) -> bool:
+    return w.filters != "inl_off"
+
+
+def inl_expect(outcome: str):
+    """What a case gives with INL by design: `outcome` in memory storage, declined_storage in
+    hybrid and disk (the dictionary is not in memory), nothing with MAPLIB_INL=0. Shape is
+    decided before storage, so a declined_shape case is declined_shape everywhere."""
+    def expected(w: World, label: str) -> bool:
+        if not inl_on(w):
+            return False
+        if outcome == "inl.declined_shape":
+            return label == outcome
+        if w.storage != "memory":
+            return label == "inl.declined_storage"
+        return label == outcome
+    return {label: (lambda w, label=label: expected(w, label)) for label in INL_LABELS}
+
+
+for name, body, outcome in [
+    ("star", ":x6 :sa ?a . :x6 :t16384 ?y . ?y ^:t16385 ?z", "inl.taken"),
+    ("chain", ":x0 :many ?y . ?s :t16384 ?y . ?s :sa ?a", "inl.taken"),
+    ("object_constant", "?s :t16384 :y3 . ?s :sa ?a", "inl.taken"),
+    ("string_constant", '?s :sa "a7" . ?s :t16384 ?y', "inl.taken"),
+    ("empty", ":x7 :sa ?a . :x7 :t16384 ?y", "inl.empty"),
+    ("absent_constant", ":x6 :t16384 ?y . ?x :t16385 ?y . ?x :many :nope", "inl.empty"),
+    ("variable_predicate", ":x6 ?p ?a . ?a :sa ?b", "inl.declined_shape"),
+    ("integer_constant", "?s :sb 3 . ?s :sa ?a", "inl.declined_shape"),
+    ("no_constant", "?s :sa ?a . ?s :t16384 ?y", "inl.declined_shape"),
+    ("mixed_types", ":m3 :mix ?o . :m3 :num ?n", "inl.declined_types"),
+]:
+    case(f"inl_{name}", f"SELECT * WHERE {{ {body} }}",
+         sorted(set(re.findall(r"\?(\w+)", body))), hits=inl_expect(outcome))
+case("inl_work_limit", "SELECT * WHERE { :x0 :many ?y . ?s :t16384 ?y }", ["y", "s"],
+     env={"MAPLIB_INL_MAX_WORK": "50"},
+     hits={"inl.declined_estimate": lambda w: inl_on(w) and w.storage == "memory",
+           "inl.taken": False})
+case("inl_row_limit", "SELECT * WHERE { :x0 :many ?y . ?s :t16384 ?y }", ["y", "s"],
+     env={"MAPLIB_INL_MAX_ROWS": "20"},
+     hits={"inl.declined_estimate|inl.aborted": lambda w: inl_on(w) and w.storage == "memory",
+           "inl.taken": False})
+case("inl_named_graph", "SELECT * WHERE { GRAPH :g1 { :w0 :walk ?x . ?x :walk ?y } }", ["x", "y"])
+case("inl_optional_around",
+     "SELECT * WHERE { :x6 :sa ?a . :x6 :t16384 ?y OPTIONAL { ?y ^:t16385 ?z } }", ["a", "y", "z"])
+
 # Mixed types, named graphs and duplicates through the general paths.
 case("mixed_all", "SELECT ?s ?o WHERE { ?s :mix ?o }", ["s", "o"])
 case("mixed_graphs", "SELECT ?g ?s ?o WHERE { GRAPH ?g { ?s :mix ?o } }", ["g", "s", "o"])
@@ -1025,16 +1084,17 @@ def test_against_oxigraph(world: World, c: Case):
     if getattr(c, "query_fn", None):
         c.query = c.reference = c.query_fn()
     expected = expected_rows(c.reference, c.variables)
-    old = os.environ.get(STATISTICS_ENV)
-    if world.filters == "stats_off":
-        os.environ[STATISTICS_ENV] = "off"
+    env = dict(QUERY_ENV.get(world.filters, {}), **c.env)
+    old = {k: os.environ.get(k) for k in env}
+    os.environ.update(env)
     try:
         actual, counts = counted(lambda: maplib_rows(world.model, c.query, list(c.variables)))
     finally:
-        if old is None:
-            os.environ.pop(STATISTICS_ENV, None)
-        else:
-            os.environ[STATISTICS_ENV] = old
+        for k, v in old.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
     report(world.storage, world.state, world.filters, c.name, counts, c.expected_hits(world))
     assert_same_rows(expected, actual, c.ordered, c.name)
     check_hits(counts, c.expected_hits(world), c.name)
