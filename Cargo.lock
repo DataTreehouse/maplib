@@ -5268,9 +5268,11 @@ name = "utils"
 version = "0.1.0"
 dependencies = [
  "polars",
+ "polars-async",
  "polars-config",
  "polars-ooc",
  "pyo3",
+ "rayon",
  "thiserror",
 ]
 

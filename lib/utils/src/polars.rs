@@ -1,7 +1,8 @@
 use crate::cancel::{self, Cancelled, CANCELLED_POLARS_MESSAGE};
 use polars::error::abort::catch_polars_abort;
-use polars::prelude::{Engine, InProcessQuery, OptFlags};
+use polars::prelude::{DslPlan, Engine, InProcessQuery, OptFlags, PolarsResult};
 use polars::{error::PolarsError, frame::DataFrame, prelude::LazyFrame};
+use polars_async::executor::ALLOW_RAYON_THREADS;
 use std::panic::AssertUnwindSafe;
 use std::sync::mpsc::RecvTimeoutError;
 use thiserror::Error;
@@ -223,9 +224,152 @@ fn collect_streaming_cancellable(
     }
 }
 
+/// A plan in which no step has more than this many rows is collected on one thread, see
+/// [is_tiny_plan].
+pub const TINY_COLLECT_ROWS: u64 = 16_384;
+
+/// The most steps a plan collected on one thread may have, see [is_tiny_plan].
+const TINY_COLLECT_STEPS: usize = 256;
+
+/// Optimizations left out for tiny plans (see [is_tiny_plan]), where they cost more than they
+/// save. They only change how a plan runs, not its result.
+const TINY_PLAN_SKIPPED_OPTIMIZATIONS: OptFlags = OptFlags::COMM_SUBEXPR_ELIM
+    .union(OptFlags::CLUSTER_WITH_COLUMNS)
+    .union(OptFlags::CHECK_ORDER_OBSERVE);
+
+/// Whether every step of `plan` is known to give at most [TINY_COLLECT_ROWS] rows: it reads only
+/// in-memory frames, and joins of them give at most the product of their rows. Such a plan takes
+/// well under a millisecond, which handing it to Polars' threads and polling for the result took
+/// several times over: [pl_interruptable_collect_in_memory] then collects it on one thread.
+/// Anything else, e.g. a scan of files, an explode or a Python function, is not tiny.
+fn is_tiny_plan(plan: &DslPlan) -> bool {
+    let mut steps = 0;
+    tiny_plan_rows(plan, &mut steps).is_some()
+}
+
+/// The most rows `plan` gives, if every step of it gives at most [TINY_COLLECT_ROWS].
+fn tiny_plan_rows(plan: &DslPlan, steps: &mut usize) -> Option<u64> {
+    *steps += 1;
+    if *steps > TINY_COLLECT_STEPS {
+        return None;
+    }
+    let rows = match plan {
+        DslPlan::DataFrameScan { df, .. } => df.height() as u64,
+        DslPlan::Filter { input, .. }
+        | DslPlan::Cache { input, .. }
+        | DslPlan::Select { input, .. }
+        | DslPlan::HStack { input, .. }
+        | DslPlan::MatchToSchema { input, .. }
+        | DslPlan::Distinct { input, .. }
+        | DslPlan::Sort { input, .. }
+        | DslPlan::GroupBy {
+            input, apply: None, ..
+        } => tiny_plan_rows(input, steps)?,
+        DslPlan::Slice { input, len, .. } => tiny_plan_rows(input, steps)?.min(*len as u64),
+        DslPlan::MapFunction { input, function } => {
+            // Polars does not export the type of `function`, only its name.
+            let name: &'static str = function.into();
+            let keeps_rows = match name {
+                "ROW_INDEX" | "RENAME" | "STATS" | "FILL_NAN" | "HINT" => true,
+                "FUNCTION_IR" => function.to_string() == cancel::CANCEL_CHECK_NAME,
+                _ => false,
+            };
+            if !keeps_rows {
+                return None;
+            }
+            tiny_plan_rows(input, steps)?
+        }
+        DslPlan::Join {
+            input_left,
+            input_right,
+            ..
+        } => {
+            let left = tiny_plan_rows(input_left, steps)?;
+            let right = tiny_plan_rows(input_right, steps)?;
+            // Also an outer join, which may give the rows of both sides that match nothing.
+            left.saturating_mul(right).max(left.saturating_add(right))
+        }
+        DslPlan::Union { inputs, .. } => {
+            let mut rows = 0u64;
+            for i in inputs {
+                rows = rows.saturating_add(tiny_plan_rows(i, steps)?);
+            }
+            rows
+        }
+        DslPlan::HConcat { inputs, .. } => {
+            let mut rows = 0u64;
+            for i in inputs {
+                rows = rows.max(tiny_plan_rows(i, steps)?);
+            }
+            rows
+        }
+        // A plan that was converted to find its schema keeps what it was converted from.
+        DslPlan::IR { dsl, .. } => tiny_plan_rows(dsl, steps)?,
+        _ => return None,
+    };
+    (rows <= TINY_COLLECT_ROWS).then_some(rows)
+}
+
+type TinyJob = Box<dyn FnOnce() + Send>;
+
+thread_local! {
+    /// The thread that collects the tiny plans of this thread, see [collect_tiny].
+    static TINY_COLLECTOR: std::cell::OnceCell<std::sync::mpsc::Sender<TinyJob>> =
+        const { std::cell::OnceCell::new() };
+}
+
+/// Collects the tiny plan `lf` (see [is_tiny_plan]) with all of Polars' parallel steps on one
+/// thread: for a tiny plan, waking the threads of Polars' pool and waiting for them takes longer
+/// than the work.
+///
+/// Polars runs them on one thread when `ALLOW_RAYON_THREADS` is off, in a thread pool of one that
+/// takes over the current thread: from then on, everything that thread runs in parallel with
+/// rayon, also outside of Polars, runs on that thread alone. So it is not the calling thread, but
+/// a helper thread of it that does nothing else, and waits for the next plan in between.
+fn collect_tiny(lf: LazyFrame) -> PolarsResult<DataFrame> {
+    let (tx, rx) = std::sync::mpsc::sync_channel(1);
+    let job: TinyJob = Box::new(move || {
+        let result = std::panic::catch_unwind(AssertUnwindSafe(|| {
+            lf.collect_with_engine(Engine::InMemory)
+                .map(|r| r.unwrap_single())
+        }));
+        let _ = tx.send(result);
+    });
+    TINY_COLLECTOR.with(|collector| {
+        collector
+            .get_or_init(|| {
+                let (tx, rx) = std::sync::mpsc::channel::<TinyJob>();
+                std::thread::Builder::new()
+                    .name("maplib tiny collect".into())
+                    .spawn(move || {
+                        ALLOW_RAYON_THREADS.set(false);
+                        // Ends when the thread it collects for has ended.
+                        while let Ok(job) = rx.recv() {
+                            job();
+                        }
+                    })
+                    .expect("could not start the thread that collects tiny plans");
+                tx
+            })
+            .send(job)
+            .expect("the thread that collects tiny plans has stopped")
+    });
+    match rx.recv().expect("the thread that collects tiny plans has stopped") {
+        Ok(result) => result,
+        Err(panic) => std::panic::resume_unwind(panic),
+    }
+}
+
 fn pl_interruptable_collect_in_memory(
     lf: LazyFrame,
 ) -> Result<DataFrame, InterruptableCollectError> {
+    if is_tiny_plan(&lf.logical_plan) {
+        // It can not be interrupted, but stops before it starts if the query was stopped, and
+        // a tiny plan uses next to no memory.
+        let flags = lf.get_current_optimizations();
+        let lf = lf.with_optimizations(flags & !TINY_PLAN_SKIPPED_OPTIMIZATIONS);
+        return Ok(collect_tiny(lf)?);
+    }
     let future = lf.collect_concurrently()?;
     let token = cancel::current();
 
@@ -319,5 +463,110 @@ struct EndOnDrop(cancel::Leftover);
 impl Drop for EndOnDrop {
     fn drop(&mut self) {
         self.0.end();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use polars::prelude::{col, IntoLazy, JoinArgs, JoinType};
+
+    fn frame(rows: i64) -> LazyFrame {
+        polars::df!("a" => (0..rows).collect::<Vec<_>>(), "b" => (0..rows).map(|i| i % 7).collect::<Vec<_>>())
+            .unwrap()
+            .lazy()
+    }
+
+    #[test]
+    fn small_in_memory_plans_are_tiny() {
+        let lf = frame(1000)
+            .filter(col("b").gt(2))
+            .group_by([col("b")])
+            .agg([col("a").sum()])
+            .rename(["a"], ["s"], true);
+        assert!(is_tiny_plan(&lf.logical_plan));
+        // Also with the cancellation check, and after its schema was looked up.
+        let token = cancel::CancelToken::new(None);
+        let mut lf = cancel::with_token(Some(token), || cancel_check_node_for_test(lf));
+        lf.collect_schema().unwrap();
+        assert!(is_tiny_plan(&lf.logical_plan));
+        let joined = frame(100)
+            .join(
+                frame(100),
+                [col("a")],
+                [col("a")],
+                JoinArgs::new(JoinType::Inner),
+            )
+            .unwrap();
+        assert!(is_tiny_plan(&joined.logical_plan));
+    }
+
+    fn cancel_check_node_for_test(lf: LazyFrame) -> LazyFrame {
+        cancel::cancel_check_node(lf)
+    }
+
+    #[test]
+    fn large_or_unknown_plans_are_not_tiny() {
+        assert!(!is_tiny_plan(
+            &frame(TINY_COLLECT_ROWS as i64 + 1).logical_plan
+        ));
+        // A join may give the product of its inputs.
+        let joined = frame(200)
+            .join(
+                frame(200),
+                [col("b")],
+                [col("b")],
+                JoinArgs::new(JoinType::Inner),
+            )
+            .unwrap();
+        assert!(!is_tiny_plan(&joined.logical_plan));
+        let exploded = frame(10).select([col("a").implode(false)]).explode(
+            polars::prelude::cols(["a"]),
+            polars::prelude::ExplodeOptions {
+                empty_as_null: false,
+                keep_nulls: true,
+            },
+        );
+        assert!(!is_tiny_plan(&exploded.logical_plan));
+    }
+
+    #[test]
+    fn tiny_plans_collect_as_before() {
+        let lf = || {
+            frame(1000)
+                .filter(col("b").gt(2))
+                .group_by([col("b")])
+                .agg([col("a").sum()])
+                .sort(["b"], Default::default())
+        };
+        let token = cancel::CancelToken::new(None);
+        let tiny = cancel::with_token(Some(token), || pl_interruptable_collect_estimated(lf(), 4))
+            .unwrap();
+        let other = lf()
+            .collect_with_engine(Engine::Streaming)
+            .unwrap()
+            .unwrap_single();
+        assert!(tiny.equals(&other));
+        // A query that was stopped does not start.
+        let token = cancel::CancelToken::new(None);
+        token.cancel();
+        assert!(matches!(
+            cancel::with_token(Some(token), || pl_interruptable_collect_estimated(lf(), 4)),
+            Err(InterruptableCollectError::Cancelled(_))
+        ));
+    }
+
+    #[test]
+    fn collecting_tiny_plans_leaves_the_calling_thread_to_rayon_as_it_was() {
+        std::thread::spawn(|| {
+            let lf = frame(100).group_by([col("b")]).agg([col("a").sum()]);
+            assert!(is_tiny_plan(&lf.logical_plan));
+            pl_interruptable_collect_estimated(lf, 4).unwrap();
+            // Had the plan been collected in Polars' pool of one on this thread, it would have
+            // made this thread its worker, and everything it runs in parallel would run on it.
+            assert_eq!(rayon::current_thread_index(), None);
+        })
+        .join()
+        .unwrap();
     }
 }

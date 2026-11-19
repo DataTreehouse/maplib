@@ -52,6 +52,9 @@ pub fn default_query_memory_limit() -> Option<u64> {
 /// The message of the Polars error raised by a cancellation check inside a Polars plan.
 pub const CANCELLED_POLARS_MESSAGE: &str = "maplib query cancelled";
 
+/// The name of the step that [cancel_check_node] adds to a plan.
+pub const CANCEL_CHECK_NAME: &str = "maplib cancel check";
+
 /// Why a query stopped.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Cancelled {
@@ -424,7 +427,7 @@ pub fn cancel_check_node(lf: LazyFrame) -> LazyFrame {
         },
         OptFlags::PREDICATE_PUSHDOWN | OptFlags::PROJECTION_PUSHDOWN | OptFlags::STREAMING,
         None,
-        Some("maplib cancel check"),
+        Some(CANCEL_CHECK_NAME),
     )
 }
 
