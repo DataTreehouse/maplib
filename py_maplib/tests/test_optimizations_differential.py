@@ -1012,14 +1012,12 @@ def inl_on(w: World) -> bool:
 
 
 def inl_expect(outcome: str):
-    """What a case gives with INL by design: `outcome` in memory storage, declined_storage in
-    hybrid and disk (the dictionary is not in memory), nothing with MAPLIB_INL=0. Shape is
-    decided before storage, so a declined_shape case is declined_shape everywhere."""
+    """What a case gives with INL: `outcome` in memory storage, declined_storage in hybrid and
+    disk (the dictionary is not in memory; checked before the shape), nothing with
+    MAPLIB_INL=0."""
     def expected(w: World, label: str) -> bool:
         if not inl_on(w):
             return False
-        if outcome == "inl.declined_shape":
-            return label == outcome
         if w.storage != "memory":
             return label == "inl.declined_storage"
         return label == outcome
