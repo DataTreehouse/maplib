@@ -447,7 +447,10 @@ fn run(
     if patterns.is_empty() {
         return decline(Decline::Shape, "no patterns");
     }
-    let iri_maps = &cats.get_cat_encs(&BaseRDFNodeType::IRI).maps;
+    let Some(iri_encs) = cats.get_enc(&BaseRDFNodeType::IRI) else {
+        return decline(Decline::Shape, "no IRIs are stored");
+    };
+    let iri_maps = &iri_encs.maps;
     if iri_maps.as_in_memory().is_none() {
         return decline(Decline::Storage, "dictionary not in memory");
     }
@@ -545,7 +548,10 @@ fn run(
             (None, None) => unreachable!(),
         };
         let o_order = if t.object_type.stored_cat() {
-            let maps = &cats.get_cat_encs(&t.object_type).maps;
+            let maps = &cats
+                .get_enc(&t.object_type)
+                .or_decline(Decline::Storage, "no dictionary for the object type")?
+                .maps;
             if maps.as_in_memory().is_none() {
                 return decline(Decline::Storage, "dictionary not in memory");
             }
