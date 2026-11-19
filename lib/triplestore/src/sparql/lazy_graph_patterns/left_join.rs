@@ -6,21 +6,21 @@ use tracing::{instrument, trace};
 use super::filter::{pushdowns_for_expression, uses_variables_out_of_scope};
 use super::join::{certainly_bound_variables, maybe_unbound_variables};
 use crate::sparql::QuerySettings;
+use oxrdf::vocab::xsd;
 use oxrdf::Variable;
 use polars::prelude::{col, IntoLazy, JoinType};
+use polars::prelude::{NamedFrom, Series};
+use polars_core::prelude::IntoColumn;
 use query_processing::expressions::contains_graph_pattern;
 use query_processing::expressions::effective_boolean_value;
-use query_processing::graph_patterns::{distinct, extend, filter, join, join_with_unbound};
+use query_processing::find_query_variables::find_all_used_variables_in_expression;
+use query_processing::graph_patterns::{distinct, extend, filter, join, join_with_unbound, union};
 use query_processing::pushdowns::Pushdowns;
 use representation::dataset::QueryGraph;
 use representation::query_context::{Context, PathEntry};
 use representation::solution_mapping::{EagerSolutionMappings, SolutionMappings};
-use spargebra::algebra::{Expression, GraphPattern};
-use oxrdf::vocab::xsd;
-use polars::prelude::{NamedFrom, Series};
-use polars_core::prelude::IntoColumn;
-use query_processing::find_query_variables::find_all_used_variables_in_expression;
 use representation::BaseRDFNodeType;
+use spargebra::algebra::{Expression, GraphPattern};
 use std::collections::{HashMap, HashSet};
 
 /// The left side of OPTIONAL is collected to evaluate the right side with its values when it is
@@ -156,13 +156,14 @@ impl Triplestore {
                 let merged_expression_pushdowns = expression_pushdowns.as_ref().map(|p| {
                     pushdowns_for_expression(p, &merged, expression_incoming.as_ref(), parameters)
                 });
-                return self.left_join_filtering_merged_solutions(
+                return self.left_join_numbered(
                     left_solution_mappings,
+                    &maybe_unbound_variables(left),
                     right_solution_mappings,
-                    expr,
+                    &maybe_unbound_variables(right),
+                    Some((expr, merged_expression_pushdowns.as_ref())),
                     &expression_context,
                     parameters,
-                    merged_expression_pushdowns.as_ref(),
                     query_settings,
                     dataset,
                 );
@@ -182,10 +183,30 @@ impl Triplestore {
             )?;
         }
         // Rows of the left side that leave a shared variable unbound are compatible with every
-        // value of it on the right side.
+        // value of it on the right side. So are rows of the right side (`{ ?s :b ?y } UNION
+        // { ?z :h ?y }` for a left side binding ?s), which a left join cannot split by: a left
+        // row matching only some of the parts would also be kept unmatched by the others.
+        let left_maybe_unbound = maybe_unbound_variables(left);
+        let right_maybe_unbound = maybe_unbound_variables(right);
+        if right_maybe_unbound.iter().any(|v| {
+            left_solution_mappings.rdf_node_types.contains_key(v)
+                && right_solution_mappings.rdf_node_types.contains_key(v)
+        }) {
+            return self.left_join_numbered(
+                left_solution_mappings,
+                &left_maybe_unbound,
+                right_solution_mappings,
+                &right_maybe_unbound,
+                None,
+                &expression_context,
+                parameters,
+                query_settings,
+                dataset,
+            );
+        }
         let left_solution_mappings = join_with_unbound(
             left_solution_mappings,
-            &maybe_unbound_variables(left),
+            &left_maybe_unbound,
             right_solution_mappings,
             &HashSet::new(),
             JoinType::Left,
@@ -297,21 +318,27 @@ impl Triplestore {
             self.global_cats.clone(),
         );
         solution_mappings = filter(solution_mappings, expression_context)?;
-        Ok(drop_columns(solution_mappings, &[expression_context.as_str()]))
+        Ok(drop_columns(
+            solution_mappings,
+            &[expression_context.as_str()],
+        ))
     }
 
-    /// The left join where the expression is evaluated on the merged solutions: the left
-    /// solutions are numbered, joined with the right ones and filtered, and the matches that
-    /// remain are joined back to the left solutions by their number.
+    /// A left join by numbering the left solutions: they are joined with the right ones (and
+    /// the matches filtered on the expression, when it is evaluated on the merged solutions),
+    /// and the left solutions whose number has no match are added unmatched. Either side may
+    /// leave shared variables unbound in some solutions, which are then compatible with any
+    /// value on the other side.
     #[allow(clippy::too_many_arguments)]
-    fn left_join_filtering_merged_solutions(
+    fn left_join_numbered(
         &self,
         left: SolutionMappings,
+        left_maybe_unbound: &HashSet<String>,
         right: SolutionMappings,
-        expr: &Expression,
+        right_maybe_unbound: &HashSet<String>,
+        expression: Option<(&Expression, Option<&Pushdowns>)>,
         expression_context: &Context,
         parameters: Option<&HashMap<String, EagerSolutionMappings>>,
-        expression_pushdowns: Option<&Pushdowns>,
         query_settings: &QuerySettings,
         dataset: &QueryGraph,
     ) -> Result<SolutionMappings, SparqlError> {
@@ -334,36 +361,52 @@ impl Triplestore {
                 .into_default_input_rdf_node_state(),
         );
         let left = left.as_lazy();
-        let left_columns: Vec<String> = left.rdf_node_types.keys().cloned().collect();
-        let matches = join(
+        let mut matches = join_with_unbound(
             left.clone(),
+            left_maybe_unbound,
             right,
+            right_maybe_unbound,
             JoinType::Inner,
             self.global_cats.clone(),
             query_settings.max_rows,
         )?;
-        let matches = self.filter_on_expression(
-            matches,
-            expr,
-            expression_context,
-            parameters,
-            expression_pushdowns,
-            query_settings,
-            dataset,
-        )?;
-        let shared: Vec<&str> = left_columns
-            .iter()
+        if let Some((expr, expression_pushdowns)) = expression {
+            matches = self.filter_on_expression(
+                matches,
+                expr,
+                expression_context,
+                parameters,
+                expression_pushdowns,
+                query_settings,
+                dataset,
+            )?;
+        }
+        // Collected once, since it is used twice below.
+        let matches = matches
+            .as_eager_interruptable()
+            .map_err(|e| match e {
+                utils::polars::InterruptableCollectError::Interrupted => {
+                    SparqlError::InterruptSignal
+                }
+                e => SparqlError::QueryExecutionError(e.to_string()),
+            })?
+            .as_lazy();
+        let not_row: Vec<String> = matches
+            .rdf_node_types
+            .keys()
             .filter(|c| **c != row)
-            .map(|c| c.as_str())
+            .cloned()
             .collect();
-        let matches = drop_columns(matches, &shared);
-        let joined = join(
+        let not_row: Vec<&str> = not_row.iter().map(|c| c.as_str()).collect();
+        let matched_rows = drop_columns(matches.clone(), &not_row);
+        let unmatched = join(
             left,
-            matches,
-            JoinType::Left,
+            matched_rows,
+            JoinType::Anti,
             self.global_cats.clone(),
             query_settings.max_rows,
         )?;
+        let joined = union(vec![matches, unmatched], false, self.global_cats.clone())?;
         Ok(drop_columns(joined, &[row.as_str()]))
     }
 
@@ -439,9 +482,9 @@ fn has_constant_term(gp: &GraphPattern) -> bool {
     use spargebra::term::TermPattern;
     match gp {
         GraphPattern::Bgp { patterns } => patterns.iter().any(|tp| {
-            [&tp.subject, &tp.object].iter().any(|t| {
-                matches!(t, TermPattern::NamedNode(_) | TermPattern::Literal(_))
-            })
+            [&tp.subject, &tp.object]
+                .iter()
+                .any(|t| matches!(t, TermPattern::NamedNode(_) | TermPattern::Literal(_)))
         }),
         GraphPattern::Join { left, right } => has_constant_term(left) || has_constant_term(right),
         GraphPattern::LeftJoin { left, .. }

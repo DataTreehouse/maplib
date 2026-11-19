@@ -296,11 +296,15 @@ def test_minus_in_optional_multi_type(seed):
     check(seed, "SELECT * WHERE { ?s :a :n3 OPTIONAL { ?s :b ?y MINUS { ?y :a :n1 } } }")
 
 
-# Wrong before this change too (2026-11-19), left for its own fix.
-@pytest.mark.xfail(strict=True, reason="OPTIONAL over a UNION that leaves a shared variable unbound")
-@pytest.mark.parametrize("seed", [2])
+@pytest.mark.parametrize("seed", [1, 2, 3])
 def test_optional_union_unbound_shared(seed):
+    # A right solution that leaves a shared variable unbound is compatible with every left one.
     check(seed, "SELECT * WHERE { ?s :a :n3 OPTIONAL { { ?s :b ?y } UNION { ?z :h ?y } } }")
+    check(seed, "SELECT * WHERE { ?s :a ?o OPTIONAL { { ?s :b ?y } UNION { ?o :h ?y } } }")
+    check(seed, "SELECT * WHERE { ?s :a :n3 { { ?s :b ?y } UNION { ?z :h ?y } } }")
+    check(seed, "SELECT * WHERE { ?s :a ?o OPTIONAL { ?y :h ?o OPTIONAL { ?s :b ?y } } }")
+    check(seed, "SELECT * WHERE { ?s :a ?o OPTIONAL { ?o :h ?y VALUES ?s { :n3 UNDEF } } }")
+    check(seed, "SELECT * WHERE { ?s :a ?o OPTIONAL { { ?s :b ?y } UNION { ?z :h ?y } FILTER(?o != ?y) } }")
 
 
 @pytest.mark.parametrize("seed", [1, 2])
