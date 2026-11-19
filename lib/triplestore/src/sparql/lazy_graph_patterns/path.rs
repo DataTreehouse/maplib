@@ -67,6 +67,40 @@ impl Triplestore {
         query_settings: &QuerySettings,
         dataset: &QueryGraph,
     ) -> Result<SolutionMappings, SparqlError> {
+        // A sequence is a join of its steps (SPARQL 1.1, 18.4): it has a solution for each
+        // intermediate node, also when a step is an arbitrary length path, whose own solutions
+        // are distinct pairs. Steps that need the closure are evaluated as paths of their own.
+        let normalised = push_reverse_down(ppe, false);
+        if need_sparse_matrix(&normalised)
+            && matches!(normalised, PropertyPathExpression::Sequence(..))
+            && !is_repetition(&normalised)
+        {
+            let mut intermediaries = vec![];
+            let gp = sequence_steps(&normalised, subject, object, &mut intermediaries);
+            let mut sms = self.lazy_graph_pattern(
+                &gp,
+                None,
+                &context.extension_with(PathEntry::PathRewrite),
+                None,
+                pushdowns,
+                query_settings,
+                dataset,
+            )?;
+            for i in &intermediaries {
+                sms.rdf_node_types.remove(i);
+            }
+            sms.mappings = sms.mappings.drop(by_name(intermediaries, false, false));
+            if let Some(solution_mappings) = solution_mappings {
+                sms = join(
+                    sms,
+                    solution_mappings,
+                    JoinType::Inner,
+                    self.global_cats.clone(),
+                    query_settings.max_rows,
+                )?;
+            }
+            return Ok(sms);
+        }
         let create_sparse = need_sparse_matrix(ppe);
 
         let mut var_cols = vec![];
@@ -159,11 +193,33 @@ impl Triplestore {
                 &cats,
             )
         };
-        let (mut subject_vec, mut object_vec) = if let Some((starts, reversed)) = bound {
+        let selective =
+            |n: usize| n.saturating_mul(SELECTIVE_START_FACTOR) <= lookup_df.height();
+        let (mut subject_vec, mut object_vec) = if let Some((starts, reversed)) =
+            bound.as_ref().filter(|(s, _)| selective(s.len()))
+        {
             // Only the paths from the nodes an end is bound to are followed.
-            paths_from(ppe, starts, reversed, &namednode_dfs, max_index as usize)
-        } else if let Some(starts) = first_step_starts(ppe, &namednode_dfs)
-            .filter(|s| s.len().saturating_mul(SELECTIVE_START_FACTOR) <= lookup_df.height())
+            paths_from(ppe, starts.clone(), *reversed, &namednode_dfs, max_index as usize)
+        } else if let Some((starts, reversed)) = bound {
+            // Bound to many nodes (e.g. the intermediate nodes of a sequence that a join passes
+            // in): the closure over all nodes, keeping the paths that start (or end) at them.
+            let starts: HashSet<u32> = starts.into_iter().collect();
+            let SparsePathReturn { sparmat, .. } =
+                sparse_path(ppe, &namednode_dfs, max_index as usize);
+            let mut subject_vec = vec![];
+            let mut object_vec = vec![];
+            for (i, row) in sparmat.outer_iterator().enumerate() {
+                for (j, v) in row.iter() {
+                    let end = if reversed { j as u32 } else { i as u32 };
+                    if v > &0 && starts.contains(&end) {
+                        subject_vec.push(i as u32);
+                        object_vec.push(j as u32);
+                    }
+                }
+            }
+            (subject_vec, object_vec)
+        } else if let Some(starts) =
+            first_step_starts(ppe, &namednode_dfs).filter(|s| selective(s.len()))
         {
             // Every path begins with a step that few nodes have: following the paths from those
             // nodes is cheaper than the closure over all nodes (e.g. `era:includes/rdf:rest+`).
@@ -841,6 +897,108 @@ fn sum_mat(mat: &SparseMatrix) -> u32 {
         s += out.data().iter().sum::<u32>()
     }
     s
+}
+
+/// Moves inverses (`^`) through sequences and alternatives to the steps: `^(a/b)` is `^b/^a`.
+fn push_reverse_down(ppe: &PropertyPathExpression, reversed: bool) -> PropertyPathExpression {
+    use PropertyPathExpression as P;
+    match ppe {
+        P::Reverse(inner) => push_reverse_down(inner, !reversed),
+        P::Sequence(a, b) if reversed => P::Sequence(
+            Box::new(push_reverse_down(b, true)),
+            Box::new(push_reverse_down(a, true)),
+        ),
+        P::Sequence(a, b) => P::Sequence(
+            Box::new(push_reverse_down(a, false)),
+            Box::new(push_reverse_down(b, false)),
+        ),
+        P::Alternative(a, b) => P::Alternative(
+            Box::new(push_reverse_down(a, reversed)),
+            Box::new(push_reverse_down(b, reversed)),
+        ),
+        other if reversed => P::Reverse(Box::new(other.clone())),
+        other => other.clone(),
+    }
+}
+
+/// A sequence path as the join of its steps through fresh intermediate variables; each step that
+/// is not itself a sequence is a path pattern of its own.
+fn sequence_steps(
+    ppe: &PropertyPathExpression,
+    subject: &TermPattern,
+    object: &TermPattern,
+    intermediaries: &mut Vec<String>,
+) -> GraphPattern {
+    match ppe {
+        PropertyPathExpression::Sequence(l, r) => {
+            let intermediary = format!("v{}", uuid::Uuid::new_v4());
+            let intermediary_tp = TermPattern::Variable(Variable::new_unchecked(&intermediary));
+            intermediaries.push(intermediary);
+            GraphPattern::Join {
+                left: Box::new(sequence_steps(l, subject, &intermediary_tp, intermediaries)),
+                right: Box::new(sequence_steps(r, &intermediary_tp, object, intermediaries)),
+            }
+        }
+        // A predicate or its inverse is a triple pattern, as in an explicit join.
+        step if is_predicate_step(step) => {
+            create_graph_pattern(step, subject, object, intermediaries)
+        }
+        // An inverse step is the path with its ends swapped, as the query rewriting does for an
+        // inverse path pattern (the path evaluation is not used with an inverse at the top).
+        PropertyPathExpression::Reverse(inner) => GraphPattern::Path {
+            subject: object.clone(),
+            path: inner.as_ref().clone(),
+            object: subject.clone(),
+        },
+        step => GraphPattern::Path {
+            subject: subject.clone(),
+            path: step.clone(),
+            object: object.clone(),
+        },
+    }
+}
+
+/// Whether a sequence is a length range of one step `x`: `x/.../x` followed by `x?/.../x?`, or by
+/// a single `x+`. The parser writes `x{n,m}` and `x{n,}` so (see `repeat_path` in spargebra), and
+/// length ranges have set semantics like the other arbitrary length paths, so they are not
+/// evaluated as a join of their steps. The same sequences written out by hand are treated alike.
+fn is_repetition(ppe: &PropertyPathExpression) -> bool {
+    fn flatten<'a>(p: &'a PropertyPathExpression, out: &mut Vec<&'a PropertyPathExpression>) {
+        if let PropertyPathExpression::Sequence(a, b) = p {
+            flatten(a, out);
+            flatten(b, out);
+        } else {
+            out.push(p);
+        }
+    }
+    let mut steps = vec![];
+    flatten(ppe, &mut steps);
+    let (base, plus) = match steps.last() {
+        Some(PropertyPathExpression::ZeroOrOne(x)) => (x.as_ref(), false),
+        Some(PropertyPathExpression::OneOrMore(x)) => (x.as_ref(), true),
+        _ => return false,
+    };
+    let rest = &steps[..steps.len() - 1];
+    if plus {
+        return rest.iter().all(|s| *s == base);
+    }
+    // Copies of x first, then copies of x?.
+    let optional = |s: &&PropertyPathExpression| {
+        matches!(s, PropertyPathExpression::ZeroOrOne(x) if x.as_ref() == base)
+    };
+    let first_optional = rest.iter().position(optional).unwrap_or(rest.len());
+    rest[..first_optional].iter().all(|s| *s == base) && rest[first_optional..].iter().all(optional)
+}
+
+/// A single predicate, forwards or backwards.
+fn is_predicate_step(ppe: &PropertyPathExpression) -> bool {
+    match ppe {
+        PropertyPathExpression::NamedNode(_) => true,
+        PropertyPathExpression::Reverse(inner) => {
+            matches!(inner.as_ref(), PropertyPathExpression::NamedNode(_))
+        }
+        _ => false,
+    }
 }
 
 pub fn need_sparse_matrix(ppe: &PropertyPathExpression) -> bool {

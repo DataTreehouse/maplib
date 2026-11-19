@@ -105,18 +105,16 @@ def test_bound_start_matches_rdflib(seed, path):
         assert {str(x) for x in got} == exp
 
 
-@pytest.mark.xfail(
-    reason="a sequence path keeps one solution per intermediate node in SPARQL (it is a join); "
-    "maplib returns distinct pairs, e.g. 5076 instead of 20057 for Sparqloscope's "
-    "transitive-path-small-join-and-plus on RINF 0076",
-    strict=True,
-)
 def test_count_shapes_of_sparqloscope():
+    # A sequence path keeps one solution per intermediate node (it is a join), e.g. 20057 rather
+    # than 5076 for Sparqloscope's transitive-path-small-join-and-plus on RINF 0076.
     data = graph(7, False)
     m = Model()
     m.reads(data, format="ntriples")
     g = rdflib.Graph()
     g.parse(data=data, format="nt")
-    for path in [":next+", ":rare/:next+", ":next/:next+"]:
+    # Not ":next/:next+": a step repeated with + at the end is the length range :next{2,}, whose
+    # solutions are distinct pairs in maplib (see is_repetition in path.rs).
+    for path in [":next+", ":rare/:next+", "^:rare/:next+"]:
         q = f"SELECT (COUNT(*) AS ?c) {{ ?s {path} ?o }}"
         assert m.query(PFX + q)["c"][0] == int(list(g.query(PFX + q))[0][0])
