@@ -368,7 +368,8 @@ pub fn rank_one(
     solution_mappings.mappings = solution_mappings
         .mappings
         .filter(keep)
-        .with_column(lit(1i64).alias(output.as_str()));
+        // A plain integer literal is materialized as Int32; RANK is Int64 on every other path.
+        .with_column(lit(1i64).cast(DataType::Int64).alias(output.as_str()));
     solution_mappings.rdf_node_types.insert(
         output.as_str().to_string(),
         BaseRDFNodeType::Literal(xsd::INTEGER.into_owned(), None)

@@ -548,3 +548,15 @@ def test_window_inside_lateral_is_per_left_solution(m, monkeypatch, per_row, ran
         ("north", "n4"),
         ("south", "s2"),
     ]
+
+
+def test_rank_one_filter_has_the_type_of_rank():
+    # FILTER(?rk = 1) over RANK finds the rows with rank 1 without ranking. Its ?rk column must
+    # have the type of RANK, or a union with ranked solutions (e.g. inside LATERAL) fails.
+    m = Model()
+    m.reads("@prefix : <http://example.org/> .\n:a :v 2 .\n:b :v 3 .\n", format="turtle")
+    q = PREFIX + "SELECT ?s ?rk WHERE {{ {{ ?s :v ?v }} BIND(RANK() OVER (ORDER BY DESC(?v)) AS ?rk) FILTER({}) }}"
+    fast = m.query(q.format("?rk = 1"))
+    ranked = m.query(q.format("?rk + 0 = 1"))
+    assert fast.schema == ranked.schema
+    assert fast["rk"].to_list() == [1]
