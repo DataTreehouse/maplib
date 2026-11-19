@@ -631,7 +631,7 @@ case("join_estimate_bounded",
      "SELECT ?s ?y ?one WHERE { ?s :many ?y . ?s :one ?one }", ["s", "y", "one"],
      # The most triples per key is known for tables of one segment without a write buffer.
      hits={"join.estimate_bounded_per_key":
-           lambda w: w.storage != "disk" and w.state in ("fresh", "object_index", "reloaded")})
+           lambda w: w.storage != "disk" and w.state in ("fresh", "object_index", "analyzed", "reloaded")})
 # A key with a multi-type (mixed) column: no per-key bound for :mix tables of several types.
 case("join_estimate_mixed",
      "SELECT ?s ?o ?l WHERE { ?s :mix ?o . ?s :label ?l }", ["s", "o", "l"])
@@ -948,10 +948,7 @@ case("statistics_reorder_star",
      hits={ORDER_STATS: statistics_on, ORDER_OFF: lambda w: not statistics_on(w),
            "table_stats.deep": source_is("deep"),
            "table_stats.merged": source_is("merged"),
-           "table_stats.assumed": source_is("assumed"),
-           # The exact distinct counts of a table of one segment without a write buffer.
-           "table_stats.exact_distinct": lambda w: (
-               stats_source(w) == "merged" and w.state in ("fresh", "object_index"))})
+           "table_stats.assumed": source_is("assumed")})
 case("statistics_reorder_chain",
      "SELECT ?x ?s ?y WHERE { ?x :t16385 ?y . ?s :many ?y . ?s :sa ?a }", ["x", "s", "y"])
 case("statistics_written_near_equal",
@@ -1149,3 +1146,33 @@ def test_write_buffer_steps(storage, tmp_path):
     m = Model.deserialize(path, **kwargs)
     for q, vs in BUFFER_QUERIES:
         assert_same_rows(oxigraph_rows(store, q, vs), maplib_rows(m, q, vs), False, f"reloaded: {q}")
+
+
+@pytest.mark.parametrize("storage", selected("MAPLIB_DIFFERENTIAL_STORAGE", disk_params()))
+def test_statistics_use_exact_distinct_counts_of_one_segment(storage, tmp_path):
+    """Merged statistics take a table's exact distinct counts when it is one segment with an
+    empty write buffer, and the segments' sketches once a small insert is buffered (statistics.rs
+    merged_table_stats). Counted when the statistics are merged, so each step changes the table
+    first."""
+    kwargs = {"storage": storage}
+    if storage != "memory":
+        kwargs["storage_folder"] = str(tmp_path / "storage")
+    m = Model(**kwargs)
+    store = ox.Store()
+    base = [f"{iri(f'e{i}')} {iri('ea')} {iri(f'f{i % 700}')} ." for i in range(5000)]
+    base += [f"{iri(f'e{i}')} {iri('eb')} {int_lit(i % 13)} ." for i in range(0, 5000, 7)]
+    m.reads(nquads(base), format="nquads")
+    store.load(nquads(base).encode(), ox.RdfFormat.N_TRIPLES)
+    q = "SELECT ?s ?f ?n WHERE { ?s :ea ?f . ?s :eb ?n }"
+
+    def run(name, expected):
+        rows, counts = counted(lambda: maplib_rows(m, q, ["s", "f", "n"]))
+        assert_same_rows(oxigraph_rows(store, q, ["s", "f", "n"]), rows, False, name)
+        if storage != "disk":
+            check_hits(counts, expected, name)
+
+    run("one segment", {"table_stats.merged": True, "table_stats.exact_distinct": True})
+    extra = data_update("INSERT DATA", [f"{iri(f'e{i}')} {iri('ea')} {iri('f1')} ." for i in range(9000, 9010)])
+    m.update(PFX + extra)
+    store.update(PFX + extra)
+    run("write buffer", {"table_stats.merged": True, "table_stats.exact_distinct": False})
