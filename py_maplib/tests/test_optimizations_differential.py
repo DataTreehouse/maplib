@@ -931,3 +931,33 @@ def test_write_buffer_steps(storage, tmp_path):
     m = Model.deserialize(path, **kwargs)
     for q, vs in BUFFER_QUERIES:
         assert_same_rows(oxigraph_rows(store, q, vs), maplib_rows(m, q, vs), False, f"reloaded: {q}")
+
+
+def process_threads() -> int:
+    import subprocess
+
+    out = subprocess.check_output(["ps", "-M", "-p", str(os.getpid())]).decode()
+    return out.count("\n") - 1
+
+
+@pytest.mark.skipif("hybrid" not in disk_params() or not os.uname().sysname == "Darwin",
+                    reason="needs maplib_ee; counts threads with macOS ps -M")
+@pytest.mark.parametrize("storage", ["hybrid", "disk"])
+@pytest.mark.xfail(strict=True, reason="each dropped hybrid or disk model keeps about 14 threads")
+def test_dropped_models_free_their_threads(storage, tmp_path):
+    """Found by this suite (2026-11-19): the W3C suites in hybrid and disk storage fail with
+    "failed to spawn thread" after a few hundred models, as the threads of dropped models stay."""
+    import gc
+
+    def use_one(i):
+        m = Model(storage=storage, storage_folder=str(tmp_path / f"s{i}"))
+        m.reads('<http://a> <http://b> "c" .', format="ntriples")
+        m.query("SELECT * WHERE { ?s ?p ?o }")
+
+    use_one(0)
+    gc.collect()
+    before = process_threads()
+    for i in range(1, 21):
+        use_one(i)
+    gc.collect()
+    assert process_threads() - before < 20
