@@ -40,6 +40,36 @@ impl Triplestore {
             .sum()
     }
 
+    /// The largest number of triples with the predicate that share a subject (`subject`) or an
+    /// object, summed over the tables of the queried graphs: an upper bound on the matches of one
+    /// solution on that position. None when a table does not know it cheaply.
+    pub(crate) fn predicate_max_rows_per_key(
+        &self,
+        predicate: &NamedNode,
+        subject: bool,
+        dataset: &QueryGraph,
+    ) -> Option<usize> {
+        let graphs: Vec<NamedGraph> = match dataset {
+            QueryGraph::NamedGraph(ng) => vec![ng.clone()],
+            QueryGraph::QueryDataset(qd) => qd
+                .default
+                .iter()
+                .map(|nn| NamedGraph::from_maybe_named_node(Some(nn)))
+                .collect(),
+        };
+        let mut total = 0usize;
+        for m in graphs
+            .iter()
+            .filter_map(|g| self.graph_triples_map.get(g))
+            .filter_map(|m| m.get(predicate))
+        {
+            for t in m.values() {
+                total = total.saturating_add(t.max_rows_per_key(subject)?);
+            }
+        }
+        Some(total)
+    }
+
     /// The predicates of the graph, together with the predicates of the included graphs.
     pub fn get_predicate_iris(
         &self,

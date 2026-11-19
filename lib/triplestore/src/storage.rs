@@ -715,6 +715,66 @@ impl Triples {
         }
     }
 
+    /// The largest number of triples that share a subject (`subject`) or an object, or None when
+    /// it is not known cheaply: a segment is not in memory, or the column is not dictionary codes.
+    /// An upper bound on how many triples a solution can join with on that position, for the
+    /// size estimates of joins. Kept per generation of the triples, since it scans the column.
+    pub(crate) fn max_rows_per_key(&self, subject: bool) -> Option<usize> {
+        type Cache = std::sync::Mutex<HashMap<(u64, bool), Option<usize>>>;
+        static CACHE: std::sync::OnceLock<Cache> = std::sync::OnceLock::new();
+        let cache = CACHE.get_or_init(Default::default);
+        let key = (self.generation, subject);
+        if let Some(v) = cache.lock().ok().and_then(|c| c.get(&key).copied()) {
+            return v;
+        }
+        let v = self.compute_max_rows_per_key(subject);
+        if let Ok(mut c) = cache.lock() {
+            // Generations are never reused, so old entries only take space.
+            if c.len() > 100_000 {
+                c.clear();
+            }
+            c.insert(key, v);
+        }
+        v
+    }
+
+    fn compute_max_rows_per_key(&self, subject: bool) -> Option<usize> {
+        let column = if subject {
+            SUBJECT_COL_NAME
+        } else {
+            OBJECT_COL_NAME
+        };
+        let mut total = 0usize;
+        for s in &self.segments {
+            if s.height == 0 {
+                continue;
+            }
+            // Sorted on the column, so equal keys are next to each other.
+            let sorted = if subject {
+                s.subject_sort.as_ref()
+            } else {
+                s.object_sort.as_ref()
+            };
+            let Some(StoredTriples::TriplesInMemory(mem)) = sorted else {
+                return None;
+            };
+            let df = mem.df.as_ref()?;
+            let codes = df.column(column).ok()?.u32().ok()?;
+            let (mut max, mut run, mut last) = (0usize, 0usize, None);
+            for c in codes.iter() {
+                if c.is_some() && c == last {
+                    run += 1;
+                } else {
+                    run = 1;
+                    last = c;
+                }
+                max = max.max(run);
+            }
+            total = total.saturating_add(max);
+        }
+        Some(total)
+    }
+
     /// The rows of a single subject with dictionary code `code`, read eagerly when every segment
     /// is in memory: the sparse index range of each segment, filtered on the code. A table that
     /// does not hold the subject gives no frames, so a query plan need not include it. None when

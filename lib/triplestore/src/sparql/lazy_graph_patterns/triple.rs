@@ -198,6 +198,23 @@ impl Triplestore {
                     height_estimate: height_upper_bound,
                 });
             } else {
+                // Each solution matches at most as many triples as share its value of a key.
+                // An untyped (unbound) column on either side is no join key.
+                let keys: Vec<String> = overlap
+                    .iter()
+                    .filter(|k| {
+                        !rdf_node_types.get(*k).unwrap().is_none()
+                            && !dts.get(*k).unwrap().is_none()
+                    })
+                    .cloned()
+                    .collect();
+                let bound = self
+                    .join_key_bound(triple_pattern, &keys, dataset)
+                    .map(|m| height_upper_bound.saturating_mul(m));
+                let new_height_upper_bound = match bound {
+                    Some(b) => new_height_upper_bound.min(b),
+                    None => new_height_upper_bound,
+                };
                 solution_mappings = Some(SolutionMappings {
                     mappings,
                     rdf_node_types,
@@ -208,13 +225,17 @@ impl Triplestore {
                     rdf_node_types: dts,
                     height_estimate: new_height_upper_bound,
                 };
-                solution_mappings = Some(join(
+                let mut joined = join(
                     solution_mappings.unwrap(),
                     new_solution_mappings,
                     JoinType::Inner,
                     self.global_cats.clone(),
                     query_settings.max_rows,
-                )?);
+                )?;
+                if let Some(b) = bound {
+                    joined.height_estimate = joined.height_estimate.min(b);
+                }
+                solution_mappings = Some(joined);
             }
         } else {
             solution_mappings = Some(SolutionMappings {
@@ -315,6 +336,35 @@ impl Triplestore {
             self.global_cats.clone(),
             query_settings.max_rows,
         )?)
+    }
+}
+
+impl Triplestore {
+    /// For a pattern with a constant predicate joined on `keys`: the largest number of its
+    /// triples that share the value of a key in the subject or object position. Each solution it
+    /// is joined with matches at most that many. None if not known.
+    fn join_key_bound(
+        &self,
+        tp: &TriplePattern,
+        keys: &[String],
+        dataset: &QueryGraph,
+    ) -> Option<usize> {
+        let NamedNodePattern::NamedNode(p) = &tp.predicate else {
+            return None;
+        };
+        let mut bound: Option<usize> = None;
+        for (term, subject) in [(&tp.subject, true), (&tp.object, false)] {
+            let Some(name) = get_keep_rename_term_pattern(term) else {
+                continue;
+            };
+            if !keys.contains(&name) {
+                continue;
+            }
+            if let Some(m) = self.predicate_max_rows_per_key(p, subject, dataset) {
+                bound = Some(bound.map_or(m, |b| b.min(m)));
+            }
+        }
+        bound
     }
 }
 
