@@ -18,11 +18,14 @@ use std::collections::HashMap;
 use std::io::Write;
 use utils::polars::collect_sized;
 
+mod constructed;
 mod fast_ntriples;
 mod hdt_write;
 mod pretty_turtle;
 mod serializers;
 pub mod sparql_json;
+
+pub use constructed::write_constructed_triples;
 
 const CHUNK_SIZE: usize = 1_024;
 /// Rows of a table that are decoded at a time when it is written triple by triple, so that only

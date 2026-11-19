@@ -69,7 +69,6 @@ use representation::constants::{DEFAULT_GRAPH_IRI, TRANSIENT_GRAPH_IRI};
 use representation::dataset::NamedGraph;
 use representation::debug::DebugOutputs;
 use representation::df_to_python::{df_to_py_df, fix_cats_and_multicolumns};
-use representation::formatting::format_native_columns;
 use representation::python_df_to_rust::polars_df_to_rust_df;
 use representation::rdf_to_polars::rdf_named_node_to_polars_literal_value;
 use representation::response_format::SparqlResponseFormat;
@@ -88,7 +87,8 @@ use templates::python::{
 use templates::MappingColumnType;
 use triplestore::changes::Changes;
 use triplestore::triples_read::ExtendedRdfFormat;
-use triplestore::{new_triples_by_predicate, NewTriples, StorageOptions, Triplestore};
+use triplestore::triples_write::write_constructed_triples;
+use triplestore::{new_triples_by_predicate, NewTriples};
 
 use virtualization::python::VirtualizedPythonDatabase;
 use virtualized_query::python::{
@@ -405,7 +405,7 @@ fn query_to_result(
         }
         SparqlResponseFormat::Turtle | SparqlResponseFormat::TriG => {
             let trig = matches!(use_response_format, SparqlResponseFormat::TriG);
-            let QueryResultKind::Construct(mut sms) = res.kind else {
+            let QueryResultKind::Construct(sms) = res.kind else {
                 return Err(PyMaplibError::FunctionArgumentError(format!(
                     "{} response format can only be used with construct and describe",
                     if trig { "trig" } else { "turtle" }
@@ -426,27 +426,18 @@ fn query_to_result(
             if sms.is_empty() {
                 return Ok(PyString::new(py, "").into());
             }
-            // We have a cat problem otherwise..
-            for (sm, _, _) in &mut sms {
-                let lf = format_native_columns(
-                    sm.mappings.clone().lazy(),
-                    &mut sm.rdf_node_types,
-                    global_cats.clone(),
-                );
-                sm.mappings = lf
-                    .collect()
-                    .map_err(|e| PyMaplibError::RuntimeError(e.to_string()))?;
-            }
-            let mut ts = Triplestore::new(StorageOptions::memory(), None)
-                .map_err(|x| PyMaplibError::MaplibError(MaplibError::TriplestoreError(x)))?;
-            ts.insert_constructed_triples(sms, &NamedGraph::DefaultGraph)
-                .map_err(|x| PyMaplibError::MaplibError(MaplibError::from(x)))?;
             let mut out_bytes = vec![];
-            if trig {
-                ts.write_quads(&mut out_bytes, RdfFormat::TriG, None, prefixes)
-            } else {
-                ts.write_pretty_turtle(&mut out_bytes, &NamedGraph::DefaultGraph, prefixes)
-            }
+            write_constructed_triples(
+                &mut out_bytes,
+                sms,
+                if trig {
+                    RdfFormat::TriG
+                } else {
+                    RdfFormat::Turtle
+                },
+                &global_cats,
+                prefixes,
+            )
             .map_err(|x| PyMaplibError::MaplibError(MaplibError::TriplestoreError(x)))?;
             let s = String::from_utf8(out_bytes)
                 .map_err(|e| PyMaplibError::RuntimeError(e.to_string()))?;

@@ -67,7 +67,7 @@ impl Triplestore {
     }
 }
 
-fn construct_result_as_triples_to_add(
+pub(crate) fn construct_result_as_triples_to_add(
     sms: Vec<ConstructedTriples>,
     default_graph: &NamedGraph,
 ) -> Vec<TriplesToAdd> {

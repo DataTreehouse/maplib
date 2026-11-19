@@ -2,7 +2,7 @@ pub mod debug;
 pub mod delete;
 pub mod errors;
 pub mod evaluation_hook;
-mod insert;
+pub(crate) mod insert;
 pub(crate) mod lazy_aggregate;
 mod lazy_expressions;
 pub(crate) mod lazy_graph_patterns;
