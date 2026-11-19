@@ -162,15 +162,6 @@ impl JoinEstimate {
         self.rows = rows;
         self.analyzed = self.analyzed && p.analyzed;
     }
-
-    /// The estimate as a number of rows, at least one.
-    pub(crate) fn height(&self) -> usize {
-        if self.rows >= usize::MAX as f64 {
-            usize::MAX
-        } else {
-            (self.rows.ceil() as usize).max(1)
-        }
-    }
 }
 
 /// The graphs a pattern is matched in.

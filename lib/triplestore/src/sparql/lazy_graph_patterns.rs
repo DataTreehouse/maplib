@@ -239,7 +239,6 @@ impl Triplestore {
                     )
                 };
                 let groups = group_triple_patterns(ordered_patterns, &updated_solution_mappings);
-                let mut estimate = estimate::JoinEstimate::start(&updated_solution_mappings);
                 for group in &groups {
                     match updated_solution_mappings {
                         // The group shares more bound variables than its first pattern does.
@@ -267,24 +266,11 @@ impl Triplestore {
                             }
                         }
                     }
-                    if estimated && !had_input {
-                        for tp in group {
-                            estimate.join(&self.estimate_triple_pattern(tp, &pushdowns, dataset));
-                        }
-                    }
                 }
-                // The estimate from the tables' statistics lowers the one of the patterns and
-                // joins when it is smaller, and never raises it: that one is an upper bound where
-                // it can be (the rows a pattern reads, the most triples sharing a key), and zero
-                // means no solutions. Only once the basic graph pattern is done, so that the
-                // pushdowns between its patterns are decided as before, and only without incoming
-                // solutions, whose own estimate is not from the statistics: a low estimate there
-                // makes the patterns that follow collect and push down solutions that may be many.
-                if estimated && !had_input && estimate.analyzed {
-                    if let Some(sm) = updated_solution_mappings.as_mut() {
-                        sm.height_estimate = sm.height_estimate.min(estimate.height());
-                    }
-                }
+                // The statistics only choose the order of the patterns. They do not change the
+                // estimate the solutions carry: a lower estimate makes the patterns and graph
+                // patterns that follow (e.g. a FILTER EXISTS) collect the solutions and push their
+                // values down, which costs more than it saves when there are many of them.
                 for lp in &length_paths {
                     updated_solution_mappings = Some(self.lazy_length_path(
                         lp,
