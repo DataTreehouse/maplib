@@ -925,9 +925,33 @@ def statistics_on(w: World) -> bool:
 
 
 ORDER_STATS, ORDER_WRITTEN, ORDER_OFF = "bgp_order.statistics", "bgp_order.written", "bgp_order.no_statistics"
+def stats_source(w: World) -> Optional[str]:
+    """Where the statistics of the star's tables come from, by design (statistics.rs
+    table_stats): a deep analyze while fresh; else merged from the sketches each segment gets
+    when written; assumed for segments read back from disk storage without a sketch. None when
+    statistics are off."""
+    if not statistics_on(w):
+        return None
+    if w.state == "analyzed":
+        return "deep"
+    if w.storage == "disk" and w.state == "reloaded":
+        return "assumed"
+    return "merged"
+
+
+def source_is(name: str):
+    return lambda w: stats_source(w) == name
+
+
 case("statistics_reorder_star",
      "SELECT ?s ?o ?a WHERE { ?s :cd65537 ?o . ?s :sa ?a }", ["s", "o", "a"],
-     hits={ORDER_STATS: statistics_on, ORDER_OFF: lambda w: not statistics_on(w)})
+     hits={ORDER_STATS: statistics_on, ORDER_OFF: lambda w: not statistics_on(w),
+           "table_stats.deep": source_is("deep"),
+           "table_stats.merged": source_is("merged"),
+           "table_stats.assumed": source_is("assumed"),
+           # The exact distinct counts of a table of one segment without a write buffer.
+           "table_stats.exact_distinct": lambda w: (
+               stats_source(w) == "merged" and w.state in ("fresh", "object_index"))})
 case("statistics_reorder_chain",
      "SELECT ?x ?s ?y WHERE { ?x :t16385 ?y . ?s :many ?y . ?s :sa ?a }", ["x", "s", "y"])
 case("statistics_written_near_equal",
