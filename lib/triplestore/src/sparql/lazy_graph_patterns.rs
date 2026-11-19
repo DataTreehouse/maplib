@@ -267,20 +267,22 @@ impl Triplestore {
                             }
                         }
                     }
-                    // The estimate from the tables' statistics lowers the one of the patterns
-                    // and joins when it is smaller, and never raises it: that one is an upper
-                    // bound where it can be (the rows a pattern reads), and zero means no
-                    // solutions.
-                    if !estimated {
-                        continue;
-                    }
-                    for tp in group {
-                        estimate.join(&self.estimate_triple_pattern(tp, &pushdowns, dataset));
-                    }
-                    if let Some(sm) = updated_solution_mappings.as_mut() {
-                        if estimate.analyzed {
-                            sm.height_estimate = sm.height_estimate.min(estimate.height());
+                    if estimated && !had_input {
+                        for tp in group {
+                            estimate.join(&self.estimate_triple_pattern(tp, &pushdowns, dataset));
                         }
+                    }
+                }
+                // The estimate from the tables' statistics lowers the one of the patterns and
+                // joins when it is smaller, and never raises it: that one is an upper bound where
+                // it can be (the rows a pattern reads, the most triples sharing a key), and zero
+                // means no solutions. Only once the basic graph pattern is done, so that the
+                // pushdowns between its patterns are decided as before, and only without incoming
+                // solutions, whose own estimate is not from the statistics: a low estimate there
+                // makes the patterns that follow collect and push down solutions that may be many.
+                if estimated && !had_input && estimate.analyzed {
+                    if let Some(sm) = updated_solution_mappings.as_mut() {
+                        sm.height_estimate = sm.height_estimate.min(estimate.height());
                     }
                 }
                 for lp in &length_paths {

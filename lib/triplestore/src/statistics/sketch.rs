@@ -23,6 +23,9 @@ use std::collections::HashMap;
 
 /// The number of most common codes kept per column.
 pub const TOP_KEYS: usize = 64;
+/// The fewest common codes of a column whose presence in another must be known for their share
+/// to estimate the codes the columns share (see [ColumnSketch::join_size]).
+const MIN_CHECKED: f64 = 8.0;
 /// The number of bits of a hash that index the HyperLogLog registers.
 pub const HLL_P: u32 = 12;
 const HLL_M: usize = 1 << HLL_P;
@@ -37,7 +40,8 @@ pub struct ColumnSketch {
     /// one row.
     pub top: Vec<(u32, u64)>,
     /// The counts in this column of the codes that are among the most common ones of other
-    /// columns of the same type (0 when absent), set by [Triplestore::analyze]: with them, the
+    /// columns of the same type (only those it has: the others count 0), set by
+    /// [Triplestore::analyze]: with them, the
     /// join of a code common in one column with a column where it is rare is exact.
     ///
     /// [Triplestore::analyze]: crate::Triplestore::analyze
@@ -150,7 +154,10 @@ impl ColumnSketch {
         for k in keys {
             let lo = sorted_codes.partition_point(|c| c < k);
             let hi = sorted_codes.partition_point(|c| c <= k);
-            cross.insert(*k, (hi - lo) as u64);
+            // Only the codes the column has: the others count 0.
+            if hi > lo {
+                cross.insert(*k, (hi - lo) as u64);
+            }
         }
         let mut s = self.clone();
         s.cross = Some(cross);
@@ -163,7 +170,7 @@ impl ColumnSketch {
         if let Some(n) = top.get(&k) {
             return Some(*n);
         }
-        self.cross.as_ref().and_then(|c| c.get(&k).copied())
+        self.cross.as_ref().map(|c| c.get(&k).copied().unwrap_or(0))
     }
 
     /// The most rows that share one code.
@@ -180,28 +187,9 @@ impl ColumnSketch {
         hll_count(merged)
     }
 
-    /// The estimated number of codes the two columns share.
-    pub fn shared_distinct(&self, other: &ColumnSketch) -> f64 {
-        if self.key_type != other.key_type {
-            return 0.0;
-        }
-        let (a, b) = (self.distinct as f64, other.distinct as f64);
-        // Codes both lists of most common codes have are certainly shared.
-        let sure = self
-            .top
-            .iter()
-            .filter(|(c, _)| other.top.iter().any(|(d, _)| d == c))
-            .count() as f64;
-        (a + b - self.union_distinct(other)).clamp(sure, a.min(b))
-    }
-
     /// The estimated number of rows of a join of the two columns on equal codes.
     pub fn join_size(&self, other: &ColumnSketch) -> f64 {
         if self.key_type != other.key_type || self.rows == 0 || other.rows == 0 {
-            return 0.0;
-        }
-        let shared = self.shared_distinct(other);
-        if shared <= 0.0 {
             return 0.0;
         }
         let a_top: HashMap<u32, u64> = self.top.iter().cloned().collect();
@@ -219,25 +207,34 @@ impl ColumnSketch {
         let b_avg = if b_light_distinct > 0.0 { b_light_rows / b_light_distinct } else { 0.0 };
 
         // Every code common in either column: exact where its count in the other column is
-        // known, weighted by the chance that the other column has it otherwise.
-        let mut heavy: Vec<u32> = self.top.iter().map(|(c, _)| *c).collect();
+        // known. Those of each column also show what share of its codes the other column has.
+        let mut heavy: Vec<(u32, bool)> = self.top.iter().map(|(c, _)| (*c, true)).collect();
         for (c, _) in &other.top {
             if !a_top.contains_key(c) {
-                heavy.push(*c);
+                heavy.push((*c, false));
             }
         }
         let mut size = 0.0;
-        // Common codes known to be in both, and the expected number of the others that are.
         let mut known_shared = 0.0;
-        let mut expected_shared = 0.0;
+        // Per column: its common codes whose count in the other column is known, and how many
+        // of those the other column has.
+        let (mut a_checked, mut a_present, mut b_checked, mut b_present) = (0.0, 0.0, 0.0, 0.0);
         let mut a_unknown = vec![];
         let mut b_unknown = vec![];
-        for k in &heavy {
+        for (k, of_a) in &heavy {
             match (self.known_count(&a_top, *k), other.known_count(&b_top, *k)) {
                 (Some(x), Some(y)) => {
                     size += (x as f64) * (y as f64);
-                    if x > 0 && y > 0 {
+                    let both = x > 0 && y > 0;
+                    if both {
                         known_shared += 1.0;
+                    }
+                    if *of_a {
+                        a_checked += 1.0;
+                        a_present += f64::from(u8::from(both));
+                    } else {
+                        b_checked += 1.0;
+                        b_present += f64::from(u8::from(both));
                     }
                 }
                 (Some(x), None) => b_unknown.push(x as f64),
@@ -245,10 +242,15 @@ impl ColumnSketch {
                 (None, None) => {}
             }
         }
+        let shared = self.shared_estimate(other, known_shared, (a_checked, a_present), (b_checked, b_present));
+        if shared <= 0.0 {
+            return size;
+        }
         // The chance that a code of one column whose count in the other is unknown is in it.
         let shared_rest = (shared - known_shared).max(0.0);
         let p_in_b = (shared_rest / (self.distinct as f64 - known_shared).max(1.0)).min(1.0);
         let p_in_a = (shared_rest / (other.distinct as f64 - known_shared).max(1.0)).min(1.0);
+        let mut expected_shared = 0.0;
         for x in &b_unknown {
             size += x * b_avg * p_in_b;
             expected_shared += p_in_b;
@@ -260,6 +262,36 @@ impl ColumnSketch {
         let light_shared = (shared_rest - expected_shared).max(0.0);
         size += light_shared * a_avg * b_avg;
         size.clamp(0.0, self.rows as f64 * other.rows as f64)
+    }
+
+    /// The estimated number of codes the two columns share. From the HyperLogLogs, unless their
+    /// error (about 1.6% of the union) is large next to the smaller column: then from the share
+    /// of the smaller column's common codes that the other column is known to have (their
+    /// counts in the other column are known after [Triplestore::analyze]), when at least
+    /// [MIN_CHECKED] of them are. Never fewer than the codes known to be in both.
+    ///
+    /// [Triplestore::analyze]: crate::Triplestore::analyze
+    fn shared_estimate(
+        &self,
+        other: &ColumnSketch,
+        known_shared: f64,
+        (a_checked, a_present): (f64, f64),
+        (b_checked, b_present): (f64, f64),
+    ) -> f64 {
+        let (a, b) = (self.distinct as f64, other.distinct as f64);
+        let union = self.union_distinct(other);
+        let hll_error = 1.04 / (HLL_M as f64).sqrt() * union;
+        let (small, checked, present) = if a <= b {
+            (a, a_checked, a_present)
+        } else {
+            (b, b_checked, b_present)
+        };
+        let shared = if hll_error > 0.2 * small && checked >= MIN_CHECKED {
+            present / checked * small
+        } else {
+            a + b - union
+        };
+        shared.clamp(known_shared, a.min(b).max(known_shared))
     }
 
     /// The memory the sketch holds, in bytes.
@@ -451,5 +483,34 @@ mod tests {
         // Code 5 has 2,004 rows; a's list may miss its 4 there.
         assert_eq!(m.top[0].0, 5);
         assert!((2_000..=2_004).contains(&m.top[0].1), "{:?}", m.top[0]);
+    }
+
+    #[test]
+    fn few_codes_against_many() {
+        // Regression (RINF 0076, era:validity objects against rdf:type subjects, 207 against
+        // 361k distinct): the overlap clamped to 0 and the join was estimated empty although
+        // the counts of the common codes were known. 200 codes (17,000 rows on the most common)
+        // all among 360,000 codes: the HyperLogLog
+        // error is far larger than 200, so the share comes from the common codes.
+        let mut a = vec![];
+        for k in 0..200u32 {
+            for _ in 0..(if k < 10 { 1_000 } else { 30 }) {
+                a.push(k * 1_000);
+            }
+        }
+        let b: Vec<u32> = (0..360_000).map(|i| i * 3 + (i % 2)).collect();
+        let b: Vec<u32> = b.into_iter().chain((0..200u32).map(|k| k * 1_000)).collect();
+        let (sa, ca) = ColumnSketch::from_codes_sorted(BaseRDFNodeType::IRI, a.clone());
+        let (sb, cb) = ColumnSketch::from_codes_sorted(BaseRDFNodeType::IRI, b.clone());
+        let keys: Vec<u32> = sa.top.iter().chain(sb.top.iter()).map(|(c, _)| *c).collect();
+        let (sa, sb) = (sa.with_cross(&ca, &keys), sb.with_cross(&cb, &keys));
+        let ex = exact(&a, &b);
+        let est = sa.join_size(&sb);
+        assert!(est / ex < 1.5 && ex / est < 1.5, "{est} vs {ex}");
+        // And none of them: the estimate is near zero, not a share of the HyperLogLog error.
+        let c: Vec<u32> = (0..360_000).map(|i| 10_000_000 + i).collect();
+        let (sc, cc) = ColumnSketch::from_codes_sorted(BaseRDFNodeType::IRI, c);
+        let sc = sc.with_cross(&cc, &keys);
+        assert!(sa.join_size(&sc) < 0.05 * ex, "{}", sa.join_size(&sc));
     }
 }
