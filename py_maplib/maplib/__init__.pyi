@@ -2492,6 +2492,33 @@ class Model:
         additions into a single sorted segment per predicate and type combination.
         """
 
+    def analyze(self, deep: bool = False) -> DataFrame:
+        """
+        The statistics of every triple table, which queries use for planning: they order the
+        triple patterns of each basic graph pattern by the estimated number of solutions, and
+        estimate the size of joins between tables from sketches of their columns.
+
+        The statistics are kept up to date as triples are added and deleted, without reading
+        the triples again: each segment of a table is sketched when it is written, and a table's
+        statistics are merged from its segments' sketches. Calling this is optional.
+
+        With deep=True, every table is read again for exact counts, also tables in disk storage
+        mode, and the column sketches get the counts of the values that are most common in other
+        columns, which makes joins of a value common on one side only accurate. These statistics
+        are kept until a table has grown or shrunk by more than 20%.
+
+        Usage:
+
+        >>> m.analyze()
+        >>> m.analyze(deep=True)
+
+        :param deep: Read every table again for exact counts and cross-column counts.
+        :return: One row per table: graph, predicate, subject_type, object_type, triples,
+            distinct_subjects, distinct_objects, max_triples_per_subject,
+            max_triples_per_object, exact (whether the counts are exact rather than merged
+            estimates), most_common_objects (N-Triples terms) and most_common_object_counts.
+        """
+
     def add_graph(
             self,
             other: "Model",

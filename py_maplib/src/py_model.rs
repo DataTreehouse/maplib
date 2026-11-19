@@ -2093,6 +2093,33 @@ impl PyModel {
         })
     }
 
+    #[pyo3(signature = (deep=false))]
+    fn analyze(&self, py: Python<'_>, deep: bool) -> PyResult<Py<PyAny>> {
+        let df = py.detach(move || -> PyResult<polars::prelude::DataFrame> {
+            let inner = self.read_inner();
+            let tables = inner.analyze(deep).map_err(PyMaplibError::from)?;
+            analyzed_tables_df(&tables)
+        })?;
+        df_to_py_df(df, HashMap::new(), None, None, false, py)
+    }
+
+    /// For measuring the table statistics: the estimated join size of every pair of table
+    /// columns whose key types match, and with `exact` the exact size too.
+    #[pyo3(signature = (exact=false))]
+    fn _join_size_estimates(&self, py: Python<'_>, exact: bool) -> PyResult<Py<PyAny>> {
+        let df = py.detach(move || -> PyResult<polars::prelude::DataFrame> {
+            let inner = self.read_inner();
+            let pairs = inner.join_size_estimates(exact).map_err(PyMaplibError::from)?;
+            join_size_estimates_df(&pairs)
+        })?;
+        df_to_py_df(df, HashMap::new(), None, None, false, py)
+    }
+
+    /// The memory held by the sketches of the table statistics, in bytes.
+    fn _sketch_memory(&self) -> usize {
+        self.read_inner().sketch_memory()
+    }
+
     #[pyo3(signature = (path = PathBuf::from("./model.maplib"), raw_db = false, single_file = true, storage_options = None))]
     fn serialize(
         &self,
@@ -2739,4 +2766,90 @@ fn paged_query(
         solution_mappings: solution_mappings.unwrap_or(false),
         return_format,
     })
+}
+
+/// The table statistics of [`PyModel::analyze`] as a DataFrame, one row per table.
+fn analyzed_tables_df(
+    tables: &[triplestore::statistics::AnalyzedTable],
+) -> PyResult<polars::prelude::DataFrame> {
+    use polars::prelude::{Column, DataFrame, NamedFrom, Series};
+    let s = |xs: Vec<String>, name: &str| Column::new(name.into(), xs);
+    let u = |xs: Vec<u64>, name: &str| Column::new(name.into(), xs);
+    let mut common_objects = vec![];
+    let mut common_counts = vec![];
+    for t in tables {
+        let (objs, counts): (Vec<String>, Vec<u64>) = t
+            .stats
+            .most_common_objects
+            .iter()
+            .map(|(o, c)| (o.to_string(), *c as u64))
+            .unzip();
+        common_objects.push(Series::new("".into(), objs));
+        common_counts.push(Series::new("".into(), counts));
+    }
+    let df = DataFrame::new(
+        tables.len(),
+        vec![
+            s(tables.iter().map(|t| t.graph.to_string()).collect(), "graph"),
+            s(tables.iter().map(|t| t.predicate.to_string()).collect(), "predicate"),
+            s(tables.iter().map(|t| t.subject_type.to_string()).collect(), "subject_type"),
+            s(tables.iter().map(|t| t.object_type.to_string()).collect(), "object_type"),
+            u(tables.iter().map(|t| t.stats.rows as u64).collect(), "triples"),
+            u(
+                tables.iter().map(|t| t.stats.distinct_subjects as u64).collect(),
+                "distinct_subjects",
+            ),
+            u(
+                tables.iter().map(|t| t.stats.distinct_objects as u64).collect(),
+                "distinct_objects",
+            ),
+            u(
+                tables.iter().map(|t| t.stats.max_subject_rows as u64).collect(),
+                "max_triples_per_subject",
+            ),
+            u(
+                tables.iter().map(|t| t.stats.max_object_rows as u64).collect(),
+                "max_triples_per_object",
+            ),
+            Column::new(
+                "exact".into(),
+                tables.iter().map(|t| t.stats.exact).collect::<Vec<bool>>(),
+            ),
+            Column::new("most_common_objects".into(), common_objects),
+            Column::new("most_common_object_counts".into(), common_counts),
+        ],
+    )
+    .map_err(|e| PyValueError::new_err(e.to_string()))?;
+    Ok(df)
+}
+
+/// The pairs of [`PyModel::_join_size_estimates`] as a DataFrame.
+fn join_size_estimates_df(
+    pairs: &[triplestore::statistics::JoinSizeEstimate],
+) -> PyResult<polars::prelude::DataFrame> {
+    use polars::prelude::{Column, DataFrame};
+    let s = |f: &dyn Fn(&triplestore::statistics::JoinSizeEstimate) -> String, name: &str| {
+        Column::new(name.into(), pairs.iter().map(f).collect::<Vec<_>>())
+    };
+    let df = DataFrame::new(
+        pairs.len(),
+        vec![
+            s(&|p| p.graph.to_string(), "graph"),
+            s(&|p| p.left_predicate.to_string(), "left_predicate"),
+            s(&|p| p.left_position.to_string(), "left_position"),
+            s(&|p| p.right_predicate.to_string(), "right_predicate"),
+            s(&|p| p.right_position.to_string(), "right_position"),
+            s(&|p| p.key_type.to_string(), "key_type"),
+            Column::new(
+                "estimate".into(),
+                pairs.iter().map(|p| p.estimate).collect::<Vec<f64>>(),
+            ),
+            Column::new(
+                "exact".into(),
+                pairs.iter().map(|p| p.exact).collect::<Vec<Option<u64>>>(),
+            ),
+        ],
+    )
+    .map_err(|e| PyValueError::new_err(e.to_string()))?;
+    Ok(df)
 }

@@ -2,6 +2,7 @@ mod bgp_types;
 pub(crate) mod count;
 mod count_joins;
 mod distinct;
+pub(crate) mod estimate;
 mod extend;
 mod filter;
 mod geo_filter;
@@ -31,7 +32,7 @@ use crate::sparql::evaluation_hook::HookDecision;
 use tracing::{instrument, trace, warn};
 
 use crate::sparql::lazy_graph_patterns::triples_ordering::{
-    group_triple_patterns, order_triple_patterns,
+    group_triple_patterns,
 };
 use polars::prelude::{col, int_range, len, lit, DataType, IntoLazy, JoinType};
 use polars_core::frame::DataFrame;
@@ -217,9 +218,28 @@ impl Triplestore {
                 };
                 let patterns = if proven_empty { vec![] } else { patterns };
                 let bgp_context = context.extension_with(PathEntry::BGP);
-                let ordered_patterns =
-                    order_triple_patterns(&patterns, &updated_solution_mappings, &pushdowns);
+                let had_input = updated_solution_mappings.is_some();
+                // One pattern on its own needs no order, and the rows it reads bound it.
+                let statistics = estimate::statistics_enabled();
+                let estimated = statistics && (had_input || patterns.len() > 1);
+                let ordered_patterns = if estimated {
+                    self.order_triple_patterns_by_estimates(
+                        &patterns,
+                        &updated_solution_mappings,
+                        &pushdowns,
+                        dataset,
+                    )
+                } else if statistics {
+                    patterns.clone()
+                } else {
+                    triples_ordering::order_triple_patterns(
+                        &patterns,
+                        &updated_solution_mappings,
+                        &pushdowns,
+                    )
+                };
                 let groups = group_triple_patterns(ordered_patterns, &updated_solution_mappings);
+                let mut estimate = estimate::JoinEstimate::start(&updated_solution_mappings);
                 for group in &groups {
                     match updated_solution_mappings {
                         // The group shares more bound variables than its first pattern does.
@@ -245,6 +265,21 @@ impl Triplestore {
                                     dataset,
                                 )?);
                             }
+                        }
+                    }
+                    // The estimate from the tables' statistics lowers the one of the patterns
+                    // and joins when it is smaller, and never raises it: that one is an upper
+                    // bound where it can be (the rows a pattern reads), and zero means no
+                    // solutions.
+                    if !estimated {
+                        continue;
+                    }
+                    for tp in group {
+                        estimate.join(&self.estimate_triple_pattern(tp, &pushdowns, dataset));
+                    }
+                    if let Some(sm) = updated_solution_mappings.as_mut() {
+                        if estimate.analyzed {
+                            sm.height_estimate = sm.height_estimate.min(estimate.height());
                         }
                     }
                 }

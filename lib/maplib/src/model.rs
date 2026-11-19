@@ -1462,6 +1462,29 @@ SELECT ?loc ?crs ?seq ?x ?y ?z WHERE {{
         Ok(())
     }
 
+    /// The statistics of every triple table, see `Triplestore::analyze`; with `deep`, read
+    /// again from the triples.
+    pub fn analyze(
+        &self,
+        deep: bool,
+    ) -> Result<Vec<triplestore::statistics::AnalyzedTable>, MaplibError> {
+        Ok(self.triplestore.analyze(deep)?)
+    }
+
+    /// The estimated (and optionally exact) join sizes of all pairs of table columns, see
+    /// `Triplestore::join_size_estimates`.
+    pub fn join_size_estimates(
+        &self,
+        exact: bool,
+    ) -> Result<Vec<triplestore::statistics::JoinSizeEstimate>, MaplibError> {
+        Ok(self.triplestore.join_size_estimates(exact)?)
+    }
+
+    /// The memory held by the sketches of the table statistics, in bytes.
+    pub fn sketch_memory(&self) -> usize {
+        self.triplestore.sketch_memory()
+    }
+
     /// Serializes the model to object storage, see `Triplestore::serialize_triples_remote`.
     pub fn serialize_triples_remote(
         &mut self,

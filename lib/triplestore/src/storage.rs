@@ -4,6 +4,7 @@ pub mod remote_segments;
 pub mod so_index;
 
 use crate::errors::TriplestoreError;
+use crate::statistics::sketch::SegmentSketch;
 use crate::storage::so_index::SubjectObjectIndex;
 use crate::IndexingOptions;
 use file_io::remote::RemoteLocation;
@@ -223,6 +224,24 @@ impl Triples {
         self.height
     }
 
+    /// Whether the triples are held in memory, as opposed to parquet files in disk storage mode.
+    pub(crate) fn in_memory(&self) -> bool {
+        self.triples_folder.is_none()
+    }
+
+    /// The sketches of every segment, see [TriplesSegment::sketch]; None when a segment has none.
+    pub(crate) fn segment_sketches(&self, compute: bool) -> Option<Vec<Arc<SegmentSketch>>> {
+        self.segments
+            .iter()
+            .map(|s| s.sketch(&self.subject_type, &self.object_type, compute))
+            .collect()
+    }
+
+    /// The number of segments.
+    pub(crate) fn n_segments(&self) -> usize {
+        self.segments.len()
+    }
+
     /// Creates triples from serialized parquet files. In disk storage mode (`triples_folder` set)
     /// the files are copied into the triples folder, otherwise they are read into memory. Files
     /// in object storage with a known `height` (number of triples) are not copied in disk
@@ -267,6 +286,7 @@ impl Triples {
             object_filter: object_filter.map(Arc::new),
             distinct_subjects: None,
             distinct_objects: None,
+            sketch: OnceLock::new(),
         };
         segment.recount_distinct();
 
@@ -1171,6 +1191,10 @@ pub(crate) struct TriplesSegment {
     /// The exact number of distinct objects, when the segment has an object sort over
     /// dictionary codes; None when unknown.
     distinct_objects: Option<usize>,
+    /// The sketches of the segment's columns for the table statistics, made when the segment
+    /// is created from triples in memory, or when they are first needed for a segment read
+    /// from storage ([TriplesSegment::sketch]).
+    sketch: OnceLock<Arc<SegmentSketch>>,
 }
 
 impl TriplesSegment {
@@ -1359,6 +1383,7 @@ impl TriplesSegment {
         triples_folder: Option<&Path>,
     ) -> Result<Self, TriplestoreError> {
         df.rechunk_mut();
+        let sketch = crate::statistics::sketch_segment(&df, subject_type, object_type);
         let indexed = create_indices(
             df,
             object_indexing_enabled,
@@ -1368,7 +1393,33 @@ impl TriplesSegment {
             compacted,
             triples_folder,
         )?;
-        Ok(indexed.into_segment())
+        let mut segment = indexed.into_segment();
+        segment.sketch = OnceLock::from(Arc::new(sketch));
+        Ok(segment)
+    }
+
+    /// The sketches of the segment's columns. Made from the stored triples when the segment has
+    /// none yet (it was read from storage), if `compute` and the triples are in memory.
+    pub(crate) fn sketch(
+        &self,
+        subject_type: &BaseRDFNodeType,
+        object_type: &BaseRDFNodeType,
+        compute: bool,
+    ) -> Option<Arc<SegmentSketch>> {
+        if let Some(s) = self.sketch.get() {
+            return Some(s.clone());
+        }
+        if !compute || !matches!(self.subject_sort, Some(StoredTriples::TriplesInMemory(_))) {
+            return None;
+        }
+        let df = collect_in_memory(
+            self.get_subject_sort_lazy_frame()
+                .ok()?
+                .select([col(SUBJECT_COL_NAME), col(OBJECT_COL_NAME)]),
+        )
+        .ok()?;
+        let s = Arc::new(crate::statistics::sketch_segment(&df, subject_type, object_type));
+        Some(self.sketch.get_or_init(|| s).clone())
     }
 
     pub(crate) fn get_lazy_frames(
@@ -1462,6 +1513,7 @@ impl IndexedTriples {
             object_filter: self.object_filter,
             distinct_subjects: self.distinct_subjects,
             distinct_objects: self.distinct_objects,
+            sketch: OnceLock::new(),
         }
     }
 }
@@ -2304,6 +2356,7 @@ fn compact_segments(
             df.column(SUBJECT_RANK_COL_NAME).is_ok() && df.column(OBJECT_RANK_COL_NAME).is_ok()
         );
     }
+    let sketch = crate::statistics::sketch_segment(&df, subj_type, obj_type);
     let indexed = create_indices(
         df,
         object_indexing_enabled,
@@ -2313,7 +2366,9 @@ fn compact_segments(
         false,
         triples_folder,
     )?;
-    Ok(indexed.into_segment())
+    let mut segment = indexed.into_segment();
+    segment.sketch = OnceLock::from(Arc::new(sketch));
+    Ok(segment)
 }
 
 const SO_RANK_KEY_COL_NAME: &str = "so_rank_key";

@@ -476,6 +476,15 @@ impl Triples {
             seg.distinct_subjects = distinct_subjects;
             seg.distinct_objects = distinct_objects;
             seg.height = height;
+            // The sketch keeps its counts for a few deletes, and is made again (when next
+            // needed) after many.
+            if let Some(sk) = seg.sketch.get() {
+                let n = subject_rows.len();
+                seg.sketch = match sk.after_delete(n) {
+                    Some(s) => std::sync::OnceLock::from(std::sync::Arc::new(s)),
+                    None => std::sync::OnceLock::new(),
+                };
+            }
         }
         self.height -= triples.height();
         self.generation = super::next_generation();

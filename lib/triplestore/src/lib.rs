@@ -19,6 +19,7 @@ pub mod query_solutions;
 pub mod rdfs_inferencing;
 pub mod serialization;
 pub mod sparql;
+pub mod statistics;
 pub mod storage;
 pub mod triples_read;
 pub mod triples_write;
@@ -100,6 +101,8 @@ pub struct Triplestore {
     pub udf_registry: Arc<UdfRegistry>,
     /// Search graphs of path searches.
     pub(crate) path_graph_cache: sparql::lazy_graph_patterns::path_search::PathGraphCache,
+    /// Statistics of the triple tables, for planning queries (see [statistics]).
+    pub(crate) stats_cache: statistics::StatsCache,
     /// Results of queries, invalidated by the changes `graph_triples_map` records.
     pub query_cache: Arc<QueryCache>,
     /// Which endpoints SERVICE may query and LOAD may fetch, and how.
@@ -505,6 +508,7 @@ impl Triplestore {
                 n_triples_deleted: 0,
                 distinct_count_cache: Default::default(),
                 path_graph_cache: Default::default(),
+                stats_cache: Default::default(),
                 udf_registry: Arc::new(UdfRegistry::new()),
                 federation: self.federation.clone(),
             };
@@ -908,6 +912,7 @@ impl Triplestore {
             n_triples_deleted: 0,
             distinct_count_cache: Default::default(),
             path_graph_cache: Default::default(),
+            stats_cache: Default::default(),
             udf_registry: Arc::new(UdfRegistry::new()),
             federation: Arc::new(FederationSettings::default()),
         })

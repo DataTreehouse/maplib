@@ -465,6 +465,7 @@ impl Triplestore {
             n_triples_deleted: 0,
             distinct_count_cache: Default::default(),
             path_graph_cache: Default::default(),
+            stats_cache: Default::default(),
             udf_registry: Arc::new(UdfRegistry::new()),
             federation: Arc::new(FederationSettings::default()),
         };
