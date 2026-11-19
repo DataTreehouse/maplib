@@ -13,6 +13,7 @@
 ### Bug fixes
 - `MINUS` with a variable on its right side that is never bound, e.g. `MINUS { ?s ex:nonexistent ?o }` inside a `LATERAL` evaluated per row, failed with a join key type mismatch. Variables that are never bound on the right side are now left out of the join
 - `MINUS`, `FILTER EXISTS` and `FILTER NOT EXISTS` after a pattern without solutions, e.g. a type with no instances joined with a `UNION`, failed with "datatypes of join keys don't match - `lim`: bool on left does not match `lim`: u32 on right". Variables that are never bound on the left side are now left out of the `MINUS` join, and an EXISTS on a variable that is never bound keeps the (empty) solutions without a join. The Model portal's Grid › Served power failed on the Nordic44 grid, which has no apparent power limits. The W3C SPARQL 1.1 test `negation/partial-minuend` now passes
+- Sequence property paths with a closure step, e.g. `?s ex:includes/rdf:rest+ ?o`, give one solution per intermediate node, as SPARQL joins the steps of a sequence; they gave each pair of ends once. **This changes results**: such queries can return more rows than before (on RINF 0076, 20,057 instead of 5,076, as in Jena, QLever and Oxigraph). Length ranges such as `ex:p{2,4}`, and sequences written in the same shape (`ex:p/ex:p+`, `ex:p/ex:p?`), still give each pair once
 
 ## v0.23.1
 ### Bug fixes
