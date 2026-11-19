@@ -270,9 +270,14 @@ impl<'a> TableView<'a> {
             distinct_s = distinct_s
                 .zip(seg.distinct_count(false))
                 .map(|(a, b)| a + b);
-            distinct_o = distinct_o
-                .zip(seg.distinct_count(true))
-                .map(|(a, b)| a + b);
+            // Without an object sort the exact count is unknown; the segment's sketch, made
+            // when it was created, estimates it.
+            let seg_distinct_o = seg.distinct_count(true).or_else(|| {
+                seg.sketch
+                    .get()
+                    .and_then(|s| s.object.as_ref().map(|c| c.distinct))
+            });
+            distinct_o = distinct_o.zip(seg_distinct_o).map(|(a, b)| a + b);
             segs.push(SegView {
                 seg: Some(seg),
                 parts,
@@ -318,8 +323,8 @@ impl<'a> TableView<'a> {
 
     /// The expected rows of one probe for a bound object.
     fn object_fanout(&self) -> f64 {
-        // Without distinct objects (no object sort), assume the square root of the table's
-        // rows; the run-time guard catches the exceptions.
+        // Without distinct objects (no object sort and no sketch), assume the square root of
+        // the table's rows; the run-time guard catches the exceptions.
         self.object_fanout
             .unwrap_or_else(|| (self.rows as f64).sqrt().max(1.0))
     }
