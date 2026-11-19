@@ -162,6 +162,14 @@ impl Triplestore {
         let (mut subject_vec, mut object_vec) = if let Some((starts, reversed)) = bound {
             // Only the paths from the nodes an end is bound to are followed.
             paths_from(ppe, starts, reversed, &namednode_dfs, max_index as usize)
+        } else if let Some(starts) = first_step_starts(ppe, &namednode_dfs)
+            .filter(|s| s.len().saturating_mul(SELECTIVE_START_FACTOR) <= lookup_df.height())
+        {
+            // Every path begins with a step that few nodes have: following the paths from those
+            // nodes is cheaper than the closure over all nodes (e.g. `era:includes/rdf:rest+`).
+            // With many starts, following them in step costs a pass per step of the longest path,
+            // and the matrix closure is faster.
+            paths_from(ppe, starts, false, &namednode_dfs, max_index as usize)
         } else {
             let SparsePathReturn { sparmat, .. } =
                 sparse_path(ppe, &namednode_dfs, max_index as usize);
@@ -990,6 +998,9 @@ impl U32DataFrameCreator {
         ),
         QueryProcessingError,
     > {
+        if let Some(out) = single_cat_type_keys(&self.named_nodes) {
+            return Ok(out);
+        }
         // TODO! Possible to constrain lookup to only nodes that may occur as subj/obj in path expr.
         // Can reduce size of a join
         let mut nns: Vec<_> = self.named_nodes.keys().cloned().collect();
@@ -1265,6 +1276,125 @@ impl U32DataFrameCreator {
             }
         }
     }
+}
+
+/// Paths are followed from the nodes of their first step when those are at most this fraction
+/// (1 / factor) of all nodes. Measured on RINF 0076's `rdf:rest` lists: starting from half of the
+/// nodes (`era:hasSequence/rdf:rest+`) took twice as long as the matrix closure, starting from a
+/// tenth (`era:includes/rdf:rest+`) half as long.
+const SELECTIVE_START_FACTOR: usize = 8;
+
+/// The sorted keys of the nodes that every path matching `ppe` starts from, when its first step
+/// is a single predicate (forwards or backwards); None when a path can start anywhere, e.g. with
+/// a zero-length match or an alternative.
+fn first_step_starts(
+    ppe: &PropertyPathExpression,
+    namednode_map: &HashMap<PathLeaf, DataFrame>,
+) -> Option<Vec<u32>> {
+    let (leaf, column) = match ppe {
+        PropertyPathExpression::Sequence(first, _) => {
+            return first_step_starts(first, namednode_map)
+        }
+        PropertyPathExpression::OneOrMore(inner) => return first_step_starts(inner, namednode_map),
+        PropertyPathExpression::NamedNode(nn) => (PathLeaf::NamedNode(nn.clone()), SUBJECT_COL_NAME),
+        PropertyPathExpression::Reverse(inner) => match inner.as_ref() {
+            PropertyPathExpression::NamedNode(nn) => {
+                (PathLeaf::NamedNode(nn.clone()), OBJECT_COL_NAME)
+            }
+            _ => return None,
+        },
+        _ => return None,
+    };
+    // A leaf without triples has no frame: no path can start.
+    let Some(df) = namednode_map.get(&leaf) else {
+        return Some(vec![]);
+    };
+    let mut keys: Vec<u32> = df.column(column).ok()?.u32().ok()?.iter().flatten().collect();
+    keys.sort_unstable();
+    keys.dedup();
+    Some(keys)
+}
+
+/// Lookup keys for path leaves whose subjects and objects all have one and the same type with
+/// global dictionary codes (e.g. IRIs only, as in `rdf:rest+`): the key of a value is the rank of
+/// its code among the distinct codes, found by sorting the codes. This gives the same tables as
+/// the general keying in [`U32DataFrameCreator::create_u32_dfs`] (a lookup table with one row per
+/// value, and the leaves' edges as keys) without the union and group by, which dominated paths
+/// from a bound start. None for anything else, e.g. several types or local codes.
+#[allow(clippy::type_complexity)]
+fn single_cat_type_keys(
+    named_nodes: &HashMap<PathLeaf, (DataFrame, RDFNodeState, RDFNodeState)>,
+) -> Option<(
+    DataFrame,
+    HashMap<String, RDFNodeState>,
+    HashMap<PathLeaf, DataFrame>,
+)> {
+    let mut state: Option<&RDFNodeState> = None;
+    let mut rows = 0usize;
+    for (df, s, o) in named_nodes.values() {
+        for st in [s, o] {
+            let t = st.get_base_type()?;
+            if st.is_multi() || !matches!(t, BaseRDFNodeType::IRI | BaseRDFNodeType::BlankNode) {
+                return None;
+            }
+            if !matches!(st.map.get(t), Some(BaseCatState::CategoricalNative(None))) {
+                return None;
+            }
+            match state {
+                None => state = Some(st),
+                Some(first) if first.get_base_type() == Some(t) => {}
+                Some(_) => return None,
+            }
+        }
+        rows += df.height();
+    }
+    let state = state?.clone();
+    if rows == 0 {
+        return None;
+    }
+    let mut columns = Vec::with_capacity(named_nodes.len());
+    let mut values: Vec<u32> = Vec::with_capacity(2 * rows);
+    for (leaf, (df, _, _)) in named_nodes {
+        let s = df.column(SUBJECT_COL_NAME).ok()?.u32().ok()?.rechunk();
+        let o = df.column(OBJECT_COL_NAME).ok()?.u32().ok()?.rechunk();
+        if s.null_count() > 0 || o.null_count() > 0 {
+            return None;
+        }
+        let s: Vec<u32> = s.into_no_null_iter().collect();
+        let o: Vec<u32> = o.into_no_null_iter().collect();
+        values.extend_from_slice(&s);
+        values.extend_from_slice(&o);
+        columns.push((leaf.clone(), s, o));
+    }
+    values.sort_unstable();
+    values.dedup();
+    let key = |c: &u32| values.binary_search(c).unwrap() as u32;
+    let mut out = HashMap::with_capacity(columns.len());
+    for (leaf, s, o) in columns {
+        let height = s.len();
+        let s: Vec<u32> = s.iter().map(key).collect();
+        let o: Vec<u32> = o.iter().map(key).collect();
+        let df = DataFrame::new(
+            height,
+            vec![
+                UInt32Chunked::from_vec(SUBJECT_COL_NAME.into(), s).into_column(),
+                UInt32Chunked::from_vec(OBJECT_COL_NAME.into(), o).into_column(),
+            ],
+        )
+        .ok()?;
+        out.insert(leaf, df);
+    }
+    let n = values.len();
+    let lookup_df = DataFrame::new(
+        n,
+        vec![
+            IdxCa::from_vec(LOOKUP_COLUMN.into(), (0..n as polars_core::prelude::IdxSize).collect()).into_column(),
+            UInt32Chunked::from_vec(VALUE_COLUMN.into(), values).into_column(),
+        ],
+    )
+    .ok()?;
+    let types = HashMap::from([(VALUE_COLUMN.to_string(), state)]);
+    Some((lookup_df, types, out))
 }
 
 fn is_constant(t: &TermPattern) -> bool {
