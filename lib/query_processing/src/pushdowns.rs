@@ -25,9 +25,10 @@ pub const MEDIUM_HEIGHT: usize = 100_000;
 /// pattern reads has at least this many times more rows. Otherwise converting the values to
 /// terms and looking them up costs more than reading the table and joining.
 pub const MEDIUM_TABLE_FACTOR: usize = 16;
-/// Solutions are not collected to push their values down into a pattern whose triple table has
-/// at most this many rows: joining the whole table within the query's plan costs less than a
-/// collect, and a star or chain of such patterns is then collected once.
+/// Solutions estimated to have at most this many rows are not collected to push their values down
+/// into a pattern whose triple table has at most this many rows: joining the whole table within
+/// the query's plan costs less than a collect, and a star or chain of such patterns is then
+/// collected once.
 pub const SMALL_TABLE_HEIGHT: usize = 16_384;
 pub const OWL_REAL: &str = "http://www.w3.org/2002/07/owl#real";
 
@@ -95,9 +96,13 @@ impl Pushdowns {
             Some(t) => MEDIUM_HEIGHT.min(t / MEDIUM_TABLE_FACTOR),
             None => MEDIUM_HEIGHT,
         };
+        // Joining a small table within the plan only pays when the solutions so far are
+        // estimated small too: a collect also replaces a loose estimate (e.g. that of a lookup
+        // by a constant object) by the real height, which decides the engine of the query.
         if self.keep_lazy
             || sm.height_estimate > CHECK_SMALL_HEIGHT
-            || table_height.is_some_and(|t| t <= SMALL_TABLE_HEIGHT)
+            || (table_height.is_some_and(|t| t <= SMALL_TABLE_HEIGHT)
+                && sm.height_estimate <= SMALL_TABLE_HEIGHT)
         {
             return sm;
         }
