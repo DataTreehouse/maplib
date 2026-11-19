@@ -379,45 +379,50 @@ fn decode_codes(
     } else {
         DECODE_ROWS_PER_TASK
     };
-    let chunks: Vec<Utf8ViewArray> = (0..n.div_ceil(rows_per_task))
-        .into_par_iter()
-        .map(|t| {
-            let from = t * rows_per_task;
-            let to = (from + rows_per_task).min(n);
-            let mut b = MutableBinaryViewArray::<str>::with_capacity(to - from);
-            let mut scratch = String::new();
-            for i in from..to {
-                if !arr.is_valid(i) {
-                    b.push_null();
-                    continue;
+    let decode_block = |t: usize| {
+        let from = t * rows_per_task;
+        let to = (from + rows_per_task).min(n);
+        let mut b = MutableBinaryViewArray::<str>::with_capacity(to - from);
+        let mut scratch = String::new();
+        for i in from..to {
+            if !arr.is_valid(i) {
+                b.push_null();
+                continue;
+            }
+            let u = arr.value(i);
+            match maps
+                .iter()
+                .find_map(|m| m.decode_parts(u).map(|pq| (m.is_vector(), pq)))
+            {
+                None => b.push_null(),
+                Some((true, (_, q))) if is_packed(q) => {
+                    scratch.clear();
+                    scratch.push_str(prefix);
+                    stored_to_lexical_into(q, &mut scratch);
+                    scratch.push_str(suffix);
+                    b.push_value(scratch.as_str());
                 }
-                let u = arr.value(i);
-                match maps
-                    .iter()
-                    .find_map(|m| m.decode_parts(u).map(|pq| (m.is_vector(), pq)))
-                {
-                    None => b.push_null(),
-                    Some((true, (_, q))) if is_packed(q) => {
-                        scratch.clear();
-                        scratch.push_str(prefix);
-                        stored_to_lexical_into(q, &mut scratch);
-                        scratch.push_str(suffix);
-                        b.push_value(scratch.as_str());
-                    }
-                    Some((_, (p, q))) if p.is_empty() && !wrap => b.push_value(q),
-                    Some((_, (p, q))) => {
-                        scratch.clear();
-                        scratch.push_str(prefix);
-                        scratch.push_str(p);
-                        scratch.push_str(q);
-                        scratch.push_str(suffix);
-                        b.push_value(scratch.as_str());
-                    }
+                Some((_, (p, q))) if p.is_empty() && !wrap => b.push_value(q),
+                Some((_, (p, q))) => {
+                    scratch.clear();
+                    scratch.push_str(prefix);
+                    scratch.push_str(p);
+                    scratch.push_str(q);
+                    scratch.push_str(suffix);
+                    b.push_value(scratch.as_str());
                 }
             }
-            b.freeze()
-        })
-        .collect();
+        }
+        b.freeze()
+    };
+    // A single block is decoded on the calling thread: handing it to the thread pool and waiting
+    // for it costs more than decoding a few thousand rows, e.g. the 10 rows of a LIMIT 10.
+    let n_blocks = n.div_ceil(rows_per_task);
+    let chunks: Vec<Utf8ViewArray> = if n_blocks <= 1 {
+        (0..n_blocks).map(decode_block).collect()
+    } else {
+        (0..n_blocks).into_par_iter().map(decode_block).collect()
+    };
     let name = ser.name().clone();
     if chunks.is_empty() {
         return Ok(Series::new_empty(name, &DataType::String));

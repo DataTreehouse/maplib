@@ -12,11 +12,13 @@ use polars::prelude::{col, IntoLazy};
 use polars_core::datatypes::DataType;
 use polars_core::frame::DataFrame;
 use polars_core::prelude::Series;
+use polars_core::prelude::{Column, IntoColumn};
 use polars_core::runtime::THREAD_POOL;
 use polars_core::utils::polars_arrow::array::Array;
 use rayon::prelude::*;
 use representation::cats::{maybe_decode_complex_expr, LockedCats};
 use representation::multitype::extract_column_from_multitype;
+use representation::solution_mapping::BaseCatState;
 use representation::solution_mapping::EagerSolutionMappings;
 use representation::{BaseRDFNodeType, LANG_STRING_LANG_FIELD, LANG_STRING_VALUE_FIELD};
 
@@ -67,65 +69,45 @@ pub fn sparql_json(
         return Ok(Some(out));
     }
 
-    // Decode the dictionary codes of every part in one go.
-    let mut columns = vec![];
-    let mut exprs = vec![];
-    let mut meta = vec![];
+    // The parts of each variable, as (variable, type, column, state).
+    let mut part_columns = vec![];
     for (vi, (name, state)) in variables.iter().enumerate() {
         let column = df.column(name).map_err(TriplestoreError::LazyLoadError)?;
-        for (k, (t, s)) in state.map.iter().enumerate() {
+        for (t, s) in state.map.iter() {
             if t.is_none() {
                 continue;
             }
-            let part_name = format!("p{vi}_{k}");
-            let mut c = if state.is_multi() {
+            let c = if state.is_multi() {
                 extract_column_from_multitype(column, t)
             } else {
                 column.clone()
             };
-            c.rename(part_name.as_str().into());
-            columns.push(c);
-            exprs.push(
-                maybe_decode_complex_expr(col(&part_name), t, s, global_cats.clone())
-                    .alias(&part_name),
-            );
-            meta.push((vi, t.clone(), part_name));
+            part_columns.push((vi, t.clone(), c, s.clone()));
         }
     }
-    let mut decoded = DataFrame::new(height, columns)
-        .map_err(TriplestoreError::LazyLoadError)?
-        .lazy()
-        .with_columns(exprs)
-        .collect()
-        .map_err(TriplestoreError::LazyLoadError)?;
+    // A result of one chunk is decoded and written on the calling thread. A Polars plan runs its
+    // expressions on the thread pool, and handing work to the pool and waiting for it cost more
+    // than the rest of a query such as `SELECT ?s ?o WHERE { ?s rdf:type ?o } LIMIT 10`.
+    let one_chunk = height <= MIN_CHUNK_ROWS;
+    let decoded: Vec<(usize, BaseRDFNodeType, Series, Option<Series>)> = if one_chunk {
+        part_columns
+            .into_iter()
+            .map(|(vi, t, c, s)| {
+                let (value, lang) = decode_eager(&c, &t, &s, &global_cats)?;
+                Ok((vi, t, value, lang))
+            })
+            .collect::<Result<_, TriplestoreError>>()?
+    } else {
+        decode_lazy(part_columns, height, &global_cats)?
+    };
 
     let mut parts = vec![];
-    for (variable, rdf_type, part_name) in meta {
-        let (value, lang) = if rdf_type.is_lang_string() {
-            let st = decoded
-                .column(&part_name)
-                .map_err(TriplestoreError::LazyLoadError)?
-                .struct_()
-                .map_err(TriplestoreError::LazyLoadError)?
-                .clone();
-            let field = |f: &str| {
-                st.field_by_name(f)
-                    .map_err(TriplestoreError::LazyLoadError)
-                    .map(|s| s.rechunk())
-            };
-            (field(LANG_STRING_VALUE_FIELD)?, Some(field(LANG_STRING_LANG_FIELD)?))
-        } else {
-            if let BaseRDFNodeType::Literal(..) = &rdf_type {
-                convert_datelike_to_string(&mut decoded, &part_name, rdf_type.time_zone_offset());
-            }
-            let s = decoded
-                .column(&part_name)
-                .map_err(TriplestoreError::LazyLoadError)?
-                .as_materialized_series()
-                .rechunk();
-            (s, None)
-        };
-        if !writable(value.dtype()) || lang.as_ref().is_some_and(|l| l.dtype() != &DataType::String) {
+    for (variable, rdf_type, value, lang) in decoded {
+        if !writable(value.dtype())
+            || lang
+                .as_ref()
+                .is_some_and(|l| l.dtype() != &DataType::String)
+        {
             return Ok(None);
         }
         let (prefix, suffix) = wrapping(&rdf_type);
@@ -151,16 +133,20 @@ pub fn sparql_json(
     let n_threads = THREAD_POOL.current_num_threads().max(1);
     let chunk = MIN_CHUNK_ROWS.max(height.div_ceil(n_threads * 4));
     let n_chunks = height.div_ceil(chunk);
-    let buffers: Vec<Vec<u8>> = THREAD_POOL.install(|| {
-        (0..n_chunks)
-            .into_par_iter()
-            .map(|c| {
-                let offset = c * chunk;
-                let len = chunk.min(height - offset);
-                write_rows(&parts, &keys, variables.len(), offset, len)
-            })
-            .collect::<Result<_, _>>()
-    })?;
+    let buffers: Vec<Vec<u8>> = if n_chunks <= 1 {
+        vec![write_rows(&parts, &keys, variables.len(), 0, height)?]
+    } else {
+        THREAD_POOL.install(|| {
+            (0..n_chunks)
+                .into_par_iter()
+                .map(|c| {
+                    let offset = c * chunk;
+                    let len = chunk.min(height - offset);
+                    write_rows(&parts, &keys, variables.len(), offset, len)
+                })
+                .collect::<Result<_, _>>()
+        })?
+    };
     for b in &buffers {
         out.extend_from_slice(b);
     }
@@ -170,6 +156,115 @@ pub fn sparql_json(
     }
     out.extend_from_slice(b"]}}");
     Ok(Some(out))
+}
+
+/// Decodes the dictionary codes of a part on the calling thread, splitting language-tagged
+/// strings into their values and language tags.
+fn decode_eager(
+    column: &Column,
+    rdf_type: &BaseRDFNodeType,
+    state: &BaseCatState,
+    global_cats: &LockedCats,
+) -> Result<(Series, Option<Series>), TriplestoreError> {
+    let decode = |ser: Series| -> Result<Series, TriplestoreError> {
+        let ser = match state {
+            BaseCatState::CategoricalNative(local_cats) => global_cats
+                .read()
+                .unwrap()
+                .decode_of_type(&ser, rdf_type, local_cats.clone())
+                .map_err(TriplestoreError::LazyLoadError)?,
+            BaseCatState::String | BaseCatState::NonString => ser,
+        };
+        Ok(ser.rechunk())
+    };
+    if rdf_type.is_lang_string() {
+        let st = column.struct_().map_err(TriplestoreError::LazyLoadError)?;
+        let field = |f: &str| {
+            st.field_by_name(f)
+                .map_err(TriplestoreError::LazyLoadError)
+                .and_then(&decode)
+        };
+        return Ok((
+            field(LANG_STRING_VALUE_FIELD)?,
+            Some(field(LANG_STRING_LANG_FIELD)?),
+        ));
+    }
+    let value = decode(column.as_materialized_series().clone())?;
+    if let BaseRDFNodeType::Literal(..) = rdf_type {
+        if value.dtype().is_temporal() {
+            let name = value.name().to_string();
+            let mut df = DataFrame::new(value.len(), vec![value.into_column()])
+                .map_err(TriplestoreError::LazyLoadError)?;
+            convert_datelike_to_string(&mut df, &name, rdf_type.time_zone_offset());
+            let value = df
+                .column(&name)
+                .map_err(TriplestoreError::LazyLoadError)?
+                .as_materialized_series()
+                .rechunk();
+            return Ok((value, None));
+        }
+    }
+    Ok((value, None))
+}
+
+/// Decodes the dictionary codes of every part in one Polars plan, which decodes the parts in
+/// parallel, splitting language-tagged strings into their values and language tags.
+fn decode_lazy(
+    part_columns: Vec<(usize, BaseRDFNodeType, Column, BaseCatState)>,
+    height: usize,
+    global_cats: &LockedCats,
+) -> Result<Vec<(usize, BaseRDFNodeType, Series, Option<Series>)>, TriplestoreError> {
+    let mut columns = vec![];
+    let mut exprs = vec![];
+    let mut meta = vec![];
+    for (k, (vi, t, mut c, s)) in part_columns.into_iter().enumerate() {
+        let part_name = format!("p{k}");
+        c.rename(part_name.as_str().into());
+        columns.push(c);
+        exprs.push(
+            maybe_decode_complex_expr(col(&part_name), &t, &s, global_cats.clone())
+                .alias(&part_name),
+        );
+        meta.push((vi, t, part_name));
+    }
+    let mut decoded = DataFrame::new(height, columns)
+        .map_err(TriplestoreError::LazyLoadError)?
+        .lazy()
+        .with_columns(exprs)
+        .collect()
+        .map_err(TriplestoreError::LazyLoadError)?;
+    let mut out = vec![];
+    for (variable, rdf_type, part_name) in meta {
+        let (value, lang) = if rdf_type.is_lang_string() {
+            let st = decoded
+                .column(&part_name)
+                .map_err(TriplestoreError::LazyLoadError)?
+                .struct_()
+                .map_err(TriplestoreError::LazyLoadError)?
+                .clone();
+            let field = |f: &str| {
+                st.field_by_name(f)
+                    .map_err(TriplestoreError::LazyLoadError)
+                    .map(|s| s.rechunk())
+            };
+            (
+                field(LANG_STRING_VALUE_FIELD)?,
+                Some(field(LANG_STRING_LANG_FIELD)?),
+            )
+        } else {
+            if let BaseRDFNodeType::Literal(..) = &rdf_type {
+                convert_datelike_to_string(&mut decoded, &part_name, rdf_type.time_zone_offset());
+            }
+            let s = decoded
+                .column(&part_name)
+                .map_err(TriplestoreError::LazyLoadError)?
+                .as_materialized_series()
+                .rechunk();
+            (s, None)
+        };
+        out.push((variable, rdf_type, value, lang));
+    }
+    Ok(out)
 }
 
 /// Whether the serializers write values of this column type.
@@ -226,7 +321,9 @@ fn write_rows(
         .map(|p| {
             (
                 p.value.slice(offset as i64, len).rechunk(),
-                p.lang.as_ref().map(|l| l.slice(offset as i64, len).rechunk()),
+                p.lang
+                    .as_ref()
+                    .map(|l| l.slice(offset as i64, len).rechunk()),
             )
         })
         .collect();
@@ -234,8 +331,10 @@ fn write_rows(
         .iter()
         .map(|(v, l)| (&*v.chunks()[0], l.as_ref().map(|l| &*l.chunks()[0])))
         .collect();
-    let mut serializers: Vec<(Box<dyn Serializer + Send>, Option<Box<dyn Serializer + Send>>)> =
-        Vec::with_capacity(parts.len());
+    let mut serializers: Vec<(
+        Box<dyn Serializer + Send>,
+        Option<Box<dyn Serializer + Send>>,
+    )> = Vec::with_capacity(parts.len());
     for ((p, (v, l)), (va, la)) in parts.iter().zip(&sliced).zip(&arrays) {
         let value = serializer_for(*va, v.dtype(), &p.rdf_type, false, Style::Json)
             .map_err(TriplestoreError::LazyLoadError)?;
@@ -255,8 +354,7 @@ fn write_rows(
         buf.push(b'{');
         written.iter_mut().for_each(|w| *w = false);
         let mut first = true;
-        for ((p, (value, lang)), (va, _)) in parts.iter().zip(serializers.iter_mut()).zip(&arrays)
-        {
+        for ((p, (value, lang)), (va, _)) in parts.iter().zip(serializers.iter_mut()).zip(&arrays) {
             // Every serializer moves on by one row, also where it writes nothing.
             if va.is_valid(row) && !written[p.variable] {
                 written[p.variable] = true;
