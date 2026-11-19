@@ -251,7 +251,8 @@ def _virtualization_available() -> bool:
         from maplib import virtualization  # noqa: F401
 
         return hasattr(virtualization, "DuckDBDatabase")
-    except ImportError:
+    except (ImportError, NotImplementedError):
+        # The open-source build raises NotImplementedError for Enterprise Edition modules.
         return False
 
 
