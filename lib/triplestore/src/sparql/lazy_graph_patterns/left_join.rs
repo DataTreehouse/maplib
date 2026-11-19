@@ -4,13 +4,13 @@ use crate::sparql::errors::SparqlError;
 use tracing::{instrument, trace};
 
 use super::filter::{pushdowns_for_expression, uses_variables_out_of_scope};
-use super::join::maybe_unbound_variables;
+use super::join::{certainly_bound_variables, maybe_unbound_variables};
 use crate::sparql::QuerySettings;
 use oxrdf::Variable;
-use polars::prelude::{col, JoinType};
+use polars::prelude::{col, IntoLazy, JoinType};
 use query_processing::expressions::contains_graph_pattern;
 use query_processing::expressions::effective_boolean_value;
-use query_processing::graph_patterns::{extend, filter, join, join_with_unbound};
+use query_processing::graph_patterns::{distinct, extend, filter, join, join_with_unbound};
 use query_processing::pushdowns::Pushdowns;
 use representation::dataset::QueryGraph;
 use representation::query_context::{Context, PathEntry};
@@ -22,6 +22,10 @@ use polars_core::prelude::IntoColumn;
 use query_processing::find_query_variables::find_all_used_variables_in_expression;
 use representation::BaseRDFNodeType;
 use std::collections::{HashMap, HashSet};
+
+/// The left side of OPTIONAL is collected to evaluate the right side with its values when it is
+/// estimated to have at most this many solutions, and they are used when it has.
+const OPTIONAL_KEYS_HEIGHT: usize = 10_000;
 
 impl Triplestore {
     #[allow(clippy::too_many_arguments)]
@@ -117,7 +121,7 @@ impl Triplestore {
             let keys = self.bind_keys(&left_eager, &in_scope_variables(right))?;
             (left_eager.as_lazy(), keys.map(|k| k.as_lazy()))
         } else {
-            (left_solution_mappings, None)
+            self.optional_keys(left_solution_mappings, left, right)?
         };
         let right_expression_pushdowns = expression_pushdowns
             .as_ref()
@@ -189,6 +193,78 @@ impl Triplestore {
             query_settings.max_rows,
         )?;
         Ok(left_solution_mappings)
+    }
+
+    /// For a small left side of OPTIONAL: the left solutions, collected, and the distinct values
+    /// of the variables both sides certainly bind, which the right side is then evaluated with.
+    /// Its patterns then read only the triples that can match a left solution, instead of whole
+    /// tables (`?review :rating ?r` for a few reviews). The right side then only has solutions
+    /// compatible with these values, which gives the same left join.
+    fn optional_keys(
+        &self,
+        left_solution_mappings: SolutionMappings,
+        left: &GraphPattern,
+        right: &GraphPattern,
+    ) -> Result<(SolutionMappings, Option<SolutionMappings>), SparqlError> {
+        // A constant subject or object already makes the right side selective on its own.
+        if left_solution_mappings.height_estimate > OPTIONAL_KEYS_HEIGHT
+            || has_constant_term(right)
+        {
+            return Ok((left_solution_mappings, None));
+        }
+        let left_certain = certainly_bound_variables(left);
+        let right_certain = certainly_bound_variables(right);
+        let shared: Vec<String> = left_solution_mappings
+            .rdf_node_types
+            .iter()
+            .filter(|(v, t)| {
+                left_certain.contains(*v)
+                    && right_certain.contains(*v)
+                    && !t.is_multi()
+                    && !t.is_none()
+            })
+            .map(|(v, _)| v.clone())
+            .collect();
+        if shared.is_empty() {
+            return Ok((left_solution_mappings, None));
+        }
+        // Small, so collected with the in-memory engine.
+        let SolutionMappings {
+            mappings,
+            rdf_node_types,
+            height_estimate,
+        } = left_solution_mappings;
+        let df = utils::polars::pl_interruptable_collect_estimated(mappings, height_estimate)
+            .map_err(|e| match e {
+                utils::polars::InterruptableCollectError::Interrupted => {
+                    SparqlError::InterruptSignal
+                }
+                e => SparqlError::QueryExecutionError(e.to_string()),
+            })?;
+        let left_eager = EagerSolutionMappings::new(df, rdf_node_types);
+        let height = left_eager.mappings.height();
+        // Values bound in every left solution only: an unbound one is compatible with anything.
+        let shared: Vec<String> = shared
+            .into_iter()
+            .filter(|v| left_eager.mappings.column(v).unwrap().null_count() == 0)
+            .collect();
+        if shared.is_empty() || height > OPTIONAL_KEYS_HEIGHT {
+            return Ok((left_eager.as_lazy(), None));
+        }
+        let keys = SolutionMappings::new(
+            left_eager
+                .mappings
+                .select(shared.iter().map(|x| x.as_str()))
+                .map_err(|e| SparqlError::QueryExecutionError(e.to_string()))?
+                .lazy(),
+            shared
+                .iter()
+                .map(|v| (v.clone(), left_eager.rdf_node_types.get(v).unwrap().clone()))
+                .collect(),
+            height,
+        );
+        let keys = distinct(keys)?;
+        Ok((left_eager.as_lazy(), Some(keys)))
     }
 
     /// Keeps the solutions where the expression is true, without the expression column.
@@ -352,4 +428,27 @@ fn drop_columns(mut sm: SolutionMappings, names: &[&str]) -> SolutionMappings {
         sm.rdf_node_types.remove(*n);
     }
     sm
+}
+
+/// Whether a triple pattern the pattern evaluates first (outside OPTIONAL right sides, UNION and
+/// subqueries) has a constant subject or object.
+fn has_constant_term(gp: &GraphPattern) -> bool {
+    use spargebra::term::TermPattern;
+    match gp {
+        GraphPattern::Bgp { patterns } => patterns.iter().any(|tp| {
+            [&tp.subject, &tp.object].iter().any(|t| {
+                matches!(t, TermPattern::NamedNode(_) | TermPattern::Literal(_))
+            })
+        }),
+        GraphPattern::Join { left, right } => has_constant_term(left) || has_constant_term(right),
+        GraphPattern::LeftJoin { left, .. }
+        | GraphPattern::Minus { left, .. }
+        | GraphPattern::Lateral { left, .. } => has_constant_term(left),
+        GraphPattern::Filter { inner, .. }
+        | GraphPattern::Extend { inner, .. }
+        | GraphPattern::Graph { inner, .. }
+        | GraphPattern::Distinct { inner }
+        | GraphPattern::Reduced { inner } => has_constant_term(inner),
+        _ => false,
+    }
 }
