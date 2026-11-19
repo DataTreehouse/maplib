@@ -208,11 +208,13 @@ impl Triplestore {
                     })
                     .cloned()
                     .collect();
-                let bound = self
-                    .join_key_bound(triple_pattern, &keys, dataset)
-                    .map(|m| height_upper_bound.saturating_mul(m));
-                let new_height_upper_bound = match bound {
-                    Some(b) => new_height_upper_bound.min(b),
+                let per_key = self.join_key_bound(triple_pattern, &keys, dataset);
+                let bound = per_key.map(|m| height_upper_bound.saturating_mul(m));
+                // The join's estimate and its check for joins of many rows on shared values
+                // (whose product of the input heights would otherwise be that of the whole
+                // table) then use the rows a solution can match: at most `m`.
+                let new_height_upper_bound = match per_key {
+                    Some(m) => new_height_upper_bound.min(m),
                     None => new_height_upper_bound,
                 };
                 solution_mappings = Some(SolutionMappings {
