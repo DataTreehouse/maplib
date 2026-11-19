@@ -2629,7 +2629,10 @@ parser! {
             (s, e)
         }
 
-        rule UnaryExpression() -> Expression = s: "!" _ e:UnaryExpression() {?
+        // The lookahead tries the double negation only on `!!`: without it, every `!(...)`
+        // parses its operand here, fails without SPARQL 1.2, and parses it again below, which
+        // takes time exponential in the nesting depth of `!`.
+        rule UnaryExpression() -> Expression = "!" _ &"!" e:UnaryExpression() {?
             #[cfg(feature = "sparql-12")]{Ok(Expression::Not(Box::new(e)))}
             #[cfg(not(feature = "sparql-12"))]{Err("Double negation (!!) is only available in SPARQL 1.2")}
         } / s: $("!" / "+" / "-")? _ e:PrimaryExpression() { match s {
@@ -2783,32 +2786,38 @@ parser! {
 
         rule Aggregate() -> AggregateExpression =
             i("COUNT") _ "(" _ i("DISTINCT") _ "*" _ ")" { AggregateExpression::CountSolutions { distinct: true } } /
-            i("COUNT") _ "(" _ i("DISTINCT") _ expr:Expression() _ ")" { AggregateExpression::FunctionCall { name: AggregateFunction::Count, expr, distinct: true } } /
+            i("COUNT") _ "(" _ i("DISTINCT") _ expr:AggregateArgument() _ ")" { AggregateExpression::FunctionCall { name: AggregateFunction::Count, expr, distinct: true } } /
             i("COUNT") _ "(" _ "*" _ ")" { AggregateExpression::CountSolutions { distinct: false } } /
-            i("COUNT") _ "(" _ expr:Expression() _ ")" { AggregateExpression::FunctionCall { name: AggregateFunction::Count, expr, distinct: false } } /
-            i("SUM") _ "(" _ i("DISTINCT") _ expr:Expression() _ ")" { AggregateExpression::FunctionCall { name: AggregateFunction::Sum, expr, distinct: true } } /
-            i("SUM") _ "(" _ expr:Expression() _ ")" { AggregateExpression::FunctionCall { name: AggregateFunction::Sum, expr, distinct: false } } /
-            i("MIN") _ "(" _ i("DISTINCT") _ expr:Expression() _ ")" { AggregateExpression::FunctionCall { name: AggregateFunction::Min, expr, distinct: true } } /
-            i("MIN") _ "(" _ expr:Expression() _ ")" { AggregateExpression::FunctionCall { name: AggregateFunction::Min, expr, distinct: false } } /
-            i("MAX") _ "(" _ i("DISTINCT") _ expr:Expression() _ ")" { AggregateExpression::FunctionCall { name: AggregateFunction::Max, expr, distinct: true } } /
-            i("MAX") _ "(" _ expr:Expression() _ ")" { AggregateExpression::FunctionCall { name: AggregateFunction::Max, expr, distinct: false } } /
-            i("AVG") _ "(" _ i("DISTINCT") _ expr:Expression() _ ")" { AggregateExpression::FunctionCall { name: AggregateFunction::Avg, expr, distinct: true } } /
-            i("AVG") _ "(" _ expr:Expression() _ ")" { AggregateExpression::FunctionCall { name: AggregateFunction::Avg, expr, distinct: false } } /
-            i("SAMPLE") _ "(" _ distinct:AggregateDistinct() expr:Expression() _ o:AggregateOrderBy()? ")" { AggregateExpression::FunctionCall { name: AggregateFunction::Sample, expr: ordered_aggregate_argument(o, expr), distinct } } /
-            i("GROUP_CONCAT") _ "(" _ distinct:AggregateDistinct() expr:Expression() _ s1:GroupConcatSeparator()? o:AggregateOrderBy()? s2:GroupConcatSeparator()? ")" {?
+            i("COUNT") _ "(" _ expr:AggregateArgument() _ ")" { AggregateExpression::FunctionCall { name: AggregateFunction::Count, expr, distinct: false } } /
+            i("SUM") _ "(" _ i("DISTINCT") _ expr:AggregateArgument() _ ")" { AggregateExpression::FunctionCall { name: AggregateFunction::Sum, expr, distinct: true } } /
+            i("SUM") _ "(" _ expr:AggregateArgument() _ ")" { AggregateExpression::FunctionCall { name: AggregateFunction::Sum, expr, distinct: false } } /
+            i("MIN") _ "(" _ i("DISTINCT") _ expr:AggregateArgument() _ ")" { AggregateExpression::FunctionCall { name: AggregateFunction::Min, expr, distinct: true } } /
+            i("MIN") _ "(" _ expr:AggregateArgument() _ ")" { AggregateExpression::FunctionCall { name: AggregateFunction::Min, expr, distinct: false } } /
+            i("MAX") _ "(" _ i("DISTINCT") _ expr:AggregateArgument() _ ")" { AggregateExpression::FunctionCall { name: AggregateFunction::Max, expr, distinct: true } } /
+            i("MAX") _ "(" _ expr:AggregateArgument() _ ")" { AggregateExpression::FunctionCall { name: AggregateFunction::Max, expr, distinct: false } } /
+            i("AVG") _ "(" _ i("DISTINCT") _ expr:AggregateArgument() _ ")" { AggregateExpression::FunctionCall { name: AggregateFunction::Avg, expr, distinct: true } } /
+            i("AVG") _ "(" _ expr:AggregateArgument() _ ")" { AggregateExpression::FunctionCall { name: AggregateFunction::Avg, expr, distinct: false } } /
+            i("SAMPLE") _ "(" _ distinct:AggregateDistinct() expr:AggregateArgument() _ o:AggregateOrderBy()? ")" { AggregateExpression::FunctionCall { name: AggregateFunction::Sample, expr: ordered_aggregate_argument(o, expr), distinct } } /
+            i("GROUP_CONCAT") _ "(" _ distinct:AggregateDistinct() expr:AggregateArgument() _ s1:GroupConcatSeparator()? o:AggregateOrderBy()? s2:GroupConcatSeparator()? ")" {?
                 if s1.is_some() && s2.is_some() {
                     Err("GROUP_CONCAT has more than one SEPARATOR")
                 } else {
                     Ok(AggregateExpression::FunctionCall { name: AggregateFunction::GroupConcat { separator: s1.or(s2) }, expr: ordered_aggregate_argument(o, expr), distinct })
                 }
             } /
-            name:iri() _ "(" _ distinct:AggregateDistinct() expr:Expression() _ o:AggregateOrderBy()? ")" {?
+            name:iri() _ "(" _ distinct:AggregateDistinct() expr:AggregateArgument() _ o:AggregateOrderBy()? ")" {?
                 if state.custom_aggregate_functions.contains(&name) {
                     Ok(AggregateExpression::FunctionCall { name: AggregateFunction::Custom(name), expr: ordered_aggregate_argument(o, expr), distinct })
                 } else {
                     Err("This custom function is a regular function and not an aggregate function")
                 }
             }
+
+        // A call such as SUM(...) is tried as a window function, which fails without OVER, and
+        // then as an aggregate. Its argument is parsed once at its position and reused, or parsing
+        // takes time exponential in the nesting depth of the calls.
+        #[cache]
+        rule AggregateArgument() -> Expression = Expression()
 
         // maplib extension: ORDER BY in aggregates and window functions, see window.rs
         rule AggregateDistinct() -> bool = d:(i("DISTINCT") _)? { d.is_some() }
@@ -2830,7 +2839,7 @@ parser! {
             i("DENSE_RANK") _ NIL() { (WindowFunction::DenseRank, None) } /
             i("RANK") _ NIL() { (WindowFunction::Rank, None) } /
             i("COUNT") _ "(" _ "*" _ ")" { (WindowFunction::CountSolutions, None) } /
-            name:WindowAggregateName() _ "(" _ distinct:AggregateDistinct() expr:Expression() _ separator:GroupConcatSeparator()? ")" {?
+            name:WindowAggregateName() _ "(" _ distinct:AggregateDistinct() expr:AggregateArgument() _ separator:GroupConcatSeparator()? ")" {?
                 match (name, separator) {
                     (AggregateFunction::GroupConcat { .. }, separator) => Ok(AggregateFunction::GroupConcat { separator }),
                     (name, None) => Ok(name),
