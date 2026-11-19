@@ -37,7 +37,7 @@ import pyoxigraph as ox
 import pytest
 
 import maplib.maplib as native
-from maplib import Model
+from maplib import IndexingOptions, Model
 
 from .disk import disk_params
 
@@ -276,6 +276,13 @@ def dataset() -> Tuple[Tuple[str, ...], Tuple[str, ...]]:
         add(f"_:wb{i}", "walk", iri(f"w{i * 11}"), pin=True)
     for i in range(30):
         add(iri(f"w{i}"), "walk", iri(f"w{i + 1}"), g=G1)
+    # A forest of short IRI chains: walks from up to 64 starts stay within the budget. (A
+    # predicate with any literal or non-IRI object, like :walk, is never walked on codes.)
+    for k in range(100):
+        for i in range(3):
+            add(iri(f"t{k}_{i}"), "tw", iri(f"t{k}_{i + 1}"))
+        if k % 10 == 0:
+            add(iri(f"t{k}_3"), "tw", iri(f"t{(k + 1) % 100}_0"))
 
     # Mixed types in one column, in the default graph and in two named graphs, with duplicates.
     for i in range(600):
@@ -332,7 +339,7 @@ def expected_rows(query: str, variables: Tuple[str, ...]):
 # The states
 # ---------------------------------------------------------------------------
 
-STATES = ["fresh", "segments", "compacted", "buffered", "reloaded"]
+STATES = ["fresh", "object_index", "segments", "compacted", "buffered", "reloaded"]
 # The states built again with the segment Bloom filters off.
 FILTER_OFF_STATES = ["segments", "buffered", "reloaded"]
 
@@ -408,7 +415,9 @@ def build_state(state: str, model_kwargs: dict, folder: str) -> Model:
     lines, pinned = dataset()
     lines, pinned = list(lines), list(pinned)
     rng = random.Random(11)
-    if state in ("fresh",):
+    if state in ("fresh", "object_index"):
+        if state == "object_index":
+            model_kwargs = dict(model_kwargs, indexing_options=IndexingOptions(object_sort_all=True))
         m = Model(**model_kwargs)
         m.reads(nquads(pinned + lines), format="nquads")
         return m
@@ -583,20 +592,33 @@ case("bgp_proven_empty_missing_predicate",
      hits={"bgp.proven_empty": True})
 case("bgp_proven_empty_constant_type",
      'SELECT ?s WHERE { ?s :sa 3 }', ["s"], hits={"bgp.proven_empty": True})
+# The proof only uses the patterns, not the types of the incoming solutions: here ?q is an object
+# of :sa (literals) and a subject of :t16384 (IRIs).
 case("bgp_proven_empty_in_optional",
+     "SELECT ?s ?a ?z WHERE { ?s :sa ?a OPTIONAL { ?s :t16384 ?z . ?z ^:t16384 ?x . ?x :sa ?q . ?q :t16384 ?w } }",
+     ["s", "a", "z"], hits={"bgp.proven_empty": True})
+case("bgp_not_proven_from_incoming_types",
      "SELECT ?s ?a ?z WHERE { ?s :sa ?a OPTIONAL { ?a :t16384 ?z } }", ["s", "a", "z"],
-     hits={"bgp.proven_empty": True})
+     hits={"bgp.proven_empty": False})
 case("bgp_not_empty_mixed",
      "SELECT ?s ?o ?l WHERE { ?s :mix ?o . ?o :label ?l }", ["s", "o", "l"],
      hits={"bgp.proven_empty": False})
+# GRAPH ?g: graphs without one of the predicates are proven empty on their own.
+case("bgp_named_graphs",
+     "SELECT ?g ?s ?l WHERE { GRAPH ?g { ?s :label ?l . ?s :mix ?o } }", ["g", "s", "l"])
 case("bgp_not_empty_named_graph",
-     "SELECT ?g ?s ?l WHERE { GRAPH ?g { ?s :label ?l . ?s :mix ?o } }", ["g", "s", "l"],
+     "SELECT ?s ?l WHERE { GRAPH :g2 { ?s :label ?l . ?s :mix ?o } }", ["s", "l"],
      hits={"bgp.proven_empty": False})
 
 # Join estimates bounded by the most triples that share a key.
 case("join_estimate_bounded",
      "SELECT ?s ?y ?one WHERE { ?s :many ?y . ?s :one ?one }", ["s", "y", "one"],
-     hits={"join.estimate_bounded_per_key": True})
+     # The most triples per key is known for tables of one segment without a write buffer.
+     hits={"join.estimate_bounded_per_key":
+           lambda w: w.storage != "disk" and w.state in ("fresh", "object_index", "reloaded")})
+# A key with a multi-type (mixed) column: no per-key bound for :mix tables of several types.
+case("join_estimate_mixed",
+     "SELECT ?s ?o ?l WHERE { ?s :mix ?o . ?s :label ?l }", ["s", "o", "l"])
 case("join_estimate_bounded_chain",
      "SELECT ?s ?y ?z WHERE { ?s :e501 ?y . ?s :one ?o . ?s :many ?z }", ["s", "y", "z"])
 
@@ -695,27 +717,54 @@ for direction, op, test in (("ASC", "<", "?rk = 1"), ("DESC", ">", "?rk <= 1")):
 
 # Property paths: walks on codes from at most 64 starts within a budget of lookups, keying the
 # tables otherwise.
+def walked(w: World) -> bool:
+    """Paths are walked on codes from tables in memory only (not in disk storage)."""
+    return w.storage != "disk"
+
+
+def walked_back(w: World) -> bool:
+    """Backwards (from objects), only with the object index."""
+    return walked(w) and w.state == "object_index"
+
+
 for k, walk in ((WALK_MAX_STARTS, True), (WALK_MAX_STARTS + 1, False)):
     starts = values("w", random.Random(k).sample(range(300), k))
-    hits = {"path.code_walk": walk, "path.keyed_bound": not walk}
+    tree_starts = " ".join(iri(f"t{j}_0") for j in random.Random(k).sample(range(100), k))
+    hits = {"path.code_walk": (lambda w: walked(w)) if walk else False,
+            "path.keyed_bound": (lambda w: not walked(w)) if walk else True}
+    # Backwards, the walk reads the tables by object: only with the object index.
+    back = {"path.code_walk": (lambda w: walked_back(w)) if walk else False,
+            "path.keyed_bound": (lambda w: not walked_back(w)) if walk else True}
+    for p in (":tw+", "(:tw/:tw)+", "^:tw+"):
+        case(f"path_tree_starts_{k}_{p}",
+             f"SELECT ?s ?o WHERE {{ VALUES ?s {{ {tree_starts} }} ?s {p} ?o }}", ["s", "o"],
+             hits=back if p.startswith("^") else hits)
+    case(f"path_tree_starts_object_{k}",
+         f"SELECT ?s ?o WHERE {{ VALUES ?o {{ {tree_starts.replace('_0>', '_3>')} }} ?s :tw+ ?o }}",
+         ["s", "o"], hits=back)
+    case(f"path_tree_joined_{k}",
+         f"SELECT ?s ?o ?x WHERE {{ VALUES ?s {{ {tree_starts} }} ?s :tw ?x . ?x :tw+ ?o }}",
+         ["s", "o", "x"])
+    # :walk has literal objects and blank node subjects: keyed, also from few starts.
     for p in (":walk+", ":walk*", "(:walk|^:walk2)+", "(:walk/:walk2)+", ":walk?"):
-        zero = p.endswith("*") or p.endswith("?")
         case(f"path_starts_{k}_{p}",
              f"SELECT ?s ?o WHERE {{ VALUES ?s {{ {starts} }} ?s {p} ?o }}", ["s", "o"],
-             # A zero-length match from a variable start is not walked.
-             hits={} if zero else hits)
+             hits={"path.code_walk": False})
     case(f"path_starts_object_{k}",
-         f"SELECT ?s ?o WHERE {{ VALUES ?o {{ {starts} }} ?s :walk+ ?o }}", ["s", "o"], hits=hits)
+         f"SELECT ?s ?o WHERE {{ VALUES ?o {{ {starts} }} ?s :walk+ ?o }}", ["s", "o"],
+         hits={"path.code_walk": False})
     case(f"path_joined_{k}",
          f"SELECT ?s ?o WHERE {{ ?s :walk2 ?a . VALUES ?s {{ {starts} }} ?s :walk+ ?o }}", ["s", "o"])
 case("path_walk_within_budget", "SELECT ?o WHERE { :c360 :chain+ ?o }", ["o"],
-     hits={"path.code_walk": True, "path.code_walk_aborted": False})
+     hits={"path.code_walk": walked, "path.code_walk_aborted": lambda w: not walked(w)})
 case("path_walk_past_budget", "SELECT ?o WHERE { :c0 :chain+ ?o }", ["o"],
      hits={"path.code_walk_aborted": True, "path.keyed_bound": True})
 case("path_walk_past_budget_reverse", "SELECT ?s WHERE { ?s :chain+ :c400 }", ["s"],
      hits={"path.code_walk_aborted": True})
 case("path_fixed_star", "SELECT ?o WHERE { :w3 :walk* ?o }", ["o"],
-     hits={"path.code_walk": True})
+     hits={"path.code_walk": False, "path.code_walk_aborted": True})
+case("path_tree_fixed_star", "SELECT ?o WHERE { :t10_0 :tw* ?o }", ["o"],
+     hits={"path.code_walk": walked})
 case("path_unbound", "SELECT ?s ?o WHERE { ?s :walk+ ?o }", ["s", "o"],
      hits={"path.keyed_unbound": True})
 case("path_unbound_sequence", "SELECT ?s ?o WHERE { ?s (:walk/:walk2)+ ?o }", ["s", "o"],
