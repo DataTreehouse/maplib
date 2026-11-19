@@ -15,6 +15,7 @@ use query_processing::expressions::{
     literal, named_node, not_expression, unary_minus, unary_plus, variable,
 };
 use query_processing::graph_patterns::{join, union};
+use query_processing::pushdowns::SMALL_HEIGHT;
 use query_processing::pushdowns::{ExpressionInput, Pushdowns};
 use representation::cats::LockedCats;
 use representation::dataset::QueryGraph;
@@ -724,6 +725,11 @@ impl Triplestore {
             incoming.mappings = incoming.mappings.cache();
             inner_pushdowns.keep_lazy = true;
         }
+        // The keys come from the solutions, which the join back evaluates again: collecting
+        // them to push their values into P pays only when they are few.
+        if incoming.height_estimate > SMALL_HEIGHT {
+            inner_pushdowns.keep_lazy = true;
+        }
         let mentioned = mentioned_variable_names(inner);
         let mut keys: Vec<String> = incoming
             .rdf_node_types
@@ -918,6 +924,10 @@ impl Triplestore {
         inner_pushdowns.expression_input = None;
         if may_change {
             keys.mappings = keys.mappings.cache();
+            inner_pushdowns.keep_lazy = true;
+        }
+        // As in lazy_exists: the keys are evaluated again by the semi or anti join.
+        if keys.height_estimate > SMALL_HEIGHT {
             inner_pushdowns.keep_lazy = true;
         }
         let evaluated = self.lazy_graph_pattern(
