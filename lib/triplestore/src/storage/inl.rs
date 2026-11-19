@@ -46,6 +46,27 @@ pub const INL_MAX_ROWS_ENV: &str = "MAPLIB_INL_MAX_ROWS";
 
 const DEFAULT_MAX_WORK: usize = 4_000_000;
 const DEFAULT_MAX_ROWS: usize = 100_000;
+/// Scales INL's estimated time against the Polars path's (see [plan]): INL is chosen when its
+/// estimate times this is at most the Polars path's. Above 1 favours the Polars path.
+pub const INL_COST_RATIO_ENV: &str = "MAPLIB_INL_COST_RATIO";
+
+// The cost model of [plan], in nanoseconds, from in-process timings on BSBM and trainmarks
+// (2026-11-19/20): a step of a binary search compares two codes by their strings; a scan
+// compares two codes; the Polars path pays a plan, a lookup and a collect per pattern, and
+// joins the rows it reads.
+const SEEK_STEP_NS: f64 = 10.0;
+const SCAN_NS: f64 = 1.0;
+const EMIT_NS: f64 = 3.0;
+const POLARS_PATTERN_NS: f64 = 300_000.0;
+const POLARS_ROW_NS: f64 = 30.0;
+
+fn cost_ratio() -> f64 {
+    std::env::var(INL_COST_RATIO_ENV)
+        .ok()
+        .and_then(|v| v.trim().parse().ok())
+        .unwrap_or(1.0)
+}
+
 /// Work done while running may exceed the estimate by this factor before the loop gives up.
 const RUN_WORK_FACTOR: usize = 4;
 /// Cancellation is checked after this many rows of a step.
@@ -301,6 +322,15 @@ impl<'a> TableView<'a> {
         // rows; the run-time guard catches the exceptions.
         self.object_fanout
             .unwrap_or_else(|| (self.rows as f64).sqrt().max(1.0))
+    }
+
+    /// The estimated time of one probe for a bound object, in nanoseconds.
+    fn object_probe_ns(&self) -> f64 {
+        if self.object_sorted {
+            self.seek_cost() as f64 * SEEK_STEP_NS
+        } else {
+            self.rows as f64 * SCAN_NS
+        }
     }
 
     /// The cost of one probe for a bound object.
@@ -754,28 +784,35 @@ fn plan(
     max_work: usize,
     max_rows: usize,
 ) -> R<Vec<usize>> {
-    let mut seed: Option<(usize, usize)> = None;
+    // (pattern, matches, estimated ns of the probe)
+    let mut seed: Option<(usize, usize, f64)> = None;
     let mut work = 0usize;
     for (i, p) in pats.iter().enumerate() {
-        let count = match (p.s, p.o) {
+        let (count, ns) = match (p.s, p.o) {
             (Pos::Const(s), _) => {
                 work += p.view.seek_cost();
-                count_subject(&p.view, s_order, s)
+                (
+                    count_subject(&p.view, s_order, s),
+                    p.view.seek_cost() as f64 * SEEK_STEP_NS,
+                )
             }
             (_, Pos::Const(o)) => {
                 if work + p.view.object_probe_cost() > max_work {
                     continue;
                 }
                 work += p.view.object_probe_cost();
-                count_object(&p.view, p.o_order.as_ref().unwrap(), o)
+                (
+                    count_object(&p.view, p.o_order.as_ref().unwrap(), o),
+                    p.view.object_probe_ns(),
+                )
             }
             _ => continue,
         };
-        if seed.is_none_or(|(_, c)| count < c) {
-            seed = Some((i, count));
+        if seed.is_none_or(|(_, c, _)| count < c) {
+            seed = Some((i, count, ns));
         }
     }
-    let Some((start, count)) = seed else {
+    let Some((start, count, seed_ns)) = seed else {
         return decline(
             Decline::Shape,
             "no constant subject or object to start from",
@@ -785,6 +822,10 @@ fn plan(
     let mut bound = vec![false; vars.len()];
     let mut order = Vec::with_capacity(pats.len());
     let mut rows = count as f64;
+    // Estimated time of index nested loops and of the Polars path, which reads the seed's
+    // matches and, for every other pattern, the rows it joins (at most its table).
+    let mut inl_ns = seed_ns + rows * EMIT_NS;
+    let mut polars_ns = POLARS_PATTERN_NS + rows * POLARS_ROW_NS;
     let mark = |i: usize, done: &mut Vec<bool>, bound: &mut Vec<bool>, order: &mut Vec<usize>| {
         done[i] = true;
         order.push(i);
@@ -821,11 +862,20 @@ fn plan(
                     .partial_cmp(&(b.1, b.2))
                     .unwrap_or(Ordering::Equal)
             });
-        let Some((i, _, fanout, cost)) = next else {
+        let Some((i, class, fanout, cost)) = next else {
             return decline(Decline::Shape, "patterns not connected");
         };
         work = work.saturating_add((rows.ceil() as usize).saturating_mul(cost));
+        let rows_in = rows;
         rows *= fanout;
+        let per_probe_ns = if class == 3 {
+            cost as f64 * SCAN_NS
+        } else {
+            cost as f64 * SEEK_STEP_NS
+        };
+        inl_ns += rows_in * per_probe_ns + rows * EMIT_NS;
+        polars_ns += POLARS_PATTERN_NS
+            + POLARS_ROW_NS * (pats[i].view.rows as f64).min(rows_in.max(rows));
         if work > max_work || rows > max_rows as f64 {
             return decline(
                 Decline::Estimate,
@@ -833,6 +883,18 @@ fn plan(
             );
         }
         mark(i, &mut done, &mut bound, &mut order);
+    }
+    // Many probes cost more than joining the tables they probe, e.g. a star over every
+    // instance of a class: then the Polars path is faster.
+    if inl_ns * cost_ratio() > polars_ns {
+        return decline(
+            Decline::Estimate,
+            &format!(
+                "estimated {:.0} µs by index nested loops against {:.0} µs by Polars",
+                inl_ns / 1000.0,
+                polars_ns / 1000.0
+            ),
+        );
     }
     Ok(order)
 }

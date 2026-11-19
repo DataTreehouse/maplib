@@ -381,3 +381,41 @@ def test_model_without_iris():
     assert m.query(PFX + f"SELECT * WHERE {{ {P} rdfs:label ?l . ?x :p ?l }}").height == 0
     m.reads('_:a <http://ex.org/p> "x" .', format="ntriples")
     assert m.query(PFX + 'SELECT * WHERE { ?s :p "x" . ?s :p ?o }').height == 1
+
+
+def test_cost_ratio(eng, monkeypatch):
+    """INL is chosen only when its estimated time is below the Polars path's; the ratio moves
+    the decision to both sides with the same results."""
+    q = f"SELECT * WHERE {{ ?p a {T} . ?p :feature ?f . ?f rdfs:label ?fl }}"
+    monkeypatch.setenv("MAPLIB_INL_COST_RATIO", "0")
+    check(eng, q, "inl.taken")
+    monkeypatch.setenv("MAPLIB_INL_COST_RATIO", "1000000")
+    check(eng, q, "inl.declined_estimate")
+
+
+def test_star_over_every_instance_declines():
+    """A star over every instance of a class (trainmarks' OPTIONAL + GROUP BY, 2026-11-20
+    regression: 20,000 customers, two probes each) costs more by index nested loops than the
+    Polars path's joins, so it is declined by the cost estimate."""
+    n = 20_000
+    lines = []
+    for i in range(n):
+        c = f"<{EX}C{i}>"
+        lines.append(f"{c} <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <{EX}Customer> .")
+        lines.append(f'{c} <{EX}country> "country {i % 30}" .')
+        lines.append(f'{c} <{EX}segment> "segment {i % 4}" .')
+    data = "\n".join(lines)
+    m = Model()
+    m.reads(data, format="ntriples")
+    q = PFX + "SELECT ?c ?co ?s WHERE { ?c a :Customer ; :country ?co ; :segment ?s }"
+    df, counts = counted(lambda: m.query(q))
+    assert df.height == n
+    if HAS_COUNTERS:
+        assert counts.get("inl.declined_estimate", 0) > 0, counts
+        assert counts.get("inl.taken", 0) == 0, counts
+    # A selective star over the same tables is still taken.
+    q = PFX + f"SELECT ?co ?s WHERE {{ <{EX}C7> a :Customer ; :country ?co ; :segment ?s }}"
+    df, counts = counted(lambda: m.query(q))
+    assert df.height == 1
+    if HAS_COUNTERS:
+        assert counts.get("inl.taken", 0) > 0, counts
