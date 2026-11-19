@@ -7,8 +7,9 @@ use polars::prelude::{
 use polars::prelude::{IntoSeries, UInt32Chunked};
 use polars::series::Series;
 use std::sync::Arc;
-use representation::cats::{distinct_codes, extend_codes, LockedCats, RankMap};
+use representation::cats::{distinct_codes, extend_codes, maybe_decode_expr, LockedCats, RankMap};
 use representation::solution_mapping::{BaseCatState, SolutionMappings};
+use representation::rdf_to_polars::default_decimal_type;
 use representation::{BaseRDFNodeType, LANG_STRING_LANG_FIELD, LANG_STRING_VALUE_FIELD};
 use oxrdf::vocab::xsd;
 use std::cmp::Ordering;
@@ -261,23 +262,17 @@ pub fn ordering_exprs_with_lang(
                     .iter()
                     .take_while(|(u, _)| is_date_time(u) && same_datatype(t, u))
                     .count();
-                // Numbers of different datatypes are ordered by value, then by datatype and
-                // exact value (a double may not hold every integer and decimal).
+                // Numbers of different datatypes are ordered by value (SPARQL 1.1, 15.1: the `<`
+                // operator), so equal numbers of different datatypes are equal and ordered by
+                // the next sort key, as `0` and `0.0e0`.
                 let numeric_run = ts[i..].iter().take_while(|(u, _)| u.is_numeric()).count();
-                if numeric_run > 1 {
-                    order_exprs.push(numeric_value_expr(
-                        c,
-                        &ts[i..i + numeric_run].iter().map(|(u, _)| *u).collect::<Vec<_>>(),
-                    ));
+                if numeric_run > 1 || (numeric_run == 1 && is_lexical_number(t, s)) {
+                    let numeric_types = &ts[i..i + numeric_run];
+                    order_exprs.push(numeric_value_expr(c, numeric_types, &global_cats, true));
                     asc_bools.push(a);
                     is_lang.push(false);
-                    for (u, us) in &ts[i..i + numeric_run] {
-                        order_exprs.push(make_ordering_expr(
-                            col(c).struct_().field_by_name(&u.field_col_name()),
-                            global_cats.clone(),
-                            (*u).clone(),
-                            (*us).clone(),
-                        ));
+                    if let Some(e) = exact_remainder_expr(c, numeric_types, &global_cats, true) {
+                        order_exprs.push(e);
                         asc_bools.push(a);
                         is_lang.push(false);
                     }
@@ -315,6 +310,16 @@ pub fn ordering_exprs_with_lang(
                     ));
                 }
             }
+        } else if is_lexical_number(t.get_base_type().unwrap(), t.get_base_state().unwrap()) {
+            let types = [(t.get_base_type().unwrap(), t.get_base_state().unwrap())];
+            order_exprs.push(numeric_value_expr(c, &types, &global_cats, false));
+            asc_bools.push(a);
+            is_lang.push(false);
+            if let Some(e) = exact_remainder_expr(c, &types, &global_cats, false) {
+                order_exprs.push(e);
+                asc_bools.push(a);
+                is_lang.push(false);
+            }
         } else {
             asc_bools.push(a);
             is_lang.push(t.get_base_type().unwrap().is_lang_string());
@@ -329,6 +334,12 @@ pub fn ordering_exprs_with_lang(
     (order_exprs, asc_bools, is_lang)
 }
 
+/// Is this a number stored as its lexical form (the derived integer types, as
+/// xsd:nonNegativeInteger), which is ordered by value, not as a string.
+fn is_lexical_number(t: &BaseRDFNodeType, s: &BaseCatState) -> bool {
+    t.is_numeric() && !matches!(s, BaseCatState::NonString)
+}
+
 fn is_date_time(t: &BaseRDFNodeType) -> bool {
     t.is_lit_type(xsd::DATE_TIME) || t.is_lit_type(xsd::DATE_TIME_STAMP)
 }
@@ -337,19 +348,66 @@ fn same_datatype(x: &BaseRDFNodeType, y: &BaseRDFNodeType) -> bool {
     matches!((x, y), (BaseRDFNodeType::Literal(x, _), BaseRDFNodeType::Literal(y, _)) if x == y)
 }
 
+/// The number in the field of `t` of the column: as stored for the datatypes stored as numbers,
+/// else (the derived integer types, as xsd:nonNegativeInteger) as its lexical form, which is
+/// cast to the number.
+fn numeric_field_expr(
+    c: &str,
+    t: &BaseRDFNodeType,
+    s: &BaseCatState,
+    global_cats: &LockedCats,
+    multi: bool,
+) -> Expr {
+    let f = if multi {
+        col(c).struct_().field_by_name(&t.field_col_name())
+    } else {
+        col(c)
+    };
+    match s {
+        BaseCatState::NonString => f,
+        _ => maybe_decode_expr(f, t, s, global_cats.clone()),
+    }
+}
+
 /// The value as a double of the number in any of the fields of `types`, null for other rows.
-fn numeric_value_expr(c: &str, types: &[&BaseRDFNodeType]) -> Expr {
+fn numeric_value_expr(
+    c: &str,
+    types: &[(&BaseRDFNodeType, &BaseCatState)],
+    global_cats: &LockedCats,
+    multi: bool,
+) -> Expr {
     coalesce(
         &types
             .iter()
-            .map(|t| {
-                col(c)
-                    .struct_()
-                    .field_by_name(&t.field_col_name())
-                    .cast(DataType::Float64)
-            })
+            .map(|(t, s)| numeric_field_expr(c, t, s, global_cats, multi).cast(DataType::Float64))
             .collect::<Vec<_>>(),
     )
+}
+
+/// Breaks ties of [`numeric_value_expr`] between integers and decimals that a double can not
+/// tell apart: the exact value minus that of its double, zero for floats and doubles. Integers
+/// and decimals are compared exactly, and numbers are compared with floats and doubles as
+/// doubles (XPath numeric type promotion), so a number equal to a double as a double is equal
+/// to it. None if there are no integers or decimals among `types`.
+fn exact_remainder_expr(
+    c: &str,
+    types: &[(&BaseRDFNodeType, &BaseCatState)],
+    global_cats: &LockedCats,
+    multi: bool,
+) -> Option<Expr> {
+    let exact = default_decimal_type();
+    let remainders: Vec<_> = types
+        .iter()
+        .filter(|(t, _)| !t.is_lit_type(xsd::DOUBLE) && !t.is_lit_type(xsd::FLOAT))
+        .map(|(t, s)| {
+            let f = numeric_field_expr(c, t, s, global_cats, multi);
+            f.clone().cast(exact.clone()) - f.cast(DataType::Float64).cast(exact.clone())
+        })
+        .collect();
+    if remainders.is_empty() {
+        return None;
+    }
+    Some(coalesce(&remainders).fill_null(lit(0).cast(exact)))
 }
 
 /// The UTC instant of the dateTime in any of the fields of `types`, null for other rows.

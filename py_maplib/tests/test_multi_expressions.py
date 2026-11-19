@@ -515,8 +515,9 @@ def test_multi_filter_incompatible_many_comparison():
     SELECT ?a ?b WHERE {
     VALUES (?a) { (1) (3.0) (89) ("String") ("2021-01-01T08:00:00"^^xsd:dateTime) }
     VALUES (?b) { (2) (2.0) (90) ("AString") ("2021-01-01T08:00:01"^^xsd:dateTime) }
+    # 2 and 2.0 are equal for ORDER BY, the datatype orders them.
     FILTER(?a < ?b)
-    } ORDER BY ?a ?b
+    } ORDER BY ?a ?b STR(DATATYPE(?b))
     """,
     )
     f = TESTDATA_PATH / "multi_many_comp.csv"
@@ -534,8 +535,9 @@ def test_multi_concat():
     SELECT ?a ?b ?c WHERE {
     VALUES (?a) { (1) (3.0) (89) ("String") ("2021-01-01T08:00:00"^^xsd:dateTime) }
     VALUES (?b) { (2) (2.0) (90) ("AString") ("2021-01-01T08:00:01"^^xsd:dateTime) }
+    # 2 and 2.0 are equal for ORDER BY, the datatype orders them.
     BIND(CONCAT(STR(?a),"_", STR(?b)) AS ?c)
-    } ORDER BY ?a ?b
+    } ORDER BY ?a ?b STR(DATATYPE(?b))
     """,
     )
     f = TESTDATA_PATH / "multi_concat.csv"
