@@ -18,7 +18,7 @@ use polars::prelude::{
     ParallelStrategy, ParquetCompression, ParquetReader, ParquetWriter, SerReader,
 };
 use polars_core::frame::DataFrame;
-use polars_core::prelude::DataType;
+use polars_core::prelude::{ChunkCompareEq, DataType};
 use polars_core::prelude::{
     IntoColumn, Series, SortMultipleOptions, StringChunked, StringChunkedBuilder, UInt32Chunked,
     UInt64Chunked,
@@ -575,6 +575,66 @@ impl Triples {
             )?);
         }
         Ok(all_sms)
+    }
+
+    /// The rows of a single subject with dictionary code `code`, read eagerly when every segment
+    /// is in memory: the sparse index range of each segment, filtered on the code. A table that
+    /// does not hold the subject gives no frames, so a query plan need not include it. None when
+    /// a segment is not in memory, for the caller to fall back to lazy frames.
+    pub(crate) fn get_in_memory_subject_rows(
+        &self,
+        subject: &NamedOrBlankNode,
+        code: u32,
+    ) -> Result<Option<Vec<DataFrame>>, TriplestoreError> {
+        let strings = get_subject_strings(&[subject]);
+        let mut out = vec![];
+        for s in &self.segments {
+            let (Some(StoredTriples::TriplesInMemory(mem)), Some(index)) =
+                (&s.subject_sort, &s.subject_sparse_index)
+            else {
+                return Ok(None);
+            };
+            let Some(df) = mem.df.as_ref() else {
+                return Ok(None);
+            };
+            if s.height == 0 || df.height() == 0 {
+                continue;
+            }
+            let offsets = get_lookup_offsets(&strings, &index.map, s.height);
+            let ranges = coalesce_lookup_ranges(offsets, s.height)
+                .unwrap_or_else(|| vec![(0, df.height())]);
+            for (offset, len) in ranges {
+                let slice = df.slice(offset as i64, len);
+                let subjects = slice
+                    .column(SUBJECT_COL_NAME)
+                    .map_err(TriplestoreError::LazyLoadError)?
+                    .u32()
+                    .map_err(TriplestoreError::LazyLoadError)?;
+                // The rows of a subject are next to each other in the subject sorted table, so
+                // they are a zero copy slice. A filter would hand a tiny frame to the thread pool.
+                let (mut first, mut last, mut n) = (None, 0usize, 0usize);
+                for (i, s) in subjects.iter().enumerate() {
+                    if s == Some(code) {
+                        first.get_or_insert(i);
+                        last = i;
+                        n += 1;
+                    }
+                }
+                let Some(first) = first else {
+                    continue;
+                };
+                if n == last - first + 1 {
+                    out.push(slice.slice(first as i64, n));
+                } else {
+                    out.push(
+                        slice
+                            .filter_seq(&subjects.equal(code))
+                            .map_err(TriplestoreError::LazyLoadError)?,
+                    );
+                }
+            }
+        }
+        Ok(Some(out))
     }
 
     pub(crate) fn get_all_triples_lazy_frames(

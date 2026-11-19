@@ -556,6 +556,40 @@ fn single_triples_to_lf(
     global_cats: &Cats,
     encodings: &mut TermEncodings,
 ) -> Result<Option<(LazyFrame, usize)>, TriplestoreError> {
+    // A single IRI subject in triples held in memory: find its rows eagerly, so that tables
+    // without the subject are left out of the query plan. Planning a union over every table of
+    // a variable predicate costs far more than these lookups.
+    if let (Some([subject]), true) = (
+        subjects.as_ref().map(|s| s.as_slice()),
+        triples.subject_type.is_iri(),
+    ) {
+        if let NamedOrBlankNode::NamedNode(nn) = *subject {
+            let Some(code) = encodings.iri_code(nn, global_cats) else {
+                return Ok(None);
+            };
+            if let Some(dfs) = triples.get_in_memory_subject_rows(subject, code)? {
+            let mut dfs = dfs.into_iter();
+            let Some(mut df) = dfs.next() else {
+                return Ok(None);
+            };
+            for other in dfs {
+                df.vstack_mut_owned(other)
+                    .map_err(TriplestoreError::LazyLoadError)?;
+            }
+            let height = df.height();
+            let mut lf = df.lazy();
+            if let Some(object_terms) = &objects {
+                if object_terms.len() == 1 {
+                    lf = match encodings.encode(object_terms[0], global_cats)? {
+                        Some(enc) => lf.filter(col(OBJECT_COL_NAME).eq(enc)),
+                        None => lf.filter(lit(false)),
+                    };
+                }
+            }
+            return Ok(Some((lf, height)));
+            }
+        }
+    }
     let lfs_and_heights = triples.get_lazy_frames(subjects, objects)?;
     if lfs_and_heights.is_empty() {
         return Ok(None);
@@ -616,6 +650,7 @@ fn single_triples_to_lf(
 #[derive(Default)]
 struct TermEncodings {
     encodings: HashMap<Term, Option<Expr>>,
+    codes: HashMap<NamedNode, Option<u32>>,
 }
 
 impl TermEncodings {
@@ -644,6 +679,16 @@ impl TermEncodings {
         let enc = named_node_enc(nn, global_cats);
         self.encodings.insert(term, enc.clone());
         enc
+    }
+
+    /// The dictionary code of an IRI, None if the dictionary does not have it.
+    fn iri_code(&mut self, nn: &NamedNode, global_cats: &Cats) -> Option<u32> {
+        if let Some(c) = self.codes.get(nn) {
+            return *c;
+        }
+        let c = global_cats.maybe_encode_iri_slice(&[Some(nn.as_str())])[0];
+        self.codes.insert(nn.clone(), c);
+        c
     }
 
     /// Encodes the IRIs with a single dictionary lookup.

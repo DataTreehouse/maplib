@@ -170,7 +170,14 @@ pub fn minus(
     left_solution_mappings.mappings = left_mappings;
     join::update_state(&mut left_solution_mappings.rdf_node_types, target_cat_state);
 
-    let right_column_set: HashSet<_> = right_datatypes.keys().collect();
+    // A right variable that is never bound (e.g. from a pattern without solutions) is in the
+    // domain of no right solution, so MINUS does not compare on it (SPARQL 1.1, 18.5). Joining
+    // on it would also compare a typed left column with an untyped one.
+    let right_column_set: HashSet<_> = right_datatypes
+        .iter()
+        .filter(|(_, t)| !t.is_none())
+        .map(|(k, _)| k)
+        .collect();
     let left_column_set: HashSet<_> = left_solution_mappings.rdf_node_types.keys().collect();
 
     let mut join_on: Vec<_> = left_column_set
