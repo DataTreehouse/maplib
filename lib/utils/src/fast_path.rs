@@ -70,6 +70,9 @@ fast_paths! {
     TableStatsMerged => "table_stats.merged",
     TableStatsAssumed => "table_stats.assumed",
     TableStatsExactDistinct => "table_stats.exact_distinct",
+    // SELECT results as SPARQL JSON: one chunk (at most 4,096 rows) on the calling thread.
+    JsonOneChunk => "sparql_json.one_chunk",
+    JsonChunks => "sparql_json.chunks",
     // Basic graph patterns on codes.
     BgpSmallTableInPlan => "bgp.small_table_in_plan",
     BgpValuesPushed => "bgp.values_pushed",

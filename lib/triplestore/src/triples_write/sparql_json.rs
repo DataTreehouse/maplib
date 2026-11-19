@@ -21,6 +21,7 @@ use representation::multitype::extract_column_from_multitype;
 use representation::solution_mapping::BaseCatState;
 use representation::solution_mapping::EagerSolutionMappings;
 use representation::{BaseRDFNodeType, LANG_STRING_LANG_FIELD, LANG_STRING_VALUE_FIELD};
+use utils::fast_path::{self, FastPath};
 
 /// Rows per chunk that a thread writes at a time.
 const MIN_CHUNK_ROWS: usize = 4_096;
@@ -89,6 +90,7 @@ pub fn sparql_json(
     // expressions on the thread pool, and handing work to the pool and waiting for it cost more
     // than the rest of a query such as `SELECT ?s ?o WHERE { ?s rdf:type ?o } LIMIT 10`.
     let one_chunk = height <= MIN_CHUNK_ROWS;
+    fast_path::hit_if(one_chunk, FastPath::JsonOneChunk, FastPath::JsonChunks);
     let decoded: Vec<(usize, BaseRDFNodeType, Series, Option<Series>)> = if one_chunk {
         part_columns
             .into_iter()

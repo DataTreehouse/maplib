@@ -65,7 +65,8 @@ MAX_FILTERED_TARGETS = 128  # the cap of the old term path in dblf.rs, kept as a
 # storage.rs: seek in the sparse index when targets * log2(keys) <= keys, with a key per 100 rows.
 # The 65,537-row :cd65537 table has 656 keys (10 bits): seek up to 65 targets.
 SEEK_TARGETS = 65
-MAX_COUNT_TERMS = 16  # count_joins.rs MAX_TERMS: UNION terms a counted pattern may expand to
+MAX_COUNT_TERMS = 16
+JSON_CHUNK_ROWS = 4096  # sparql_json.rs MIN_CHUNK_ROWS: one chunk is written on the calling thread  # count_joins.rs MAX_TERMS: UNION terms a counted pattern may expand to
 
 
 # ---------------------------------------------------------------------------
@@ -965,6 +966,33 @@ case("statistics_mixed_star",
 case("statistics_graph_star",
      "SELECT ?g ?s ?w WHERE { GRAPH ?g { ?s :mix ?o . ?s :walk ?w } }", ["g", "s", "w"])
 
+# SELECT results as SPARQL JSON: one chunk (at most 4,096 rows) on the calling thread, more in
+# parallel chunks. Exactly n rows: the mixed column (blank nodes, language tags, several
+# datatypes, duplicates) and the first rows of an IRI table to make up the rest.
+@functools.lru_cache(maxsize=None)
+def mixed_rows() -> int:
+    return len(oxigraph_rows(oxigraph_store(), "SELECT ?s ?o WHERE { ?s :mix ?o }", ["s", "o"]))
+
+
+def json_rows_case(n: int, one_chunk: bool):
+    name = f"sparql_json_{n}_rows"
+
+    def query():
+        k = n - mixed_rows()
+        return f"""SELECT ?s ?o WHERE {{ {{ ?s :mix ?o }} UNION
+            {{ SELECT ?s ?o WHERE {{ ?s :cd65536 ?o }} ORDER BY ?s LIMIT {k} }} }}"""
+
+    c = Case(name, None, ["s", "o"],
+             hits={"sparql_json.one_chunk": one_chunk, "sparql_json.chunks": not one_chunk})
+    c.query_fn = query
+    CASES.append(c)
+
+
+json_rows_case(JSON_CHUNK_ROWS, True)
+json_rows_case(JSON_CHUNK_ROWS + 1, False)
+case("sparql_json_limit_10", "SELECT ?s ?n WHERE { ?s :num ?n } ORDER BY ?s LIMIT 10", ["s", "n"],
+     ordered=True, hits={"sparql_json.one_chunk": True, "sparql_json.chunks": False})
+
 # Mixed types, named graphs and duplicates through the general paths.
 case("mixed_all", "SELECT ?s ?o WHERE { ?s :mix ?o }", ["s", "o"])
 case("mixed_graphs", "SELECT ?g ?s ?o WHERE { GRAPH ?g { ?s :mix ?o } }", ["g", "s", "o"])
@@ -994,6 +1022,8 @@ def case_id(c: Case) -> str:
 def test_against_oxigraph(world: World, c: Case):
     if c.only is not None and not c.only(world):
         pytest.skip("not applicable")
+    if getattr(c, "query_fn", None):
+        c.query = c.reference = c.query_fn()
     expected = expected_rows(c.reference, c.variables)
     old = os.environ.get(STATISTICS_ENV)
     if world.filters == "stats_off":
