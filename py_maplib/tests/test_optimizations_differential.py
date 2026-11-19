@@ -81,6 +81,19 @@ def counted(f: Callable):
     return out, {k: v for k, v in native._fast_path_counts().items() if v}
 
 
+def report(storage, state, toggles, name, counts, expected):
+    """With MAPLIB_DIFFERENTIAL_REPORT set to a file, adds a JSON line per case run, for the
+    coverage table (optimization x threshold side x storage mode x hit proven)."""
+    path = os.environ.get("MAPLIB_DIFFERENTIAL_REPORT")
+    if not path:
+        return
+    line = {"storage": storage, "state": state, "toggles": toggles, "case": name,
+            "counts": counts, "expected": expected,
+            "dictionary_bloom": "off" if DICTIONARY_BLOOM_OFF else "on"}
+    with open(path, "a") as f:
+        f.write(json.dumps(line) + "\n")
+
+
 def check_hits(counts: Dict[str, int], expected: Dict[str, bool], what: str):
     if not HAS_COUNTERS:
         return
@@ -775,6 +788,7 @@ def test_against_oxigraph(world: World, c: Case):
         pytest.skip("not applicable")
     expected = expected_rows(c.reference, c.variables)
     actual, counts = counted(lambda: maplib_rows(world.model, c.query, list(c.variables)))
+    report(world.storage, world.state, world.filters, c.name, counts, c.expected_hits(world))
     assert_same_rows(expected, actual, c.ordered, c.name)
     check_hits(counts, c.expected_hits(world), c.name)
 
@@ -832,3 +846,88 @@ def test_order_by_equal_numbers_of_two_types():
     m.reads(data, format="ntriples")
     q = "SELECT ?s WHERE { ?s :n ?o } ORDER BY ?o ?s"
     assert maplib_rows(m, q, ["s"]) == oxigraph_rows(store, q, ["s"])
+
+
+# ---------------------------------------------------------------------------
+# The write buffer and small updates, step by step
+# ---------------------------------------------------------------------------
+
+BUFFER_QUERIES = [
+    ("SELECT (COUNT(*) AS ?n) WHERE { ?s :wb ?o }", ["n"]),
+    ("SELECT (COUNT(DISTINCT ?s) AS ?n) WHERE { ?s :wb ?o }", ["n"]),
+    ("SELECT (COUNT(DISTINCT ?o) AS ?n) WHERE { ?s :wb ?o }", ["n"]),
+    ("SELECT ?o WHERE { :b7 :wb ?o }", ["o"]),
+    ("SELECT ?s WHERE { ?s :wb :c3 }", ["s"]),
+    ("SELECT ?o WHERE { :b0 :wb+ ?o }", ["o"]),
+    ("SELECT ?s ?v WHERE { ?s :wv ?v FILTER(?v > 4090) }", ["s", "v"]),
+    ("SELECT ?s ?o ?v WHERE { ?s :wb ?o OPTIONAL { ?s :wv ?v } } ", ["s", "o", "v"]),
+    ("SELECT ?g ?s WHERE { GRAPH ?g { ?s :wb ?o } }", ["g", "s"]),
+]
+
+
+def wb(i, j=None):
+    return f"{iri(f'b{i}')} {iri('wb')} {iri(f'b{j}') if j is not None else iri(f'c{i % 9}')} ."
+
+
+def wv(i, v):
+    return f"{iri(f'b{i}')} {iri('wv')} {int_lit(v)} ."
+
+
+@pytest.mark.parametrize("storage", selected("MAPLIB_DIFFERENTIAL_STORAGE", disk_params()))
+def test_write_buffer_steps(storage, tmp_path):
+    kwargs = {"storage": storage}
+    if storage != "memory":
+        kwargs["storage_folder"] = str(tmp_path / "storage")
+    m = Model(**kwargs)
+    store = ox.Store()
+    base = [wb(i, i + 1) for i in range(5000)] + [wv(i, i) for i in range(5000)]
+    base += [f"{iri('b1')} {iri('wb')} {iri('b2')} <{G1}> ."]
+    m.reads(nquads(base), format="nquads")
+    store.load(nquads(base).encode(), ox.RdfFormat.N_QUADS)
+
+    def step(name, update, hits):
+        _, counts = counted(lambda: m.update(PFX + update))
+        report(storage, "write_buffer_steps", "on", name, counts, hits)
+        store.update(PFX + update)
+        check_hits(counts, hits, name)
+        for q, vs in BUFFER_QUERIES:
+            assert_same_rows(oxigraph_rows(store, q, vs), maplib_rows(m, q, vs), False,
+                             f"{name}: {q}")
+
+    # Exactly the buffer's capacity of new rows in one table: buffered, no new segment.
+    step("fill buffer", data_update("INSERT DATA", [wb(10_000 + i) for i in range(MAX_BUFFER_HEIGHT)]),
+         {"write_buffer.insert_buffered": True, "write_buffer.insert_segment": False})
+    # One row more: the buffer is merged into a segment.
+    step("overflow buffer", data_update("INSERT DATA", [wb(20_000)]),
+         {"write_buffer.insert_segment": True, "write_buffer.flush": True})
+    step("small insert", data_update("INSERT DATA", [wb(30_000 + i) for i in range(50)]
+                                     + [wv(30_000 + i, 4095 + i) for i in range(50)]),
+         {"write_buffer.insert_buffered": True, "write_buffer.insert_segment": False})
+    # Deletes of buffered rows and of rows in segments, by code pairs (IRIs) or by a join
+    # (integer literals).
+    step("delete buffered iris", data_update("DELETE DATA", [wb(30_000 + i) for i in range(0, 50, 2)]),
+         {"delete.code_pairs": True})
+    step("delete segment iris", data_update("DELETE DATA", [wb(i, i + 1) for i in range(0, 300, 3)]),
+         {"delete.code_pairs": True})
+    step("delete literals", data_update("DELETE DATA", [wv(30_000 + i, 4095 + i) for i in range(0, 50, 5)]
+                                        + [wv(i, i) for i in range(4000, 4100)]),
+         {"delete.join": True})
+    step("delete absent", data_update("DELETE DATA", [wb(99_999), wv(99_999, 1)]), {})
+    # DELETE/INSERT with an empty WHERE and no variables: data updates.
+    step("empty where",
+         f"DELETE {{ {wb(30_001)} {wb(5, 6)} }} INSERT {{ {wb(40_000)} GRAPH <{G2}> {{ {wb(40_001)} }} }} WHERE {{}}",
+         {"update.empty_where_as_data": True})
+    step("where with variables",
+         f"DELETE {{ ?s :wb ?o }} INSERT {{ ?s :wb :c0 }} WHERE {{ VALUES ?s {{ :b11 :b12 }} ?s :wb ?o }}",
+         {"update.empty_where_as_data": False})
+    step("delete where", "DELETE WHERE { :b20 :wb ?o . :b20 :wv ?v }", {})
+    step("reinsert deleted", data_update("INSERT DATA", [wb(i, i + 1) for i in range(0, 300, 3)]),
+         {"write_buffer.insert_buffered": True})
+    path = str(tmp_path / "m.maplib")
+    m.serialize(path)
+    del m
+    if storage != "memory":
+        kwargs["storage_folder"] = str(tmp_path / "reloaded_storage")
+    m = Model.deserialize(path, **kwargs)
+    for q, vs in BUFFER_QUERIES:
+        assert_same_rows(oxigraph_rows(store, q, vs), maplib_rows(m, q, vs), False, f"reloaded: {q}")
