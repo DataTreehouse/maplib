@@ -1026,7 +1026,8 @@ def inl_expect(outcome: str):
 
 for name, body, outcome in [
     ("star", ":x6 :sa ?a . :x6 :t16384 ?y . ?y ^:t16385 ?z", "inl.taken"),
-    ("chain", ":x0 :many ?y . ?s :t16384 ?y . ?s :sa ?a", "inl.taken"),
+    # A chain through bound subjects is probed by binary searches.
+    ("chain_by_subjects", ":c5 :chain ?a . ?a :chain ?b . ?b :chain ?c", "inl.taken"),
     ("object_constant", "?s :t16384 :y3 . ?s :sa ?a", "inl.taken"),
     ("string_constant", '?s :sa "a7" . ?s :t16384 ?y', "inl.taken"),
     ("empty", ":x7 :sa ?a . :x7 :t16384 ?y", "inl.empty"),
@@ -1038,6 +1039,12 @@ for name, body, outcome in [
 ]:
     case(f"inl_{name}", f"SELECT * WHERE {{ {body} }}",
          sorted(set(re.findall(r"\?(\w+)", body))), hits=inl_expect(outcome))
+# Every ?y is a bound object of :t16384: without an object sort, 60 scans of 16,384 codes cost
+# about as much as the Polars path's joins and the cost estimate declines it; with an object
+# sort (the object_index state) they are binary searches and it is taken.
+case("inl_chain", "SELECT * WHERE { :x0 :many ?y . ?s :t16384 ?y . ?s :sa ?a }", ["a", "s", "y"],
+     hits={"inl.taken|inl.declined_estimate": lambda w: inl_on(w) and w.storage == "memory",
+           "inl.declined_storage": lambda w: inl_on(w) and w.storage != "memory"})
 case("inl_work_limit", "SELECT * WHERE { :x0 :many ?y . ?s :t16384 ?y }", ["y", "s"],
      env={"MAPLIB_INL_MAX_WORK": "50"},
      hits={"inl.declined_estimate": lambda w: inl_on(w) and w.storage == "memory",

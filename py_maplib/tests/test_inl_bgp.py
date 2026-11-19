@@ -360,7 +360,9 @@ def test_kill_switch(eng, monkeypatch):
 
 
 def test_thresholds(eng, monkeypatch):
-    """Both sides of the estimate and of the run-time guard give the same results."""
+    """Both sides of the estimate and of the run-time guard give the same results. The cost
+    comparison with the Polars path is turned off (ratio 0), so that only the limits decide."""
+    monkeypatch.setenv("MAPLIB_INL_COST_RATIO", "0")
     q = f"SELECT * WHERE {{ ?p a {T} . ?p :feature ?f . ?f rdfs:label ?fl }}"
     check(eng, q, "inl.taken")
     monkeypatch.setenv("MAPLIB_INL_MAX_WORK", "50")
