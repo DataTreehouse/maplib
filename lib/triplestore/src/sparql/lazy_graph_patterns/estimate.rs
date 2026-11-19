@@ -39,6 +39,14 @@ pub(crate) fn statistics_enabled() -> bool {
     )
 }
 
+/// More constant values than this for a subject or object are counted without checking which
+/// fit a table's column.
+const MAX_VALUES_CHECKED: usize = 1024;
+
+/// A pattern is taken before the next one in the order of the query only when its join is
+/// estimated to be at least this many times smaller.
+const CLEARLY_CHEAPER: f64 = 2.0;
+
 /// A join on a variable is estimated from the sketches of its columns when there are at most
 /// this many pairs of them (a pattern with an unbound predicate has a column per table).
 const MAX_SKETCH_PAIRS: usize = 64;
@@ -308,7 +316,13 @@ impl Triplestore {
                     }
                 }
                 (None, Some(vs)) => {
-                    let k = vs.iter().filter(|t| term_fits(t, &st)).count() as f64;
+                    // Many values are taken to all fit the column: looking at each costs more
+                    // than the estimate is worth.
+                    let k = if vs.len() > MAX_VALUES_CHECKED {
+                        vs.len()
+                    } else {
+                        vs.iter().filter(|t| term_fits(t, &st)).count()
+                    } as f64;
                     ((k / ds).min(1.0), k.min(ds))
                 }
                 (None, None) => (1.0, ds),
@@ -327,13 +341,19 @@ impl Triplestore {
                     }
                 }
                 (None, Some(vs)) => {
-                    let fitting: Vec<&&Term> = vs.iter().filter(|t| term_fits(t, &ot)).collect();
-                    let r = if fitting.len() <= MAX_VALUES_LOOKED_UP {
-                        fitting.iter().map(|t| s.object_frequency(t)).sum::<f64>()
+                    let (r, k) = if vs.len() > MAX_VALUES_CHECKED {
+                        (vs.len() as f64 * n / dobj, vs.len() as f64)
                     } else {
-                        fitting.len() as f64 * n / dobj
+                        let fitting: Vec<&&Term> =
+                            vs.iter().filter(|t| term_fits(t, &ot)).collect();
+                        let r = if fitting.len() <= MAX_VALUES_LOOKED_UP {
+                            fitting.iter().map(|t| s.object_frequency(t)).sum::<f64>()
+                        } else {
+                            fitting.len() as f64 * n / dobj
+                        };
+                        (r, fitting.len() as f64)
                     };
-                    (Some(r.min(n)), (fitting.len() as f64).min(dobj))
+                    (Some(r.min(n)), k.min(dobj))
                 }
                 (None, None) => (None, dobj),
             };
@@ -395,10 +415,11 @@ impl Triplestore {
         }
     }
 
-    /// Orders the triple patterns of a basic graph pattern by estimated cost: first the pattern
-    /// with the fewest estimated solutions, then each time the pattern connected to those before
-    /// it whose join gives the fewest. A pattern is only taken before a connected one when none
-    /// is connected. Ties keep the order of the query.
+    /// Orders the triple patterns of a basic graph pattern by estimated cost: each time the
+    /// pattern connected to those before it whose join gives the fewest solutions, when that is
+    /// at least [CLEARLY_CHEAPER] times fewer than for the next connected pattern in the order
+    /// of the query, and otherwise that next one. A pattern is only taken before a connected one
+    /// when none is connected.
     pub(crate) fn order_triple_patterns_by_estimates(
         &self,
         tps: &[TriplePattern],
@@ -418,6 +439,10 @@ impl Triplestore {
                 && remaining
                     .iter()
                     .any(|i| state.shares_variables(&estimates[*i]));
+            // The first candidate in the order of the query, and the cheapest one: the
+            // cheapest is only taken when it is estimated to be at least [CLEARLY_CHEAPER] times
+            // cheaper, since a small difference in estimates is mostly their error.
+            let mut first: Option<(usize, f64)> = None;
             let mut best: Option<(usize, f64)> = None;
             for (pos, i) in remaining.iter().enumerate() {
                 let e = &estimates[*i];
@@ -425,11 +450,20 @@ impl Triplestore {
                     continue;
                 }
                 let cost = state.joined_rows(e);
+                if first.is_none() {
+                    first = Some((pos, cost));
+                }
                 if best.is_none_or(|(_, c)| cost < c) {
                     best = Some((pos, cost));
                 }
             }
-            let (pos, _) = best.unwrap();
+            let (first_pos, first_cost) = first.unwrap();
+            let (best_pos, best_cost) = best.unwrap();
+            let pos = if best_cost * CLEARLY_CHEAPER <= first_cost {
+                best_pos
+            } else {
+                first_pos
+            };
             let i = remaining.remove(pos);
             state.join(&estimates[i]);
             ordered.push(tps[i].clone());

@@ -218,10 +218,9 @@ impl Triplestore {
                 };
                 let patterns = if proven_empty { vec![] } else { patterns };
                 let bgp_context = context.extension_with(PathEntry::BGP);
-                let had_input = updated_solution_mappings.is_some();
-                // One pattern on its own needs no order, and the rows it reads bound it.
+                // One pattern on its own needs no order.
                 let statistics = estimate::statistics_enabled();
-                let estimated = statistics && (had_input || patterns.len() > 1);
+                let estimated = statistics && patterns.len() > 1;
                 let ordered_patterns = if estimated {
                     self.order_triple_patterns_by_estimates(
                         &patterns,
@@ -229,8 +228,6 @@ impl Triplestore {
                         &pushdowns,
                         dataset,
                     )
-                } else if statistics {
-                    patterns.clone()
                 } else {
                     triples_ordering::order_triple_patterns(
                         &patterns,
