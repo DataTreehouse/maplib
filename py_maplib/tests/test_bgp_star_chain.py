@@ -301,3 +301,13 @@ def test_minus_in_optional_multi_type(seed):
 @pytest.mark.parametrize("seed", [2])
 def test_optional_union_unbound_shared(seed):
     check(seed, "SELECT * WHERE { ?s :a :n3 OPTIONAL { { ?s :b ?y } UNION { ?z :h ?y } } }")
+
+
+@pytest.mark.parametrize("seed", [1, 2])
+def test_optional_subquery_sees_no_left_values(seed):
+    # A subquery is evaluated on its own: its LIMIT and aggregates are over all its solutions,
+    # not those of the left side's values.
+    check(seed, "SELECT * WHERE { ?s :a :n3 OPTIONAL { SELECT ?s ?y WHERE { ?s :b ?y } ORDER BY ?s ?y LIMIT 2 } }")
+    check(seed, "SELECT * WHERE { ?s :a :n3 OPTIONAL { SELECT ?s (COUNT(*) AS ?c) WHERE { ?s :b ?y } GROUP BY ?s ORDER BY DESC(?c) ?s LIMIT 1 } }")
+    check(seed, "SELECT * WHERE { ?s :a :n3 OPTIONAL { SELECT (COUNT(*) AS ?c) WHERE { ?s :b ?y } } }")
+    check(seed, "SELECT * WHERE { ?s :a :n3 OPTIONAL { ?s :b ?y { SELECT ?y WHERE { ?y :h ?z } ORDER BY ?y LIMIT 3 } } }")

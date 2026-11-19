@@ -207,8 +207,11 @@ impl Triplestore {
         right: &GraphPattern,
     ) -> Result<(SolutionMappings, Option<SolutionMappings>), SparqlError> {
         // A constant subject or object already makes the right side selective on its own.
+        // Patterns that see their incoming solutions (LATERAL, subqueries with LIMIT or
+        // aggregates) would give other solutions when evaluated with the left side's values.
         if left_solution_mappings.height_estimate > OPTIONAL_KEYS_HEIGHT
             || has_constant_term(right)
+            || !keys_keep_solutions(right)
         {
             return Ok((left_solution_mappings, None));
         }
@@ -449,6 +452,25 @@ fn has_constant_term(gp: &GraphPattern) -> bool {
         | GraphPattern::Graph { inner, .. }
         | GraphPattern::Distinct { inner }
         | GraphPattern::Reduced { inner } => has_constant_term(inner),
+        _ => false,
+    }
+}
+
+/// Whether evaluating the pattern with incoming solutions gives the join of its own solutions
+/// with them: true for patterns built from triple patterns, paths, joins, OPTIONAL, UNION,
+/// MINUS, FILTER, BIND, VALUES and GRAPH.
+fn keys_keep_solutions(gp: &GraphPattern) -> bool {
+    match gp {
+        GraphPattern::Bgp { .. } | GraphPattern::Path { .. } | GraphPattern::Values { .. } => true,
+        GraphPattern::Join { left, right }
+        | GraphPattern::LeftJoin { left, right, .. }
+        | GraphPattern::Union { left, right }
+        | GraphPattern::Minus { left, right } => {
+            keys_keep_solutions(left) && keys_keep_solutions(right)
+        }
+        GraphPattern::Filter { inner, .. }
+        | GraphPattern::Extend { inner, .. }
+        | GraphPattern::Graph { inner, .. } => keys_keep_solutions(inner),
         _ => false,
     }
 }
