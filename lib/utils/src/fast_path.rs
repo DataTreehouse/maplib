@@ -83,6 +83,15 @@ fast_paths! {
     ExistsKeysCollected => "exists.keys_collected",
     ExistsKeysLazy => "exists.keys_lazy",
     MinusAntiJoin => "minus.anti_join",
+    // Basic graph patterns by index nested loops on codes, outside Polars, and why they were
+    // declined (the Polars path then answers).
+    InlTaken => "inl.taken",
+    InlEmpty => "inl.empty",
+    InlDeclinedShape => "inl.declined_shape",
+    InlDeclinedTypes => "inl.declined_types",
+    InlDeclinedStorage => "inl.declined_storage",
+    InlDeclinedEstimate => "inl.declined_estimate",
+    InlAborted => "inl.aborted",
 }
 
 /// Counts a hit of `path`, when counting is on.

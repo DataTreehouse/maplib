@@ -1,23 +1,30 @@
-//! PROTOTYPE: index nested-loop evaluation of small, selective basic graph patterns on
-//! dictionary codes, outside Polars. See `docs/design/inl_bgp.md`.
+//! Index nested-loop evaluation of small, selective basic graph patterns on dictionary codes,
+//! outside Polars (stage 1 of `docs/design/inl_bgp.md`).
 //!
-//! Scope of the prototype: in-memory storage, constant predicates, one table per predicate
-//! after the types of the constants and bound variables are applied, subjects and objects that
-//! are constants or variables (no blank nodes), every pattern after the first sharing a variable
-//! with the patterns before it. Anything else returns `None` and the Polars path answers.
+//! A basic graph pattern without incoming solutions is answered by probing the sorted segments
+//! of each pattern's table with the codes that the patterns before it bound, starting from a
+//! pattern with a constant subject or object. It covers tables in memory with a dictionary in
+//! memory, constant predicates, one table per pattern once the types of the constants and of the
+//! bound variables are applied, and subjects and objects that are constants or variables (blank
+//! nodes are variables). For anything else, and when the estimated or actual work is too large,
+//! it declines and the Polars path answers, so it never changes results.
 //!
-//! The bindings are kept as columns of `u64` slots, one row per partial solution, and each
-//! pattern extends all rows at once (a breadth-first, batch-at-a-time nested loop): for every
-//! row it probes the pattern's table with the codes that row binds. A slot is a dictionary code
-//! for variables of coded types, and a (segment, row) reference into the table that bound the
-//! variable for types stored as native values, which are gathered only at the end.
+//! The bindings are columns of `u64` slots, one row per partial solution, and each pattern
+//! extends all rows at once: for every row it probes the pattern's table with the codes that row
+//! binds. A slot is a dictionary code for variables of coded types, and a (segment, row)
+//! reference into the table that bound the variable for types stored as native values, which are
+//! gathered only at the end.
 
 use super::{StoredTriples, Triples, TriplesSegment};
+use crate::sparql::errors::SparqlError;
+use crate::sparql::QuerySettings;
 use crate::storage::PredicateTriples;
+use representation::dataset::{NamedGraph, QueryGraph};
 use oxrdf::vocab::xsd;
 use polars_core::frame::DataFrame;
-use polars_core::prelude::{Column, IdxCa, IdxSize, IntoColumn, Series, UInt32Chunked};
-use polars_core::prelude::{NewChunkedArray, PlSmallStr};
+use polars_core::prelude::{
+    Column, IdxCa, IdxSize, IntoColumn, NewChunkedArray, PlSmallStr, UInt32Chunked,
+};
 use representation::cats::maps::CatMaps;
 use representation::cats::Cats;
 use representation::solution_mapping::EagerSolutionMappings;
@@ -25,47 +32,118 @@ use representation::{BaseRDFNodeType, RDFNodeState, OBJECT_COL_NAME, SUBJECT_COL
 use spargebra::term::{NamedNodePattern, TermPattern, TriplePattern};
 use std::cmp::Ordering;
 use std::collections::HashMap;
+use utils::cancel::Cancelled;
+use utils::fast_path::{hit, FastPath};
 
-/// The environment variable that turns the prototype on.
+/// Set to `0` to turn index nested loops off (a kill switch); on otherwise.
 pub const INL_ENV: &str = "MAPLIB_INL";
+/// With `1`, says on stderr why index nested loops declined a basic graph pattern.
+pub const INL_DEBUG_ENV: &str = "MAPLIB_INL_DEBUG";
+/// The most estimated work (about one unit per code compared) before declining, see [max_work].
+pub const INL_MAX_WORK_ENV: &str = "MAPLIB_INL_MAX_WORK";
+/// The most rows the bindings may have, see [max_rows].
+pub const INL_MAX_ROWS_ENV: &str = "MAPLIB_INL_MAX_ROWS";
+
+const DEFAULT_MAX_WORK: usize = 4_000_000;
+const DEFAULT_MAX_ROWS: usize = 100_000;
+/// Work done while running may exceed the estimate by this factor before the loop gives up.
+const RUN_WORK_FACTOR: usize = 4;
+/// Cancellation is checked after this many rows of a step.
+const CANCEL_CHECK_ROWS: usize = 4096;
 
 pub fn inl_enabled() -> bool {
-    std::env::var(INL_ENV).is_ok_and(|v| v == "1")
+    !std::env::var(INL_ENV).is_ok_and(|v| v.trim() == "0")
 }
 
-/// PROTOTYPE: with `MAPLIB_INL_DEBUG=1`, says on stderr why INL declined.
-pub(crate) fn why<T>(x: Option<T>, reason: &str) -> Option<T> {
-    if x.is_none() && std::env::var("MAPLIB_INL_DEBUG").is_ok_and(|v| v == "1") {
-        eprintln!("INL declined: {reason}");
+fn env_usize(name: &str, default: usize) -> usize {
+    std::env::var(name)
+        .ok()
+        .and_then(|v| v.trim().parse().ok())
+        .unwrap_or(default)
+}
+
+/// The most estimated work for a basic graph pattern to be evaluated with index nested loops:
+/// about the number of codes compared, i.e. a few milliseconds.
+fn max_work() -> usize {
+    env_usize(INL_MAX_WORK_ENV, DEFAULT_MAX_WORK)
+}
+
+/// The most rows of the bindings, estimated before and counted while running.
+fn max_rows() -> usize {
+    env_usize(INL_MAX_ROWS_ENV, DEFAULT_MAX_ROWS)
+}
+
+/// Why index nested loops declined.
+#[derive(Clone, Copy, Debug)]
+enum Decline {
+    /// The patterns: a variable predicate, a constant that is not a coded term, a variable twice
+    /// in a pattern, no constant to start from, or patterns not connected to the others.
+    Shape,
+    /// Several tables (mixed types), language-tagged strings or blank node subjects.
+    Types,
+    /// Tables or dictionary not in memory, or columns laid out in ways it does not read.
+    Storage,
+    /// Too much estimated work or too many estimated rows.
+    Estimate,
+    /// Too much work or too many rows while running.
+    Aborted,
+}
+
+impl Decline {
+    fn path(self) -> FastPath {
+        match self {
+            Decline::Shape => FastPath::InlDeclinedShape,
+            Decline::Types => FastPath::InlDeclinedTypes,
+            Decline::Storage => FastPath::InlDeclinedStorage,
+            Decline::Estimate => FastPath::InlDeclinedEstimate,
+            Decline::Aborted => FastPath::InlAborted,
+        }
     }
-    x
 }
 
-/// The most rows the bindings may grow to before the prototype gives up.
-const MAX_ROWS: usize = 100_000;
+type R<T> = Result<T, Stop>;
 
-/// One sorted segment (or the unsorted write buffer) of a table, as slices.
-struct Seg<'a> {
-    /// Subject codes, sorted by their strings (unsorted for the buffer).
-    subj: &'a [u32],
-    /// Object column, aligned with `subj`.
-    obj: &'a Column,
-    /// Object codes when the object type is dictionary coded.
-    obj_codes: Option<&'a [u32]>,
-    /// The object sort: object codes sorted by their strings, and the subjects in that order.
-    osort: Option<(&'a [u32], &'a [u32])>,
-    /// The segment, for its Bloom filters; None for the buffer.
-    seg: Option<&'a TriplesSegment>,
+/// Why the loop stopped: it declined, or the query was cancelled.
+enum Stop {
+    Declined,
+    Cancelled(Cancelled),
 }
 
-/// A table of one predicate and one subject and object type, in memory.
-struct TableView<'a> {
-    triples: &'a Triples,
-    segs: Vec<Seg<'a>>,
+impl From<Cancelled> for Stop {
+    fn from(c: Cancelled) -> Self {
+        Stop::Cancelled(c)
+    }
 }
 
-fn u32_slice(c: &Column) -> Option<&[u32]> {
-    c.u32().ok()?.cont_slice().ok()
+/// Counts and, with [INL_DEBUG_ENV], reports a decline.
+fn decline<T>(why: Decline, detail: &str) -> R<T> {
+    hit(why.path());
+    if std::env::var(INL_DEBUG_ENV).is_ok_and(|v| v == "1") {
+        eprintln!("INL declined ({why:?}): {detail}");
+    }
+    Err(Stop::Declined)
+}
+
+trait OrDecline<T> {
+    fn or_decline(self, why: Decline, detail: &str) -> R<T>;
+}
+
+impl<T> OrDecline<T> for Option<T> {
+    fn or_decline(self, why: Decline, detail: &str) -> R<T> {
+        match self {
+            Some(t) => Ok(t),
+            None => decline(why, detail),
+        }
+    }
+}
+
+/// The values of a column of codes, chunk by chunk; None with nulls or not codes.
+fn u32_chunks(c: &Column) -> Option<Vec<&[u32]>> {
+    let ca = c.as_materialized_series().u32().ok()?;
+    if ca.null_count() > 0 {
+        return None;
+    }
+    Some(ca.downcast_iter().map(|arr| arr.values().as_slice()).collect())
 }
 
 fn mem_df(st: &StoredTriples) -> Option<&DataFrame> {
@@ -75,63 +153,167 @@ fn mem_df(st: &StoredTriples) -> Option<&DataFrame> {
     }
 }
 
+/// A chunk of the subject sort of a segment (or of the write buffer): subject codes sorted by
+/// their strings (unsorted in the buffer), the object codes aligned with them when the object
+/// type is coded, and the offset of the chunk in the segment.
+struct Part<'a> {
+    subj: &'a [u32],
+    obj_codes: Option<&'a [u32]>,
+    offset: usize,
+}
+
+/// A segment of a table (or its write buffer) as slices.
+struct SegView<'a> {
+    /// The segment, for its Bloom filters; None for the buffer.
+    seg: Option<&'a TriplesSegment>,
+    parts: Vec<Part<'a>>,
+    /// The object sort, chunk by chunk: object codes sorted by their strings, and the subjects
+    /// in that order. None when there is none, or when its chunks can not be read.
+    osort: Option<Vec<(&'a [u32], &'a [u32])>>,
+    /// The object column of the subject sort, for gathering native values.
+    obj: &'a Column,
+    rows: usize,
+}
+
+/// A table of one predicate and one subject and object type, in memory.
+struct TableView<'a> {
+    segs: Vec<SegView<'a>>,
+    rows: usize,
+    /// Rows per distinct subject and per distinct object, where the segments know their
+    /// distinct counts (summed over segments, so an upper bound on the distinct count).
+    subject_fanout: f64,
+    object_fanout: Option<f64>,
+    /// Whether every segment has a usable object sort.
+    object_sorted: bool,
+}
+
+/// The parts of one frame of subjects and objects, chunk by chunk.
+fn frame_parts(df: &DataFrame, obj_coded: bool) -> R<Vec<Part<'_>>> {
+    let subj = u32_chunks(df.column(SUBJECT_COL_NAME).unwrap())
+        .or_decline(Decline::Storage, "subject column is not codes")?;
+    let obj_codes = if obj_coded {
+        let o = u32_chunks(df.column(OBJECT_COL_NAME).unwrap())
+            .or_decline(Decline::Storage, "object column is not codes")?;
+        if o.len() != subj.len() || o.iter().zip(&subj).any(|(o, s)| o.len() != s.len()) {
+            return decline(Decline::Storage, "subject and object chunks differ");
+        }
+        Some(o)
+    } else {
+        None
+    };
+    let mut offset = 0;
+    let mut parts = Vec::with_capacity(subj.len());
+    for (i, s) in subj.into_iter().enumerate() {
+        parts.push(Part {
+            subj: s,
+            obj_codes: obj_codes.as_ref().map(|o| o[i]),
+            offset,
+        });
+        offset += s.len();
+    }
+    Ok(parts)
+}
+
 impl<'a> TableView<'a> {
-    fn new(triples: &'a Triples) -> Option<TableView<'a>> {
-        if !triples.subject_type.stored_cat() || triples.object_type.is_lang_string() {
-            return why(None, "subject not coded or lang string objects");
+    fn new(triples: &'a Triples) -> R<TableView<'a>> {
+        if triples.subject_type != BaseRDFNodeType::IRI {
+            return decline(Decline::Types, "subjects are not IRIs");
+        }
+        if triples.object_type.is_lang_string() {
+            return decline(Decline::Types, "language-tagged string objects");
         }
         let obj_coded = triples.object_type.stored_cat();
         let mut segs = Vec::with_capacity(triples.segments.len() + 1);
+        let mut distinct_s = Some(0usize);
+        let mut distinct_o = Some(0usize);
+        let mut object_sorted = obj_coded;
         for seg in &triples.segments {
-            let df = why(mem_df(seg.subject_sort.as_ref()?), "segment not in memory")?;
-            let subj = why(
-                u32_slice(df.column(SUBJECT_COL_NAME).ok()?),
-                "subject column not one chunk",
-            )?;
-            let obj = df.column(OBJECT_COL_NAME).ok()?;
-            let obj_codes = if obj_coded {
-                Some(why(u32_slice(obj), "object column not one chunk")?)
-            } else {
-                None
-            };
-            // An object sort that is not contiguous is not used: bound objects are scanned.
+            let df = seg
+                .subject_sort
+                .as_ref()
+                .and_then(mem_df)
+                .or_decline(Decline::Storage, "segment not in memory")?;
+            let parts = frame_parts(df, obj_coded)?;
             let osort = match &seg.object_sort {
                 Some(os) if obj_coded => mem_df(os).and_then(|odf| {
-                    Some((
-                        u32_slice(odf.column(OBJECT_COL_NAME).ok()?)?,
-                        u32_slice(odf.column(SUBJECT_COL_NAME).ok()?)?,
-                    ))
+                    let o = u32_chunks(odf.column(OBJECT_COL_NAME).ok()?)?;
+                    let s = u32_chunks(odf.column(SUBJECT_COL_NAME).ok()?)?;
+                    if o.len() != s.len() || o.iter().zip(&s).any(|(o, s)| o.len() != s.len()) {
+                        return None;
+                    }
+                    Some(o.into_iter().zip(s).collect::<Vec<_>>())
                 }),
                 _ => None,
             };
-            if seg.object_sort.is_some() && obj_coded && osort.is_none() {
-                why::<()>(None, "object sort not one chunk (scanning instead)");
-            }
-            segs.push(Seg {
-                subj,
-                obj,
-                obj_codes,
-                osort,
+            object_sorted &= osort.is_some();
+            distinct_s = distinct_s
+                .zip(seg.distinct_count(false))
+                .map(|(a, b)| a + b);
+            distinct_o = distinct_o
+                .zip(seg.distinct_count(true))
+                .map(|(a, b)| a + b);
+            segs.push(SegView {
                 seg: Some(seg),
+                parts,
+                osort,
+                obj: df.column(OBJECT_COL_NAME).unwrap(),
+                rows: df.height(),
             });
         }
         if let Some(b) = triples.buffer.as_ref().filter(|b| b.height() > 0) {
-            let subj = u32_slice(b.column(SUBJECT_COL_NAME).ok()?)?;
-            let obj = b.column(OBJECT_COL_NAME).ok()?;
-            let obj_codes = if obj_coded { Some(u32_slice(obj)?) } else { None };
-            segs.push(Seg {
-                subj,
-                obj,
-                obj_codes,
-                osort: None,
+            segs.push(SegView {
                 seg: None,
+                parts: frame_parts(b, obj_coded)?,
+                osort: None,
+                obj: b.column(OBJECT_COL_NAME).unwrap(),
+                rows: b.height(),
             });
+            // The buffer's rows are new subjects and objects at worst.
+            distinct_s = distinct_s.map(|d| d + b.height());
+            distinct_o = distinct_o.map(|d| d + b.height());
+            // The buffer is scanned for bound objects.
+            object_sorted = false;
         }
-        Some(TableView { triples, segs })
+        let rows: usize = segs.iter().map(|s| s.rows).sum();
+        let fanout = |d: Option<usize>| d.filter(|d| *d > 0).map(|d| rows as f64 / d as f64);
+        Ok(TableView {
+            segs,
+            rows,
+            // Without distinct counts, a subject is assumed to have few triples; the run-time
+            // guard catches the exceptions.
+            subject_fanout: fanout(distinct_s).unwrap_or(1.0),
+            object_fanout: fanout(distinct_o),
+            object_sorted,
+        })
+    }
+
+    /// The cost of one binary search in every segment of the table.
+    fn seek_cost(&self) -> usize {
+        self.segs
+            .iter()
+            .map(|s| (usize::BITS - s.rows.leading_zeros()) as usize + 1)
+            .sum()
+    }
+
+    /// The expected rows of one probe for a bound object.
+    fn object_fanout(&self) -> f64 {
+        // Without distinct objects (no object sort), assume the square root of the table's
+        // rows; the run-time guard catches the exceptions.
+        self.object_fanout
+            .unwrap_or_else(|| (self.rows as f64).sqrt().max(1.0))
+    }
+
+    /// The cost of one probe for a bound object.
+    fn object_probe_cost(&self) -> usize {
+        if self.object_sorted {
+            self.seek_cost()
+        } else {
+            self.rows
+        }
     }
 }
 
-/// Orders codes by their strings.
+/// Orders codes by their strings, without decoding them.
 struct Order<'c> {
     maps: &'c CatMaps,
 }
@@ -166,9 +348,10 @@ struct Pat<'a> {
     view: TableView<'a>,
     s: Pos,
     o: Pos,
+    /// How objects are ordered, for coded objects.
+    o_order: Option<Order<'a>>,
 }
 
-#[derive(Clone)]
 struct VarInfo {
     name: String,
     ty: BaseRDFNodeType,
@@ -176,87 +359,133 @@ struct VarInfo {
     native_from: Option<usize>,
 }
 
+/// A (segment, row) reference to a native value.
 fn pack(seg: usize, row: usize) -> u64 {
     ((seg as u64) << 32) | row as u64
 }
 
-fn encode_const(t: &TermPattern, cats: &Cats) -> Result<Option<(u32, BaseRDFNodeType)>, ()> {
+/// The code of a constant (None if the dictionary does not have it) and its type.
+fn encode_const(t: &TermPattern, cats: &Cats) -> R<(Option<u32>, BaseRDFNodeType)> {
     match t {
-        TermPattern::NamedNode(nn) => {
-            let c = cats.maybe_encode_iri_slice(&[Some(nn.as_str())]).pop().flatten();
-            Ok(c.map(|c| (c, BaseRDFNodeType::IRI)))
-        }
-        TermPattern::Literal(l) if l.datatype() == xsd::STRING && l.language().is_none() => {
-            let c = cats
-                .maybe_encode_literals(&[Some(l.value())], xsd::STRING.into_owned())
+        TermPattern::NamedNode(nn) => Ok((
+            cats.maybe_encode_iri_slice(&[Some(nn.as_str())])
                 .pop()
-                .flatten();
-            Ok(c.map(|c| (c, BaseRDFNodeType::Literal(xsd::STRING.into_owned(), None))))
-        }
-        _ => Err(()),
+                .flatten(),
+            BaseRDFNodeType::IRI,
+        )),
+        TermPattern::Literal(l) if l.datatype() == xsd::STRING && l.language().is_none() => Ok((
+            cats.maybe_encode_literals(&[Some(l.value())], xsd::STRING.into_owned())
+                .pop()
+                .flatten(),
+            BaseRDFNodeType::Literal(xsd::STRING.into_owned(), None),
+        )),
+        _ => decline(Decline::Shape, "constant that is not an IRI or a string"),
     }
 }
 
-/// Evaluates the basic graph pattern with index nested loops over the tables of `graph`, or
-/// returns None if the prototype does not cover it. `Some(None)` would mean no solutions; the
-/// prototype returns None for that as well, so the general path builds the typed empty result.
+/// The name of a variable or blank node, as the Polars path names its column.
+fn var_name(t: &TermPattern) -> Option<String> {
+    match t {
+        TermPattern::Variable(v) => Some(v.as_str().to_string()),
+        TermPattern::BlankNode(b) => Some(b.to_string()),
+        _ => None,
+    }
+}
+
+/// Evaluates the basic graph pattern with index nested loops over the tables of `graph`.
+/// `Ok(None)` when it declines (the Polars path then answers), an error if the query was
+/// cancelled. `query_max_rows` is the query's row limit, which the Polars path reports.
 pub(crate) fn inl_bgp(
     patterns: &[TriplePattern],
     graph: &PredicateTriples,
     cats: &Cats,
-) -> Option<EagerSolutionMappings> {
-    if patterns.is_empty() {
-        return None;
-    }
-    let mut vars: Vec<VarInfo> = vec![];
-    let var_idx = |vars: &mut Vec<VarInfo>, name: &str, ty: &BaseRDFNodeType| -> Option<usize> {
-        if let Some(i) = vars.iter().position(|v| v.name == name) {
-            if &vars[i].ty != ty {
-                return None;
+    query_max_rows: Option<usize>,
+) -> Result<Option<EagerSolutionMappings>, Cancelled> {
+    match run(patterns, graph, cats, query_max_rows) {
+        Ok(sm) => {
+            hit(FastPath::InlTaken);
+            if sm.mappings.height() == 0 {
+                hit(FastPath::InlEmpty);
             }
-            Some(i)
-        } else {
-            vars.push(VarInfo {
-                name: name.to_string(),
-                ty: ty.clone(),
-                native_from: None,
-            });
-            Some(vars.len() - 1)
+            Ok(Some(sm))
         }
-    };
+        Err(Stop::Declined) => Ok(None),
+        Err(Stop::Cancelled(c)) => Err(c),
+    }
+}
+
+impl crate::Triplestore {
+    /// [inl_bgp] over the graph of the dataset, when the dataset is one stored graph.
+    pub(crate) fn inl_bgp(
+        &self,
+        patterns: &[TriplePattern],
+        dataset: &QueryGraph,
+        query_settings: &QuerySettings,
+    ) -> Result<Option<EagerSolutionMappings>, SparqlError> {
+        let graph = match dataset {
+            QueryGraph::NamedGraph(ng) => Some(ng.clone()),
+            QueryGraph::QueryDataset(qd) if qd.default.len() == 1 => {
+                Some(NamedGraph::from_maybe_named_node(Some(&qd.default[0])))
+            }
+            _ => None,
+        };
+        let Some(g) = graph.as_ref().and_then(|g| self.graph_triples_map.get(g)) else {
+            let _ = decline::<()>(Decline::Shape, "the dataset is not one stored graph");
+            return Ok(None);
+        };
+        let cats = self.global_cats.read()?;
+        Ok(inl_bgp(patterns, g, &cats, query_settings.max_rows)?)
+    }
+}
+
+fn run(
+    patterns: &[TriplePattern],
+    graph: &PredicateTriples,
+    cats: &Cats,
+    query_max_rows: Option<usize>,
+) -> R<EagerSolutionMappings> {
+    if patterns.is_empty() {
+        return decline(Decline::Shape, "no patterns");
+    }
+    let iri_maps = &cats.get_cat_encs(&BaseRDFNodeType::IRI).maps;
+    if iri_maps.as_in_memory().is_none() {
+        return decline(Decline::Storage, "dictionary not in memory");
+    }
+    let s_order = Order { maps: iri_maps };
+    let max_rows = query_max_rows.map_or(max_rows(), |m| m.min(max_rows()));
+    let max_work = max_work();
 
     // Resolve each pattern to one table and its positions.
+    let mut vars: Vec<VarInfo> = vec![];
     let mut pats: Vec<Pat> = Vec::with_capacity(patterns.len());
+    // A constant without a code matches nothing: the result is empty, with the types of the
+    // tables, as the Polars path gives it.
+    let mut unknown_constant = false;
     for tp in patterns {
         let NamedNodePattern::NamedNode(p) = &tp.predicate else {
-            return None;
+            return decline(Decline::Shape, "variable predicate");
         };
-        let tables = why(graph.get(p), "predicate not in graph")?;
-        let s_const = match &tp.subject {
-            TermPattern::Variable(_) => None,
-            t => Some(why(encode_const(t, cats).ok().flatten(), "subject constant")?),
-        };
-        let o_const = match &tp.object {
-            TermPattern::Variable(_) => None,
-            t => Some(why(encode_const(t, cats).ok().flatten(), "object constant")?),
-        };
-        let s_var = if let TermPattern::Variable(v) = &tp.subject {
-            Some(v.as_str())
-        } else {
-            None
-        };
-        let o_var = if let TermPattern::Variable(v) = &tp.object {
-            Some(v.as_str())
-        } else {
-            None
-        };
+        let s_var = var_name(&tp.subject);
+        let o_var = var_name(&tp.object);
         if s_var.is_some() && s_var == o_var {
-            return None;
+            return decline(Decline::Shape, "variable twice in a pattern");
         }
-        let known = |name: Option<&str>| {
-            name.and_then(|n| vars.iter().find(|v| v.name == n).map(|v| v.ty.clone()))
+        let s_const = match &s_var {
+            None => Some(encode_const(&tp.subject, cats)?),
+            Some(_) => None,
         };
-        let (s_known, o_known) = (known(s_var), known(o_var));
+        let o_const = match &o_var {
+            None => Some(encode_const(&tp.object, cats)?),
+            Some(_) => None,
+        };
+        let tables = graph
+            .get(p)
+            .or_decline(Decline::Shape, "predicate not in the graph")?;
+        let known = |name: &Option<String>| {
+            name.as_ref()
+                .and_then(|n| vars.iter().find(|v| &v.name == n).map(|v| v.ty.clone()))
+        };
+        let (s_known, o_known) = (known(&s_var), known(&o_var));
         let candidates: Vec<&Triples> = tables
             .iter()
             .filter(|((st, ot), t)| {
@@ -269,100 +498,74 @@ pub(crate) fn inl_bgp(
             .map(|(_, t)| t)
             .collect();
         if candidates.len() != 1 {
-            return why(None, &format!("{} tables for {}", candidates.len(), p));
+            return decline(
+                Decline::Types,
+                &format!("{} tables for {p} after types", candidates.len()),
+            );
         }
         let t = candidates[0];
-        let view = why(TableView::new(t), "table view")?;
-        let s = match (s_const, s_var) {
-            (Some((c, _)), _) => Pos::Const(c),
-            (None, Some(v)) => Pos::Var(var_idx(&mut vars, v, &t.subject_type)?),
-            _ => return None,
+        let view = TableView::new(t)?;
+        let mut var_idx = |name: &str, ty: &BaseRDFNodeType| -> usize {
+            if let Some(i) = vars.iter().position(|v| v.name == name) {
+                i
+            } else {
+                vars.push(VarInfo {
+                    name: name.to_string(),
+                    ty: ty.clone(),
+                    native_from: None,
+                });
+                vars.len() - 1
+            }
         };
-        let o = match (o_const, o_var) {
-            (Some((c, _)), _) => Pos::Const(c),
+        let s = match (s_const, &s_var) {
+            (Some((Some(c), _)), _) => Pos::Const(c),
+            (Some((None, _)), _) => {
+                unknown_constant = true;
+                Pos::Const(u32::MAX)
+            }
+            (None, Some(v)) => Pos::Var(var_idx(v, &t.subject_type)),
+            (None, None) => unreachable!(),
+        };
+        let o = match (o_const, &o_var) {
+            (Some((Some(c), _)), _) => Pos::Const(c),
+            (Some((None, _)), _) => {
+                unknown_constant = true;
+                Pos::Const(u32::MAX)
+            }
             (None, Some(v)) => {
-                let i = var_idx(&mut vars, v, &t.object_type)?;
+                let i = var_idx(v, &t.object_type);
                 if !t.object_type.stored_cat() {
                     if vars[i].native_from.is_some() {
-                        // A join on a native value: not in the prototype.
-                        return None;
+                        return decline(Decline::Types, "join on a native value");
                     }
                     vars[i].native_from = Some(pats.len());
                 }
                 Pos::Var(i)
             }
-            _ => return None,
+            (None, None) => unreachable!(),
         };
-        pats.push(Pat { view, s, o });
-    }
-
-    let order_maps = |ty: &BaseRDFNodeType| {
-        let maps = &cats.get_cat_encs(ty).maps;
-        maps.as_in_memory().map(|_| maps)
-    };
-    let s_order = Order {
-        maps: why(order_maps(&BaseRDFNodeType::IRI), "IRI dictionary not in memory")?,
-    };
-    let mut o_orders: Vec<Option<Order>> = Vec::with_capacity(pats.len());
-    for p in &pats {
-        let ot = &p.view.triples.object_type;
-        if p.view.triples.subject_type != BaseRDFNodeType::IRI {
-            return why(None, "blank node subjects");
-        }
-        o_orders.push(if ot.stored_cat() {
-            Some(Order {
-                maps: why(order_maps(ot), "object dictionary not in memory")?,
-            })
+        let o_order = if t.object_type.stored_cat() {
+            let maps = &cats.get_cat_encs(&t.object_type).maps;
+            if maps.as_in_memory().is_none() {
+                return decline(Decline::Storage, "dictionary not in memory");
+            }
+            Some(Order { maps })
         } else {
             None
-        });
+        };
+        pats.push(Pat { view, s, o, o_order });
+    }
+    if unknown_constant {
+        return Ok(empty(&vars, &pats));
     }
 
-    // Order: start from the pattern with a constant and the fewest matches, then always take a
-    // connected pattern, bound subjects first (their fanout is small), both ends bound first of all.
-    let mut done = vec![false; pats.len()];
-    let mut bound = vec![false; vars.len()];
-    let mut order = Vec::with_capacity(pats.len());
-    let start = (0..pats.len())
-        .filter(|i| matches!(pats[*i].s, Pos::Const(_)) || matches!(pats[*i].o, Pos::Const(_)))
-        .min_by_key(|i| {
-            let p = &pats[*i];
-            match (p.s, p.o) {
-                (Pos::Const(s), _) => count_subject(&p.view, &s_order, s),
-                (_, Pos::Const(o)) => count_object(&p.view, o_orders[*i].as_ref(), o),
-                _ => usize::MAX,
-            }
-        });
-    let start = why(start, "no seed")?;
-    let mark = |i: usize, done: &mut Vec<bool>, bound: &mut Vec<bool>, order: &mut Vec<usize>| {
-        done[i] = true;
-        order.push(i);
-        for pos in [pats[i].s, pats[i].o] {
-            if let Pos::Var(v) = pos {
-                bound[v] = true;
-            }
-        }
-    };
-    mark(start, &mut done, &mut bound, &mut order);
-    while order.len() < pats.len() {
-        let is_bound = |pos: Pos| match pos {
-            Pos::Const(_) => true,
-            Pos::Var(v) => bound[v],
-        };
-        let next = (0..pats.len())
-            .filter(|i| !done[*i] && (is_bound(pats[*i].s) || is_bound(pats[*i].o)))
-            .min_by_key(|i| match (is_bound(pats[*i].s), is_bound(pats[*i].o)) {
-                (true, true) => 0,
-                (true, false) => 1,
-                _ => 2,
-            });
-        let next = why(next, "not connected")?;
-        mark(next, &mut done, &mut bound, &mut order);
-    }
+    let order = plan(&pats, &vars, &s_order, max_work, max_rows)?;
 
     // The nested loops, one pattern at a time over all rows.
     let mut cols: Vec<Option<Vec<u64>>> = vec![None; vars.len()];
     let mut n_rows = 1usize;
+    let mut work = 0usize;
+    let max_run_work = max_work.saturating_mul(RUN_WORK_FACTOR);
     for &pi in &order {
         let p = &pats[pi];
         let mut parent: Vec<u32> = Vec::new();
@@ -376,8 +579,10 @@ pub(crate) fn inl_bgp(
                 Pos::Var(v) => cols[v].as_ref().map(|c| c[row] as u32),
             }
         };
-        let o_coded = p.view.triples.object_type.stored_cat();
         for row in 0..n_rows {
+            if row % CANCEL_CHECK_ROWS == CANCEL_CHECK_ROWS - 1 {
+                utils::cancel::check()?;
+            }
             let s = get(p.s, row);
             let o = if o_new { None } else { get(p.o, row) };
             match (s, o) {
@@ -386,124 +591,272 @@ pub(crate) fn inl_bgp(
                         if seg.seg.is_some_and(|sg| !sg.may_hold_code(s, false)) {
                             continue;
                         }
-                        let range = if seg.seg.is_some() {
-                            s_order.equal_range(seg.subj, s)
-                        } else {
-                            0..seg.subj.len()
-                        };
-                        for r in range {
-                            if seg.subj[r] != s {
-                                continue;
-                            }
-                            if let Some(o) = o {
-                                if seg.obj_codes.is_some_and(|oc| oc[r] == o) {
-                                    parent.push(row as u32);
-                                }
+                        for part in &seg.parts {
+                            let range = if seg.seg.is_some() {
+                                work += (usize::BITS - part.subj.len().leading_zeros()) as usize;
+                                s_order.equal_range(part.subj, s)
                             } else {
-                                parent.push(row as u32);
-                                new_o.push(if o_coded {
-                                    seg.obj_codes.unwrap()[r] as u64
-                                } else {
-                                    pack(si, r)
-                                });
+                                work += part.subj.len();
+                                0..part.subj.len()
+                            };
+                            work += range.len();
+                            for r in range {
+                                if part.subj[r] != s {
+                                    continue;
+                                }
+                                match o {
+                                    Some(o) => {
+                                        if part.obj_codes.is_some_and(|oc| oc[r] == o) {
+                                            parent.push(row as u32);
+                                        }
+                                    }
+                                    None => {
+                                        parent.push(row as u32);
+                                        new_o.push(match part.obj_codes {
+                                            Some(oc) => oc[r] as u64,
+                                            None => pack(si, part.offset + r),
+                                        });
+                                    }
+                                }
                             }
                         }
                     }
                 }
                 (None, Some(o)) => {
-                    let ord = o_orders[pi].as_ref()?;
+                    // Only coded objects are bound here (native variables are bound once).
+                    let ord = p.o_order.as_ref().unwrap();
                     for seg in &p.view.segs {
                         if seg.seg.is_some_and(|sg| !sg.may_hold_code(o, true)) {
                             continue;
                         }
-                        if let Some((os, ss)) = seg.osort {
-                            for r in ord.equal_range(os, o) {
-                                parent.push(row as u32);
-                                new_s.push(ss[r] as u64);
+                        match &seg.osort {
+                            Some(chunks) => {
+                                for (os, ss) in chunks {
+                                    work += (usize::BITS - os.len().leading_zeros()) as usize;
+                                    let range = ord.equal_range(os, o);
+                                    work += range.len();
+                                    for r in range {
+                                        parent.push(row as u32);
+                                        new_s.push(ss[r] as u64);
+                                    }
+                                }
                             }
-                        } else {
-                            let oc = seg.obj_codes?;
-                            for (r, c) in oc.iter().enumerate() {
-                                if *c == o {
-                                    parent.push(row as u32);
-                                    new_s.push(seg.subj[r] as u64);
+                            None => {
+                                for part in &seg.parts {
+                                    let oc = part.obj_codes.unwrap();
+                                    work += oc.len();
+                                    for (r, c) in oc.iter().enumerate() {
+                                        if *c == o {
+                                            parent.push(row as u32);
+                                            new_s.push(part.subj[r] as u64);
+                                        }
+                                    }
                                 }
                             }
                         }
                     }
                 }
-                (None, None) => return None,
+                (None, None) => unreachable!("the plan binds a position of every pattern"),
             }
-            if parent.len() > MAX_ROWS {
-                return why(None, "row guard");
+            if parent.len() > max_rows {
+                return decline(Decline::Aborted, "too many rows");
+            }
+            if work > max_run_work {
+                return decline(Decline::Aborted, "too much work");
             }
         }
+        utils::cancel::check()?;
         // Gather the old columns by parent row and add the new ones.
         for c in cols.iter_mut().flatten() {
             *c = parent.iter().map(|r| c[*r as usize]).collect();
         }
-        if s_new {
-            if let Pos::Var(v) = p.s {
-                cols[v] = Some(new_s);
-            }
+        if let (true, Pos::Var(v)) = (s_new, p.s) {
+            cols[v] = Some(new_s);
         }
-        if o_new {
-            if let Pos::Var(v) = p.o {
-                cols[v] = Some(new_o);
-            }
+        if let (true, Pos::Var(v)) = (o_new, p.o) {
+            cols[v] = Some(new_o);
         }
         n_rows = parent.len();
         if n_rows == 0 {
-            // The prototype leaves typed empty results to the general path.
-            return why(None, "empty result");
+            return Ok(empty(&vars, &pats));
         }
     }
 
     // Build the frame: codes as they are, native values gathered from their segments.
     let mut out_cols = Vec::with_capacity(vars.len());
-    let mut types = HashMap::new();
     for (vi, v) in vars.iter().enumerate() {
-        let slots = cols[vi].as_ref()?;
+        let slots = cols[vi].as_ref().unwrap();
         let name = PlSmallStr::from_str(&v.name);
         let col = if let Some(pi) = v.native_from {
-            gather_native(&pats[pi].view, slots, name)?
+            gather_native(&pats[pi].view, slots, name)
+                .or_decline(Decline::Storage, "native values could not be gathered")?
         } else {
             UInt32Chunked::from_vec(name, slots.iter().map(|c| *c as u32).collect()).into_column()
         };
         out_cols.push(col);
-        types.insert(
-            v.name.clone(),
-            RDFNodeState::from_bases(v.ty.clone(), v.ty.default_stored_cat_state()),
-        );
     }
-    let df = DataFrame::new(n_rows, out_cols).ok()?;
-    Some(EagerSolutionMappings::new(df, types))
+    let df = DataFrame::new(n_rows, out_cols).unwrap();
+    Ok(EagerSolutionMappings::new(df, types(&vars)))
+}
+
+fn types(vars: &[VarInfo]) -> HashMap<String, RDFNodeState> {
+    vars.iter()
+        .map(|v| {
+            (
+                v.name.clone(),
+                RDFNodeState::from_bases(v.ty.clone(), v.ty.default_stored_cat_state()),
+            )
+        })
+        .collect()
+}
+
+/// No solutions, with the columns typed as the tables type them.
+fn empty(vars: &[VarInfo], pats: &[Pat]) -> EagerSolutionMappings {
+    let cols = vars
+        .iter()
+        .map(|v| {
+            let name = PlSmallStr::from_str(&v.name);
+            match v.native_from {
+                Some(pi) => {
+                    let mut c = pats[pi].view.segs[0].obj.slice(0, 0);
+                    c.rename(name);
+                    c
+                }
+                None => UInt32Chunked::from_vec(name, vec![]).into_column(),
+            }
+        })
+        .collect();
+    EagerSolutionMappings::new(DataFrame::new(0, cols).unwrap(), types(vars))
+}
+
+/// The order of the patterns, or a decline when the estimated work or rows are too large.
+///
+/// The first pattern is the one with a constant and the fewest matches, counted exactly by a
+/// binary search (or a scan of a table that is small enough). Then always a pattern connected
+/// to the bound variables: both ends bound (a check), a bound subject, a bound object with an
+/// object sort, a bound object without; ties by the smaller fanout. The rows and the work are
+/// estimated along the way from the tables' fanouts.
+fn plan(
+    pats: &[Pat],
+    vars: &[VarInfo],
+    s_order: &Order,
+    max_work: usize,
+    max_rows: usize,
+) -> R<Vec<usize>> {
+    let mut seed: Option<(usize, usize)> = None;
+    let mut work = 0usize;
+    for (i, p) in pats.iter().enumerate() {
+        let count = match (p.s, p.o) {
+            (Pos::Const(s), _) => {
+                work += p.view.seek_cost();
+                count_subject(&p.view, s_order, s)
+            }
+            (_, Pos::Const(o)) => {
+                if work + p.view.object_probe_cost() > max_work {
+                    continue;
+                }
+                work += p.view.object_probe_cost();
+                count_object(&p.view, p.o_order.as_ref().unwrap(), o)
+            }
+            _ => continue,
+        };
+        if seed.is_none_or(|(_, c)| count < c) {
+            seed = Some((i, count));
+        }
+    }
+    let Some((start, count)) = seed else {
+        return decline(
+            Decline::Shape,
+            "no constant subject or object to start from",
+        );
+    };
+    let mut done = vec![false; pats.len()];
+    let mut bound = vec![false; vars.len()];
+    let mut order = Vec::with_capacity(pats.len());
+    let mut rows = count as f64;
+    let mark = |i: usize, done: &mut Vec<bool>, bound: &mut Vec<bool>, order: &mut Vec<usize>| {
+        done[i] = true;
+        order.push(i);
+        for pos in [pats[i].s, pats[i].o] {
+            if let Pos::Var(v) = pos {
+                bound[v] = true;
+            }
+        }
+    };
+    mark(start, &mut done, &mut bound, &mut order);
+    while done.iter().any(|d| !d) {
+        let is_bound = |pos: Pos| match pos {
+            Pos::Const(_) => true,
+            Pos::Var(v) => bound[v],
+        };
+        // (pattern, class, fanout, cost per probe) of the connected patterns.
+        let next = (0..pats.len())
+            .filter(|i| !done[*i])
+            .filter_map(|i| {
+                let p = &pats[i];
+                let v = &p.view;
+                match (is_bound(p.s), is_bound(p.o)) {
+                    (true, true) => Some((i, 0, 1.0, v.seek_cost())),
+                    (true, false) => Some((i, 1, v.subject_fanout, v.seek_cost())),
+                    (false, true) if v.object_sorted => {
+                        Some((i, 2, v.object_fanout(), v.seek_cost()))
+                    }
+                    (false, true) => Some((i, 3, v.object_fanout(), v.rows)),
+                    (false, false) => None,
+                }
+            })
+            .min_by(|a, b| {
+                (a.1, a.2)
+                    .partial_cmp(&(b.1, b.2))
+                    .unwrap_or(Ordering::Equal)
+            });
+        let Some((i, _, fanout, cost)) = next else {
+            return decline(Decline::Shape, "patterns not connected");
+        };
+        work = work.saturating_add((rows.ceil() as usize).saturating_mul(cost));
+        rows *= fanout;
+        if work > max_work || rows > max_rows as f64 {
+            return decline(
+                Decline::Estimate,
+                &format!("estimated work {work}, rows {rows:.0}"),
+            );
+        }
+        mark(i, &mut done, &mut bound, &mut order);
+    }
+    Ok(order)
 }
 
 fn count_subject(view: &TableView, ord: &Order, s: u32) -> usize {
-    view.segs
-        .iter()
-        .map(|seg| {
-            if seg.seg.is_some() {
-                ord.equal_range(seg.subj, s).len()
+    let mut n = 0;
+    for seg in &view.segs {
+        for p in &seg.parts {
+            n += if seg.seg.is_some() {
+                ord.equal_range(p.subj, s).len()
             } else {
-                seg.subj.iter().filter(|c| **c == s).count()
-            }
-        })
-        .sum()
+                p.subj.iter().filter(|c| **c == s).count()
+            };
+        }
+    }
+    n
 }
 
-fn count_object(view: &TableView, ord: Option<&Order>, o: u32) -> usize {
-    view.segs
-        .iter()
-        .map(|seg| match (seg.osort, ord) {
-            (Some((os, _)), Some(ord)) => ord.equal_range(os, o).len(),
-            _ => seg
-                .obj_codes
-                .map(|oc| oc.iter().filter(|c| **c == o).count())
-                .unwrap_or(usize::MAX / 4),
-        })
-        .sum()
+fn count_object(view: &TableView, ord: &Order, o: u32) -> usize {
+    let mut n = 0;
+    for seg in &view.segs {
+        match &seg.osort {
+            Some(chunks) => {
+                for (os, _) in chunks {
+                    n += ord.equal_range(os, o).len();
+                }
+            }
+            None => {
+                for p in &seg.parts {
+                    n += p.obj_codes.unwrap().iter().filter(|c| **c == o).count();
+                }
+            }
+        }
+    }
+    n
 }
 
 /// The native object values of the (segment, row) slots, in slot order.
@@ -515,30 +868,31 @@ fn gather_native(view: &TableView, slots: &[u64], name: PlSmallStr) -> Option<Co
         pos_in.push((si as u32, by_seg[si].len() as u32));
         by_seg[si].push(r);
     }
-    let mut parts: Vec<Series> = vec![];
+    let mut all: Option<Column> = None;
     let mut base = vec![0u32; view.segs.len()];
     let mut acc = 0u32;
-    for (si, rows) in by_seg.iter().enumerate() {
+    for (si, rows) in by_seg.into_iter().enumerate() {
         base[si] = acc;
         acc += rows.len() as u32;
         if rows.is_empty() {
             continue;
         }
-        let idx = IdxCa::from_vec(PlSmallStr::EMPTY, rows.clone());
-        parts.push(view.segs[si].obj.as_materialized_series().take(&idx).ok()?);
-    }
-    let mut all = parts.pop()?;
-    while let Some(p) = parts.pop() {
-        let mut p = p;
-        p.append(&all).ok()?;
-        all = p;
+        let idx = IdxCa::from_vec(PlSmallStr::EMPTY, rows);
+        let part = view.segs[si].obj.take(&idx).ok()?;
+        all = Some(match all {
+            None => part,
+            Some(mut a) => {
+                a.append(&part).ok()?;
+                a
+            }
+        });
     }
     let order: Vec<IdxSize> = pos_in
         .iter()
         .map(|(si, k)| (base[*si as usize] + *k) as IdxSize)
         .collect();
     let idx = IdxCa::from_vec(PlSmallStr::EMPTY, order);
-    let mut out = all.take(&idx).ok()?;
+    let mut out = all?.take(&idx).ok()?;
     out.rename(name);
-    Some(out.into_column())
+    Some(out)
 }

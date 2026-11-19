@@ -29,6 +29,7 @@ mod values;
 use super::{QuerySettings, Triplestore};
 use crate::sparql::errors::SparqlError;
 use crate::sparql::evaluation_hook::HookDecision;
+use crate::storage::inl;
 use tracing::{instrument, trace, warn};
 
 use crate::sparql::lazy_graph_patterns::triples_ordering::{
@@ -206,43 +207,22 @@ impl Triplestore {
                 let (patterns, length_paths) =
                     length_path::extract_length_path_patterns(&patterns)?;
                 self.check_maplib_predicates(&patterns)?;
-                // PROTOTYPE: index nested loops on codes for a BGP without incoming solutions.
-                if crate::storage::inl::inl_enabled() {
-                    if let Some(sm) = &solution_mappings {
-                        crate::storage::inl::why::<()>(
-                            None,
-                            &format!("incoming solutions, height estimate {}", sm.height_estimate),
-                        );
-                    }
-                }
-                if solution_mappings.is_none()
-                    && length_paths.is_empty()
-                    && crate::storage::inl::inl_enabled()
-                {
-                    let graph = match dataset {
-                        QueryGraph::NamedGraph(ng) => Some(ng.clone()),
-                        QueryGraph::QueryDataset(qd) if qd.default.len() == 1 => Some(
-                            representation::dataset::NamedGraph::from_maybe_named_node(Some(
-                                &qd.default[0],
-                            )),
-                        ),
-                        _ => None,
-                    };
-                    let g = crate::storage::inl::why(
-                        graph.as_ref().and_then(|g| self.graph_triples_map.get(g)),
-                        "dataset is not one stored graph",
-                    );
-                    if let Some(g) = g {
-                        let cats = self.global_cats.read()?;
-                        if let Some(sm) = crate::storage::inl::inl_bgp(&patterns, g, &cats) {
-                            return Ok(sm.as_lazy());
-                        }
-                    }
-                }
                 pushdowns.add_patterns_pushdowns(&patterns);
                 // A pattern whose variables can have no stored type has no solutions: nothing is
                 // read, and the solutions so far are not collected.
                 let proven_empty = self.bgp_proven_empty(&patterns, dataset);
+                // Index nested loops on codes, outside Polars, for a basic graph pattern without
+                // incoming solutions (docs/design/inl_bgp.md). It declines what it does not
+                // cover, and the Polars path below answers.
+                if !proven_empty
+                    && solution_mappings.is_none()
+                    && length_paths.is_empty()
+                    && inl::inl_enabled()
+                {
+                    if let Some(sm) = self.inl_bgp(&patterns, dataset, query_settings)? {
+                        return Ok(sm.as_lazy());
+                    }
+                }
                 let mut updated_solution_mappings = if proven_empty {
                     fast_path::hit(FastPath::BgpProvenEmpty);
                     Some(self.empty_bgp_solution_mappings(&patterns, solution_mappings))
