@@ -101,12 +101,16 @@ def report(storage, state, toggles, name, counts, expected):
 def check_hits(counts: Dict[str, int], expected: Dict[str, bool], what: str):
     if not HAS_COUNTERS:
         return
+    # "a|b" means any of the fast paths a and b: taken if one is, not taken if none is.
     for label, taken in expected.items():
-        assert label in native._fast_path_counts(), f"unknown fast path {label}"
+        labels = label.split("|")
+        for one in labels:
+            assert one in native._fast_path_counts(), f"unknown fast path {one}"
+        n = sum(counts.get(one, 0) for one in labels)
         if taken:
-            assert counts.get(label, 0) > 0, f"{what}: fast path {label} not taken; counts {counts}"
+            assert n > 0, f"{what}: fast path {label} not taken; counts {counts}"
         else:
-            assert counts.get(label, 0) == 0, f"{what}: {label} taken; counts {counts}"
+            assert n == 0, f"{what}: {label} taken; counts {counts}"
 
 
 # ---------------------------------------------------------------------------
@@ -682,24 +686,28 @@ case("minus_large",
      "SELECT ?s ?k WHERE { ?s :o10001 ?k MINUS { ?s :oin ?w } }", ["s", "k"],
      hits={"minus.anti_join": True})
 
-# COUNT DISTINCT with a bitset over codes, serially up to 65,536 codes.
+# COUNT DISTINCT with a bitset over codes, serially up to 65,536 codes. A table with one segment
+# and an empty write buffer answers from the segment's exact count instead, and a repeated count
+# from the cache keyed by the tables' generations; either takes the place of the bitset.
+KNOWN_DISTINCT = "|count_distinct.segment_exact|count_distinct.cached"
 for n, serial in ((SERIAL_CODES, True), (SERIAL_CODES + 1, False)):
-    hits = {"count_distinct.bitset": serial, "count_distinct.bitset_parallel": not serial}
+    hits = {"count_distinct.bitset" + (KNOWN_DISTINCT if serial else ""): serial,
+            "count_distinct.bitset_parallel" + ("" if serial else KNOWN_DISTINCT): not serial}
     case(f"count_distinct_s_{n}", f"SELECT (COUNT(DISTINCT ?s) AS ?c) WHERE {{ ?s :cd{n} ?o }}",
          ["c"], hits=hits)
     case(f"count_distinct_o_{n}", f"SELECT (COUNT(DISTINCT ?o) AS ?c) WHERE {{ ?s :cd{n} ?o }}",
          ["c"], hits=hits)
 case("count_distinct_mixed_o", "SELECT (COUNT(DISTINCT ?o) AS ?c) WHERE { ?s :mix ?o }", ["c"])
 case("count_distinct_mixed_s", "SELECT (COUNT(DISTINCT ?s) AS ?c) WHERE { ?s :mix ?o }", ["c"],
-     hits={"count_distinct.bitset": True})
+     hits={"count_distinct.bitset" + KNOWN_DISTINCT: True})
 case("count_distinct_named_graph",
      "SELECT (COUNT(DISTINCT ?s) AS ?c) WHERE { GRAPH <http://ex.org/g1> { ?s :walk ?o } }", ["c"])
 case("count_distinct_s_buffered",
      "SELECT (COUNT(DISTINCT ?s) AS ?c) WHERE { ?s :many ?o }", ["c"],
-     hits={"count_distinct.bitset": True})
+     hits={"count_distinct.bitset" + KNOWN_DISTINCT: True})
 case("count_distinct_o_buffered",
      "SELECT (COUNT(DISTINCT ?o) AS ?c) WHERE { ?s :ein ?o }", ["c"],
-     hits={"count_distinct.bitset": True})
+     hits={"count_distinct.bitset" + KNOWN_DISTINCT: True})
 
 # FILTER(?r = 1) over RANK, without ranking. Oxigraph has no window functions: the reference
 # keeps the solutions with no smaller score in their group.

@@ -199,6 +199,45 @@ fn remove_rows_df(df: DataFrame, positions: &[usize]) -> DataFrame {
 
 impl StoredTriples {
     /// Removes the rows `positions` (sorted and distinct, fewer than the rows stored).
+    /// The number of runs of equal codes of column `c` (see `code_runs`) that are gone when the
+    /// rows at the sorted `positions` are removed, when the triples are in memory. A run is gone
+    /// when all its rows are removed, so it lies within a block of consecutive positions: the
+    /// runs of a block, except the first if it continues before the block and the last if it
+    /// continues after it. Reads only the removed rows and their neighbours.
+    pub(super) fn in_memory_runs_removed(&self, c: &str, positions: &[usize]) -> Option<usize> {
+        let StoredTriples::TriplesInMemory(mem) = self else {
+            return None;
+        };
+        let codes = mem.df.as_ref()?.column(c).ok()?.u32().ok()?.clone();
+        if codes.null_count() > 0 {
+            return None;
+        }
+        let at = |i: usize| codes.get(i);
+        let mut removed = 0usize;
+        let mut i = 0;
+        while i < positions.len() {
+            let first = positions[i];
+            let mut last = first;
+            let mut runs = 1usize;
+            let mut prev = at(first);
+            i += 1;
+            while i < positions.len() && positions[i] == last + 1 {
+                last = positions[i];
+                let code = at(last);
+                if code != prev {
+                    runs += 1;
+                    prev = code;
+                }
+                i += 1;
+            }
+            let continues_before = first > 0 && at(first - 1) == at(first);
+            let continues_after = last + 1 < codes.len() && at(last + 1) == at(last);
+            removed +=
+                runs.saturating_sub(usize::from(continues_before) + usize::from(continues_after));
+        }
+        Some(removed)
+    }
+
     fn remove_rows(&mut self, positions: &[usize]) -> Result<(), TriplestoreError> {
         if positions.is_empty() {
             return Ok(());
@@ -403,6 +442,22 @@ impl Triples {
                 self.segments.remove(i);
                 continue;
             }
+            // Counted before the rows are removed: the sorts keep their order, so a code is gone
+            // when all of its (adjacent) rows are deleted.
+            let distinct_subjects = seg.distinct_subjects.and_then(|n| {
+                let removed = seg
+                    .subject_sort
+                    .as_ref()
+                    .unwrap()
+                    .in_memory_runs_removed(SUBJECT_COL_NAME, &subject_rows)?;
+                Some(n - removed)
+            });
+            let distinct_objects = match (seg.distinct_objects, &seg.object_sort, &object_rows) {
+                (Some(n), Some(sort), Some(rows)) => sort
+                    .in_memory_runs_removed(OBJECT_COL_NAME, rows)
+                    .map(|removed| n - removed),
+                _ => None,
+            };
             seg.subject_sort
                 .as_mut()
                 .unwrap()
@@ -418,6 +473,8 @@ impl Triples {
                     .unwrap()
                     .remove_rows(&object_rows, height);
             }
+            seg.distinct_subjects = distinct_subjects;
+            seg.distinct_objects = distinct_objects;
             seg.height = height;
         }
         self.height -= triples.height();

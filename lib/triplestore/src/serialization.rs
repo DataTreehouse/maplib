@@ -463,6 +463,7 @@ impl Triplestore {
             vector_index: HashMap::new(),
             global_cats: LockedCats::new(cats),
             n_triples_deleted: 0,
+            distinct_count_cache: Default::default(),
             path_graph_cache: Default::default(),
             udf_registry: Arc::new(UdfRegistry::new()),
             federation: Arc::new(FederationSettings::default()),

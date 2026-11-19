@@ -160,6 +160,7 @@ impl Triples {
                 seg.object_sort = None;
                 seg.object_sparse_index = None;
                 seg.object_filter = None;
+                seg.distinct_objects = None;
             }
             self.object_indexing_enabled = false;
             return Ok(());

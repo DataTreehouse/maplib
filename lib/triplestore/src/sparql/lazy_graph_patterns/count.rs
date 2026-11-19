@@ -10,6 +10,9 @@
 //! - the distinct subjects (objects) are the distinct stored values per subject (object) type,
 //!   counted over the stored columns, which are still dictionary codes for IRIs, blank nodes and
 //!   strings.
+//!
+//! Distinct counts are kept in a [DistinctCountCache], keyed by the generations of the tables
+//! counted, which every change of a table renews.
 
 use super::Triplestore;
 use crate::errors::TriplestoreError;
@@ -32,6 +35,44 @@ use spargebra::algebra::{AggregateExpression, AggregateFunction, Expression, Fun
 use spargebra::term::{NamedNodePattern, TermPattern};
 use std::collections::{HashMap, HashSet};
 use utils::fast_path::{self, FastPath};
+use std::sync::Mutex;
+
+/// The number of distinct counts kept.
+const DISTINCT_CACHE_SIZE: usize = 32;
+
+/// Exact distinct subject (or object) counts over sets of tables, most recent first. A count is
+/// keyed by whether it counts subjects and by the sorted generations of its tables: every insert,
+/// delete and merge of a table gives it a new generation (see `Triples::generation`), and
+/// generations are unique, so a key names one state of the triples it counted. A write makes the
+/// old keys unreachable; they age out.
+#[derive(Default)]
+pub struct DistinctCountCache {
+    entries: Mutex<Vec<((bool, Vec<u64>), usize)>>,
+}
+
+impl Clone for DistinctCountCache {
+    fn clone(&self) -> Self {
+        DistinctCountCache::default()
+    }
+}
+
+impl DistinctCountCache {
+    fn get(&self, key: &(bool, Vec<u64>)) -> Option<usize> {
+        let mut entries = self.entries.lock().unwrap();
+        let i = entries.iter().position(|(k, _)| k == key)?;
+        let e = entries.remove(i);
+        let n = e.1;
+        entries.insert(0, e);
+        Some(n)
+    }
+
+    fn insert(&self, key: (bool, Vec<u64>), n: usize) {
+        let mut entries = self.entries.lock().unwrap();
+        entries.retain(|(k, _)| k != &key);
+        entries.insert(0, (key, n));
+        entries.truncate(DISTINCT_CACHE_SIZE);
+    }
+}
 
 /// The term kinds a FILTER can ask for.
 #[derive(Clone, Copy, PartialEq)]
@@ -167,8 +208,8 @@ impl Triplestore {
                 Counted::DistinctPredicates => {
                     tables.iter().map(|(p, _)| *p).collect::<HashSet<_>>().len()
                 }
-                Counted::DistinctSubjects => distinct_values(&tables, true)?,
-                Counted::DistinctObjects => distinct_values(&tables, false)?,
+                Counted::DistinctSubjects => self.cached_distinct_values(&tables, true)?,
+                Counted::DistinctObjects => self.cached_distinct_values(&tables, false)?,
             };
             columns.push(Column::new(v.as_str().into(), [n as i64]));
             types.insert(
@@ -182,6 +223,33 @@ impl Triplestore {
             types,
             1,
         )))
+    }
+}
+
+impl Triplestore {
+    /// [distinct_values], from the exact count of a single table's only segment, or from the
+    /// cache when none of the tables changed since they were last counted.
+    fn cached_distinct_values(
+        &self,
+        tables: &[(&oxrdf::NamedNode, &Triples)],
+        subject: bool,
+    ) -> Result<usize, SparqlError> {
+        if let [(_, t)] = tables {
+            if let Some(n) = t.exact_distinct(!subject) {
+                fast_path::hit(FastPath::CountDistinctSegmentExact);
+                return Ok(n);
+            }
+        }
+        let mut generations: Vec<u64> = tables.iter().map(|(_, t)| t.generation()).collect();
+        generations.sort_unstable();
+        let key = (subject, generations);
+        if let Some(n) = self.distinct_count_cache.get(&key) {
+            fast_path::hit(FastPath::CountDistinctCached);
+            return Ok(n);
+        }
+        let n = distinct_values(tables, subject)?;
+        self.distinct_count_cache.insert(key, n);
+        Ok(n)
     }
 }
 

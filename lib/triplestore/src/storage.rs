@@ -76,21 +76,35 @@ pub(crate) type CodeFilter = Arc<SplitBlockBloom>;
 /// code, which is always looked up.
 pub(crate) type TargetCodes<'a> = Option<&'a [Option<u32>]>;
 
-/// A filter of the codes of a column sorted so that equal codes are adjacent, built from the
-/// runs of equal codes. None if the filters are off or the column does not hold codes.
-fn build_code_filter(c: &Series) -> Option<CodeFilter> {
-    let bits = segment_filter_bits();
+/// The number of runs of equal codes of a column of codes without nulls: the number of distinct
+/// codes when the column is sorted so that equal codes are adjacent. None if the column does not
+/// hold codes.
+pub(crate) fn code_runs(c: &Series) -> Option<usize> {
     let ca = c.u32().ok()?;
-    if bits == 0 || ca.is_empty() {
+    if ca.null_count() > 0 {
         return None;
     }
     let mut runs = 0usize;
     let mut prev = None;
-    for u in ca.iter().flatten() {
-        if prev != Some(u) {
-            runs += 1;
-            prev = Some(u);
+    for arr in ca.downcast_iter() {
+        for &u in arr.values().as_slice() {
+            if prev != Some(u) {
+                runs += 1;
+                prev = Some(u);
+            }
         }
+    }
+    Some(runs)
+}
+
+/// A filter of the codes of a column sorted so that equal codes are adjacent, built from the
+/// runs of equal codes (`runs` of them). None if the filters are off or the column does not hold
+/// codes.
+fn build_code_filter(c: &Series, runs: usize) -> Option<CodeFilter> {
+    let bits = segment_filter_bits();
+    let ca = c.u32().ok()?;
+    if bits == 0 || ca.is_empty() {
+        return None;
     }
     let mut f = SplitBlockBloom::new(runs, bits);
     let mut prev = None;
@@ -243,7 +257,7 @@ impl Triples {
             .map(|f| StoredTriples::from_parquet_file(f, triples_folder, height, utc_objects))
             .transpose()?;
         let height = subject_sort.height();
-        let segment = TriplesSegment {
+        let mut segment = TriplesSegment {
             height,
             subject_sort: Some(subject_sort),
             subject_sparse_index: Some(SparseIndex::from_data_frame(subject_object_index_df)),
@@ -251,7 +265,10 @@ impl Triples {
             object_sparse_index: object_subject_index_df.map(SparseIndex::from_data_frame),
             subject_filter: subject_filter.map(Arc::new),
             object_filter: object_filter.map(Arc::new),
+            distinct_subjects: None,
+            distinct_objects: None,
         };
+        segment.recount_distinct();
 
         Ok(Self {
             segments: vec![segment],
@@ -717,6 +734,15 @@ impl Triples {
         self.segments.iter().any(|s| s.may_hold_code(code, by_object))
     }
 
+    /// The exact number of distinct subjects (or objects, if `by_object`) of the table, when it
+    /// is known: the table has a single segment with a known count and the write buffer is empty.
+    pub fn exact_distinct(&self, by_object: bool) -> Option<usize> {
+        match self.segments.as_slice() {
+            [s] if self.buffer_height() == 0 => s.distinct_count(by_object),
+            _ => None,
+        }
+    }
+
     /// The subject (or object) filter of the single segment of a compacted table, for
     /// serialization.
     pub(crate) fn code_filter_bytes(&self, by_object: bool) -> Option<Vec<u8>> {
@@ -1139,9 +1165,37 @@ pub(crate) struct TriplesSegment {
     subject_filter: Option<CodeFilter>,
     /// The codes of the objects, when there is an object sparse index over dictionary codes.
     object_filter: Option<CodeFilter>,
+    /// The exact number of distinct subjects, when the subjects are dictionary codes; None when
+    /// unknown (e.g. after a delete from a segment on disk).
+    distinct_subjects: Option<usize>,
+    /// The exact number of distinct objects, when the segment has an object sort over
+    /// dictionary codes; None when unknown.
+    distinct_objects: Option<usize>,
 }
 
 impl TriplesSegment {
+    /// The exact number of distinct subjects (or objects, if `by_object`), if known.
+    pub(crate) fn distinct_count(&self, by_object: bool) -> Option<usize> {
+        if by_object {
+            self.distinct_objects
+        } else {
+            self.distinct_subjects
+        }
+    }
+
+    /// Counts the distinct subjects and objects of a segment read from storage, from the sorts
+    /// held in memory; unknown for the sorts that are not.
+    fn recount_distinct(&mut self) {
+        self.distinct_subjects = self
+            .subject_sort
+            .as_ref()
+            .and_then(|s| s.in_memory_code_runs(SUBJECT_COL_NAME));
+        self.distinct_objects = self
+            .object_sort
+            .as_ref()
+            .and_then(|s| s.in_memory_code_runs(OBJECT_COL_NAME));
+    }
+
     fn code_filter(&self, by_object: bool) -> Option<&CodeFilter> {
         if by_object {
             self.object_filter.as_ref()
@@ -1391,6 +1445,8 @@ struct IndexedTriples {
     object_sparse_index: Option<SparseIndex>,
     subject_filter: Option<CodeFilter>,
     object_filter: Option<CodeFilter>,
+    distinct_subjects: Option<usize>,
+    distinct_objects: Option<usize>,
     height: usize,
 }
 
@@ -1404,6 +1460,8 @@ impl IndexedTriples {
             object_sparse_index: self.object_sparse_index,
             subject_filter: self.subject_filter,
             object_filter: self.object_filter,
+            distinct_subjects: self.distinct_subjects,
+            distinct_objects: self.distinct_objects,
         }
     }
 }
@@ -1429,11 +1487,15 @@ fn create_indices(
             .as_materialized_series(),
         subject_encs,
     );
-    let subject_filter = if subj_type.stored_cat() {
-        build_code_filter(df.column(SUBJECT_COL_NAME).unwrap().as_materialized_series())
+    // Sorted by subject, so equal subjects are adjacent.
+    let distinct_subjects = if subj_type.stored_cat() {
+        code_runs(df.column(SUBJECT_COL_NAME).unwrap().as_materialized_series())
     } else {
         None
     };
+    let subject_filter = distinct_subjects.and_then(|runs| {
+        build_code_filter(df.column(SUBJECT_COL_NAME).unwrap().as_materialized_series(), runs)
+    });
     trace!(
         "Creating subject sparse map took {} seconds",
         now.elapsed().as_secs_f32()
@@ -1446,6 +1508,7 @@ fn create_indices(
     let mut object_sort = None;
     let mut object_sparse_index = None;
     let mut object_filter = None;
+    let mut distinct_objects = None;
 
     if should_index_by_objects {
         let object_now = Instant::now();
@@ -1484,8 +1547,9 @@ fn create_indices(
         );
 
         if obj_type.stored_cat() && !obj_type.is_lang_string() {
-            object_filter =
-                build_code_filter(df.column(OBJECT_COL_NAME).unwrap().as_materialized_series());
+            let objects = df.column(OBJECT_COL_NAME).unwrap().as_materialized_series();
+            distinct_objects = code_runs(objects);
+            object_filter = distinct_objects.and_then(|runs| build_code_filter(objects, runs));
         }
         object_sort = Some(StoredTriples::new(df, triples_folder)?);
         object_sparse_index = Some(sparse);
@@ -1501,6 +1565,8 @@ fn create_indices(
         object_sparse_index,
         subject_filter,
         object_filter,
+        distinct_subjects,
+        distinct_objects,
         height,
     })
 }
@@ -1571,6 +1637,17 @@ impl StoredTriples {
             StoredTriples::TriplesInMemory(_) => false,
             StoredTriples::TriplesOnDisk(disk) => disk.is_remote_only(),
             StoredTriples::TriplesOnDiskView(view) => view.is_remote_only(),
+        }
+    }
+
+    /// The number of runs of equal codes of column `c` (see [code_runs]), when the triples are
+    /// held in memory.
+    fn in_memory_code_runs(&self, c: &str) -> Option<usize> {
+        match self {
+            StoredTriples::TriplesInMemory(mem) => {
+                code_runs(mem.df.as_ref()?.column(c).ok()?.as_materialized_series())
+            }
+            _ => None,
         }
     }
 

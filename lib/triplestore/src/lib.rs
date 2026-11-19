@@ -95,6 +95,8 @@ pub struct Triplestore {
     pub(crate) vector_index: HashMap<NamedGraph, VectorIndex>,
     pub global_cats: LockedCats,
     n_triples_deleted: usize,
+    /// Exact whole-table distinct subject and object counts, by the generations of the tables.
+    pub(crate) distinct_count_cache: sparql::lazy_graph_patterns::count::DistinctCountCache,
     pub udf_registry: Arc<UdfRegistry>,
     /// Search graphs of path searches.
     pub(crate) path_graph_cache: sparql::lazy_graph_patterns::path_search::PathGraphCache,
@@ -501,6 +503,7 @@ impl Triplestore {
                 vector_index: HashMap::new(),
                 global_cats: LockedCats::new(cats_image),
                 n_triples_deleted: 0,
+                distinct_count_cache: Default::default(),
                 path_graph_cache: Default::default(),
                 udf_registry: Arc::new(UdfRegistry::new()),
                 federation: self.federation.clone(),
@@ -903,6 +906,7 @@ impl Triplestore {
             vector_index: HashMap::new(),
             global_cats: locked_cats,
             n_triples_deleted: 0,
+            distinct_count_cache: Default::default(),
             path_graph_cache: Default::default(),
             udf_registry: Arc::new(UdfRegistry::new()),
             federation: Arc::new(FederationSettings::default()),

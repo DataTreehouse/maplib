@@ -31,6 +31,10 @@ fast_paths! {
     CountDistinctBitset => "count_distinct.bitset",
     CountDistinctBitsetParallel => "count_distinct.bitset_parallel",
     CountDistinctSorted => "count_distinct.sorted",
+    // Whole-table distinct counts: the exact count of a table's single segment, or the cache
+    // keyed by the generations of the tables counted.
+    CountDistinctSegmentExact => "count_distinct.segment_exact",
+    CountDistinctCached => "count_distinct.cached",
     // FILTER(?r = 1) over RANK.
     RankOne => "rank_one.applied",
     RankOneWindow => "rank_one.window",

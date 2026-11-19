@@ -1,5 +1,5 @@
 mod bgp_types;
-mod count;
+pub(crate) mod count;
 mod count_joins;
 mod distinct;
 mod extend;
