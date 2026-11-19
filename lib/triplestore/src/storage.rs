@@ -1903,8 +1903,10 @@ fn get_lookup_offsets(
     height: usize,
 ) -> Vec<(usize, usize)> {
     if lookup_offsets_should_seek(trgs.len(), sparse_map.len()) {
+        fast_path::hit(FastPath::LookupSeek);
         lookup_offsets_seek(trgs, sparse_map, height)
     } else {
+        fast_path::hit(FastPath::LookupWalk);
         lookup_offsets_walk(trgs, sparse_map, height)
     }
 }

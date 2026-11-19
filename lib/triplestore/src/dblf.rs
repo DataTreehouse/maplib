@@ -18,6 +18,7 @@ use representation::{
     BaseRDFNodeType, RDFNodeState, OBJECT_COL_NAME, PREDICATE_COL_NAME, SUBJECT_COL_NAME,
 };
 use std::collections::{HashMap, HashSet};
+use utils::fast_path::{self, FastPath};
 
 impl Triplestore {
     /// The number of triples with the given predicate in the graph, or in the default graphs of
@@ -613,8 +614,10 @@ fn find_target_codes(triples: &Triples, n: usize, by_object: bool) -> bool {
     if !triples.has_code_filters(by_object) {
         return false;
     }
-    n <= MAX_FILTERED_TARGETS
-        || (n <= MAX_FILTERED_REMOTE_TARGETS && triples.has_remote_segments(by_object))
+    let find = n <= MAX_FILTERED_TARGETS
+        || (n <= MAX_FILTERED_REMOTE_TARGETS && triples.has_remote_segments(by_object));
+    fast_path::hit_if(find, FastPath::FilterTargetCodes, FastPath::FilterTooManyTargets);
+    find
 }
 
 fn single_triples_to_lf(

@@ -61,6 +61,10 @@ WALK_MAX_STARTS = 64  # path.rs
 WALK_MAX_LOOKUPS = 256  # path.rs
 SERIAL_CODES = 1 << 16  # count.rs
 MAX_BUFFER_HEIGHT = 4096  # deduplication.rs
+MAX_FILTERED_TARGETS = 128  # dblf.rs (1,024 when a segment is in object storage)
+# storage.rs: seek in the sparse index when targets * log2(keys) <= keys, with a key per 100 rows.
+# The 65,537-row :cd65537 table has 656 keys (10 bits): seek up to 65 targets.
+SEEK_TARGETS = 65
 
 
 # ---------------------------------------------------------------------------
@@ -817,10 +821,45 @@ case("dictionary_absent_values",
 case("dictionary_absent_lang",
      'SELECT ?s WHERE { ?s :label "label 3"@de }', ["s"])
 
+
+
+def one_segment(w: World) -> bool:
+    """The states where :cd65537 is one segment without a buffer, so its sparse index has the
+    keys the seek threshold is computed from."""
+    return w.state in ("fresh", "object_index")
+
+
+# Lookups of few targets seek in the sparse index, of many walk it.
+for n, seek in ((SEEK_TARGETS, True), (SEEK_TARGETS + 1, False)):
+    case(f"lookup_seek_{n}",
+         f"SELECT ?s ?o WHERE {{ VALUES ?s {{ {values('x', range(0, n * 997, 997))} }} ?s :cd65537 ?o }}",
+         ["s", "o"],
+         hits={"lookup.seek": lambda w, seek=seek: seek if one_segment(w) else None,
+               "lookup.walk": lambda w, seek=seek: (not seek) if one_segment(w) else None})
+case("lookup_seek_few",
+     f"SELECT ?s ?o WHERE {{ VALUES ?s {{ {values('x', [3, 77, 4000, 65536, 99999])} }} ?s :cd65537 ?o }}",
+     ["s", "o"], hits={"lookup.seek": True})
+case("lookup_walk_many",
+     f"SELECT ?s ?o WHERE {{ VALUES ?s {{ {values('x', range(0, 60000, 30))} }} ?s :cd65537 ?o }}",
+     ["s", "o"], hits={"lookup.walk": True})
+case("lookup_seek_absent_and_mixed",
+     """SELECT ?s ?o WHERE { VALUES ?s { :x0 :absent :m3 "lit" 7 } ?s :cd65537 ?o }""",
+     ["s", "o"])
+
+# Codes of lookup targets are found for the segment filters only for up to 128 targets.
+for n, few in ((MAX_FILTERED_TARGETS, True), (MAX_FILTERED_TARGETS + 1, False)):
+    case(f"filter_targets_{n}",
+         f"SELECT ?s ?o WHERE {{ VALUES ?s {{ {values('x', range(0, n * 401, 401))} }} ?s :many ?o }}",
+         ["s", "o"],
+         hits={"segment_filter.target_codes": lambda w, few=few: few and with_filters(w),
+               "segment_filter.too_many_targets": lambda w, few=few: (not few) and with_filters(w)})
+
 # Mixed types, named graphs and duplicates through the general paths.
 case("mixed_all", "SELECT ?s ?o WHERE { ?s :mix ?o }", ["s", "o"])
 case("mixed_graphs", "SELECT ?g ?s ?o WHERE { GRAPH ?g { ?s :mix ?o } }", ["g", "s", "o"])
 case("mixed_distinct", "SELECT DISTINCT ?o WHERE { ?s :mix ?o }", ["o"])
+case("order_by_mixed_numbers", "SELECT ?o ?s WHERE { ?s :num ?o } ORDER BY ?o ?s", ["o", "s"],
+     ordered=True)
 case("order_by", "SELECT ?o ?s WHERE { ?s :score ?o } ORDER BY DESC(?o) ?s", ["o", "s"],
      ordered=True)
 case("order_by_limit", "SELECT ?s WHERE { ?s :score ?o } ORDER BY ?o ?s LIMIT 17", ["s"],
@@ -889,11 +928,9 @@ def test_dictionary_bloom_off(request):
     assert r.returncode == 0, r.stdout[-6000:] + r.stderr[-3000:]
 
 
-@pytest.mark.xfail(strict=True, reason="ORDER BY puts 0.0 (xsd:double) before 0 (xsd:integer) "
-                   "instead of treating them as equal and ordering by the next key")
 def test_order_by_equal_numbers_of_two_types():
-    """Found by this suite (2026-11-19): `0` and `0.0` are equal for `<`, so ORDER BY ?o ?s
-    orders them by ?s, as Oxigraph does; maplib orders the doubles first."""
+    """Found by this suite (2026-11-19, fixed in f8c36235): `0` and `0.0` are equal for `<`, so
+    ORDER BY ?o ?s orders them by ?s, as Oxigraph does; maplib ordered the doubles first."""
     data = f"""{iri('a')} {iri('n')} "0.0"^^<{XSD}double> .
 {iri('b')} {iri('n')} {int_lit(0)} .
 {iri('c')} {iri('n')} "0.0"^^<{XSD}double> .

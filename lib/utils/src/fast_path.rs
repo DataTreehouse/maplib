@@ -45,6 +45,12 @@ fast_paths! {
     // Per-segment Bloom filters.
     SegmentFilterSkip => "segment_filter.skip",
     TableFilterSkip => "segment_filter.table_skip",
+    // Codes of lookup targets found for the filters: at most 128 (1,024 with remote segments).
+    FilterTargetCodes => "segment_filter.target_codes",
+    FilterTooManyTargets => "segment_filter.too_many_targets",
+    // Sparse index lookups: seek per target when targets x log2(keys) <= keys, else walk.
+    LookupSeek => "lookup.seek",
+    LookupWalk => "lookup.walk",
     // The Bloom filter in front of the on-disk dictionary (maplib Enterprise Edition).
     DiskDictionaryBloomAbsent => "disk_dictionary_bloom.absent",
     // Basic graph patterns on codes.
