@@ -285,9 +285,27 @@ impl Triples {
         let subjects: Option<Vec<&str>> = subjects
             .as_ref()
             .map(|s| s.iter().map(|x| x.as_str()).collect());
+        // The subject codes to delete, to skip the segments whose filters hold none of them.
+        let subject_codes: Option<Vec<u32>> = (self.subject_type.stored_cat()
+            && self.has_code_filters(false)
+            && matches!(
+                to_delete.column(SUBJECT_COL_NAME).unwrap().dtype(),
+                DataType::UInt32
+            ))
+        .then(|| {
+            let mut codes = Vec::new();
+            extend_codes(&mut codes, to_delete.column(SUBJECT_COL_NAME).unwrap());
+            distinct_codes(codes)
+        });
         let mut segments = vec![];
         let mut found = vec![];
         for (i, seg) in self.segments.iter().enumerate() {
+            if subject_codes
+                .as_ref()
+                .is_some_and(|codes| !codes.iter().any(|c| seg.may_hold_code(*c, false)))
+            {
+                continue;
+            }
             let (subject_rows, triples) = matching_rows(
                 seg.subject_sort.as_ref().unwrap(),
                 seg.subject_sparse_index.as_ref().unwrap(),

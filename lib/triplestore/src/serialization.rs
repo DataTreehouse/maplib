@@ -5,7 +5,7 @@ use super::{
 use crate::graph_map::GraphTriplesMap;
 use crate::query_cache::QueryCache;
 use crate::errors::TriplestoreError;
-use crate::storage::{PredicateTriples, Triples, DISK_ROW_GROUP_SIZE};
+use crate::storage::{segment_filter_bits, PredicateTriples, Triples, DISK_ROW_GROUP_SIZE};
 use external_sparql::federation::FederationSettings;
 use file_io::remote::{RemoteLocation, RemoteOptions, TempFile};
 use file_io::FileIOError;
@@ -51,6 +51,10 @@ const SO_TRIPLES_FILE: &str = "so_triples.parquet";
 const SO_SPARSE_INDEX_FILE: &str = "so_index.parquet";
 const OS_TRIPLES_FILE: &str = "os_triples.parquet";
 const OS_SPARSE_INDEX_FILE: &str = "os_index.parquet";
+/// Bloom filters of the subject and object codes (see `utils::bloom`). Serializations without
+/// them are read with no filters, which lets every lookup through.
+const SO_FILTER_FILE: &str = "so_filter.bin";
+const OS_FILTER_FILE: &str = "os_filter.bin";
 const METADATA_FILE: &str = "metadata.json";
 /// Triple tables use the row group size of disk storage, as disk storage deserializes by copying
 /// the files and reads whole row groups for lookups through the sparse indices. Sparse indices
@@ -158,6 +162,7 @@ impl Triplestore {
         self.compact()?;
 
         let mut to_serialize = vec![];
+        let mut filters = vec![];
         let mut triples_uuid_map = HashMap::new();
         let mut heights = HashMap::new();
 
@@ -176,6 +181,11 @@ impl Triplestore {
                     let pb_subjects_index = rel(SO_SPARSE_INDEX_FILE);
                     let pb_objects = rel(OS_TRIPLES_FILE);
                     let pb_objects_index = rel(OS_SPARSE_INDEX_FILE);
+                    for (name, by_object) in [(SO_FILTER_FILE, false), (OS_FILTER_FILE, true)] {
+                        if let Some(bytes) = triples.code_filter_bytes(by_object) {
+                            filters.push((rel(name), bytes));
+                        }
+                    }
                     heights.insert(key.clone(), triples.len());
                     triples_uuid_map.insert(key, value);
 
@@ -240,6 +250,9 @@ impl Triplestore {
             })
             .collect();
         res?;
+        for (rel, bytes) in filters {
+            target.write_bytes(&rel, &bytes)?;
+        }
 
         self.global_cats
             .read()
@@ -353,6 +366,21 @@ impl Triplestore {
                             } else {
                                 (None, None)
                             };
+                        // The filters are small and read now, so that lookups of absent codes in
+                        // tables in object storage need not download the tables.
+                        let read_filter = |name: &str| -> Result<_, TripleSerializationError> {
+                            let f = file(name);
+                            if segment_filter_bits() == 0 || !f.exists() {
+                                return Ok(None);
+                            }
+                            Ok(utils::bloom::SplitBlockBloom::from_bytes(&f.read()?))
+                        };
+                        let subject_filter = read_filter(SO_FILTER_FILE)?;
+                        let object_filter = if object_subject_file.is_some() {
+                            read_filter(OS_FILTER_FILE)?
+                        } else {
+                            None
+                        };
                         let triples = Triples::from_serialization(
                             subject_object_file,
                             subject_object_index_df,
@@ -362,6 +390,8 @@ impl Triplestore {
                             object_type.clone(),
                             triples_folder.as_deref(),
                             heights.get(&uuid).copied(),
+                            subject_filter,
+                            object_filter,
                         )?;
                         Ok((graph, predicate, subject_type, object_type, triples))
                     })

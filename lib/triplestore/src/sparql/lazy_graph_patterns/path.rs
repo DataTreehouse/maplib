@@ -1720,21 +1720,39 @@ impl<'a> CodeWalk<'a> {
         if codes.is_empty() {
             return Ok(empty());
         }
-        let mut names = Vec::with_capacity(codes.len());
-        for c in &codes {
-            names.push(
-                self.cats
+        // The frontier of each table, without the codes its filters reject, so that only codes
+        // some table may hold are decoded.
+        let frontiers: Vec<Vec<u32>> = tables
+            .iter()
+            .map(|t| {
+                codes
+                    .iter()
+                    .copied()
+                    .filter(|c| t.may_hold_code(*c, key.1))
+                    .collect()
+            })
+            .collect();
+        let mut names: HashMap<u32, _> = HashMap::new();
+        for c in frontiers.iter().flatten() {
+            if !names.contains_key(c) {
+                let name = self
+                    .cats
                     .maybe_decode_of_type(c, &BaseRDFNodeType::IRI)
-                    .ok_or(WalkAborted)?,
-            );
+                    .ok_or(WalkAborted)?;
+                names.insert(*c, name);
+            }
         }
-        let mut strings: Vec<&str> = names.iter().map(|s| s.as_ref()).collect();
-        strings.sort_unstable();
         let mut edges = vec![];
-        for t in tables {
+        for (t, frontier) in tables.iter().zip(&frontiers) {
+            if frontier.is_empty() {
+                continue;
+            }
+            let mut targets: Vec<(&str, u32)> =
+                frontier.iter().map(|c| (&*names[c], *c)).collect();
+            targets.sort_unstable();
             Self::spend(&self.lookups, t.n_segments(), WALK_MAX_LOOKUPS)?;
             let rows = t
-                .in_memory_edges_from(&strings, &codes, key.1, &mut edges)
+                .in_memory_edges_from(&targets, frontier, key.1, &mut edges)
                 .ok()
                 .flatten()
                 .ok_or(WalkAborted)?;

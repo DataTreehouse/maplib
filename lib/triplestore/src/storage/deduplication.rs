@@ -154,6 +154,7 @@ impl Triples {
             for seg in self.segments.iter_mut() {
                 seg.object_sort = None;
                 seg.object_sparse_index = None;
+                seg.object_filter = None;
             }
             self.object_indexing_enabled = false;
             return Ok(());
@@ -229,13 +230,17 @@ impl Triples {
         if self.triples_folder.is_some() {
             return Ok(Some(self.subject_lookup_index(df, cats)?));
         }
-        let Some(subjects) = subject_strings(df, cats, &self.subject_type) else {
+        let Some(subjects) = self.subject_targets(df, cats) else {
             return Ok(None);
         };
-        let strs: Vec<&str> = subjects.iter().map(|x| x.as_str()).collect();
         let mut ranges = Vec::with_capacity(self.segments.len());
         let mut rows = 0;
         for seg in &self.segments {
+            let strs = segment_strings(seg, &subjects);
+            if strs.is_empty() {
+                ranges.push(vec![]);
+                continue;
+            }
             let offsets = get_lookup_offsets(
                 &strs,
                 &seg.subject_sparse_index.as_ref().unwrap().map,
@@ -276,11 +281,15 @@ impl Triples {
         cats: &Cats,
     ) -> Result<SubjectObjectIndex, TriplestoreError> {
         let mut index = SubjectObjectIndex::new(&self.subject_type, &self.object_type)?;
-        let subjects = subject_strings(df, cats, &self.subject_type);
+        let subjects = self.subject_targets(df, cats);
         let mut lfs = vec![];
         for seg in &self.segments {
             if let Some(subjects) = &subjects {
-                let strs: Vec<&str> = subjects.iter().map(|x| x.as_str()).collect();
+                let strs = segment_strings(seg, subjects);
+                if strs.is_empty() {
+                    // The filter of the segment holds none of the subjects.
+                    continue;
+                }
                 let offsets = get_lookup_offsets(
                     &strs,
                     &seg.subject_sparse_index.as_ref().unwrap().map,
@@ -322,24 +331,41 @@ impl Triples {
     }
 }
 
-/// The sorted, distinct subject strings of `df`, or None if subjects are not categorical.
-fn subject_strings(
-    df: &DataFrame,
-    cats: &Cats,
-    subject_type: &representation::BaseRDFNodeType,
-) -> Option<Vec<String>> {
-    let encs = maybe_get_cat_encs(cats, subject_type)?;
-    let mut codes = Vec::new();
-    extend_codes(&mut codes, df.column(SUBJECT_COL_NAME).unwrap());
-    let us: Vec<_> = distinct_codes(codes).into_iter().map(Some).collect();
-    let mut strings: Vec<String> = encs
-        .maps
-        .decode_batch(&us)
-        .into_iter()
-        .map(|x| x.unwrap().into_owned())
-        .collect();
-    strings.sort_unstable();
-    Some(strings)
+impl Triples {
+    /// The distinct subjects of `df` that the filter of some segment may hold, as (string,
+    /// code) sorted by string, or None if subjects are not categorical. Subjects that no
+    /// segment holds are not decoded. The write buffer is deduplicated against as a whole.
+    fn subject_targets(&self, df: &DataFrame, cats: &Cats) -> Option<Vec<(String, u32)>> {
+        let encs = maybe_get_cat_encs(cats, &self.subject_type)?;
+        let mut codes = Vec::new();
+        extend_codes(&mut codes, df.column(SUBJECT_COL_NAME).unwrap());
+        let codes: Vec<u32> = distinct_codes(codes)
+            .into_iter()
+            .filter(|c| self.segments_may_hold_code(*c, false))
+            .collect();
+        if codes.is_empty() {
+            return Some(vec![]);
+        }
+        let us: Vec<_> = codes.iter().map(|c| Some(*c)).collect();
+        let mut targets: Vec<(String, u32)> = encs
+            .maps
+            .decode_batch(&us)
+            .into_iter()
+            .zip(codes)
+            .map(|(x, c)| (x.unwrap().into_owned(), c))
+            .collect();
+        targets.sort_unstable();
+        Some(targets)
+    }
+}
+
+/// The strings of the `targets` (sorted by string) that the subject filter of `seg` may hold.
+fn segment_strings<'a>(seg: &TriplesSegment, targets: &'a [(String, u32)]) -> Vec<&'a str> {
+    targets
+        .iter()
+        .filter(|(_, c)| seg.may_hold_code(*c, false))
+        .map(|(s, _)| s.as_str())
+        .collect()
 }
 
 /// Widens lookup offsets to whole row groups and merges the ones that touch, or returns None if

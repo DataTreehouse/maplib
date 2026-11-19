@@ -44,6 +44,7 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, OnceLock};
 use std::time::Instant;
 use tracing::{debug, instrument, trace, warn};
+use utils::bloom::SplitBlockBloom;
 use utils::polars::collect_in_memory;
 use uuid::Uuid;
 
@@ -53,6 +54,70 @@ const OFFSET_STEP: usize = 100;
 pub(crate) const DISK_ROW_GROUP_SIZE: usize = 16_384;
 const SPARSE_INDEX_KEY_COLUMN_NAME: &str = "key";
 const SPARSE_INDEX_VALUE_COLUMN_NAME: &str = "value";
+/// Bits per key of the per-segment code filters (default 10, about 1% false positives); 0 turns
+/// the filters off, both when segments are built and when they are deserialized.
+pub const SEGMENT_FILTER_BITS_ENV: &str = "MAPLIB_SEGMENT_FILTER_BITS";
+const DEFAULT_SEGMENT_FILTER_BITS: usize = 10;
+
+pub(crate) fn segment_filter_bits() -> usize {
+    std::env::var(SEGMENT_FILTER_BITS_ENV)
+        .ok()
+        .and_then(|s| s.trim().parse().ok())
+        .unwrap_or(DEFAULT_SEGMENT_FILTER_BITS)
+}
+
+/// A Bloom filter of the dictionary codes of the subjects (or objects) of a segment. Segments
+/// are immutable, so a filter is never updated: deletes leave it a superset, which is still
+/// correct, and merges and compaction build new segments with new filters.
+pub(crate) type CodeFilter = Arc<SplitBlockBloom>;
+
+/// The dictionary codes of lookup targets, aligned with the targets; None for a target without a
+/// code, which is always looked up.
+pub(crate) type TargetCodes<'a> = Option<&'a [Option<u32>]>;
+
+/// A filter of the codes of a column sorted so that equal codes are adjacent, built from the
+/// runs of equal codes. None if the filters are off or the column does not hold codes.
+fn build_code_filter(c: &Series) -> Option<CodeFilter> {
+    let bits = segment_filter_bits();
+    let ca = c.u32().ok()?;
+    if bits == 0 || ca.is_empty() {
+        return None;
+    }
+    let mut runs = 0usize;
+    let mut prev = None;
+    for u in ca.iter().flatten() {
+        if prev != Some(u) {
+            runs += 1;
+            prev = Some(u);
+        }
+    }
+    let mut f = SplitBlockBloom::new(runs, bits);
+    let mut prev = None;
+    for u in ca.iter().flatten() {
+        if prev != Some(u) {
+            f.insert_code(u);
+            prev = Some(u);
+        }
+    }
+    Some(Arc::new(f))
+}
+
+/// The targets whose code may be in `filter`. Without a filter or codes, all targets.
+fn filter_targets<'a, T: ?Sized>(
+    targets: &[&'a T],
+    codes: TargetCodes,
+    filter: &Option<CodeFilter>,
+) -> Vec<&'a T> {
+    match (codes, filter) {
+        (Some(codes), Some(f)) => targets
+            .iter()
+            .zip(codes)
+            .filter(|(_, c)| c.is_none_or(|c| f.may_contain_code(c)))
+            .map(|(t, _)| *t)
+            .collect(),
+        _ => targets.to_vec(),
+    }
+}
 
 // const MIN_SIZE_CACHING: usize = 100_000_000; //100MB
 
@@ -153,6 +218,8 @@ impl Triples {
         object_type: BaseRDFNodeType,
         triples_folder: Option<&Path>,
         height: Option<usize>,
+        subject_filter: Option<SplitBlockBloom>,
+        object_filter: Option<SplitBlockBloom>,
     ) -> Result<Self, TriplestoreError> {
         let object_indexing_enabled = object_subject_file.is_some();
         // Models serialized before all xsd:dateTime values were stored as UTC instants can hold
@@ -177,6 +244,8 @@ impl Triples {
             subject_sparse_index: Some(SparseIndex::from_data_frame(subject_object_index_df)),
             object_sort,
             object_sparse_index: object_subject_index_df.map(SparseIndex::from_data_frame),
+            subject_filter: subject_filter.map(Arc::new),
+            object_filter: object_filter.map(Arc::new),
         };
 
         Ok(Self {
@@ -591,12 +660,25 @@ impl Triples {
         subjects: &Option<Vec<&NamedOrBlankNode>>,
         objects: &Option<Vec<&Term>>,
     ) -> Result<Vec<(LazyFrame, usize)>, TriplestoreError> {
+        self.get_lazy_frames_with_codes(subjects, objects, None, None)
+    }
+
+    /// As [Self::get_lazy_frames], with the dictionary codes of the subjects and objects (aligned
+    /// with them): segments whose filters reject every target are not read.
+    pub(crate) fn get_lazy_frames_with_codes(
+        &self,
+        subjects: &Option<Vec<&NamedOrBlankNode>>,
+        objects: &Option<Vec<&Term>>,
+        subject_codes: TargetCodes,
+        object_codes: TargetCodes,
+    ) -> Result<Vec<(LazyFrame, usize)>, TriplestoreError> {
         let mut all_sms = vec![];
         for s in &self.segments {
             all_sms.extend(s.get_lazy_frames(
                 subjects,
                 objects,
-                &self.subject_type,
+                subject_codes,
+                object_codes,
                 &self.object_type,
             )?);
         }
@@ -604,6 +686,33 @@ impl Triples {
         // whole buffer.
         all_sms.extend(self.buffer_lazy_frame());
         Ok(all_sms)
+    }
+
+    /// Whether some segment has a subject (or object, if `by_object`) filter, so that codes of
+    /// lookup targets are worth finding.
+    pub(crate) fn has_code_filters(&self, by_object: bool) -> bool {
+        self.segments.iter().any(|s| s.code_filter(by_object).is_some())
+    }
+
+    /// False if the table can not hold a subject (or object, if `by_object`) with `code`: no
+    /// segment's filter holds it and the write buffer, which has no filter, is empty.
+    pub(crate) fn may_hold_code(&self, code: u32, by_object: bool) -> bool {
+        self.buffer_height() > 0 || self.segments_may_hold_code(code, by_object)
+    }
+
+    /// False if no segment can hold a subject (or object) with `code`; says nothing about the
+    /// write buffer.
+    pub(crate) fn segments_may_hold_code(&self, code: u32, by_object: bool) -> bool {
+        self.segments.iter().any(|s| s.may_hold_code(code, by_object))
+    }
+
+    /// The subject (or object) filter of the single segment of a compacted table, for
+    /// serialization.
+    pub(crate) fn code_filter_bytes(&self, by_object: bool) -> Option<Vec<u8>> {
+        match self.segments.as_slice() {
+            [s] => s.code_filter(by_object).map(|f| f.to_bytes()),
+            _ => None,
+        }
     }
 
     /// The rows of a single subject with dictionary code `code`, read eagerly when every segment
@@ -618,6 +727,9 @@ impl Triples {
         let strings = get_subject_strings(&[subject]);
         let mut out = vec![];
         for s in &self.segments {
+            if !s.may_hold_code(code, false) {
+                continue;
+            }
             let (Some(StoredTriples::TriplesInMemory(mem)), Some(index)) =
                 (&s.subject_sort, &s.subject_sparse_index)
             else {
@@ -682,13 +794,14 @@ impl Triples {
     }
 
     /// The (from, to) dictionary codes of the rows whose subject (or object, if `by_object`) is
-    /// one of the nodes with the sorted `strings` and the sorted `codes`, appended to `out`, read
-    /// from the sparse index ranges of each segment. Returns the number of rows read, or None
-    /// when a segment is not in memory or, for `by_object`, has no object sort; the caller then
-    /// reads the table some other way. Both columns must hold dictionary codes (u32).
+    /// one of the `targets` (string and code, sorted by string) with the sorted `codes`,
+    /// appended to `out`, read from the sparse index ranges of each segment whose filter may
+    /// hold one of them. Returns the number of rows read, or None when a segment is not in
+    /// memory or, for `by_object`, has no object sort; the caller then reads the table some
+    /// other way. Both columns must hold dictionary codes (u32).
     pub(crate) fn in_memory_edges_from(
         &self,
-        strings: &[&str],
+        targets: &[(&str, u32)],
         codes: &[u32],
         by_object: bool,
         out: &mut Vec<(u32, u32)>,
@@ -714,7 +827,15 @@ impl Triples {
             if s.height == 0 || df.height() == 0 {
                 continue;
             }
-            let offsets = get_lookup_offsets(strings, &index.map, s.height);
+            let strings: Vec<&str> = targets
+                .iter()
+                .filter(|(_, c)| s.may_hold_code(*c, by_object))
+                .map(|(t, _)| *t)
+                .collect();
+            if strings.is_empty() {
+                continue;
+            }
+            let offsets = get_lookup_offsets(&strings, &index.map, s.height);
             let ranges = coalesce_lookup_ranges(offsets, s.height)
                 .unwrap_or_else(|| vec![(0, df.height())]);
             let (Ok(from), Ok(to)) = (
@@ -787,7 +908,7 @@ impl Triples {
     pub(crate) fn get_lazy_frame_slices(&self) -> Result<Option<Vec<LazyFrame>>, TriplestoreError> {
         let mut all_lfs = vec![];
         for s in &self.segments {
-            let lf_is = s.get_lazy_frames(&None, &None, &self.subject_type, &self.object_type)?;
+            let lf_is = s.get_lazy_frames(&None, &None, None, None, &self.object_type)?;
             for (lf, _) in lf_is {
                 all_lfs.push(lf);
             }
@@ -931,9 +1052,28 @@ pub(crate) struct TriplesSegment {
     subject_sparse_index: Option<SparseIndex>,
     object_sort: Option<StoredTriples>,
     object_sparse_index: Option<SparseIndex>,
+    /// The codes of the subjects, when they are dictionary codes and the filters are on.
+    subject_filter: Option<CodeFilter>,
+    /// The codes of the objects, when there is an object sparse index over dictionary codes.
+    object_filter: Option<CodeFilter>,
 }
 
 impl TriplesSegment {
+    fn code_filter(&self, by_object: bool) -> Option<&CodeFilter> {
+        if by_object {
+            self.object_filter.as_ref()
+        } else {
+            self.subject_filter.as_ref()
+        }
+    }
+
+    /// False if the segment holds no subject (or object, if `by_object`) with `code`.
+    #[inline]
+    pub(crate) fn may_hold_code(&self, code: u32, by_object: bool) -> bool {
+        self.code_filter(by_object)
+            .is_none_or(|f| f.may_contain_code(code))
+    }
+
     pub(crate) fn get_sparse_index_as_data_frame(
         &self,
         subject_object_sort: bool,
@@ -1070,13 +1210,7 @@ impl TriplesSegment {
         triples_folder: Option<&Path>,
     ) -> Result<Self, TriplestoreError> {
         df.rechunk_mut();
-        let IndexedTriples {
-            subject_sort,
-            subject_sparse_index,
-            object_sort,
-            object_sparse_index,
-            height,
-        } = create_indices(
+        let indexed = create_indices(
             df,
             object_indexing_enabled,
             subject_type,
@@ -1085,25 +1219,23 @@ impl TriplesSegment {
             compacted,
             triples_folder,
         )?;
-        let triples = TriplesSegment {
-            height,
-            subject_sort: Some(subject_sort),
-            subject_sparse_index: Some(subject_sparse_index),
-            object_sort,
-            object_sparse_index,
-        };
-        Ok(triples)
+        Ok(indexed.into_segment())
     }
 
     pub(crate) fn get_lazy_frames(
         &self,
         subjects: &Option<Vec<&NamedOrBlankNode>>,
         objects: &Option<Vec<&Term>>,
-        _subject_type: &BaseRDFNodeType,
+        subject_codes: TargetCodes,
+        object_codes: TargetCodes,
         object_type: &BaseRDFNodeType,
     ) -> Result<Vec<(LazyFrame, usize)>, TriplestoreError> {
         if let Some(subjects) = subjects {
-            let strings = get_subject_strings(subjects);
+            let subjects = filter_targets(subjects, subject_codes, &self.subject_filter);
+            if subjects.is_empty() {
+                return Ok(vec![]);
+            }
+            let strings = get_subject_strings(&subjects);
             let offsets = get_lookup_offsets(
                 &strings,
                 &self.subject_sparse_index.as_ref().unwrap().map,
@@ -1123,7 +1255,11 @@ impl TriplesSegment {
                 };
 
                 let offsets = if allow_pushdown {
-                    let strings = get_object_strings(objects);
+                    let objects = filter_targets(objects, object_codes, &self.object_filter);
+                    if objects.is_empty() {
+                        return Ok(vec![]);
+                    }
+                    let strings = get_object_strings(&objects);
                     let offsets = get_lookup_offsets(
                         strings.as_slice(),
                         &self.object_sparse_index.as_ref().unwrap().map,
@@ -1158,7 +1294,23 @@ struct IndexedTriples {
     subject_sparse_index: SparseIndex,
     object_sort: Option<StoredTriples>,
     object_sparse_index: Option<SparseIndex>,
+    subject_filter: Option<CodeFilter>,
+    object_filter: Option<CodeFilter>,
     height: usize,
+}
+
+impl IndexedTriples {
+    fn into_segment(self) -> TriplesSegment {
+        TriplesSegment {
+            height: self.height,
+            subject_sort: Some(self.subject_sort),
+            subject_sparse_index: Some(self.subject_sparse_index),
+            object_sort: self.object_sort,
+            object_sparse_index: self.object_sparse_index,
+            subject_filter: self.subject_filter,
+            object_filter: self.object_filter,
+        }
+    }
 }
 
 // DF should always be sorted by subjects underlying string
@@ -1182,6 +1334,11 @@ fn create_indices(
             .as_materialized_series(),
         subject_encs,
     );
+    let subject_filter = if subj_type.stored_cat() {
+        build_code_filter(df.column(SUBJECT_COL_NAME).unwrap().as_materialized_series())
+    } else {
+        None
+    };
     trace!(
         "Creating subject sparse map took {} seconds",
         now.elapsed().as_secs_f32()
@@ -1193,6 +1350,7 @@ fn create_indices(
     trace!("Storing triples took {}", store_now.elapsed().as_secs_f32());
     let mut object_sort = None;
     let mut object_sparse_index = None;
+    let mut object_filter = None;
 
     if should_index_by_objects {
         let object_now = Instant::now();
@@ -1230,6 +1388,10 @@ fn create_indices(
             object_encs,
         );
 
+        if obj_type.stored_cat() && !obj_type.is_lang_string() {
+            object_filter =
+                build_code_filter(df.column(OBJECT_COL_NAME).unwrap().as_materialized_series());
+        }
         object_sort = Some(StoredTriples::new(df, triples_folder)?);
         object_sparse_index = Some(sparse);
         trace!(
@@ -1242,6 +1404,8 @@ fn create_indices(
         subject_sparse_index,
         object_sort,
         object_sparse_index,
+        subject_filter,
+        object_filter,
         height,
     })
 }
@@ -1897,13 +2061,7 @@ fn compact_segments(
             df.column(SUBJECT_RANK_COL_NAME).is_ok() && df.column(OBJECT_RANK_COL_NAME).is_ok()
         );
     }
-    let IndexedTriples {
-        subject_sort,
-        subject_sparse_index,
-        object_sort,
-        object_sparse_index,
-        height,
-    } = create_indices(
+    let indexed = create_indices(
         df,
         object_indexing_enabled,
         subj_type,
@@ -1912,13 +2070,7 @@ fn compact_segments(
         false,
         triples_folder,
     )?;
-    Ok(TriplesSegment {
-        height,
-        subject_sort: Some(subject_sort),
-        subject_sparse_index: Some(subject_sparse_index),
-        object_sort,
-        object_sparse_index,
-    })
+    Ok(indexed.into_segment())
 }
 
 const SO_RANK_KEY_COL_NAME: &str = "so_rank_key";

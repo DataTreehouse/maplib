@@ -606,7 +606,28 @@ fn single_triples_to_lf(
             }
         }
     }
-    let lfs_and_heights = triples.get_lazy_frames(subjects, objects)?;
+    // The codes of the constants, for the segments' filters to leave out the segments (and the
+    // whole table) that can not hold them.
+    let subject_codes = match subjects {
+        Some(s) if triples.has_code_filters(false) => {
+            let terms: Vec<Term> = s.iter().map(|x| Term::from((*x).clone())).collect();
+            Some(encodings.term_codes(&terms, global_cats))
+        }
+        _ => None,
+    };
+    let object_codes = match objects {
+        Some(o) if triples.has_code_filters(true) => {
+            let terms: Vec<Term> = o.iter().map(|x| (*x).clone()).collect();
+            Some(encodings.term_codes(&terms, global_cats))
+        }
+        _ => None,
+    };
+    let lfs_and_heights = triples.get_lazy_frames_with_codes(
+        subjects,
+        objects,
+        subject_codes.as_deref(),
+        object_codes.as_deref(),
+    )?;
     if lfs_and_heights.is_empty() {
         return Ok(None);
     }
@@ -667,6 +688,8 @@ fn single_triples_to_lf(
 struct TermEncodings {
     encodings: HashMap<Term, Option<Expr>>,
     codes: HashMap<NamedNode, Option<u32>>,
+    /// The dictionary codes of IRIs, blank nodes and xsd:string literals.
+    term_codes: HashMap<Term, Option<u32>>,
 }
 
 impl TermEncodings {
@@ -705,6 +728,57 @@ impl TermEncodings {
         let c = global_cats.maybe_encode_iri_slice(&[Some(nn.as_str())])[0];
         self.codes.insert(nn.clone(), c);
         c
+    }
+
+    /// The dictionary codes of the terms: None for terms not in the dictionary and for terms
+    /// that tables do not store as codes with filters (literals other than xsd:string). The
+    /// terms not seen before are looked up with one dictionary lookup per kind of term.
+    fn term_codes(&mut self, terms: &[Term], global_cats: &Cats) -> Vec<Option<u32>> {
+        let mut iris: Vec<&Term> = vec![];
+        let mut blanks: Vec<&Term> = vec![];
+        let mut strings: Vec<&Term> = vec![];
+        let mut seen = HashSet::new();
+        for t in terms {
+            if self.term_codes.contains_key(t) || !seen.insert(t) {
+                continue;
+            }
+            match t {
+                Term::NamedNode(_) => iris.push(t),
+                Term::BlankNode(_) => blanks.push(t),
+                Term::Literal(l)
+                    if l.language().is_none() && l.datatype() == oxrdf::vocab::xsd::STRING =>
+                {
+                    strings.push(t)
+                }
+                _ => {
+                    self.term_codes.insert(t.clone(), None);
+                }
+            }
+        }
+        let value = |t: &Term| -> String {
+            match t {
+                Term::NamedNode(nn) => nn.as_str().to_string(),
+                Term::BlankNode(bl) => bl.as_str().to_string(),
+                Term::Literal(l) => l.value().to_string(),
+            }
+        };
+        for (group, kind) in [(iris, 0), (blanks, 1), (strings, 2)] {
+            if group.is_empty() {
+                continue;
+            }
+            let values: Vec<String> = group.iter().map(|t| value(t)).collect();
+            let strs: Vec<Option<&str>> = values.iter().map(|v| Some(v.as_str())).collect();
+            let found = match kind {
+                0 => global_cats.maybe_encode_iri_slice(&strs),
+                1 => global_cats.maybe_encode_blanks(&strs),
+                _ => global_cats
+                    .maybe_encode_literals(&strs, oxrdf::vocab::xsd::STRING.into_owned()),
+            };
+            for (t, c) in group.into_iter().zip(found) {
+                self.term_codes.insert(t.clone(), c);
+            }
+        }
+        terms.iter().map(|t| self.term_codes[t]).collect()
     }
 
     /// Encodes the IRIs with a single dictionary lookup.
