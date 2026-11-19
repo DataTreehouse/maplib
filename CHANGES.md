@@ -31,6 +31,7 @@
 - N-Triples, N-Quads and SPARQL JSON escape every control character below U+0020 in literals, as `\b`, `\f` or `\u00XX`; only tab, newline and carriage return were escaped before, and the others were written as is
 - A `FILTER` on a `RANK` that maplib answers without ranking the rows, e.g. keeping only `?rank = 1`, gave the rank column the type Int32 instead of Int64, so a `UNION` or `LATERAL` that combined it with ranked solutions failed with a type mismatch
 - maplib Enterprise Edition: validating a model in hybrid or disk storage a second time panicked with "not yet implemented" when the on-disk dictionary already had strings cached in memory. The strings of the codes that are not cached yet are now added to the cache
+- maplib Enterprise Edition: a dropped model in hybrid or disk storage kept its on-disk dictionary's DuckDB database open, with one thread per core, so a process that created a few hundred such models (a server, a test suite) failed with "failed to spawn thread". The database is now closed when the last model or table using its file is dropped
 
 ## v0.23.1
 ### Bug fixes
