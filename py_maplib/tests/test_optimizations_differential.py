@@ -61,7 +61,7 @@ WALK_MAX_STARTS = 64  # path.rs
 WALK_MAX_LOOKUPS = 256  # path.rs
 SERIAL_CODES = 1 << 16  # count.rs
 MAX_BUFFER_HEIGHT = 4096  # deduplication.rs
-MAX_FILTERED_TARGETS = 128  # dblf.rs (1,024 when a segment is in object storage)
+MAX_FILTERED_TARGETS = 128  # the cap of the old term path in dblf.rs, kept as a case size
 # storage.rs: seek in the sparse index when targets * log2(keys) <= keys, with a key per 100 rows.
 # The 65,537-row :cd65537 table has 656 keys (10 bits): seek up to 65 targets.
 SEEK_TARGETS = 65
@@ -855,13 +855,14 @@ case("lookup_seek_absent_and_mixed",
      """SELECT ?s ?o WHERE { VALUES ?s { :x0 :absent :m3 "lit" 7 } ?s :cd65537 ?o }""",
      ["s", "o"])
 
-# Codes of lookup targets are found for the segment filters only for up to 128 targets.
-for n, few in ((MAX_FILTERED_TARGETS, True), (MAX_FILTERED_TARGETS + 1, False)):
+# Pushed down values reach the lookups as dictionary codes, so every target is checked against
+# the segment filters, however many there are (the 128-target cap of the term path is gone).
+for n in (MAX_FILTERED_TARGETS, MAX_FILTERED_TARGETS + 1, 20 * MAX_FILTERED_TARGETS):
     case(f"filter_targets_{n}",
          f"SELECT ?s ?o WHERE {{ VALUES ?s {{ {values('x', range(0, n * 401, 401))} }} ?s :many ?o }}",
          ["s", "o"],
-         hits={"segment_filter.target_codes": lambda w, few=few: few and with_filters(w),
-               "segment_filter.too_many_targets": lambda w, few=few: (not few) and with_filters(w)})
+         hits={"segment_filter.target_codes": with_filters,
+               "segment_filter.too_many_targets": False})
 
 # COUNT over joins of constant-predicate patterns, counted on dictionary codes (no threshold
 # but the 16 UNION terms; taken or not by shape).

@@ -16,7 +16,7 @@ use super::Triplestore;
 use crate::statistics::sketch::ColumnSketch;
 use crate::statistics::TableStats;
 use oxrdf::{NamedNode, Term};
-use query_processing::pushdowns::Pushdowns;
+use query_processing::pushdowns::{PushdownValues, Pushdowns};
 use representation::dataset::{NamedGraph, QueryGraph};
 use representation::solution_mapping::SolutionMappings;
 use representation::BaseRDFNodeType;
@@ -213,19 +213,35 @@ fn term_fits(term: &Term, t: &BaseRDFNodeType) -> bool {
     }
 }
 
-/// The constant values of a subject or object: the term itself, or the values pushed down for
-/// its variable. None when it is unbound.
-fn values_of<'a>(
-    tp: &'a TermPattern,
-    pushdowns: &'a Pushdowns,
-) -> Option<Vec<&'a Term>> {
+/// The values pushed down for the variable of a subject or object. None when there are none.
+fn values_of<'a>(tp: &'a TermPattern, pushdowns: &'a Pushdowns) -> Option<&'a PushdownValues> {
     match tp {
-        TermPattern::Variable(v) => pushdowns
-            .variables_values
-            .get(v.as_str())
-            .map(|vs| vs.iter().collect()),
+        TermPattern::Variable(v) => pushdowns.variables_values.get(v.as_str()),
         _ => None,
     }
+}
+
+/// The number of pushed down values that can be stored in a column of type `t`: its codes of
+/// that type and its terms that fit. Codes are counted without decoding them.
+fn fitting_count(vs: &PushdownValues, t: &BaseRDFNodeType) -> usize {
+    vs.codes.get(t).map_or(0, |c| c.len()) + vs.terms.iter().filter(|x| term_fits(x, t)).count()
+}
+
+/// The estimated number of triples of a table (with object type `t`) whose object is one of the
+/// pushed down values: by code for the codes, and by term for the terms. Only for a few values
+/// (see [MAX_VALUES_LOOKED_UP]).
+fn fitting_frequency(vs: &PushdownValues, t: &BaseRDFNodeType, s: &TableStats) -> f64 {
+    let by_code: f64 = vs
+        .codes
+        .get(t)
+        .map_or(0.0, |c| c.iter().map(|c| s.object_frequency_code(*c)).sum());
+    let by_term: f64 = vs
+        .terms
+        .iter()
+        .filter(|x| term_fits(x, t))
+        .map(|x| s.object_frequency(x))
+        .sum();
+    by_code + by_term
 }
 
 fn constant_term(tp: &TermPattern) -> Option<Term> {
@@ -254,14 +270,10 @@ impl Triplestore {
     ) -> Vec<(NamedNode, (BaseRDFNodeType, BaseRDFNodeType), Arc<TableStats>)> {
         let predicates: Option<HashSet<NamedNode>> = match &tp.predicate {
             NamedNodePattern::NamedNode(n) => Some(HashSet::from([n.clone()])),
-            NamedNodePattern::Variable(v) => pushdowns.variables_values.get(v.as_str()).map(|vs| {
-                vs.iter()
-                    .filter_map(|t| match t {
-                        Term::NamedNode(nn) => Some(nn.clone()),
-                        _ => None,
-                    })
-                    .collect()
-            }),
+            NamedNodePattern::Variable(v) => pushdowns
+                .variables_values
+                .get(v.as_str())
+                .and_then(|vs| self.pushed_predicates(vs, dataset)),
         };
         let mut out = vec![];
         for g in dataset_graphs(dataset) {
@@ -292,6 +304,52 @@ impl Triplestore {
             }
         }
         out
+    }
+
+    /// The predicates of the queried graphs among the values pushed down for a variable
+    /// predicate. The graphs have few predicates, so their codes are looked up in the pushed codes
+    /// rather than the codes decoded. None (every predicate) when more than
+    /// [MAX_VALUES_CHECKED] values are pushed.
+    fn pushed_predicates(
+        &self,
+        vs: &PushdownValues,
+        dataset: &QueryGraph,
+    ) -> Option<HashSet<NamedNode>> {
+        let mut out: HashSet<NamedNode> = vs
+            .terms
+            .iter()
+            .filter_map(|t| match t {
+                Term::NamedNode(nn) => Some(nn.clone()),
+                _ => None,
+            })
+            .collect();
+        let codes = match vs.codes.get(&BaseRDFNodeType::IRI) {
+            Some(c) if !c.is_empty() => c,
+            _ => return Some(out),
+        };
+        if vs.len() > MAX_VALUES_CHECKED {
+            return None;
+        }
+        let mut candidates: Vec<NamedNode> = vec![];
+        for g in dataset_graphs(dataset) {
+            if let Some(pm) = self.graph_triples_map.get(&g) {
+                candidates.extend(pm.keys().cloned());
+            }
+        }
+        candidates.sort();
+        candidates.dedup();
+        let strs: Vec<Option<&str>> = candidates.iter().map(|p| Some(p.as_str())).collect();
+        let found = self
+            .global_cats
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .maybe_encode_iri_slice(&strs);
+        for (p, c) in candidates.into_iter().zip(found) {
+            if c.is_some_and(|c| codes.binary_search(&c).is_ok()) {
+                out.insert(p);
+            }
+        }
+        Some(out)
     }
 
     /// The estimated solutions of a triple pattern on its own, with the values pushed down so
@@ -342,7 +400,7 @@ impl Triplestore {
                     let k = if vs.len() > MAX_VALUES_CHECKED {
                         vs.len()
                     } else {
-                        vs.iter().filter(|t| term_fits(t, &st)).count()
+                        fitting_count(vs, &st)
                     } as f64;
                     ((k / ds).min(1.0), k.min(ds))
                 }
@@ -365,14 +423,13 @@ impl Triplestore {
                     let (r, k) = if vs.len() > MAX_VALUES_CHECKED {
                         (vs.len() as f64 * n / dobj, vs.len() as f64)
                     } else {
-                        let fitting: Vec<&&Term> =
-                            vs.iter().filter(|t| term_fits(t, &ot)).collect();
-                        let r = if fitting.len() <= MAX_VALUES_LOOKED_UP {
-                            fitting.iter().map(|t| s.object_frequency(t)).sum::<f64>()
+                        let k = fitting_count(vs, &ot);
+                        let r = if k <= MAX_VALUES_LOOKED_UP {
+                            fitting_frequency(vs, &ot, &s)
                         } else {
-                            fitting.len() as f64 * n / dobj
+                            k as f64 * n / dobj
                         };
-                        (r, fitting.len() as f64)
+                        (r, k as f64)
                     };
                     (Some(r.min(n)), k.min(dobj))
                 }

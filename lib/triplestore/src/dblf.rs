@@ -1,7 +1,7 @@
 use super::Triplestore;
 use crate::errors::TriplestoreError;
 use crate::sparql::QuerySettings;
-use crate::storage::Triples;
+use crate::storage::{LookupTarget, Triples};
 use oxrdf::{NamedNode, NamedOrBlankNode, Term};
 use polars::prelude::{
     as_struct, by_name, col, concat, lit, Expr, IntoLazy, LazyFrame, UnionArgs,
@@ -9,6 +9,7 @@ use polars::prelude::{
 use polars_core::prelude::{Column, DataFrame};
 use query_processing::expressions::{blank_node_enc, literal_enc, named_node_enc};
 use query_processing::graph_patterns::{distinct, union};
+use query_processing::pushdown_values::{is_code_type, term_base_type, PushdownValues};
 use query_processing::type_constraints::{bt_as_constrained, PossibleTypes};
 use representation::cats::Cats;
 use representation::dataset::{NamedGraph, QueryGraph};
@@ -17,7 +18,9 @@ use representation::solution_mapping::{BaseCatState, EagerSolutionMappings, Solu
 use representation::{
     BaseRDFNodeType, RDFNodeState, OBJECT_COL_NAME, PREDICATE_COL_NAME, SUBJECT_COL_NAME,
 };
+use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
+use std::sync::Arc;
 use utils::fast_path::{self, FastPath};
 
 impl Triplestore {
@@ -138,24 +141,24 @@ impl Triplestore {
     }
 
     #[allow(clippy::too_many_arguments)]
-    fn get_predicate_lf(
+    fn get_predicate_lf<'c>(
         &self,
         predicate_uri: &NamedNode,
         keep_subject: bool,
         keep_predicate: bool,
         keep_object: bool,
-        subjects: &Option<Vec<NamedOrBlankNode>>,
-        objects: &Option<Vec<Term>>,
+        subjects: &Option<PushdownValues>,
+        objects: &Option<PushdownValues>,
         subject_datatype_ctr: &Option<PossibleTypes>,
         object_datatype_ctr: &Option<PossibleTypes>,
         graph: &NamedGraph,
-        encodings: &mut TermEncodings,
+        cats: &'c Cats,
+        encodings: &mut TermEncodings<'c>,
     ) -> Result<Option<Vec<HalfBakedSolutionMappings>>, TriplestoreError> {
         if !self.graph_triples_map.contains_key(graph) {
             return Ok(None);
         }
         let mut all_sms = vec![];
-        let cats = self.global_cats.read()?;
         if let Some(map) = self.graph_triples_map.get(graph) {
             if map.contains_key(predicate_uri) {
                 let compatible_types = self.all_compatible_types(
@@ -172,7 +175,7 @@ impl Triplestore {
                         objects,
                         keep_subject,
                         keep_object,
-                        &cats,
+                        cats,
                         encodings,
                     )? {
                         all_sms.extend(sms);
@@ -192,6 +195,8 @@ impl Triplestore {
         }
     }
 
+    /// The triples with the predicates (all predicates if None), whose subjects and objects are
+    /// among the given terms (any if None), restricted to the types of the constraints.
     #[allow(clippy::too_many_arguments)]
     pub fn get_multi_predicates_solution_mappings(
         &self,
@@ -205,13 +210,47 @@ impl Triplestore {
         object_datatype_ctr: &Option<PossibleTypes>,
         dataset: &QueryGraph,
     ) -> Result<SolutionMappings, TriplestoreError> {
+        let subjects = subjects
+            .as_ref()
+            .map(|s| PushdownValues::from_terms(s.iter().map(|x| Term::from(x.clone())).collect()));
+        let objects = objects
+            .as_ref()
+            .map(|o| PushdownValues::from_terms(o.iter().cloned().collect()));
+        self.get_multi_predicates_solution_mappings_of_values(
+            predicate_uris,
+            subject_keep_rename,
+            predicate_keep_rename,
+            object_keep_rename,
+            &subjects,
+            &objects,
+            subject_datatype_ctr,
+            object_datatype_ctr,
+            dataset,
+        )
+    }
+
+    /// As [Self::get_multi_predicates_solution_mappings], with the subjects and objects given as
+    /// pushed down values: their dictionary codes are looked up as they are.
+    #[allow(clippy::too_many_arguments)]
+    pub fn get_multi_predicates_solution_mappings_of_values(
+        &self,
+        predicate_uris: Option<Vec<NamedNode>>,
+        subject_keep_rename: &Option<String>,
+        predicate_keep_rename: &Option<String>,
+        object_keep_rename: &Option<String>,
+        subjects: &Option<PushdownValues>,
+        objects: &Option<PushdownValues>,
+        subject_datatype_ctr: &Option<PossibleTypes>,
+        object_datatype_ctr: &Option<PossibleTypes>,
+        dataset: &QueryGraph,
+    ) -> Result<SolutionMappings, TriplestoreError> {
         let named_graph = match dataset {
             QueryGraph::NamedGraph(ng) => ng,
             QueryGraph::QueryDataset(qd) => {
                 // The default graph of the dataset is the RDF merge of the FROM graphs.
                 let mut sms = vec![];
                 for nn in &qd.default {
-                    sms.push(self.get_multi_predicates_solution_mappings(
+                    sms.push(self.get_multi_predicates_solution_mappings_of_values(
                         predicate_uris.clone(),
                         subject_keep_rename,
                         predicate_keep_rename,
@@ -262,8 +301,8 @@ impl Triplestore {
         }
 
         let mut sms = vec![];
-        if !(objects.is_some() && objects.as_ref().unwrap().is_empty())
-            || !(subjects.is_some() && subjects.as_ref().unwrap().is_empty())
+        if !(objects.as_ref().is_some_and(|o| o.is_empty()))
+            || !(subjects.as_ref().is_some_and(|s| s.is_empty()))
         {
             for nn in predicate_uris {
                 if let Some(sm) = self.get_predicate_lf(
@@ -276,6 +315,7 @@ impl Triplestore {
                     subject_datatype_ctr,
                     object_datatype_ctr,
                     named_graph,
+                    &cats,
                     &mut encodings,
                 )? {
                     sms.extend(sm);
@@ -596,93 +636,127 @@ fn partial_check_need_multi(
     false
 }
 
-/// The most subjects (or objects) of a lookup whose dictionary codes are found to check them
-/// against the segments' Bloom filters, when every segment the lookup reads is local. Finding a
-/// code clones and hashes the term and looks its string up in the dictionary, which for the
-/// thousands of subjects that a join pushes down costs more than the lookup itself (e.g. 28,880
-/// subjects pushed into `rdf:type` doubled the time of a GROUP BY over that join). With more
-/// targets the filters seldom leave a segment out: at about 1% false positives, a segment that
-/// holds none of 128 targets is left out 27% of the time.
-const MAX_FILTERED_TARGETS: usize = 128;
-
-/// The same for a lookup that may download a segment from object storage: a download left out
-/// saves milliseconds, far more than finding the codes of a few hundred targets.
-const MAX_FILTERED_REMOTE_TARGETS: usize = 1024;
-
-/// Whether to find the codes of `n` lookup targets for the segment filters of `triples`.
-fn find_target_codes(triples: &Triples, n: usize, by_object: bool) -> bool {
-    if !triples.has_code_filters(by_object) {
-        return false;
-    }
-    let find = n <= MAX_FILTERED_TARGETS
-        || (n <= MAX_FILTERED_REMOTE_TARGETS && triples.has_remote_segments(by_object));
-    fast_path::hit_if(find, FastPath::FilterTargetCodes, FastPath::FilterTooManyTargets);
-    find
+/// The subjects or objects a table is looked up by.
+enum Targets {
+    /// Global dictionary codes, sorted, for a column of codes.
+    Codes(Arc<Vec<u32>>),
+    /// Terms of the type of a column that does not hold codes.
+    Terms(Vec<Term>),
 }
 
-fn single_triples_to_lf(
-    triples: &Triples,
-    subjects: &Option<Vec<&NamedOrBlankNode>>,
-    objects: &Option<Vec<&Term>>,
+/// An expression for the column value of a single target, None if there are several. The
+/// inner None is for a term that is not in the dictionary.
+fn single_target_expr(
+    target: &Targets,
     global_cats: &Cats,
     encodings: &mut TermEncodings,
+) -> Result<Option<Option<Expr>>, TriplestoreError> {
+    Ok(match target {
+        Targets::Codes(c) if c.len() == 1 => {
+            Some(Some(lit(c[0]).cast(polars_core::prelude::DataType::UInt32)))
+        }
+        Targets::Terms(t) if t.len() == 1 => Some(encodings.encode(&t[0], global_cats)?),
+        _ => None,
+    })
+}
+
+fn single_triples_to_lf<'c>(
+    triples: &Triples,
+    subjects: Option<&Targets>,
+    objects: Option<&Targets>,
+    global_cats: &'c Cats,
+    encodings: &mut TermEncodings<'c>,
 ) -> Result<Option<(LazyFrame, usize)>, TriplestoreError> {
     // A single IRI subject in triples held in memory: find its rows eagerly, so that tables
     // without the subject are left out of the query plan. Planning a union over every table of
     // a variable predicate costs far more than these lookups.
-    if let (Some([subject]), true) = (
-        subjects.as_ref().map(|s| s.as_slice()),
-        triples.subject_type.is_iri(),
-    ) {
-        if let NamedOrBlankNode::NamedNode(nn) = *subject {
-            let Some(code) = encodings.iri_code(nn, global_cats) else {
+    if let (Some(Targets::Codes(codes)), true) = (subjects, triples.subject_type.is_iri()) {
+        if let [code] = codes.as_slice() {
+            if !triples.may_hold_code(*code, false) {
                 return Ok(None);
-            };
-            if let Some(dfs) = triples.get_in_memory_subject_rows(subject, code)? {
-            let mut dfs = dfs.into_iter();
-            let Some(mut df) = dfs.next() else {
-                return Ok(None);
-            };
-            for other in dfs {
-                df.vstack_mut_owned(other)
-                    .map_err(TriplestoreError::LazyLoadError)?;
             }
-            let height = df.height();
-            let mut lf = df.lazy();
-            if let Some(object_terms) = &objects {
-                if object_terms.len() == 1 {
-                    lf = match encodings.encode(object_terms[0], global_cats)? {
-                        Some(enc) => lf.filter(col(OBJECT_COL_NAME).eq(enc)),
-                        None => lf.filter(lit(false)),
-                    };
+            encodings.decode_codes(&BaseRDFNodeType::IRI, &[*code], global_cats);
+            let Some(string) = encodings.string(&BaseRDFNodeType::IRI, *code) else {
+                return Ok(None);
+            };
+            let string = string.to_string();
+            if let Some(dfs) = triples.get_in_memory_subject_rows(&string, *code)? {
+                let mut dfs = dfs.into_iter();
+                let Some(mut df) = dfs.next() else {
+                    return Ok(None);
+                };
+                for other in dfs {
+                    df.vstack_mut_owned(other)
+                        .map_err(TriplestoreError::LazyLoadError)?;
                 }
-            }
-            return Ok(Some((lf, height)));
+                let height = df.height();
+                let mut lf = df.lazy();
+                if let Some(objects) = objects {
+                    if let Some(enc) = single_target_expr(objects, global_cats, encodings)? {
+                        lf = match enc {
+                            Some(enc) => lf.filter(col(OBJECT_COL_NAME).eq(enc)),
+                            None => lf.filter(lit(false)),
+                        };
+                    }
+                }
+                return Ok(Some((lf, height)));
             }
         }
     }
-    // The codes of the constants, for the segments' filters to leave out the segments (and the
-    // whole table) that can not hold them. Only for a few constants (see [find_target_codes]).
-    let subject_codes = match subjects {
-        Some(s) if find_target_codes(triples, s.len(), false) => {
-            let terms: Vec<Term> = s.iter().map(|x| Term::from((*x).clone())).collect();
-            Some(encodings.term_codes(&terms, global_cats))
-        }
-        _ => None,
+    // The codes that some segment (or the write buffer) of the table may hold. Only those are
+    // decoded, to the strings of the sparse indexes. Objects that are not codes are not looked
+    // up by: their column has no sparse index.
+    let may_hold = |targets: Option<&Targets>, by_object: bool| -> Option<Vec<u32>> {
+        let Some(Targets::Codes(codes)) = targets else {
+            return None;
+        };
+        // Every coded target is checked against the filters: checking a code costs no
+        // dictionary lookup, so there is no cap on the number of targets.
+        fast_path::hit_when(triples.has_code_filters(by_object), FastPath::FilterTargetCodes);
+        let kept: Vec<u32> = codes
+            .iter()
+            .copied()
+            .filter(|c| triples.may_hold_code(*c, by_object))
+            .collect();
+        fast_path::hit_when(kept.len() < codes.len(), FastPath::TableFilterSkip);
+        Some(kept)
     };
-    let object_codes = match objects {
-        Some(o) if find_target_codes(triples, o.len(), true) => {
-            let terms: Vec<Term> = o.iter().map(|x| (*x).clone()).collect();
-            Some(encodings.term_codes(&terms, global_cats))
-        }
-        _ => None,
+    let subject_codes = may_hold(subjects, false);
+    let object_codes = if subject_codes.is_none() {
+        may_hold(objects, true)
+    } else {
+        None
     };
-    let lfs_and_heights = triples.get_lazy_frames_with_codes(
-        subjects,
-        objects,
-        subject_codes.as_deref(),
-        object_codes.as_deref(),
-    )?;
+    if subject_codes.as_ref().is_some_and(|t| t.is_empty())
+        || object_codes.as_ref().is_some_and(|t| t.is_empty())
+    {
+        return Ok(None);
+    }
+    if let Some(c) = &subject_codes {
+        encodings.decode_codes(&triples.subject_type, c, global_cats);
+    }
+    if let Some(c) = &object_codes {
+        encodings.decode_codes(&triples.object_type, c, global_cats);
+    }
+    let lfs_and_heights = {
+        let lookup =
+            |codes: &Option<Vec<u32>>, bt: &BaseRDFNodeType| -> Option<Vec<LookupTarget>> {
+                codes.as_ref().map(|codes| {
+                    codes
+                        .iter()
+                        .filter_map(|c| encodings.string(bt, *c).map(|s| (s, Some(*c))))
+                        .collect()
+                })
+            };
+        let subject_lookup = lookup(&subject_codes, &triples.subject_type);
+        let object_lookup = lookup(&object_codes, &triples.object_type);
+        if subject_lookup.as_ref().is_some_and(|t| t.is_empty())
+            || object_lookup.as_ref().is_some_and(|t| t.is_empty())
+        {
+            return Ok(None);
+        }
+        triples.get_lazy_frames_of_targets(subject_lookup.as_deref(), object_lookup.as_deref())?
+    };
     if lfs_and_heights.is_empty() {
         return Ok(None);
     }
@@ -709,46 +783,40 @@ fn single_triples_to_lf(
     } else {
         lfs.pop().unwrap()
     };
-    if let Some(subject_terms) = &subjects {
-        // Handles case where singular subject from triple pattern.
-        if subject_terms.len() == 1 {
-            let subj = *subject_terms.first().unwrap();
-            let enc = encodings.encode(&Term::from(subj.clone()), global_cats)?;
-            if let Some(enc) = enc {
-                lf = lf.filter(col(SUBJECT_COL_NAME).eq(enc));
-            } else {
-                lf = lf.filter(lit(false));
-            }
-        }
-    }
-    if let Some(object_terms) = &objects {
-        // Handles case where singular object from triple pattern.
-        if object_terms.len() == 1 {
-            let obj = *object_terms.first().unwrap();
-            let enc = encodings.encode(obj, global_cats)?;
-            if let Some(enc) = enc {
-                lf = lf.filter(col(OBJECT_COL_NAME).eq(enc));
-            } else {
-                lf = lf.filter(lit(false));
+    // A single subject or object (e.g. a constant of the triple pattern) is filtered on here, as
+    // the sparse index ranges hold other rows too.
+    for (targets, c) in [(subjects, SUBJECT_COL_NAME), (objects, OBJECT_COL_NAME)] {
+        if let Some(targets) = targets {
+            if let Some(enc) = single_target_expr(targets, global_cats, encodings)? {
+                lf = match enc {
+                    Some(enc) => lf.filter(col(c).eq(enc)),
+                    None => lf.filter(lit(false)),
+                };
             }
         }
     }
     Ok(Some((lf, new_height)))
 }
 
-/// The encodings of the constant terms of a triple pattern. Each encoding looks the term up in
-/// the dictionaries, which on disk is a database query, so a term is encoded once per pattern
-/// rather than once per predicate and type of table.
+/// The encodings of the constant terms of a triple pattern, and the strings of the pushed down
+/// codes. Each encoding or decoding looks the dictionaries up, which on disk is a database
+/// query, so it is done once per pattern rather than once per predicate and type of table.
 #[derive(Default)]
-struct TermEncodings {
+struct TermEncodings<'c> {
     encodings: HashMap<Term, Option<Expr>>,
-    codes: HashMap<NamedNode, Option<u32>>,
-    /// The dictionary codes of IRIs, blank nodes and xsd:string literals.
-    term_codes: HashMap<Term, Option<u32>>,
+    /// The global codes of the pushed down subjects (false) or objects (true) of each type of
+    /// table, see [PushdownValues::codes_of_type].
+    target_codes: HashMap<(bool, BaseRDFNodeType), Arc<Vec<u32>>>,
+    /// The strings of the codes that were decoded or encoded, per type.
+    strings: HashMap<BaseRDFNodeType, HashMap<u32, Cow<'c, str>>>,
 }
 
-impl TermEncodings {
-    fn encode(&mut self, term: &Term, global_cats: &Cats) -> Result<Option<Expr>, TriplestoreError> {
+impl<'c> TermEncodings<'c> {
+    fn encode(
+        &mut self,
+        term: &Term,
+        global_cats: &Cats,
+    ) -> Result<Option<Expr>, TriplestoreError> {
         if let Some(enc) = self.encodings.get(term) {
             return Ok(enc.clone());
         }
@@ -775,65 +843,81 @@ impl TermEncodings {
         enc
     }
 
-    /// The dictionary code of an IRI, None if the dictionary does not have it.
-    fn iri_code(&mut self, nn: &NamedNode, global_cats: &Cats) -> Option<u32> {
-        if let Some(c) = self.codes.get(nn) {
-            return *c;
+    /// The global codes of the values of type `bt` (sorted), found once per type: the codes
+    /// pushed down as they are, and the codes of the terms (the constants of the query), whose
+    /// strings are kept so that they need not be decoded.
+    fn codes_of_type(
+        &mut self,
+        values: &PushdownValues,
+        by_object: bool,
+        bt: &BaseRDFNodeType,
+        global_cats: &Cats,
+    ) -> Arc<Vec<u32>> {
+        let key = (by_object, bt.clone());
+        if let Some(c) = self.target_codes.get(&key) {
+            return c.clone();
         }
-        let c = global_cats.maybe_encode_iri_slice(&[Some(nn.as_str())])[0];
-        self.codes.insert(nn.clone(), c);
-        c
+        let mut codes = values.codes.get(bt).cloned().unwrap_or_default();
+        let terms: Vec<&str> = values
+            .terms
+            .iter()
+            .filter(|t| &term_base_type(t) == bt)
+            .map(|t| match t {
+                Term::NamedNode(nn) => nn.as_str(),
+                Term::BlankNode(bl) => bl.as_str(),
+                Term::Literal(l) => l.value(),
+            })
+            .collect();
+        if !terms.is_empty() {
+            let strs: Vec<Option<&str>> = terms.iter().map(|s| Some(*s)).collect();
+            let found = match bt {
+                BaseRDFNodeType::IRI => global_cats.maybe_encode_iri_slice(&strs),
+                BaseRDFNodeType::BlankNode => global_cats.maybe_encode_blanks(&strs),
+                BaseRDFNodeType::Literal(dt, _) => {
+                    global_cats.maybe_encode_literals(&strs, dt.clone())
+                }
+                BaseRDFNodeType::None => vec![None; strs.len()],
+            };
+            let strings = self.strings.entry(bt.clone()).or_default();
+            for (s, c) in terms.into_iter().zip(found) {
+                if let Some(c) = c {
+                    strings.insert(c, Cow::Owned(s.to_string()));
+                    codes.push(c);
+                }
+            }
+            codes.sort_unstable();
+            codes.dedup();
+        }
+        let codes = Arc::new(codes);
+        self.target_codes.insert(key, codes.clone());
+        codes
     }
 
-    /// The dictionary codes of the terms: None for terms not in the dictionary and for terms
-    /// that tables do not store as codes with filters (literals other than xsd:string). The
-    /// terms not seen before are looked up with one dictionary lookup per kind of term.
-    fn term_codes(&mut self, terms: &[Term], global_cats: &Cats) -> Vec<Option<u32>> {
-        let mut iris: Vec<&Term> = vec![];
-        let mut blanks: Vec<&Term> = vec![];
-        let mut strings: Vec<&Term> = vec![];
-        let mut seen = HashSet::new();
-        for t in terms {
-            if self.term_codes.contains_key(t) || !seen.insert(t) {
-                continue;
-            }
-            match t {
-                Term::NamedNode(_) => iris.push(t),
-                Term::BlankNode(_) => blanks.push(t),
-                Term::Literal(l)
-                    if l.language().is_none() && l.datatype() == oxrdf::vocab::xsd::STRING =>
-                {
-                    strings.push(t)
-                }
-                _ => {
-                    self.term_codes.insert(t.clone(), None);
+    /// Finds the strings of the codes of type `bt` that were not decoded or encoded before,
+    /// with one dictionary lookup.
+    fn decode_codes(&mut self, bt: &BaseRDFNodeType, codes: &[u32], global_cats: &'c Cats) {
+        let strings = self.strings.entry(bt.clone()).or_default();
+        let missing: Vec<Option<u32>> = codes
+            .iter()
+            .filter(|c| !strings.contains_key(*c))
+            .map(|c| Some(*c))
+            .collect();
+        if missing.is_empty() {
+            return;
+        }
+        if let Some(enc) = global_cats.get_enc(bt) {
+            for (c, s) in missing.iter().zip(enc.maps.decode_batch(&missing)) {
+                if let Some(s) = s {
+                    strings.insert(c.unwrap(), s);
                 }
             }
         }
-        let value = |t: &Term| -> String {
-            match t {
-                Term::NamedNode(nn) => nn.as_str().to_string(),
-                Term::BlankNode(bl) => bl.as_str().to_string(),
-                Term::Literal(l) => l.value().to_string(),
-            }
-        };
-        for (group, kind) in [(iris, 0), (blanks, 1), (strings, 2)] {
-            if group.is_empty() {
-                continue;
-            }
-            let values: Vec<String> = group.iter().map(|t| value(t)).collect();
-            let strs: Vec<Option<&str>> = values.iter().map(|v| Some(v.as_str())).collect();
-            let found = match kind {
-                0 => global_cats.maybe_encode_iri_slice(&strs),
-                1 => global_cats.maybe_encode_blanks(&strs),
-                _ => global_cats
-                    .maybe_encode_literals(&strs, oxrdf::vocab::xsd::STRING.into_owned()),
-            };
-            for (t, c) in group.into_iter().zip(found) {
-                self.term_codes.insert(t.clone(), c);
-            }
-        }
-        terms.iter().map(|t| self.term_codes[t]).collect()
+    }
+
+    /// The string of a code of type `bt` found by [Self::decode_codes] or
+    /// [Self::codes_of_type], None if it is not in the dictionary.
+    fn string(&self, bt: &BaseRDFNodeType, code: u32) -> Option<&str> {
+        self.strings.get(bt)?.get(&code).map(|s| s.as_ref())
     }
 
     /// Encodes the IRIs with a single dictionary lookup.
@@ -859,16 +943,49 @@ struct HalfBakedSolutionMappings {
     pub object_state: Option<BaseCatState>,
 }
 
-#[allow(clippy::too_many_arguments)]
-fn multiple_tt_to_lf(
-    triples: &HashMap<(BaseRDFNodeType, BaseRDFNodeType), Triples>,
-    types: Option<HashSet<(BaseRDFNodeType, BaseRDFNodeType)>>,
-    subjects: &Option<Vec<NamedOrBlankNode>>,
-    objects: &Option<Vec<Term>>,
-    keep_subject: bool,
-    keep_object: bool,
+/// Whether the column of a table of type `bt` holds global dictionary codes that pushed down
+/// codes can be compared with.
+fn holds_codes(bt: &BaseRDFNodeType) -> bool {
+    is_code_type(bt)
+        && matches!(
+            bt.default_stored_cat_state(),
+            BaseCatState::CategoricalNative(None)
+        )
+}
+
+/// The targets of the pushed down values that a column of type `bt` can hold, None if there
+/// are none.
+fn targets_of_type(
+    values: &PushdownValues,
+    bt: &BaseRDFNodeType,
+    by_object: bool,
     global_cats: &Cats,
     encodings: &mut TermEncodings,
+) -> Option<Targets> {
+    if holds_codes(bt) {
+        let codes = encodings.codes_of_type(values, by_object, bt, global_cats);
+        (!codes.is_empty()).then_some(Targets::Codes(codes))
+    } else {
+        let terms: Vec<Term> = values
+            .terms
+            .iter()
+            .filter(|t| term_matches_type(t, bt))
+            .cloned()
+            .collect();
+        (!terms.is_empty()).then_some(Targets::Terms(terms))
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn multiple_tt_to_lf<'c>(
+    triples: &HashMap<(BaseRDFNodeType, BaseRDFNodeType), Triples>,
+    types: Option<HashSet<(BaseRDFNodeType, BaseRDFNodeType)>>,
+    subjects: &Option<PushdownValues>,
+    objects: &Option<PushdownValues>,
+    keep_subject: bool,
+    keep_object: bool,
+    global_cats: &'c Cats,
+    encodings: &mut TermEncodings<'c>,
 ) -> Result<Option<Vec<HalfBakedSolutionMappings>>, TriplestoreError> {
     let mut filtered = vec![];
     for ((subj_type, obj_type), tt) in triples.iter() {
@@ -877,35 +994,27 @@ fn multiple_tt_to_lf(
                 continue;
             }
         }
-        let filtered_subjects = if let Some(subjects) = subjects {
-            let filtered = filter_subjects(subj_type, subjects);
-            if filtered.is_empty() {
-                continue;
-            }
-            Some(filtered)
-        } else {
-            None
+        let subject_targets = match subjects {
+            Some(s) => match targets_of_type(s, subj_type, false, global_cats, encodings) {
+                Some(t) => Some(t),
+                None => continue,
+            },
+            None => None,
         };
-
-        let filtered_objects = if let Some(objects) = objects {
-            let filtered = filter_objects(obj_type, objects);
-            if filtered.is_empty() {
-                continue;
-            }
-            Some(filtered)
-        } else {
-            None
+        let object_targets = match objects {
+            Some(o) => match targets_of_type(o, obj_type, true, global_cats, encodings) {
+                Some(t) => Some(t),
+                None => continue,
+            },
+            None => None,
         };
-
-        if let Some((lf, height)) =
-            single_triples_to_lf(
-                tt,
-                &filtered_subjects,
-                &filtered_objects,
-                global_cats,
-                encodings,
-            )?
-        {
+        if let Some((lf, height)) = single_triples_to_lf(
+            tt,
+            subject_targets.as_ref(),
+            object_targets.as_ref(),
+            global_cats,
+            encodings,
+        )? {
             if height > 0 {
                 let mut select = vec![];
                 if keep_subject {
@@ -958,44 +1067,19 @@ fn multiple_tt_to_lf(
     }
 }
 
-fn filter_objects<'a>(object_type: &BaseRDFNodeType, objects: &'a Vec<Term>) -> Vec<&'a Term> {
-    let mut filtered = vec![];
-    for o in objects {
-        let ok = match o {
-            Term::NamedNode(..) => object_type.is_iri(),
-            Term::BlankNode(..) => object_type.is_blank_node(),
-            Term::Literal(l) => {
-                if let BaseRDFNodeType::Literal(t, _) = object_type {
-                    l.datatype() == t.as_ref()
-                } else {
-                    false
-                }
+/// Whether the term can be a value of a column of type `bt`.
+fn term_matches_type(t: &Term, bt: &BaseRDFNodeType) -> bool {
+    match t {
+        Term::NamedNode(..) => bt.is_iri(),
+        Term::BlankNode(..) => bt.is_blank_node(),
+        Term::Literal(l) => {
+            if let BaseRDFNodeType::Literal(dt, _) = bt {
+                l.datatype() == dt.as_ref()
+            } else {
+                false
             }
-        };
-        if ok {
-            filtered.push(o);
         }
     }
-    filtered
-}
-
-fn filter_subjects<'a>(
-    subject_type: &BaseRDFNodeType,
-    subjects: &'a Vec<NamedOrBlankNode>,
-) -> Vec<&'a NamedOrBlankNode> {
-    let mut filtered = vec![];
-    for s in subjects {
-        #[allow(unreachable_patterns)]
-        let ok = match s {
-            NamedOrBlankNode::NamedNode(..) => subject_type.is_iri(),
-            NamedOrBlankNode::BlankNode(_) => subject_type.is_blank_node(),
-            _ => unimplemented!("Only blank node and iri subjects"),
-        };
-        if ok {
-            filtered.push(s);
-        }
-    }
-    filtered
 }
 
 pub fn create_empty_lf_datatypes(

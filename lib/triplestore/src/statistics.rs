@@ -123,6 +123,26 @@ impl TableStats {
         }
     }
 
+    /// The estimated number of triples with the object of dictionary code `code`, for a column
+    /// of codes: its count among the object sketch's most common codes, or else the average count
+    /// of the other objects, at most that of the least common listed one, as in
+    /// [Self::object_frequency].
+    pub fn object_frequency_code(&self, code: u32) -> f64 {
+        let top: &[(u32, u64)] = self
+            .object_sketch
+            .as_ref()
+            .map(|s| s.top.as_slice())
+            .unwrap_or(&[]);
+        if let Some((_, c)) = top.iter().find(|(k, _)| *k == code) {
+            return *c as f64;
+        }
+        let common: u64 = top.iter().map(|(_, c)| c).sum();
+        let rest_rows = (self.rows as u64).saturating_sub(common) as f64;
+        let rest_distinct = (self.distinct_objects.saturating_sub(top.len())).max(1) as f64;
+        let cap = top.last().map(|(_, c)| *c as f64).unwrap_or(f64::INFINITY);
+        (rest_rows / rest_distinct).min(cap).max(1.0)
+    }
+
     /// The estimated number of triples with the object `o`.
     pub fn object_frequency(&self, o: &Term) -> f64 {
         if let Some((_, c)) = self.most_common_objects.iter().find(|(t, _)| t == o) {

@@ -73,9 +73,10 @@ pub(crate) fn segment_filter_bits() -> usize {
 /// correct, and merges and compaction build new segments with new filters.
 pub(crate) type CodeFilter = Arc<SplitBlockBloom>;
 
-/// The dictionary codes of lookup targets, aligned with the targets; None for a target without a
-/// code, which is always looked up.
-pub(crate) type TargetCodes<'a> = Option<&'a [Option<u32>]>;
+/// A subject or object to look up: its string (that of the sparse indexes) and its dictionary
+/// code, if it has one. A target without a code is always looked up; one with a code only in
+/// the segments whose filter may hold it.
+pub(crate) type LookupTarget<'a> = (&'a str, Option<u32>);
 
 /// The number of runs of equal codes of a column of codes without nulls: the number of distinct
 /// codes when the column is sorted so that equal codes are adjacent. None if the column does not
@@ -118,25 +119,23 @@ fn build_code_filter(c: &Series, runs: usize) -> Option<CodeFilter> {
     Some(Arc::new(f))
 }
 
-/// The targets whose code may be in `filter`. Without a filter or codes, all targets.
-fn filter_targets<'a, T: ?Sized>(
-    targets: &[&'a T],
-    codes: TargetCodes,
-    filter: &Option<CodeFilter>,
-) -> Vec<&'a T> {
-    match (codes, filter) {
-        (Some(codes), Some(f)) => {
-            let kept: Vec<&'a T> = targets
+/// The strings of the targets whose code may be in `filter` (all of them without a filter),
+/// sorted.
+fn filter_targets<'a>(targets: &[LookupTarget<'a>], filter: &Option<CodeFilter>) -> Vec<&'a str> {
+    let mut strings: Vec<&str> = match filter {
+        Some(f) => {
+            let kept: Vec<&str> = targets
                 .iter()
-                .zip(codes)
                 .filter(|(_, c)| c.is_none_or(|c| f.may_contain_code(c)))
                 .map(|(t, _)| *t)
                 .collect();
             fast_path::hit_when(kept.len() < targets.len(), FastPath::TableFilterSkip);
             kept
         }
-        _ => targets.to_vec(),
-    }
+        None => targets.iter().map(|(t, _)| *t).collect(),
+    };
+    strings.sort_unstable();
+    strings
 }
 
 // const MIN_SIZE_CACHING: usize = 100_000_000; //100MB
@@ -708,27 +707,31 @@ impl Triples {
         subjects: &Option<Vec<&NamedOrBlankNode>>,
         objects: &Option<Vec<&Term>>,
     ) -> Result<Vec<(LazyFrame, usize)>, TriplestoreError> {
-        self.get_lazy_frames_with_codes(subjects, objects, None, None)
+        let subjects: Option<Vec<LookupTarget>> = subjects.as_ref().map(|s| {
+            get_subject_strings(s)
+                .into_iter()
+                .map(|x| (x, None))
+                .collect()
+        });
+        let objects: Option<Vec<LookupTarget>> = objects.as_ref().map(|o| {
+            get_object_strings(o)
+                .into_iter()
+                .map(|x| (x, None))
+                .collect()
+        });
+        self.get_lazy_frames_of_targets(subjects.as_deref(), objects.as_deref())
     }
 
-    /// As [Self::get_lazy_frames], with the dictionary codes of the subjects and objects (aligned
-    /// with them): segments whose filters reject every target are not read.
-    pub(crate) fn get_lazy_frames_with_codes(
+    /// The frames that hold (at least) the rows of the subjects, or else of the objects: the
+    /// sparse index ranges of each segment whose filter may hold one of them.
+    pub(crate) fn get_lazy_frames_of_targets(
         &self,
-        subjects: &Option<Vec<&NamedOrBlankNode>>,
-        objects: &Option<Vec<&Term>>,
-        subject_codes: TargetCodes,
-        object_codes: TargetCodes,
+        subjects: Option<&[LookupTarget]>,
+        objects: Option<&[LookupTarget]>,
     ) -> Result<Vec<(LazyFrame, usize)>, TriplestoreError> {
         let mut all_sms = vec![];
         for s in &self.segments {
-            all_sms.extend(s.get_lazy_frames(
-                subjects,
-                objects,
-                subject_codes,
-                object_codes,
-                &self.object_type,
-            )?);
+            all_sms.extend(s.get_lazy_frames(subjects, objects, &self.object_type)?);
         }
         // The segments give (at least) the rows of the subjects or objects, and so does the
         // whole buffer.
@@ -740,12 +743,6 @@ impl Triples {
     /// lookup targets are worth finding.
     pub(crate) fn has_code_filters(&self, by_object: bool) -> bool {
         self.segments.iter().any(|s| s.code_filter(by_object).is_some())
-    }
-
-    /// Whether a lookup of subjects (or objects, if `by_object`) may have to download a segment
-    /// from object storage, which a segment filter that leaves it out saves.
-    pub(crate) fn has_remote_segments(&self, by_object: bool) -> bool {
-        self.segments.iter().any(|s| s.is_remote_only(by_object))
     }
 
     /// False if the table can not hold a subject (or object, if `by_object`) with `code`: no
@@ -856,10 +853,10 @@ impl Triples {
     /// a segment is not in memory, for the caller to fall back to lazy frames.
     pub(crate) fn get_in_memory_subject_rows(
         &self,
-        subject: &NamedOrBlankNode,
+        subject: &str,
         code: u32,
     ) -> Result<Option<Vec<DataFrame>>, TriplestoreError> {
-        let strings = get_subject_strings(&[subject]);
+        let strings = [subject];
         let mut out = vec![];
         for s in &self.segments {
             if !s.may_hold_code(code, false) {
@@ -1043,7 +1040,7 @@ impl Triples {
     pub(crate) fn get_lazy_frame_slices(&self) -> Result<Option<Vec<LazyFrame>>, TriplestoreError> {
         let mut all_lfs = vec![];
         for s in &self.segments {
-            let lf_is = s.get_lazy_frames(&None, &None, None, None, &self.object_type)?;
+            let lf_is = s.get_lazy_frames(None, None, &self.object_type)?;
             for (lf, _) in lf_is {
                 all_lfs.push(lf);
             }
@@ -1234,17 +1231,6 @@ impl TriplesSegment {
         }
     }
 
-    /// Whether the sort that lookups of subjects (or objects, if `by_object`) read is in object
-    /// storage and not downloaded yet.
-    fn is_remote_only(&self, by_object: bool) -> bool {
-        let sort = if by_object {
-            &self.object_sort
-        } else {
-            &self.subject_sort
-        };
-        sort.as_ref().is_some_and(|s| s.is_remote_only())
-    }
-
     /// False if the segment holds no subject (or object, if `by_object`) with `code`.
     #[inline]
     pub(crate) fn may_hold_code(&self, code: u32, by_object: bool) -> bool {
@@ -1430,18 +1416,15 @@ impl TriplesSegment {
 
     pub(crate) fn get_lazy_frames(
         &self,
-        subjects: &Option<Vec<&NamedOrBlankNode>>,
-        objects: &Option<Vec<&Term>>,
-        subject_codes: TargetCodes,
-        object_codes: TargetCodes,
+        subjects: Option<&[LookupTarget]>,
+        objects: Option<&[LookupTarget]>,
         object_type: &BaseRDFNodeType,
     ) -> Result<Vec<(LazyFrame, usize)>, TriplestoreError> {
         if let Some(subjects) = subjects {
-            let subjects = filter_targets(subjects, subject_codes, &self.subject_filter);
-            if subjects.is_empty() {
+            let strings = filter_targets(subjects, &self.subject_filter);
+            if strings.is_empty() {
                 return Ok(vec![]);
             }
-            let strings = get_subject_strings(&subjects);
             let offsets = get_lookup_offsets(
                 &strings,
                 &self.subject_sparse_index.as_ref().unwrap().map,
@@ -1461,11 +1444,10 @@ impl TriplesSegment {
                 };
 
                 let offsets = if allow_pushdown {
-                    let objects = filter_targets(objects, object_codes, &self.object_filter);
-                    if objects.is_empty() {
+                    let strings = filter_targets(objects, &self.object_filter);
+                    if strings.is_empty() {
                         return Ok(vec![]);
                     }
-                    let strings = get_object_strings(&objects);
                     let offsets = get_lookup_offsets(
                         strings.as_slice(),
                         &self.object_sparse_index.as_ref().unwrap().map,
@@ -1686,15 +1668,6 @@ impl StoredTriples {
             StoredTriples::TriplesInMemory(mem) => mem.get_lazy_frame(),
             StoredTriples::TriplesOnDisk(disk) => disk.get_lazy_frame(),
             StoredTriples::TriplesOnDiskView(view) => view.get_lazy_frame(),
-        }
-    }
-
-    /// Whether reading the triples needs a download from object storage first.
-    fn is_remote_only(&self) -> bool {
-        match self {
-            StoredTriples::TriplesInMemory(_) => false,
-            StoredTriples::TriplesOnDisk(disk) => disk.is_remote_only(),
-            StoredTriples::TriplesOnDiskView(view) => view.is_remote_only(),
         }
     }
 

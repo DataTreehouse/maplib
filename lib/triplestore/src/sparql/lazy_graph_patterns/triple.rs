@@ -5,11 +5,11 @@ use representation::solution_mapping::{BaseCatState, SolutionMappings};
 
 use crate::errors::TriplestoreError;
 use crate::sparql::QuerySettings;
-use oxrdf::{NamedNode, NamedOrBlankNode, Term};
+use oxrdf::{NamedNode, Term};
 use polars::prelude::{by_name, IntoLazy};
 use polars::prelude::{col, lit, AnyValue, JoinType, UniqueKeepStrategy};
 use query_processing::graph_patterns::join;
-use query_processing::pushdowns::Pushdowns;
+use query_processing::pushdowns::{PushdownValues, Pushdowns};
 use query_processing::type_constraints::{ConstraintBaseRDFNodeType, PossibleTypes};
 use representation::dataset::QueryGraph;
 use representation::literal_iri_to_namednode;
@@ -68,30 +68,38 @@ impl Triplestore {
             rdf_node_types: dts,
             height_estimate: new_height_upper_bound,
         } = match &triple_pattern.predicate {
-            NamedNodePattern::NamedNode(n) => self.get_multi_predicates_solution_mappings(
-                Some(vec![n.to_owned()]),
-                &subject_rename,
-                &predicate_rename,
-                &object_rename,
-                &subjects,
-                &objects,
-                &subject_type_ctr,
-                &object_type_ctr,
-                dataset,
-            )?,
+            NamedNodePattern::NamedNode(n) => self
+                .get_multi_predicates_solution_mappings_of_values(
+                    Some(vec![n.to_owned()]),
+                    &subject_rename,
+                    &predicate_rename,
+                    &object_rename,
+                    &subjects,
+                    &objects,
+                    &subject_type_ctr,
+                    &object_type_ctr,
+                    dataset,
+                )?,
             NamedNodePattern::Variable(v) => {
                 let mut predicates: Option<HashSet<NamedNode>> = None;
                 if let Some(values) = pushdowns.variables_values.get(v.as_str()) {
-                    predicates = Some(
-                        values
+                    // Predicates are IRIs, few, and needed as IRIs.
+                    let iris = PushdownValues {
+                        terms: values.terms.clone(),
+                        codes: values
+                            .codes
                             .iter()
-                            .filter(|x| matches!(x, Term::NamedNode(_)))
-                            .map(|x| {
-                                if let Term::NamedNode(nn) = x {
-                                    nn.clone()
-                                } else {
-                                    panic!("Invalid state")
-                                }
+                            .filter(|(bt, _)| bt.is_iri())
+                            .map(|(bt, c)| (bt.clone(), c.clone()))
+                            .collect(),
+                    };
+                    let cats = self.global_cats.read()?;
+                    predicates = Some(
+                        iris.to_terms(&cats)
+                            .into_iter()
+                            .filter_map(|x| match x {
+                                Term::NamedNode(nn) => Some(nn),
+                                _ => None,
                             })
                             .collect(),
                     )
@@ -158,7 +166,7 @@ impl Triplestore {
                 let predicates: Option<Vec<_>> =
                     predicates.map(|predicates| predicates.into_iter().collect());
 
-                self.get_multi_predicates_solution_mappings(
+                self.get_multi_predicates_solution_mappings_of_values(
                     predicates,
                     &subject_rename,
                     &predicate_rename,
@@ -403,38 +411,39 @@ fn create_type_constraint(
     }
 }
 
+/// The subjects a pattern's subject can be: a constant, or the values pushed down for its
+/// variable that are IRIs or blank nodes (codes as they are).
 pub fn create_subjects(
     term_pattern: &TermPattern,
-    variable_pushdowns: &HashMap<String, HashSet<Term>>,
-) -> Option<Vec<NamedOrBlankNode>> {
-    if let TermPattern::NamedNode(nn) = term_pattern {
-        Some(vec![NamedOrBlankNode::NamedNode(nn.clone())])
-    } else if let TermPattern::Variable(v) = term_pattern {
-        variable_pushdowns.get(v.as_str()).map(|terms| {
-            terms
-                .iter()
-                .filter_map(|x| match x {
-                    Term::NamedNode(nn) => Some(NamedOrBlankNode::NamedNode(nn.clone())),
-                    Term::BlankNode(bl) => Some(NamedOrBlankNode::BlankNode(bl.clone())),
-                    _ => None,
-                })
-                .collect()
-        })
-    } else {
-        None
+    variable_pushdowns: &HashMap<String, PushdownValues>,
+) -> Option<PushdownValues> {
+    match term_pattern {
+        TermPattern::NamedNode(nn) => Some(PushdownValues::from_terms(HashSet::from([
+            Term::NamedNode(nn.clone()),
+        ]))),
+        TermPattern::Variable(v) => variable_pushdowns
+            .get(v.as_str())
+            .map(|values| values.clone().subjects_only()),
+        _ => None,
     }
 }
 
+/// The objects a pattern's object can be: a constant, or the values pushed down for its
+/// variable.
 pub fn create_objects(
     term_pattern: &TermPattern,
-    variable_pushdowns: &HashMap<String, HashSet<Term>>,
-) -> Option<Vec<Term>> {
+    variable_pushdowns: &HashMap<String, PushdownValues>,
+) -> Option<PushdownValues> {
     match term_pattern {
-        TermPattern::NamedNode(nn) => Some(vec![Term::NamedNode(nn.clone())]),
-        TermPattern::Literal(lit) => Some(vec![Term::Literal(lit.clone())]),
-        TermPattern::Variable(v) => variable_pushdowns
-            .get(v.as_str())
-            .map(|terms| terms.iter().cloned().collect()),
+        TermPattern::NamedNode(nn) => Some(PushdownValues::from_terms(HashSet::from([
+            Term::NamedNode(nn.clone()),
+        ]))),
+        TermPattern::Literal(lit) => {
+            Some(PushdownValues::from_terms(HashSet::from([Term::Literal(
+                lit.clone(),
+            )])))
+        }
+        TermPattern::Variable(v) => variable_pushdowns.get(v.as_str()).cloned(),
         _ => None,
     }
 }

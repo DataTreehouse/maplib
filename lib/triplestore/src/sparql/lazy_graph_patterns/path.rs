@@ -642,7 +642,8 @@ impl Triplestore {
             let Some(values) = pushdowns.variables_values.get(b) else {
                 return Ok(None);
             };
-            let bindings: Vec<Vec<Option<GroundTerm>>> = values
+            let terms = values.to_terms(&self.global_cats.read().unwrap());
+            let bindings: Vec<Vec<Option<GroundTerm>>> = terms
                 .iter()
                 .filter_map(|t| match t {
                     Term::NamedNode(nn) => Some(vec![Some(GroundTerm::NamedNode(nn.clone()))]),
@@ -1412,14 +1413,11 @@ fn bound_iri_codes(t: &TermPattern, pushdowns: &Pushdowns, cats: &Cats) -> Optio
         TermPattern::NamedNode(nn) => vec![Some(nn.as_str())],
         TermPattern::Variable(v) => {
             let values = pushdowns.variables_values.get(v.as_str())?;
-            let mut iris = Vec::with_capacity(values.len());
-            for x in values {
-                let Term::NamedNode(nn) = x else {
-                    return None;
-                };
-                iris.push(Some(nn.as_str()));
+            if !values.all_iris() {
+                return None;
             }
-            iris
+            // Codes as they are, and the codes of the IRIs given as terms.
+            return values.codes_of_type(&BaseRDFNodeType::IRI, cats);
         }
         _ => return None,
     };

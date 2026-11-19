@@ -1,5 +1,5 @@
-use oxrdf::{BlankNode, Term, Variable};
-use query_processing::pushdowns::Pushdowns;
+use oxrdf::{BlankNode, Variable};
+use query_processing::pushdowns::{PushdownValues, Pushdowns};
 use representation::solution_mapping::SolutionMappings;
 use spargebra::term::{NamedNodePattern, TermPattern, TriplePattern};
 use std::cmp::Ordering;
@@ -43,7 +43,7 @@ fn strictly_before(
     t1: &TriplePattern,
     t2: &TriplePattern,
     visited: &HashSet<String>,
-    variable_values: &HashMap<String, HashSet<Term>>,
+    variable_values: &HashMap<String, PushdownValues>,
 ) -> Ordering {
     let t1_connected = is_connected(t1, visited);
     let t2_connected = is_connected(t2, visited);

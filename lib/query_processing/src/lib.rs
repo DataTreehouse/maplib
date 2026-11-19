@@ -6,6 +6,7 @@ pub mod errors;
 pub mod expressions;
 pub mod find_query_variables;
 pub mod graph_patterns;
+pub mod pushdown_values;
 pub mod pushdowns;
 pub mod type_constraints;
 pub mod udf;

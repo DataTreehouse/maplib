@@ -1,3 +1,4 @@
+pub use crate::pushdown_values::PushdownValues;
 use crate::type_constraints::{
     conjunction_variable_type, datetime_datatypes, equal_variable_possible_types,
     ConstraintBaseRDFNodeType, ConstraintExpr, PossibleTypes,
@@ -6,7 +7,6 @@ use oxrdf::vocab::rdfs;
 use oxrdf::{Literal, NamedNodeRef, Term, Variable};
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use representation::cats::LockedCats;
-use representation::polars_to_rdf::column_as_terms;
 use representation::solution_mapping::SolutionMappings;
 use spargebra::algebra::{Expression, Function, GraphPattern};
 use spargebra::term::{GroundTerm, NamedNodePattern, TermPattern, TriplePattern};
@@ -37,7 +37,8 @@ pub const OWL_REAL: &str = "http://www.w3.org/2002/07/owl#real";
 
 #[derive(Clone, Debug)]
 pub struct Pushdowns {
-    pub variables_values: HashMap<String, HashSet<Term>>,
+    /// The values each variable is known to take (or a superset of them), see [PushdownValues].
+    pub variables_values: HashMap<String, PushdownValues>,
     pub variables_type_constraints: HashMap<String, PossibleTypes>,
     /// For the graph patterns of an expression (EXISTS): what is known about the solutions the
     /// expression is evaluated on, from the pattern that gave them. `None` if nothing is.
@@ -148,19 +149,15 @@ impl Pushdowns {
                 .into_par_iter()
                 .map(|x| {
                     let name = x.name().as_str();
-                    let unique = if height > SMALL_HEIGHT {
-                        x.unique().unwrap()
-                    } else {
-                        x.clone()
-                    };
-                    let maybe_terms = column_as_terms(
-                        &unique,
+                    // Dictionary codes are pushed down as they are; only the values of other
+                    // types are converted to terms.
+                    let values = PushdownValues::from_column(
+                        x,
                         eager_sm.rdf_node_types.get(name).unwrap(),
-                        global_cats.clone(),
-                        false,
+                        &global_cats,
+                        height > SMALL_HEIGHT,
                     );
-                    let terms: HashSet<_> = maybe_terms.into_iter().flatten().collect();
-                    (name.to_string(), terms)
+                    (name.to_string(), values)
                 })
                 .collect();
             self.variables_values = conjunction(&mut self.variables_values, pushdowns);
@@ -273,8 +270,9 @@ impl Pushdowns {
                         })
                         .collect();
                     if !use_terms.is_empty() {
+                        let use_terms = PushdownValues::from_terms(use_terms);
                         if let Some(t) = self.variables_values.get_mut(v.as_str()) {
-                            t.extend(use_terms);
+                            t.union_with(use_terms);
                         } else {
                             self.variables_values
                                 .insert(v.as_str().to_string(), use_terms);
@@ -348,6 +346,10 @@ impl Pushdowns {
                     pushdowns.remove(k.as_str());
                 }
             }
+            let pushdowns = pushdowns
+                .into_iter()
+                .map(|(k, v)| (k, PushdownValues::from_terms(v)))
+                .collect();
             self.variables_values = conjunction(&mut self.variables_values, pushdowns);
         }
         if let Some(mut type_constraints) = find_variable_type_constraints(e) {
@@ -422,8 +424,8 @@ fn find_variable_pushdowns(e: &Expression) -> Option<HashMap<String, HashSet<Ter
         Expression::And(left, right) => {
             let left = find_variable_pushdowns(left);
             let right = find_variable_pushdowns(right);
-            if let (Some(mut left), Some(right)) = (left, right) {
-                Some(conjunction(&mut left, right))
+            if let (Some(left), Some(right)) = (left, right) {
+                Some(terms_conjunction(left, right))
             } else {
                 None
             }
@@ -543,13 +545,28 @@ fn find_variable_type_constraints(e: &Expression) -> Option<HashMap<String, Poss
 }
 
 fn conjunction(
-    left: &mut HashMap<String, HashSet<Term>>,
+    left: &mut HashMap<String, PushdownValues>,
+    mut right: HashMap<String, PushdownValues>,
+) -> HashMap<String, PushdownValues> {
+    let mut new_map = HashMap::new();
+    for (k, v) in left.drain() {
+        if let Some(vr) = right.remove(&k) {
+            new_map.insert(k, v.intersection(vr));
+        } else {
+            new_map.insert(k, v);
+        }
+    }
+    new_map.extend(right);
+    new_map
+}
+
+fn terms_conjunction(
+    mut left: HashMap<String, HashSet<Term>>,
     mut right: HashMap<String, HashSet<Term>>,
 ) -> HashMap<String, HashSet<Term>> {
     let mut new_map = HashMap::new();
     for (k, v) in left.drain() {
         if let Some(vr) = right.remove(&k) {
-            // Todo: improve this thing.
             new_map.insert(k, v.intersection(&vr).cloned().collect());
         } else {
             new_map.insert(k, v);
