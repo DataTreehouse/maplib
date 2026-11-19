@@ -73,6 +73,9 @@ fast_paths! {
     // SELECT results as SPARQL JSON: one chunk (at most 4,096 rows) on the calling thread.
     JsonOneChunk => "sparql_json.one_chunk",
     JsonChunks => "sparql_json.chunks",
+    // Plans of at most 16,384 rows per step collected on a helper thread, else by Polars' pool.
+    CollectTiny => "collect.tiny",
+    CollectConcurrent => "collect.concurrent",
     // Basic graph patterns on codes.
     BgpSmallTableInPlan => "bgp.small_table_in_plan",
     BgpValuesPushed => "bgp.values_pushed",

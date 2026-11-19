@@ -1,4 +1,5 @@
 use crate::cancel::{self, Cancelled, CANCELLED_POLARS_MESSAGE};
+use crate::fast_path::FastPath;
 use polars::error::abort::catch_polars_abort;
 use polars::prelude::{DslPlan, Engine, InProcessQuery, OptFlags, PolarsResult};
 use polars::{error::PolarsError, frame::DataFrame, prelude::LazyFrame};
@@ -363,7 +364,9 @@ fn collect_tiny(lf: LazyFrame) -> PolarsResult<DataFrame> {
 fn pl_interruptable_collect_in_memory(
     lf: LazyFrame,
 ) -> Result<DataFrame, InterruptableCollectError> {
-    if is_tiny_plan(&lf.logical_plan) {
+    let tiny = is_tiny_plan(&lf.logical_plan);
+    crate::fast_path::hit_if(tiny, FastPath::CollectTiny, FastPath::CollectConcurrent);
+    if tiny {
         // It can not be interrupted, but stops before it starts if the query was stopped, and
         // a tiny plan uses next to no memory.
         let flags = lf.get_current_optimizations();

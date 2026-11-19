@@ -1050,6 +1050,34 @@ case("inl_named_graph", "SELECT * WHERE { GRAPH :g1 { :w0 :walk ?x . ?x :walk ?y
 case("inl_optional_around",
      "SELECT * WHERE { :x6 :sa ?a . :x6 :t16384 ?y OPTIONAL { ?y ^:t16385 ?z } }", ["a", "y", "z"])
 
+# Fixed cost per query: plans of at most 16,384 rows per step are collected on a helper thread
+# (utils polars.rs TINY_COLLECT_ROWS), larger ones by Polars' thread pool; the stack grows only
+# for deeply nested queries (model.rs on_query_stack; results only, it has no counter).
+case("collect_tiny", "SELECT ?s ?a ?b WHERE { ?s :sa ?a . ?s :sb ?b }", ["s", "a", "b"],
+     hits={"collect.tiny": True})
+case("collect_concurrent", "SELECT ?s ?o ?x WHERE { ?s :cd65537 ?o . ?s :one ?x }",
+     ["s", "o", "x"], hits={"collect.concurrent": True})
+
+
+def nested_optionals(depth: int) -> str:
+    body = "?n0 :tw ?n1"
+    for i in range(1, depth):
+        body = f"{body} OPTIONAL {{ ?n{i} :tw ?n{i + 1}"
+    return "SELECT ?n0 ?n1 ?n2 ?n3 WHERE { " + body + " }" * (depth - 1) + " }"
+
+
+def nested_subqueries(depth: int) -> str:
+    q = "SELECT ?s ?a WHERE { ?s :sa ?a }"
+    for _ in range(depth):
+        q = f"SELECT ?s ?a WHERE {{ {{ {q} }} }}"
+    return q
+
+
+case("deep_optional_40", nested_optionals(40), ["n0", "n1", "n2", "n3"])
+case("deep_subqueries_30", nested_subqueries(30), ["s", "a"])
+case("deep_union_50",
+     "SELECT ?s ?a WHERE { " + " UNION ".join(["{ ?s :sa ?a }"] * 50) + " }", ["s", "a"])
+
 # Mixed types, named graphs and duplicates through the general paths.
 case("mixed_all", "SELECT ?s ?o WHERE { ?s :mix ?o }", ["s", "o"])
 case("mixed_graphs", "SELECT ?g ?s ?o WHERE { GRAPH ?g { ?s :mix ?o } }", ["g", "s", "o"])
@@ -1264,3 +1292,27 @@ def test_statistics_use_exact_distinct_counts_of_one_segment(storage, tmp_path):
     m.update(PFX + extra)
     store.update(PFX + extra)
     run("write buffer", {"table_stats.merged": True, "table_stats.exact_distinct": False})
+
+
+@pytest.mark.parametrize("storage", selected("MAPLIB_DIFFERENTIAL_STORAGE", disk_params()))
+def test_counts_and_paths_after_tiny_queries(storage, tmp_path):
+    """A distinct count and a transitive path right after tiny queries collected on the helper
+    thread, on the same thread, and a deeply nested query in between: each against Oxigraph."""
+    kwargs = {"storage": storage}
+    if storage != "memory":
+        kwargs["storage_folder"] = str(tmp_path / "storage")
+    m = Model(**kwargs)
+    lines, pinned = dataset()
+    m.reads(nquads(list(pinned) + list(lines)), format="nquads")
+    steps = [
+        ("SELECT ?a WHERE { :x6 :sa ?a }", ["a"]),
+        ("SELECT ?s WHERE { ?s :sb 3 }", ["s"]),
+        ("SELECT (COUNT(DISTINCT ?s) AS ?c) WHERE { ?s :cd65537 ?o }", ["c"]),
+        ("SELECT ?o WHERE { :t3_0 :tw+ ?o }", ["o"]),
+        (nested_optionals(30), ["n0", "n1", "n2", "n3"]),
+        ("SELECT (COUNT(DISTINCT ?o) AS ?c) WHERE { ?s :many ?o }", ["c"]),
+        ("SELECT ?s ?o WHERE { ?s :walk+ ?o }", ["s", "o"]),
+        ("SELECT ?a WHERE { :x9 :sa ?a }", ["a"]),
+    ]
+    for q, vs in steps * 2:
+        assert_same_rows(expected_rows(q, tuple(vs)), maplib_rows(m, q, vs), False, q[:60])
