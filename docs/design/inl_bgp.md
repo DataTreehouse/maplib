@@ -286,8 +286,13 @@ early; that is stage 4 and needs the hand-back to know the LIMIT.
   the per-query floor (1 GB stack per query, pool hand-off of the final collect, optimizer) is
   then most of what is left: on the prototype's Q2 shape the floor is 0.23 ms for the 2-pattern star, of which INL is a few microseconds and the rest is the floor (`SELECT * { VALUES ?x {1} }` takes 0.18 ms). Collecting small
   plans synchronously on the calling thread (proposal D) matters more once INL is in.
-- **Row estimation (`local_e9aadebc`, `cardinality-estimates`).** INL's choice (§3) and order
-  (§5.1) read `TableStats`; until it lands, table heights and `max_*_rows` are enough for BSBM.
+- **Row estimation (`local_e9aadebc`, landed in `1ef73b27`).** It orders BGPs of two or more
+  patterns by sketch-based join sizes. INL is tried before that order: it starts from the
+  pattern with the fewest matches, counted exactly by one binary search, and then uses the
+  segments' exact distinct counts for the fanouts (stage 1). The sketch-based order applies
+  unchanged whenever INL declines. Stage 2 can take the sketches' join sizes for INL's
+  estimate of bound-object steps on tables without an object sort, where stage 1 assumes the
+  square root of the table's rows.
 - **Sparse-index seek (`local_a835595a`).** The probe for the on-disk dictionary (§4.6).
 
 ## Prototype
