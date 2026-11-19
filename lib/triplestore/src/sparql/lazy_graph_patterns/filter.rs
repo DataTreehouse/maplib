@@ -479,7 +479,7 @@ impl Triplestore {
             )?;
             return Ok(Some((sm, conjuncts)));
         }
-        let distinct =|sm: &SolutionMappings, keys: &[String]| {
+        let distinct = |sm: &SolutionMappings, keys: &[String]| {
             SolutionMappings::new(
                 sm.mappings
                     .clone()
