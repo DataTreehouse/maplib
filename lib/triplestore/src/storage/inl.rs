@@ -402,11 +402,16 @@ pub(crate) fn inl_bgp(
     query_max_rows: Option<usize>,
 ) -> Result<Option<EagerSolutionMappings>, Cancelled> {
     match run(patterns, graph, cats, query_max_rows) {
+        // No solutions: the Polars path answers, as it types the columns of an empty result in
+        // ways that depend on its plan (e.g. untyped when the Bloom filters leave every table
+        // out), and the result's columns should not depend on which path found it empty. Its
+        // work is then small, since the pattern has no solutions.
+        Ok(sm) if sm.mappings.height() == 0 => {
+            hit(FastPath::InlEmpty);
+            Ok(None)
+        }
         Ok(sm) => {
             hit(FastPath::InlTaken);
-            if sm.mappings.height() == 0 {
-                hit(FastPath::InlEmpty);
-            }
             Ok(Some(sm))
         }
         Err(Stop::Declined) => Ok(None),

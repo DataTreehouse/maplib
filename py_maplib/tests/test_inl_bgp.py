@@ -236,7 +236,7 @@ def check(e, q, expect=None, graph=None):
         if e.storage == "memory":
             assert counts.get(expect, 0) > 0, f"{expect} not hit: {counts} for {q}"
             if expect != "inl.taken":
-                assert counts.get("inl.taken", 0) == 0 or expect == "inl.empty", counts
+                assert counts.get("inl.taken", 0) == 0, counts
         else:
             assert counts.get("inl.taken", 0) == 0, counts
             assert counts.get("inl.declined_storage", 0) > 0, counts
@@ -294,7 +294,19 @@ def test_taken(eng, name):
 
 @pytest.mark.parametrize("name", EMPTY)
 def test_empty(eng, name):
+    # Found empty, and handed to the Polars path, which types the empty columns.
     assert check(eng, EMPTY[name], "inl.empty") == 0
+
+
+def test_empty_optional_columns_typed_as_without_inl(eng, monkeypatch):
+    """An OPTIONAL whose right side has no solutions gives the same frame, column types
+    included, with and without index nested loops."""
+    q = PFX + f"SELECT ?l ?t WHERE {{ <{EX}Product1> rdfs:label ?l OPTIONAL {{ <{EX}Product1> :text ?t }} }}"
+    with_inl = eng.m.query(q, cache=False)
+    monkeypatch.setenv("MAPLIB_INL", "0")
+    without = eng.m.query(q, cache=False)
+    assert with_inl.schema == without.schema
+    assert with_inl.equals(without)
 
 
 @pytest.mark.parametrize("name", DECLINED)
