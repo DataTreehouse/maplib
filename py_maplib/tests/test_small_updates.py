@@ -204,6 +204,85 @@ def test_buffer_survives_serialization_and_compaction(model, tmp_path):
     assert stored(model) == before
 
 
+XSD = "http://www.w3.org/2001/XMLSchema#"
+
+BUFFER_QUERIES = [
+    "SELECT (COUNT(DISTINCT ?s) AS ?c) WHERE { ?s ?p ?o }",
+    "SELECT (COUNT(DISTINCT ?o) AS ?c) WHERE { ?s ?p ?o }",
+    f"SELECT (COUNT(DISTINCT ?s) AS ?c) (COUNT(DISTINCT ?o) AS ?d) WHERE {{ ?s <{EX}next> ?o }}",
+    f"SELECT (COUNT(DISTINCT ?o) AS ?c) WHERE {{ ?s <{EX}name> ?o }}",
+    f"SELECT ?o WHERE {{ {s(5)} <{EX}next>+ ?o }}",
+    f"SELECT ?o WHERE {{ {s(N + 1)} <{EX}next>+ ?o }}",
+    f"SELECT ?o WHERE {{ {s(N + 1)} <{EX}next>* ?o }}",
+    f"SELECT ?s WHERE {{ ?s <{EX}next>+ {s(9)} }}",
+    f"SELECT ?s WHERE {{ ?s <{EX}next>* {s(2001)} }}",
+    f"SELECT ?s ?o WHERE {{ ?s <{EX}next>/<{EX}next> ?o FILTER(?s = {s(N + 1)} || ?o = {s(2002)}) }}",
+]
+
+
+def _ox_term(t):
+    import pyoxigraph
+    if isinstance(t, pyoxigraph.NamedNode):
+        return ("uri", t.value)
+    if t.language:
+        return ("literal", t.value, t.language)
+    if t.datatype.value == XSD + "integer":
+        return ("number", int(t.value))
+    return ("literal", t.value, t.datatype.value)
+
+
+def _json_term(b):
+    if b["type"] == "uri":
+        return ("uri", b["value"])
+    if "xml:lang" in b:
+        return ("literal", b["value"], b["xml:lang"])
+    if b.get("datatype") == XSD + "integer":
+        return ("number", int(b["value"]))
+    return ("literal", b["value"], b.get("datatype", XSD + "string"))
+
+
+def check_like_oxigraph(m, store):
+    import json
+    from collections import Counter
+    for q in BUFFER_QUERIES:
+        res = store.query(q)
+        names = [v.value for v in res.variables]
+        want = Counter(tuple((n, _ox_term(sol[n])) for n in names if sol[n] is not None)
+                       for sol in res)
+        rows = json.loads(m.query(q, return_format="json"))["results"]["bindings"]
+        got = Counter(tuple((n, _json_term(r[n])) for n in names if n in r) for r in rows)
+        assert got == want, q
+
+
+def test_count_distinct_and_paths_see_the_buffer(model):
+    """COUNT DISTINCT reads the stored columns and property paths walk the sparse indices of the
+    segments; both must also read the rows in the buffer, and not the ones deleted from it."""
+    import pyoxigraph
+    store = pyoxigraph.Store()
+    store.load("\n".join(l for i in range(N) for l in lines_of(i).values()).encode(),
+               pyoxigraph.RdfFormat.TURTLE)
+
+    def update(u):
+        model.update(u)
+        store.update(u)
+
+    # New subjects, new objects, and edges between stored and new nodes.
+    update("INSERT DATA { "
+           f"{s(N + 1)} <{EX}next> {s(N + 2)} . {s(N + 2)} <{EX}next> {s(7)} . "
+           f"{s(5)} <{EX}next> {s(2000)} . {s(N + 3)} <{EX}next> {s(N + 1)} . "
+           f'{s(N + 1)} <{EX}name> "new name"@en . {s(3)} <{EX}name> "name 3"@nb . }}')
+    update(f"INSERT {{ {s(8)} <{EX}next> {s(N + 4)} . {s(N + 4)} <{EX}next> {s(2001)} }} WHERE {{}}")
+    check_like_oxigraph(model, store)
+    # A deleted buffered triple must be gone from both.
+    update(f"DELETE DATA {{ {s(N + 2)} <{EX}next> {s(7)} . {s(N + 1)} <{EX}name> \"new name\"@en }}")
+    check_like_oxigraph(model, store)
+    update(f"DELETE WHERE {{ {s(N + 4)} ?p ?o }}")
+    update(f"DELETE WHERE {{ {s(2001)} <{EX}next> ?o }}")
+    check_like_oxigraph(model, store)
+    model.compact()
+    check_like_oxigraph(model, store)
+
+
 def test_many_small_inserts_flush_the_buffer(model):
     # More triples than the buffer holds, one table, one triple at a time in batches.
     want = set(stored(model))

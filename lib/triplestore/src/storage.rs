@@ -736,12 +736,30 @@ impl Triples {
                 }
             }
         }
+        // The buffer is in no order and has no sparse index, so all of it is scanned.
+        if let Some(buffer) = self.buffer.as_ref().filter(|b| b.height() > 0) {
+            let (Ok(from), Ok(to)) = (
+                buffer.column(from_col).and_then(|c| c.u32().cloned()),
+                buffer.column(to_col).and_then(|c| c.u32().cloned()),
+            ) else {
+                return Ok(None);
+            };
+            rows += buffer.height();
+            for (f, t) in from.iter().zip(to.iter()) {
+                if let (Some(f), Some(t)) = (f, t) {
+                    if codes.binary_search(&f).is_ok() {
+                        out.push((f, t));
+                    }
+                }
+            }
+        }
         Ok(Some(rows))
     }
 
-    /// The number of segments, each of which is one lookup in [Self::in_memory_edges_from].
+    /// The number of segments, and the buffer if it holds triples, each of which is one lookup
+    /// in [Self::in_memory_edges_from].
     pub(crate) fn n_segments(&self) -> usize {
-        self.segments.len()
+        self.segments.len() + usize::from(self.buffer_height() > 0)
     }
 
     pub(crate) fn get_all_triples_lazy_frames(
@@ -782,7 +800,7 @@ impl Triples {
         }
     }
 
-    /// The stored subject or object column (`c`) of every segment, as stored: dictionary codes
+    /// The stored subject or object column (`c`) of every segment and of the buffer, as stored: dictionary codes
     /// for IRIs, blank nodes and strings. Segments in memory hand out their column without
     /// copying or planning a query; segments on disk read just that column.
     pub(crate) fn stored_columns(&self, c: &str) -> Result<Vec<Column>, TriplestoreError> {
@@ -799,6 +817,9 @@ impl Triples {
                     .map_err(TriplestoreError::LazyLoadError)?;
                 out.push(df.column(c).unwrap().clone());
             }
+        }
+        if let Some(buffer) = self.buffer.as_ref().filter(|b| b.height() > 0) {
+            out.push(buffer.column(c).unwrap().clone());
         }
         Ok(out)
     }
