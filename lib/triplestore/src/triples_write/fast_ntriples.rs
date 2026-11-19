@@ -1,7 +1,7 @@
 // The following code is based on the code below from Polars by Ritchie Vink and other contributors.
 // https://github.com/pola-rs/polars/blob/dc94be767d26943be11a40d6171ccc1c41a86c4f/crates/polars-io/src/csv/write/write_impl.rs
 // The Polars license can be found in the licensing folder.
-use crate::triples_write::serializers::serializer_for;
+use crate::triples_write::serializers::{serializer_for, Style};
 use oxrdf::vocab::{rdf, xsd};
 use oxrdf::NamedNode;
 use polars_core::prelude::*;
@@ -90,6 +90,7 @@ pub(crate) fn write_triples_in_df<W: Write>(
                             col.dtype(),
                             rdf_node_types.get(col.name().as_str()).unwrap(),
                             lang_tag,
+                            Style::NTriples,
                         )
                     })
                     .collect::<Result<_, _>>()?;

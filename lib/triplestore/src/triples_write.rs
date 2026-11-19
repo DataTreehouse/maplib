@@ -22,6 +22,7 @@ mod fast_ntriples;
 mod hdt_write;
 mod pretty_turtle;
 mod serializers;
+pub mod sparql_json;
 
 const CHUNK_SIZE: usize = 1_024;
 /// Rows of a table that are decoded at a time when it is written triple by triple, so that only

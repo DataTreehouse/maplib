@@ -22,6 +22,15 @@ impl std::fmt::Write for IgnoreFmt {
     }
 }
 
+/// What the term serializers write: N-Triples terms (`<iri>`, `_:b`, `"lex"`, `@lang`), or the
+/// JSON strings that SPARQL JSON results hold for them (`"iri"`, `"b"`, `"lex"`, `"lang"`).
+/// Numbers, booleans and the other lexical forms are the same quoted strings in both.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub(super) enum Style {
+    NTriples,
+    Json,
+}
+
 pub(super) trait Serializer<'a> {
     fn serialize(&mut self, buf: &mut Vec<u8>);
     // Updates the array without changing the configuration.
@@ -135,6 +144,39 @@ fn bool_serializer(array: &BooleanArray) -> impl Serializer<'_> {
     })
 }
 
+/// Writes a string escaped for an N-Triples string literal and for a JSON string alike: quotes,
+/// backslashes and all control characters (as `\n`, `\t`, `\r`, `\b`, `\f` or `\u00XX`, which both
+/// formats read). All escaped characters are ASCII, so they never occur inside a multi-byte UTF-8
+/// sequence, and the bytes can be scanned with the unescaped runs copied in bulk.
+pub(super) fn write_escaped(s: &str, buf: &mut Vec<u8>) {
+    let bytes = s.as_bytes();
+    buf.reserve(bytes.len());
+    let mut start = 0;
+    for (i, &b) in bytes.iter().enumerate() {
+        if b >= 0x20 && b != b'"' && b != b'\\' {
+            continue;
+        }
+        buf.extend_from_slice(&bytes[start..i]);
+        match b {
+            b'\n' => buf.extend_from_slice(b"\\n"),
+            b'\t' => buf.extend_from_slice(b"\\t"),
+            b'\r' => buf.extend_from_slice(b"\\r"),
+            b'"' => buf.extend_from_slice(b"\\\""),
+            b'\\' => buf.extend_from_slice(b"\\\\"),
+            0x08 => buf.extend_from_slice(b"\\b"),
+            0x0c => buf.extend_from_slice(b"\\f"),
+            c => {
+                const HEX: &[u8; 16] = b"0123456789ABCDEF";
+                buf.extend_from_slice(b"\\u00");
+                buf.push(HEX[(c >> 4) as usize]);
+                buf.push(HEX[(c & 0xf) as usize]);
+            }
+        }
+        start = i + 1;
+    }
+    buf.extend_from_slice(&bytes[start..]);
+}
+
 pub(super) fn string_serializer<'a, Iter: Send + 'a>(
     mut f: impl FnMut(&mut Iter) -> Option<&str> + Send + 'a,
     mut update: impl FnMut(&'a dyn Array) -> Iter + Send + 'a,
@@ -158,28 +200,6 @@ pub(super) fn string_serializer<'a, Iter: Send + 'a>(
         fn update_array(&mut self, array: &'a dyn Array) {
             self.iter = (self.update)(array);
         }
-    }
-
-    // All escaped characters are ASCII, so they never occur inside a multi-byte UTF-8 sequence
-    // and we can scan bytes and copy the unescaped runs in bulk.
-    fn write_escaped(s: &str, buf: &mut Vec<u8>) {
-        let bytes = s.as_bytes();
-        buf.reserve(bytes.len());
-        let mut start = 0;
-        for (i, &b) in bytes.iter().enumerate() {
-            let escaped: &[u8] = match b {
-                b'\n' => b"\\n",
-                b'\t' => b"\\t",
-                b'\r' => b"\\r",
-                b'"' => b"\\\"",
-                b'\\' => b"\\\\",
-                _ => continue,
-            };
-            buf.extend_from_slice(&bytes[start..i]);
-            buf.extend_from_slice(escaped);
-            start = i + 1;
-        }
-        buf.extend_from_slice(&bytes[start..]);
     }
 
     let iter = update(array);
@@ -351,6 +371,7 @@ pub(super) fn serializer_for<'a>(
     dtype: &'a DataType,
     rdf_node_type: &'a BaseRDFNodeType,
     is_lang_tag: bool,
+    style: Style,
 ) -> PolarsResult<Box<dyn Serializer<'a> + Send + 'a>> {
     macro_rules! with_quoted_serializer {
         ($make_serializer:path, $($arg:tt)*) => {{
@@ -377,6 +398,17 @@ pub(super) fn serializer_for<'a>(
         (DataType::Boolean, _) => {
             with_quoted_serializer!(bool_serializer)
         }
+        // In JSON, IRIs, blank node labels and language tags are plain (escaped) strings.
+        (DataType::String, _) if style == Style::Json => string_serializer(
+            |iter| Iterator::next(iter).expect(TOO_MANY_MSG),
+            |arr| {
+                arr.as_any()
+                    .downcast_ref::<Utf8ViewArray>()
+                    .expect(ARRAY_MISMATCH_MSG)
+                    .iter()
+            },
+            array,
+        ),
         (DataType::String, BaseRDFNodeType::BlankNode) => blank_node_serializer(
             |iter| Iterator::next(iter).expect(TOO_MANY_MSG),
             |arr| {

@@ -388,6 +388,18 @@ fn query_to_result(
                 )
                 .into());
             }
+            // SELECT results are written with maplib's own writer; the general writer stays for
+            // ASK and for column types that writer does not cover.
+            if let QueryResultKind::Select(sm) = &res.kind {
+                let written = py
+                    .detach(|| triplestore::triples_write::sparql_json::sparql_json(sm, global_cats.clone()))
+                    .map_err(|e| PyMaplibError::RuntimeError(e.to_string()))?;
+                if let Some(bytes) = written {
+                    // The writer only writes valid UTF-8 (escaped strings and ASCII).
+                    let s = String::from_utf8(bytes).map_err(|e| PyMaplibError::RuntimeError(e.to_string()))?;
+                    return Ok(PyString::new(py, &s).into());
+                }
+            }
             let json = res.kind.json(global_cats.clone());
             Ok(PyString::new(py, &json).into())
         }
