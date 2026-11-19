@@ -664,6 +664,16 @@ impl CatMapsInMemory {
         Some(self.strings.parts(self.codes.get(u)?))
     }
 
+    /// Orders the strings with the codes `a` and `b` without decoding them, None if a code is
+    /// not here.
+    #[inline]
+    pub fn cmp_codes(&self, a: u32, b: u32) -> Option<Ordering> {
+        if a == b {
+            return Some(Ordering::Equal);
+        }
+        Some(cmp_split_strs(self.decode_parts(a)?, self.decode_parts(b)?))
+    }
+
     /// Whether some encoded string starts with `prefix`: a binary search in the cached string
     /// order, where the first string not less than `prefix` starts with it if any string does.
     pub fn has_string_with_prefix(&self, prefix: &str) -> bool {

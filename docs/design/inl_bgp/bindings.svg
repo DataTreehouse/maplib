@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 250" font-family="Helvetica, Arial, sans-serif" font-size="12">
+<defs><marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0L10,5L0,10z" fill="#444"/></marker></defs>
+<text x="10" y="20" font-weight="bold" font-size="13">Q2 core, one pattern at a time over all rows (columns of u64 slots)</text>
+<g font-family="Menlo, monospace" font-size="11">
+<text x="10" y="50">1. &lt;P&gt; rdfs:label ?label</text>
+<rect x="10" y="58" width="70" height="18" fill="#cfc" stroke="#383"/><text x="15" y="71">label=c₁</text>
+<text x="200" y="50">2. &lt;P&gt; bsbm:producer ?p</text>
+<rect x="200" y="58" width="70" height="18" fill="#eee" stroke="#999"/><text x="205" y="71">c₁</text>
+<rect x="270" y="58" width="70" height="18" fill="#cfc" stroke="#383"/><text x="275" y="71">p=c₂</text>
+<text x="390" y="50">3. ?p rdfs:label ?producer</text>
+<rect x="390" y="58" width="50" height="18" fill="#eee" stroke="#999"/><text x="395" y="71">c₁</text>
+<rect x="440" y="58" width="50" height="18" fill="#eee" stroke="#999"/><text x="445" y="71">c₂</text>
+<rect x="490" y="58" width="70" height="18" fill="#cfc" stroke="#383"/><text x="495" y="71">c₃</text>
+<text x="580" y="50">4. &lt;P&gt; …Numeric1 ?n</text>
+<rect x="580" y="58" width="110" height="18" fill="#fde" stroke="#a46"/><text x="585" y="71">n=(seg 0,row 812)</text>
+</g>
+<path d="M85,67H196" stroke="#444" marker-end="url(#a)"/><path d="M345,67H386" stroke="#444" marker-end="url(#a)"/><path d="M563,67H576" stroke="#444" marker-end="url(#a)"/>
+<text x="10" y="110">Per step: for each row, probe with the codes it binds; push (parent row, new slots); then gather the old columns by parent.</text>
+<text x="10" y="130">Coded types (IRI, blank, xsd:string) hold codes; native values (numbers, dates) hold a (segment, row) reference,</text>
+<text x="10" y="148">gathered once at the end with one take per segment. Output: DataFrame of UInt32 codes (CategoricalNative) + native columns.</text>
+<rect x="10" y="170" width="740" height="64" rx="6" fill="#f8f8f8" stroke="#aaa"/>
+<text x="20" y="190">Order: seed = pattern with a constant and the fewest matches (counted exactly by one binary search),</text>
+<text x="20" y="208">then connected patterns: both ends bound (checks) → bound subject → bound object (object sort) → bound object (scan).</text>
+<text x="20" y="226">Guard: more than 100,000 rows → return None, Polars path runs from scratch.</text>
+</svg>

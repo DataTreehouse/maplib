@@ -94,6 +94,16 @@ impl CatMaps {
         }
     }
     /// The in-memory dictionary, if the dictionary is in memory.
+    /// Orders the strings of two codes without decoding them; None on disk or for a code that
+    /// is not here.
+    #[inline]
+    pub fn cmp_codes(&self, a: u32, b: u32) -> Option<std::cmp::Ordering> {
+        match self {
+            CatMaps::InMemory(m) => m.cmp_codes(a, b),
+            CatMaps::OnDisk(_) => None,
+        }
+    }
+
     pub fn as_in_memory(&self) -> Option<&CatMapsInMemory> {
         match self {
             CatMaps::InMemory(m) => Some(m.as_ref()),

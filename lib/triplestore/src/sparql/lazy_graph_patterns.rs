@@ -206,6 +206,39 @@ impl Triplestore {
                 let (patterns, length_paths) =
                     length_path::extract_length_path_patterns(&patterns)?;
                 self.check_maplib_predicates(&patterns)?;
+                // PROTOTYPE: index nested loops on codes for a BGP without incoming solutions.
+                if crate::storage::inl::inl_enabled() {
+                    if let Some(sm) = &solution_mappings {
+                        crate::storage::inl::why::<()>(
+                            None,
+                            &format!("incoming solutions, height estimate {}", sm.height_estimate),
+                        );
+                    }
+                }
+                if solution_mappings.is_none()
+                    && length_paths.is_empty()
+                    && crate::storage::inl::inl_enabled()
+                {
+                    let graph = match dataset {
+                        QueryGraph::NamedGraph(ng) => Some(ng.clone()),
+                        QueryGraph::QueryDataset(qd) if qd.default.len() == 1 => Some(
+                            representation::dataset::NamedGraph::from_maybe_named_node(Some(
+                                &qd.default[0],
+                            )),
+                        ),
+                        _ => None,
+                    };
+                    let g = crate::storage::inl::why(
+                        graph.as_ref().and_then(|g| self.graph_triples_map.get(g)),
+                        "dataset is not one stored graph",
+                    );
+                    if let Some(g) = g {
+                        let cats = self.global_cats.read()?;
+                        if let Some(sm) = crate::storage::inl::inl_bgp(&patterns, g, &cats) {
+                            return Ok(sm.as_lazy());
+                        }
+                    }
+                }
                 pushdowns.add_patterns_pushdowns(&patterns);
                 // A pattern whose variables can have no stored type has no solutions: nothing is
                 // read, and the solutions so far are not collected.

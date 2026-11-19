@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 300" font-family="Helvetica, Arial, sans-serif" font-size="12">
+<defs><marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0L10,5L0,10z" fill="#444"/></marker></defs>
+<text x="10" y="20" font-weight="bold" font-size="13">Probe of table (g, p, IRI, T) with subject code c</text>
+<rect x="10" y="40" width="120" height="36" rx="5" fill="#ffe9c4" stroke="#a70"/><text x="70" y="62" text-anchor="middle">code c</text>
+<g>
+<rect x="190" y="35" width="120" height="46" rx="5" fill="#eef" stroke="#557"/><text x="250" y="54" text-anchor="middle">segment 1</text><text x="250" y="70" text-anchor="middle" font-size="11">Bloom: maybe</text>
+<rect x="190" y="105" width="120" height="46" rx="5" fill="#eee" stroke="#999"/><text x="250" y="124" text-anchor="middle" fill="#777">segment 2</text><text x="250" y="140" text-anchor="middle" font-size="11" fill="#777">Bloom: no → skip</text>
+<rect x="190" y="175" width="120" height="46" rx="5" fill="#fde" stroke="#a46"/><text x="250" y="194" text-anchor="middle">write buffer</text><text x="250" y="210" text-anchor="middle" font-size="11">≤ 4,096 rows: scan</text>
+</g>
+<path d="M130,58H188" stroke="#444" marker-end="url(#a)"/><path d="M130,62L188,125" stroke="#999" marker-end="url(#a)"/><path d="M130,66L188,195" stroke="#444" marker-end="url(#a)"/>
+<g font-family="Menlo, monospace" font-size="11">
+<text x="350" y="40">subj (sorted by string)   obj</text>
+<rect x="350" y="48" width="160" height="16" fill="#fff" stroke="#ccc"/><text x="355" y="60">…/Product10 → 17</text>
+<rect x="350" y="64" width="160" height="16" fill="#cfc" stroke="#383"/><text x="355" y="76">…/Product11 → c</text>
+<rect x="350" y="80" width="160" height="16" fill="#cfc" stroke="#383"/><text x="355" y="92">…/Product11 → c</text>
+<rect x="350" y="96" width="160" height="16" fill="#fff" stroke="#ccc"/><text x="355" y="108">…/Product12 → 9</text>
+<rect x="520" y="48" width="60" height="16" fill="#fff" stroke="#ccc"/><text x="525" y="60">l₁</text>
+<rect x="520" y="64" width="60" height="16" fill="#cfc" stroke="#383"/><text x="525" y="76">l₂</text>
+<rect x="520" y="80" width="60" height="16" fill="#cfc" stroke="#383"/><text x="525" y="92">l₃</text>
+<rect x="520" y="96" width="60" height="16" fill="#fff" stroke="#ccc"/><text x="525" y="108">l₄</text>
+</g>
+<path d="M310,58H346" stroke="#444" marker-end="url(#a)"/>
+<text x="600" y="62" font-size="11">partition_point with</text><text x="600" y="76" font-size="11">cmp_codes (prefix+suffix,</text><text x="600" y="90" font-size="11">no decode): log₂ n steps,</text><text x="600" y="104" font-size="11">then the run of equal codes</text>
+<rect x="350" y="150" width="390" height="120" rx="6" fill="#f8f8f8" stroke="#aaa"/>
+<text x="360" y="170" font-weight="bold">Same probe, other storage</text>
+<text x="360" y="190">object bound + object sort: same search on osort</text>
+<text x="360" y="208">object bound, no object sort: scan u32 objects (seed only)</text>
+<text x="360" y="226">hybrid (dict on disk): sparse-index seek with decoded string,</text>
+<text x="372" y="242">then window ≤ 200 rows compared by code</text>
+<text x="360" y="260">disk: + read only the row groups of the ranges, batched per step</text>
+</svg>

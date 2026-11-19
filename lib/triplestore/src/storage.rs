@@ -1,5 +1,6 @@
 mod deduplication;
 mod delete;
+pub(crate) mod inl;
 pub mod remote_segments;
 pub mod so_index;
 
