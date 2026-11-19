@@ -137,3 +137,88 @@ def test_named_graph():
     q = "SELECT (COUNT(DISTINCT ?o) AS ?c) WHERE { ?s ?p ?o }"
     assert m.query(q, graph="urn:g:2")["c"][0] == 1
     assert m.query(q.replace("WHERE", "FROM <urn:g:2> WHERE"))["c"][0] == 1
+
+
+def _large_data(seed, n, prefix):
+    """N-Triples with many distinct IRIs, blank nodes, strings, language-tagged strings, other
+    datatypes and numbers, enough that the distinct counts are computed in parallel."""
+    import random
+
+    r = random.Random(seed)
+    ex = "http://ex.org/"
+    out = []
+    for i in range(n):
+        s = f"_:{prefix}b{r.randrange(n // 50)}" if i % 7 == 0 else f"<{ex}s{r.randrange(n // 3)}>"
+        k = i % 6
+        if k == 0:
+            p, o = "p", f"<{ex}o{r.randrange(n)}>"
+        elif k == 1:
+            p, o = "q", f"_:{prefix}c{r.randrange(n // 20)}"
+        elif k == 2:
+            p, o = "q", f'"v{r.randrange(n // 2)}"'
+        elif k == 3:
+            p, o = "r", f'"w{r.randrange(n // 4)}"@{r.choice(["en", "nb", "de", "en-GB"])}'
+        elif k == 4:
+            p, o = "r", f'"t{r.randrange(n // 8)}"^^<{ex}customType>'
+        else:
+            p, o = "d", f'"{r.randrange(n // 5)}"^^<http://www.w3.org/2001/XMLSchema#integer>'
+        out.append(f"{s} <{ex}{p}> {o} .")
+    return "\n".join(out)
+
+
+LARGE_QUERIES = [
+    (pred, agg, flt)
+    for pred in ["?p", "<http://ex.org/q>", "<http://ex.org/r>"]
+    for agg in ["COUNT(DISTINCT ?s)", "COUNT(DISTINCT ?o)"]
+    for flt in [None, "ISLITERAL(?o)", "ISBLANK(?s)", "!ISBLANK(?o)"]
+]
+
+
+def _check_large(m, graph=None):
+    for pred, agg, flt in LARGE_QUERIES:
+        fast = m.query(query(pred, agg, flt, False), graph=graph)["c"].to_list()
+        general = m.query(query(pred, agg, flt, True), graph=graph)["c"].to_list()
+        assert fast == general, (pred, agg, flt)
+
+
+def test_large_mixed_types_segments_and_updates():
+    """Many tables of several segments each (one per read), then inserts and deletes, and a
+    named graph sharing the dictionary codes of the default graph."""
+    m = Model()
+    for i in range(3):
+        m.reads(_large_data(i, 60_000, f"x{i}"), format="ntriples")
+    _check_large(m)
+    m.update(
+        'INSERT DATA { <http://ex.org/new> <http://ex.org/q> "v1" , "brand new" , _:fresh , '
+        '"w1"@en , "w1"@fr . }'
+    )
+    _check_large(m)
+    m.update(
+        "DELETE { ?s ?p ?o } WHERE { ?s ?p ?o "
+        'FILTER(STRSTARTS(STR(?s), "http://ex.org/s1")) }'
+    )
+    _check_large(m)
+    m.reads(_large_data(9, 40_000, "g"), format="ntriples", graph="urn:g:large")
+    _check_large(m, graph="urn:g:large")
+    _check_large(m)
+
+
+def test_known_distinct_counts_large():
+    """Distinct counts that are known from how the data is built."""
+    ex = "http://ex.org/"
+    n = 200_000
+    lines = [f"<{ex}s{i % 70_000}> <{ex}p> <{ex}o{i % 90_001}> ." for i in range(n)]
+    lines += [f'<{ex}s{i}> <{ex}l> "x{i % 1000}"@{["en", "nb"][i % 2]} .' for i in range(4000)]
+    m = Model()
+    m.reads("\n".join(lines), format="ntriples")
+
+    def c(q):
+        return m.query(q)["c"][0]
+
+    assert c(f"SELECT (COUNT(DISTINCT ?s) AS ?c) WHERE {{ ?s <{ex}p> ?o }}") == 70_000
+    assert c(f"SELECT (COUNT(DISTINCT ?o) AS ?c) WHERE {{ ?s <{ex}p> ?o }}") == 90_001
+    # 1000 values, each with one of the two tags in every other row: (x_k, en) for even k
+    # and (x_k, nb) for odd k, since i % 1000 and i % 2 agree in parity.
+    assert c(f"SELECT (COUNT(DISTINCT ?o) AS ?c) WHERE {{ ?s <{ex}l> ?o }}") == 1000
+    assert c("SELECT (COUNT(DISTINCT ?o) AS ?c) WHERE { ?s ?p ?o }") == 91_001
+    assert c("SELECT (COUNT(DISTINCT ?s) AS ?c) WHERE { ?s ?p ?o }") == 70_000

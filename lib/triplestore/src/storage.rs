@@ -20,8 +20,8 @@ use polars::prelude::{
 use polars_core::frame::DataFrame;
 use polars_core::prelude::{ChunkCompareEq, DataType};
 use polars_core::prelude::{
-    IntoColumn, Series, SortMultipleOptions, StringChunked, StringChunkedBuilder, UInt32Chunked,
-    UInt64Chunked,
+    Column, IntoColumn, Series, SortMultipleOptions, StringChunked, StringChunkedBuilder,
+    UInt32Chunked, UInt64Chunked,
 };
 use polars_core::series::IsSorted;
 use polars_core::utils::Container;
@@ -730,6 +730,27 @@ impl Triples {
         } else {
             Ok(Some(all_lfs))
         }
+    }
+
+    /// The stored subject or object column (`c`) of every segment, as stored: dictionary codes
+    /// for IRIs, blank nodes and strings. Segments in memory hand out their column without
+    /// copying or planning a query; segments on disk read just that column.
+    pub(crate) fn stored_columns(&self, c: &str) -> Result<Vec<Column>, TriplestoreError> {
+        let mut out = Vec::with_capacity(self.segments.len());
+        for seg in &self.segments {
+            let stored = seg.subject_sort.as_ref().unwrap();
+            if let StoredTriples::TriplesInMemory(mem) = stored {
+                out.push(mem.df.as_ref().unwrap().column(c).unwrap().clone());
+            } else {
+                let df = stored
+                    .get_lazy_frame()?
+                    .select([col(c)])
+                    .collect()
+                    .map_err(TriplestoreError::LazyLoadError)?;
+                out.push(df.column(c).unwrap().clone());
+            }
+        }
+        Ok(out)
     }
 
     pub fn get_lazy_frame_between_subject_strings(

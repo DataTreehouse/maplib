@@ -17,12 +17,17 @@ use crate::sparql::errors::SparqlError;
 use crate::storage::Triples;
 use oxrdf::vocab::xsd;
 use oxrdf::Variable;
-use polars::prelude::{col, concat, IntoLazy, LazyFrame, UnionArgs};
+use polars::prelude::IntoLazy;
+use polars_core::utils::polars_arrow::array::{Array, PrimitiveArray};
 use polars_core::frame::DataFrame;
-use polars_core::prelude::{Column, DataType};
+use polars_core::prelude::{ChunkAgg, Column, DataType, UInt32Chunked};
+use rayon::prelude::*;
 use representation::dataset::QueryGraph;
 use representation::solution_mapping::SolutionMappings;
-use representation::{BaseRDFNodeType, OBJECT_COL_NAME, SUBJECT_COL_NAME};
+use representation::{
+    BaseRDFNodeType, LANG_STRING_LANG_FIELD, LANG_STRING_VALUE_FIELD, OBJECT_COL_NAME,
+    SUBJECT_COL_NAME,
+};
 use spargebra::algebra::{AggregateExpression, AggregateFunction, Expression, Function, GraphPattern};
 use spargebra::term::{NamedNodePattern, TermPattern};
 use std::collections::{HashMap, HashSet};
@@ -230,47 +235,150 @@ fn kind_conditions(
 /// stored values. Terms of different types are different terms, and the stored type of a term
 /// is fixed (a datatype with its time zone offset, see `BaseRDFNodeType`), so the counts per
 /// type add up.
+///
+/// IRIs, blank nodes and strings are stored as dictionary codes, numbered per type, so their
+/// distinct values are the bits set in a bitset over the codes. Other literals are counted with
+/// `n_unique`.
 fn distinct_values(
     tables: &[(&oxrdf::NamedNode, &Triples)],
     subject: bool,
 ) -> Result<usize, SparqlError> {
     let c = if subject { SUBJECT_COL_NAME } else { OBJECT_COL_NAME };
-    let mut by_type: HashMap<&BaseRDFNodeType, Vec<LazyFrame>> = HashMap::new();
+    let mut by_type: HashMap<&BaseRDFNodeType, Vec<Column>> = HashMap::new();
     for (_, t) in tables {
         let ty = if subject { &t.subject_type } else { &t.object_type };
-        let lfs = t.get_lazy_frame_slices()?.unwrap_or_default();
-        by_type
-            .entry(ty)
-            .or_default()
-            .extend(lfs.into_iter().map(|lf| lf.select([col(c)])));
+        by_type.entry(ty).or_default().extend(t.stored_columns(c)?);
     }
-    if by_type.is_empty() {
+    let counts = by_type
+        .into_iter()
+        .collect::<Vec<_>>()
+        .into_par_iter()
+        .map(|(ty, columns)| distinct_of_type(ty, columns))
+        .collect::<Result<Vec<usize>, SparqlError>>()?;
+    Ok(counts.into_iter().sum())
+}
+
+/// The distinct values of the stored columns of one type.
+fn distinct_of_type(ty: &BaseRDFNodeType, columns: Vec<Column>) -> Result<usize, SparqlError> {
+    if ty.stored_cat() {
+        if ty.is_lang_string() {
+            if let Some(n) = distinct_lang_strings(&columns) {
+                return Ok(n);
+            }
+        } else if columns.iter().all(|c| c.dtype() == &DataType::UInt32) {
+            let chunked: Vec<&UInt32Chunked> = columns.iter().map(|c| c.u32().unwrap()).collect();
+            return Ok(distinct_codes_count(&chunked));
+        }
+    }
+    let mut columns = columns.into_iter();
+    let Some(first) = columns.next() else {
         return Ok(0);
+    };
+    let mut s = first.take_materialized_series();
+    for c in columns {
+        s.append(c.as_materialized_series())
+            .map_err(TriplestoreError::LazyLoadError)?;
     }
-    let counts: Vec<LazyFrame> = by_type
-        .into_values()
-        .map(|lfs| {
-            let args = UnionArgs {
-                parallel: true,
-                rechunk: false,
-                to_supertypes: false,
-                ..Default::default()
-            };
-            Ok(concat(lfs, args)
-                .map_err(TriplestoreError::LazyLoadError)?
-                .select([col(c).n_unique().cast(DataType::UInt64).alias("n")]))
+    Ok(s.n_unique().map_err(TriplestoreError::LazyLoadError)?)
+}
+
+/// Inputs up to this many codes are counted on one thread.
+const SERIAL_CODES: usize = 1 << 16;
+
+/// The number of distinct codes in the columns: the bits set in a bitset over the codes. The
+/// columns are cut into pieces of about equal length, each thread sets the bits of its pieces
+/// in a bitset of its own, and the bitsets are ORed and counted word by word. Codes too sparse
+/// for a bitset are sorted instead.
+fn distinct_codes_count(columns: &[&UInt32Chunked]) -> usize {
+    let rows: usize = columns.iter().map(|c| c.len() - c.null_count()).sum();
+    let Some(max) = columns.iter().filter_map(|c| c.max()).max() else {
+        return 0;
+    };
+    let words = (max as usize >> 6) + 1;
+    // A bitset of at most 2 bytes per code (plus 512 KiB), else sort.
+    if words > rows / 4 + (1 << 16) {
+        let mut codes = Vec::with_capacity(rows);
+        for c in columns {
+            for arr in c.downcast_iter() {
+                if arr.null_count() == 0 {
+                    codes.extend_from_slice(arr.values().as_slice());
+                } else {
+                    codes.extend(arr.iter().flatten().copied());
+                }
+            }
+        }
+        codes.par_sort_unstable();
+        codes.dedup();
+        return codes.len();
+    }
+
+    let threads = if rows <= SERIAL_CODES {
+        1
+    } else {
+        rayon::current_num_threads().clamp(1, rows / SERIAL_CODES)
+    };
+    // Pieces of at most `piece` codes; arrays with nulls (not expected in stored columns) are
+    // kept whole.
+    let piece = rows.div_ceil(threads * 4).max(1);
+    let mut pieces: Vec<(&[u32], Option<&PrimitiveArray<u32>>)> = vec![];
+    for c in columns {
+        for arr in c.downcast_iter() {
+            if arr.null_count() > 0 {
+                pieces.push((&[], Some(arr)));
+            } else {
+                pieces.extend(arr.values().as_slice().chunks(piece).map(|s| (s, None)));
+            }
+        }
+    }
+    let set_bits = |bits: &mut [u64], pieces: &[(&[u32], Option<&PrimitiveArray<u32>>)]| {
+        for (values, with_nulls) in pieces {
+            let mut set = |u: u32| bits[(u >> 6) as usize] |= 1u64 << (u & 63);
+            if let Some(arr) = with_nulls {
+                arr.iter().flatten().for_each(|u| set(*u));
+            } else {
+                values.iter().for_each(|u| set(*u));
+            }
+        }
+    };
+    if threads == 1 {
+        let mut bits = vec![0u64; words];
+        set_bits(&mut bits, &pieces);
+        return bits.iter().map(|w| w.count_ones() as usize).sum();
+    }
+    let per_thread = pieces.len().div_ceil(threads);
+    let bitsets: Vec<Vec<u64>> = pieces
+        .par_chunks(per_thread)
+        .map(|ps| {
+            let mut bits = vec![0u64; words];
+            set_bits(&mut bits, ps);
+            bits
         })
-        .collect::<Result<_, SparqlError>>()?;
-    let df = concat(counts, UnionArgs::default())
-        .map_err(TriplestoreError::LazyLoadError)?
-        .select([col("n").sum()])
-        .collect()
-        .map_err(TriplestoreError::LazyLoadError)?;
-    Ok(df
-        .column("n")
-        .unwrap()
-        .u64()
-        .unwrap()
-        .get(0)
-        .unwrap_or(0) as usize)
+        .collect();
+    (0..words)
+        .into_par_iter()
+        .with_min_len(4096)
+        .map(|w| bitsets.iter().fold(0u64, |acc, b| acc | b[w]).count_ones() as usize)
+        .sum()
+}
+
+/// The number of distinct language-tagged strings, stored as a struct of the value code and the
+/// language code: the distinct pairs. None if the columns are not stored that way.
+fn distinct_lang_strings(columns: &[Column]) -> Option<usize> {
+    let mut pairs: Vec<u64> = vec![];
+    for c in columns {
+        let st = c.struct_().ok()?;
+        let values = st.field_by_name(LANG_STRING_VALUE_FIELD).ok()?;
+        let langs = st.field_by_name(LANG_STRING_LANG_FIELD).ok()?;
+        let values = values.u32().ok()?;
+        let langs = langs.u32().ok()?;
+        pairs.reserve(values.len());
+        for (v, l) in values.iter().zip(langs.iter()) {
+            if let (Some(v), Some(l)) = (v, l) {
+                pairs.push(((l as u64) << 32) | v as u64);
+            }
+        }
+    }
+    pairs.par_sort_unstable();
+    pairs.dedup();
+    Some(pairs.len())
 }
