@@ -1,18 +1,17 @@
 use super::Triplestore;
 use crate::sparql::errors::SparqlError;
 use crate::sparql::QuerySettings;
+use crate::storage::Triples;
 use oxrdf::vocab::xsd;
 use oxrdf::{NamedNode, Term, Variable};
 use polars::prelude::{
-    by_name, col, lit, AnyValue, DataFrame, IdxCa, IntoColumn, IntoLazy, IntoSeries, JoinType,
-    UInt32Chunked,
+    by_name, col, lit, DataFrame, IdxCa, IntoColumn, IntoLazy, JoinType, UInt32Chunked,
 };
-use polars_core::prelude::{DataType, ExplodeOptions, SortMultipleOptions};
-use polars_core::utils::Container;
+use polars_core::prelude::{DataType, ExplodeOptions};
 use query_processing::errors::QueryProcessingError;
 use query_processing::expressions::{literal_enc, named_node_enc, named_node_local_enc};
 use query_processing::graph_patterns::{distinct, group_by_workaround, join, union};
-use query_processing::pushdowns::Pushdowns;
+use query_processing::pushdowns::{Pushdowns, CHECK_SMALL_HEIGHT};
 use rayon::prelude::*;
 use representation::cats::{Cats, LockedCats};
 use representation::dataset::{NamedGraph, QueryGraph};
@@ -20,24 +19,17 @@ use representation::multitype::{
     compress_actual_multitypes, force_convert_multicol_to_single_col, nest_multicolumns,
 };
 use representation::query_context::{Context, PathEntry};
-use representation::solution_mapping::{BaseCatState, SolutionMappings};
+use representation::solution_mapping::{BaseCatState, EagerSolutionMappings, SolutionMappings};
 use representation::{BaseRDFNodeType, RDFNodeState};
 use representation::{OBJECT_COL_NAME, SUBJECT_COL_NAME};
 use spargebra::algebra::{Expression, GraphPattern, PropertyPathExpression};
 use spargebra::term::{GroundTerm, NamedNodePattern, TermPattern, TriplePattern};
-use sprs::{CsMatBase, TriMatBase};
+use std::cell::Cell;
 use std::collections::{HashMap, HashSet};
 
 const NAMED_NODE_INDEX_COL: &str = "named_node_index_column";
 pub(crate) const VALUE_COLUMN: &str = "value";
 pub(crate) const LOOKUP_COLUMN: &str = "key";
-
-type SparseMatrix = CsMatBase<u32, usize, Vec<usize>, Vec<usize>, Vec<u32>, usize>;
-
-struct SparsePathReturn {
-    sparmat: SparseMatrix,
-    eye: bool,
-}
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub(crate) enum PathLeaf {
@@ -157,120 +149,149 @@ impl Triplestore {
 
         let mut out_df;
 
-        // Values that the ends of the path are bound to, from the solution mappings so far.
+        // The nodes that an end of the path is bound to, as global dictionary codes. When an
+        // end's column in the solution mappings so far holds IRIs with global codes, its codes
+        // are read from the column, rather than pushed down as terms and encoded again.
         let mut pushdowns = pushdowns;
-        let focus: Vec<&str> = [subject, object]
-            .into_iter()
-            .filter_map(|t| match t {
-                TermPattern::Variable(v) => Some(v.as_str()),
-                _ => None,
-            })
-            .collect();
-        let solution_mappings = solution_mappings.map(|sm| {
-            // Paths walk outward from the pushed values, so no table size limits them.
-            pushdowns.add_from_solution_mappings(sm, self.global_cats.clone(), &focus, None)
-        });
-
-        let mut df_creator = U32DataFrameCreator::new(dataset.clone());
-        df_creator.gather_namednode_dfs(ppe, self)?;
-        let (lookup_df, lookup_dtypes, namednode_dfs) =
-            df_creator.create_u32_dfs(self.global_cats.clone())?;
-        let max_index: u32 = lookup_df
-            .column(LOOKUP_COLUMN)
-            .unwrap()
-            .as_materialized_series()
-            .max()
-            .unwrap()
-            .unwrap_or(0);
-        let bound = {
+        let mut mapped_codes = [None, None];
+        let solution_mappings = match solution_mappings {
+            Some(sm)
+                if sm.height_estimate <= CHECK_SMALL_HEIGHT
+                    && [subject, object]
+                        .into_iter()
+                        .any(|t| global_iri_column(t, &sm.rdf_node_types).is_some()) =>
+            {
+                let eager = sm.as_eager();
+                mapped_codes = [
+                    mapped_iri_codes(subject, &eager),
+                    mapped_iri_codes(object, &eager),
+                ];
+                Some(eager.as_lazy())
+            }
+            Some(sm) => {
+                let focus: Vec<&str> = [subject, object]
+                    .into_iter()
+                    .filter_map(|t| match t {
+                        TermPattern::Variable(v) => Some(v.as_str()),
+                        _ => None,
+                    })
+                    .collect();
+                // Paths walk outward from the pushed values, so no table size limits them.
+                Some(pushdowns.add_from_solution_mappings(
+                    sm,
+                    self.global_cats.clone(),
+                    &focus,
+                    None,
+                ))
+            }
+            None => None,
+        };
+        let start_codes = {
             let cats = self.global_cats.read().unwrap();
-            bound_start_keys(
-                subject,
-                object,
-                &pushdowns,
-                &lookup_df,
-                &lookup_dtypes,
-                &cats,
+            let [mapped_subject, mapped_object] = mapped_codes;
+            fewer(
+                mapped_subject,
+                bound_iri_codes(subject, &pushdowns, &cats),
+            )
+            .map(|s| (s, false))
+            .into_iter()
+            .chain(
+                fewer(mapped_object, bound_iri_codes(object, &pushdowns, &cats))
+                    .map(|o| (o, true)),
+            )
+            // The end with fewer nodes, the subject on a tie.
+            .min_by_key(|(c, reversed)| (c.len(), *reversed))
+            .map(|(mut c, reversed)| {
+                c.sort_unstable();
+                c.dedup();
+                (c, reversed)
+            })
+        };
+
+        // From a few nodes, the paths are followed on dictionary codes, reading the edges of each
+        // step from the sparse indexes of the triple tables. Past a budget of lookups, keying
+        // the whole tables (below) is cheaper. A path that matches with zero length would match
+        // each start to itself, also a start that is not a node of the graph: that is only
+        // right for a constant start, which matches itself anyway (see below).
+        let walked = match &start_codes {
+            Some((starts, reversed))
+                if starts.len() <= WALK_MAX_STARTS
+                    && (!matches_zero_length(ppe)
+                        || is_constant(if *reversed { object } else { subject })) =>
+            {
+                let cats = self.global_cats.read().unwrap();
+                CodeWalk::new(self, ppe, *reversed, dataset, &cats)
+                    .and_then(|walk| walk.paths_from(ppe, starts, *reversed).ok())
+            }
+            _ => None,
+        };
+
+        let value_state;
+        let (subjects, objects) = if let Some((subject_vec, object_vec)) = walked {
+            value_state = RDFNodeState::from_bases(
+                BaseRDFNodeType::IRI,
+                BaseCatState::CategoricalNative(None),
+            );
+            (
+                UInt32Chunked::from_vec(SUBJECT_COL_NAME.into(), subject_vec).into_column(),
+                UInt32Chunked::from_vec(OBJECT_COL_NAME.into(), object_vec).into_column(),
+            )
+        } else {
+            let mut df_creator = U32DataFrameCreator::new(dataset.clone());
+            df_creator.gather_namednode_dfs(ppe, self)?;
+            let (lookup_df, lookup_dtypes, namednode_dfs) =
+                df_creator.create_u32_dfs(self.global_cats.clone())?;
+            value_state = lookup_dtypes.get(VALUE_COLUMN).unwrap().clone();
+            // Row i of the lookup table holds the value with key i.
+            let n_values = lookup_df.height();
+            let bound = start_codes.and_then(|(codes, reversed)| {
+                Some((
+                    lookup_keys_of_iris(&lookup_df, &lookup_dtypes, codes)?,
+                    reversed,
+                ))
+            });
+            let (mut subject_vec, mut object_vec) = if let Some((starts, reversed)) = bound {
+                // Only the paths from the nodes an end is bound to are followed.
+                paths_from(ppe, starts, reversed, &namednode_dfs, n_values)
+            } else {
+                // Every path begins at a node of its first step, when that is a single predicate
+                // (e.g. `rdf:rest+`), and otherwise at any node.
+                let starts = first_step_starts(ppe, &namednode_dfs)
+                    .unwrap_or_else(|| (0..n_values as u32).collect());
+                paths_from(ppe, starts, false, &namednode_dfs, n_values)
+            };
+            utils::cancel::check()?;
+            // Keys without a value (none should occur) are left out rather than gathered.
+            let n_values = n_values as u32;
+            if subject_vec
+                .iter()
+                .chain(object_vec.iter())
+                .any(|k| *k >= n_values)
+            {
+                let (s, o): (Vec<u32>, Vec<u32>) = subject_vec
+                    .iter()
+                    .zip(object_vec.iter())
+                    .filter(|(s, o)| **s < n_values && **o < n_values)
+                    .map(|(s, o)| (*s, *o))
+                    .unzip();
+                subject_vec = s;
+                object_vec = o;
+            }
+            // Keys are mapped to values by gathering rows instead of joining.
+            let values = lookup_df.column(VALUE_COLUMN).unwrap();
+            (
+                values
+                    .take(&IdxCa::from_vec("".into(), subject_vec))
+                    .unwrap()
+                    .with_name(SUBJECT_COL_NAME.into()),
+                values
+                    .take(&IdxCa::from_vec("".into(), object_vec))
+                    .unwrap()
+                    .with_name(OBJECT_COL_NAME.into()),
             )
         };
-        let selective =
-            |n: usize| n.saturating_mul(SELECTIVE_START_FACTOR) <= lookup_df.height();
-        let (mut subject_vec, mut object_vec) = if let Some((starts, reversed)) =
-            bound.as_ref().filter(|(s, _)| selective(s.len()))
-        {
-            // Only the paths from the nodes an end is bound to are followed.
-            paths_from(ppe, starts.clone(), *reversed, &namednode_dfs, max_index as usize)
-        } else if let Some((starts, reversed)) = bound {
-            // Bound to many nodes (e.g. the intermediate nodes of a sequence that a join passes
-            // in): the closure over all nodes, keeping the paths that start (or end) at them.
-            let starts: HashSet<u32> = starts.into_iter().collect();
-            let SparsePathReturn { sparmat, .. } =
-                sparse_path(ppe, &namednode_dfs, max_index as usize);
-            let mut subject_vec = vec![];
-            let mut object_vec = vec![];
-            for (i, row) in sparmat.outer_iterator().enumerate() {
-                for (j, v) in row.iter() {
-                    let end = if reversed { j as u32 } else { i as u32 };
-                    if v > &0 && starts.contains(&end) {
-                        subject_vec.push(i as u32);
-                        object_vec.push(j as u32);
-                    }
-                }
-            }
-            (subject_vec, object_vec)
-        } else if let Some(starts) =
-            first_step_starts(ppe, &namednode_dfs).filter(|s| selective(s.len()))
-        {
-            // Every path begins with a step that few nodes have: following the paths from those
-            // nodes is cheaper than the closure over all nodes (e.g. `era:includes/rdf:rest+`).
-            // With many starts, following them in step costs a pass per step of the longest path,
-            // and the matrix closure is faster.
-            paths_from(ppe, starts, false, &namednode_dfs, max_index as usize)
-        } else {
-            let SparsePathReturn { sparmat, .. } =
-                sparse_path(ppe, &namednode_dfs, max_index as usize);
-            let mut subject_vec = vec![];
-            let mut object_vec = vec![];
-            for (i, row) in sparmat.outer_iterator().enumerate() {
-                for (j, v) in row.iter() {
-                    if v > &0 {
-                        subject_vec.push(i as u32);
-                        object_vec.push(j as u32);
-                    }
-                }
-            }
-            (subject_vec, object_vec)
-        };
         utils::cancel::check()?;
-        // Without any values (an empty dataset), the matrix is still 1x1 and a zero-length path
-        // gives it an entry, which has no value to map to.
-        let n_values = lookup_df.height() as u32;
-        if subject_vec
-            .iter()
-            .chain(object_vec.iter())
-            .any(|k| *k >= n_values)
-        {
-            let (s, o): (Vec<u32>, Vec<u32>) = subject_vec
-                .iter()
-                .zip(object_vec.iter())
-                .filter(|(s, o)| **s < n_values && **o < n_values)
-                .map(|(s, o)| (*s, *o))
-                .unzip();
-            subject_vec = s;
-            object_vec = o;
-        }
-        // Row i of the lookup table holds the value with key i, so keys are mapped to values by
-        // gathering rows instead of joining.
-        let values = lookup_df.column(VALUE_COLUMN).unwrap();
-        let height = subject_vec.len();
-        let subjects = values
-            .take(&IdxCa::from_vec("".into(), subject_vec))
-            .unwrap()
-            .with_name(SUBJECT_COL_NAME.into());
-        let objects = values
-            .take(&IdxCa::from_vec("".into(), object_vec))
-            .unwrap()
-            .with_name(OBJECT_COL_NAME.into());
+        let height = subjects.len();
         out_df = DataFrame::new(height, vec![subjects, objects]).unwrap();
         // With the same variable at both ends, the path must end where it starts.
         let same_variable = matches!(
@@ -285,16 +306,9 @@ impl Triplestore {
                 .unwrap();
         }
         let mut dtypes = HashMap::new();
-        dtypes.insert(
-            SUBJECT_COL_NAME.to_string(),
-            lookup_dtypes.get(VALUE_COLUMN).unwrap().clone(),
-        );
-        dtypes.insert(
-            OBJECT_COL_NAME.to_string(),
-            lookup_dtypes.get(VALUE_COLUMN).unwrap().clone(),
-        );
+        dtypes.insert(SUBJECT_COL_NAME.to_string(), value_state.clone());
+        dtypes.insert(OBJECT_COL_NAME.to_string(), value_state.clone());
 
-        let value_state = lookup_dtypes.get(VALUE_COLUMN).unwrap().clone();
         if value_state.is_multi() {
             // A constant end keeps only the values of its type. When the values have no such
             // type there are no solutions, and the column is left as it is: converting it to a
@@ -790,127 +804,6 @@ pub fn create_graph_pattern(
     }
 }
 
-fn to_csr(df: &DataFrame, max_index: usize) -> SparseMatrix {
-    let sub = df
-        .column(SUBJECT_COL_NAME)
-        .unwrap()
-        .u32()
-        .unwrap()
-        .clone()
-        .into_series();
-    let obj = df
-        .column(OBJECT_COL_NAME)
-        .unwrap()
-        .u32()
-        .unwrap()
-        .clone()
-        .into_series();
-    let df = DataFrame::new(sub.len(), vec![sub.into(), obj.into()]).unwrap();
-    let mut df = df
-        .sort(
-            vec![SUBJECT_COL_NAME, SUBJECT_COL_NAME],
-            SortMultipleOptions::default()
-                .with_maintain_order(false)
-                .with_order_descending(false),
-        )
-        .unwrap();
-    df.rechunk_mut();
-    let subject = df
-        .column(SUBJECT_COL_NAME)
-        .unwrap()
-        .as_materialized_series();
-    let object = df.column(OBJECT_COL_NAME).unwrap().as_materialized_series();
-    let mut subjects_vec = vec![];
-    let mut objects_vec = vec![];
-    for s in subject.iter() {
-        if let AnyValue::UInt32(s) = s {
-            subjects_vec.push(s as usize);
-        } else {
-            panic!("Should never happen");
-        }
-    }
-
-    for s in object.iter() {
-        if let AnyValue::UInt32(o) = s {
-            objects_vec.push(o as usize);
-        } else {
-            panic!("Should never happen");
-        }
-    }
-
-    let trimat = TriMatBase::from_triplets(
-        (max_index + 1, max_index + 1),
-        subjects_vec,
-        objects_vec,
-        [1_u32].repeat(df.height()),
-    );
-    trimat.to_csr()
-}
-
-fn empty_csr(max_index: usize) -> SparseMatrix {
-    let trimat = TriMatBase::from_triplets(
-        (max_index + 1, max_index + 1),
-        Vec::new(),
-        Vec::new(),
-        Vec::new(),
-    );
-    trimat.to_csr()
-}
-
-fn zero_or_more(mut rel_mat: SparseMatrix) -> SparseMatrix {
-    let rows = rel_mat.rows();
-    let eye = SparseMatrix::eye(rows);
-    rel_mat = (&rel_mat + &eye).to_csr();
-    rel_mat = rel_mat.map(|x| (x > &0) as u32);
-    let mut last_sum = sum_mat(&rel_mat);
-    let mut fixed_point = false;
-    while !fixed_point && utils::cancel::stopped().is_none() {
-        rel_mat = (&rel_mat * &rel_mat).to_csr();
-        rel_mat = rel_mat.map(|x| (x > &0) as u32);
-        let new_sum = sum_mat(&rel_mat);
-        if last_sum == new_sum {
-            fixed_point = true;
-        } else {
-            last_sum = new_sum;
-        }
-    }
-    rel_mat
-}
-
-fn zero_or_one(mut rel_mat: SparseMatrix) -> SparseMatrix {
-    let rows = rel_mat.rows();
-    let eye = SparseMatrix::eye(rows);
-    rel_mat = (&rel_mat + &eye).to_csr();
-    rel_mat = rel_mat.map(|x| (x > &0) as u32);
-    rel_mat
-}
-
-fn one_or_more(mut rel_mat: SparseMatrix) -> SparseMatrix {
-    let mut last_sum = sum_mat(&rel_mat);
-    let mut fixed_point = false;
-    while !fixed_point && utils::cancel::stopped().is_none() {
-        let new_rels = (&rel_mat * &rel_mat).to_csr();
-        rel_mat = (&new_rels + &rel_mat).to_csr();
-        rel_mat = rel_mat.map(|x| (x > &0) as u32);
-        let new_sum = sum_mat(&rel_mat);
-        if last_sum == new_sum {
-            fixed_point = true;
-        } else {
-            last_sum = new_sum;
-        }
-    }
-    rel_mat
-}
-
-fn sum_mat(mat: &SparseMatrix) -> u32 {
-    let mut s = 0;
-    //Todo parallel
-    for out in mat.outer_iterator() {
-        s += out.data().iter().sum::<u32>()
-    }
-    s
-}
-
 /// Moves inverses (`^`) through sequences and alternatives to the steps: `^(a/b)` is `^b/^a`.
 fn push_reverse_down(ppe: &PropertyPathExpression, reversed: bool) -> PropertyPathExpression {
     use PropertyPathExpression as P;
@@ -1025,121 +918,6 @@ pub fn need_sparse_matrix(ppe: &PropertyPathExpression) -> bool {
         PropertyPathExpression::OneOrMore(_) => true,
         PropertyPathExpression::ZeroOrOne(_) => true,
         PropertyPathExpression::NegatedPropertySet(_) => false,
-    }
-}
-
-fn sparse_path(
-    ppe: &PropertyPathExpression,
-    namednode_map: &HashMap<PathLeaf, DataFrame>,
-    max_index: usize,
-) -> SparsePathReturn {
-    match ppe {
-        PropertyPathExpression::NamedNode(nn) => {
-            if let Some(df) = namednode_map.get(&PathLeaf::NamedNode(nn.clone())) {
-                let sparmat = to_csr(df, max_index);
-                SparsePathReturn {
-                    sparmat,
-                    eye: false,
-                }
-            } else {
-                let sparmat = empty_csr(max_index);
-                SparsePathReturn {
-                    sparmat,
-                    eye: false,
-                }
-            }
-        }
-        PropertyPathExpression::Reverse(inner) => {
-            let SparsePathReturn { sparmat, eye } = sparse_path(inner, namednode_map, max_index);
-
-            SparsePathReturn {
-                sparmat: sparmat.transpose_into(),
-                eye,
-            }
-        }
-        PropertyPathExpression::Sequence(left, right) => {
-            let res_left = sparse_path(left, namednode_map, max_index);
-            let res_right = sparse_path(right, namednode_map, max_index);
-            let SparsePathReturn {
-                sparmat: sparmat_left,
-                eye: eye_left,
-            } = res_left;
-
-            let SparsePathReturn {
-                sparmat: sparmat_right,
-                eye: eye_right,
-            } = res_right;
-
-            let mut sparmat = (&sparmat_left * &sparmat_right).to_csr();
-            if eye_left {
-                sparmat = (&sparmat + &sparmat_right).to_csr();
-            }
-            if eye_right {
-                sparmat = (&sparmat + &sparmat_left).to_csr();
-            }
-            sparmat = sparmat.map(|x| (x > &0) as u32);
-            SparsePathReturn {
-                sparmat,
-                eye: eye_left && eye_right,
-            }
-        }
-        PropertyPathExpression::Alternative(left, right) => {
-            let res_left = sparse_path(left, namednode_map, max_index);
-            let res_right = sparse_path(right, namednode_map, max_index);
-            let SparsePathReturn {
-                sparmat: sparmat_left,
-                eye: eye_left,
-            } = res_left;
-
-            let SparsePathReturn {
-                sparmat: sparmat_right,
-                eye: eye_right,
-            } = res_right;
-
-            let sparmat = (&sparmat_left + &sparmat_right)
-                .to_csr()
-                .map(|x| (x > &0) as u32);
-            SparsePathReturn {
-                sparmat,
-                eye: eye_left || eye_right,
-            }
-        }
-        PropertyPathExpression::ZeroOrMore(inner) => {
-            let SparsePathReturn {
-                sparmat: sparmat_inner,
-                ..
-            } = sparse_path(inner, namednode_map, max_index);
-
-            let sparmat = zero_or_more(sparmat_inner);
-            SparsePathReturn { sparmat, eye: true }
-        }
-        PropertyPathExpression::OneOrMore(inner) => {
-            let SparsePathReturn {
-                sparmat: sparmat_inner,
-                eye,
-            } = sparse_path(inner, namednode_map, max_index);
-
-            let sparmat = one_or_more(sparmat_inner);
-            SparsePathReturn { sparmat, eye }
-        }
-        PropertyPathExpression::ZeroOrOne(inner) => {
-            let SparsePathReturn {
-                sparmat: sparmat_inner,
-                ..
-            } = sparse_path(inner, namednode_map, max_index);
-            let sparmat = zero_or_one(sparmat_inner);
-            SparsePathReturn { sparmat, eye: true }
-        }
-        PropertyPathExpression::NegatedPropertySet(nns) => {
-            let sparmat = match namednode_map.get(&PathLeaf::negated(nns)) {
-                Some(df) => to_csr(df, max_index).map(|x| (x > &0) as u32),
-                None => empty_csr(max_index),
-            };
-            SparsePathReturn {
-                sparmat,
-                eye: false,
-            }
-        }
     }
 }
 
@@ -1448,11 +1226,18 @@ impl U32DataFrameCreator {
     }
 }
 
-/// Paths are followed from the nodes of their first step when those are at most this fraction
-/// (1 / factor) of all nodes. Measured on RINF 0076's `rdf:rest` lists: starting from half of the
-/// nodes (`era:hasSequence/rdf:rest+`) took twice as long as the matrix closure, starting from a
-/// tenth (`era:includes/rdf:rest+`) half as long.
+/// The closure of a step that is not a single predicate (e.g. `(a/b)+`) is found by first
+/// finding the step from every node, when the paths start from at least this fraction
+/// (1 / factor) of all nodes. From fewer, the newly reached nodes are followed one step at a time.
 const SELECTIVE_START_FACTOR: usize = 8;
+
+/// Paths are followed on dictionary codes from at most this many starts (see [CodeWalk]).
+const WALK_MAX_STARTS: usize = 64;
+/// A walk on dictionary codes is given up for keying the whole tables after this many lookups of
+/// a table segment, or after reading this many rows. Keying `rdf:rest` (48k triples) of RINF 0076
+/// costs about as much as a few hundred lookups.
+const WALK_MAX_LOOKUPS: usize = 256;
+const WALK_MAX_ROWS: usize = 1 << 16;
 
 /// The sorted keys of the nodes that every path matching `ppe` starts from, when its first step
 /// is a single predicate (forwards or backwards); None when a path can start anywhere, e.g. with
@@ -1654,6 +1439,22 @@ fn lookup_keys_of_iris(
         Some(BaseCatState::CategoricalNative(None)) => {}
         Some(_) => return None,
     }
+    if !state.is_multi() {
+        // Row i holds the value with key i. Values keyed by sorting their codes (see
+        // [single_cat_type_keys]) are found by binary search.
+        let values = lookup_df.column(VALUE_COLUMN).unwrap().u32().unwrap();
+        if let Ok(values) = values.cont_slice() {
+            if values.is_sorted() {
+                let mut out: Vec<u32> = codes
+                    .iter()
+                    .filter_map(|c| values.binary_search(c).ok().map(|k| k as u32))
+                    .collect();
+                out.sort_unstable();
+                out.dedup();
+                return Some(out);
+            }
+        }
+    }
     let value = if state.is_multi() {
         col(VALUE_COLUMN)
             .struct_()
@@ -1723,6 +1524,18 @@ impl Adjacency {
         Adjacency { offsets, targets }
     }
 
+    /// From the nodes reached from each node 0..n.
+    fn from_reached(reached: Reached) -> Self {
+        let mut offsets = Vec::with_capacity(reached.len() + 1);
+        offsets.push(0);
+        let mut targets = Vec::with_capacity(reached.iter().map(|r| r.len()).sum());
+        for r in reached {
+            targets.extend_from_slice(&r);
+            offsets.push(targets.len());
+        }
+        Adjacency { offsets, targets }
+    }
+
     fn neighbours(&self, u: u32) -> &[u32] {
         let u = u as usize;
         if u + 1 < self.offsets.len() {
@@ -1736,15 +1549,40 @@ impl Adjacency {
 /// For each start node, the sorted set of nodes reached from it.
 type Reached = Vec<Vec<u32>>;
 
+/// A walk on dictionary codes ran past its budget, or met a table it can not read.
+#[derive(Debug)]
+struct WalkAborted;
+
+/// The graph that paths are followed in.
+enum Walk<'a> {
+    /// The edges of the path leaves over lookup keys `0..n`, with one adjacency per leaf and
+    /// direction.
+    Dense {
+        adjacencies: HashMap<(PathLeaf, bool), Adjacency>,
+        n: usize,
+    },
+    /// The edges read from the triple tables, one step at a time, on global dictionary codes.
+    Codes(CodeWalk<'a>),
+}
+
+impl Walk<'_> {
+    fn step(&self, key: (PathLeaf, bool), reached: &Reached) -> Result<Reached, WalkAborted> {
+        match self {
+            Walk::Dense { adjacencies, .. } => Ok(step(adjacencies.get(&key), reached)),
+            Walk::Codes(walk) => walk.step(&key, reached),
+        }
+    }
+}
+
 /// The (subject, object) key pairs of the paths matching `ppe` that start (or, if `reversed`,
-/// end) at one of `starts`. Each node set is extended one step at a time, so the cost depends on
-/// the part of the graph reachable from the starts rather than on the whole graph.
+/// end) at one of `starts`, among the lookup keys `0..n`. The cost depends on the part of the
+/// graph reachable from the starts rather than on the whole graph.
 fn paths_from(
     ppe: &PropertyPathExpression,
     starts: Vec<u32>,
     reversed: bool,
     namednode_map: &HashMap<PathLeaf, DataFrame>,
-    max_index: usize,
+    n: usize,
 ) -> (Vec<u32>, Vec<u32>) {
     let mut leaves = HashSet::new();
     path_leaves(ppe, reversed, &mut leaves);
@@ -1752,12 +1590,18 @@ fn paths_from(
         .into_par_iter()
         .filter_map(|(leaf, rev)| {
             let df = namednode_map.get(&leaf)?;
-            let adj = Adjacency::new(df, max_index + 1, rev);
+            let adj = Adjacency::new(df, n, rev);
             Some(((leaf, rev), adj))
         })
         .collect();
+    let walk = Walk::Dense { adjacencies, n };
     let initial: Reached = starts.iter().map(|s| vec![*s]).collect();
-    let reached = follow(ppe, initial, reversed, &adjacencies);
+    let reached = follow(ppe, initial, reversed, &walk).expect("Dense walks are never aborted");
+    reached_pairs(starts, reached, reversed)
+}
+
+/// The (subject, object) pairs of each start and the nodes reached from it.
+fn reached_pairs(starts: Vec<u32>, reached: Reached, reversed: bool) -> (Vec<u32>, Vec<u32>) {
     let n: usize = reached.iter().map(|r| r.len()).sum();
     let mut from = Vec::with_capacity(n);
     let mut to = Vec::with_capacity(n);
@@ -1771,6 +1615,151 @@ fn paths_from(
         (to, from)
     } else {
         (from, to)
+    }
+}
+
+/// Paths followed on the global dictionary codes of IRIs from a few starts. The edges of each
+/// step are read from the triple tables of the path's predicates, through the sparse index of
+/// their subject sort (or object sort, for a backward step): a lookup per table segment and step.
+/// This avoids keying the whole tables, which costs time proportional to their size.
+struct CodeWalk<'a> {
+    /// The tables of each leaf and direction whose start nodes are IRIs.
+    tables: HashMap<(PathLeaf, bool), Vec<&'a Triples>>,
+    cats: &'a Cats,
+    lookups: Cell<usize>,
+    rows: Cell<usize>,
+}
+
+impl<'a> CodeWalk<'a> {
+    /// None if a leaf is not a predicate (a negated property set needs every predicate), or if a
+    /// step from an IRI may reach something else than an IRI, which has codes of its own.
+    fn new(
+        store: &'a Triplestore,
+        ppe: &PropertyPathExpression,
+        reversed: bool,
+        dataset: &QueryGraph,
+        cats: &'a Cats,
+    ) -> Option<Self> {
+        let graphs: Vec<NamedGraph> = match dataset {
+            QueryGraph::NamedGraph(g) => vec![g.clone()],
+            QueryGraph::QueryDataset(qd) => qd
+                .default
+                .iter()
+                .map(|nn| NamedGraph::from_maybe_named_node(Some(nn)))
+                .collect(),
+        };
+        let mut leaves = HashSet::new();
+        path_leaves(ppe, reversed, &mut leaves);
+        let mut tables = HashMap::new();
+        for (leaf, rev) in leaves {
+            let PathLeaf::NamedNode(nn) = &leaf else {
+                return None;
+            };
+            let mut ts = vec![];
+            for g in &graphs {
+                let Some(types) = store.graph_triples_map.get(g).and_then(|m| m.get(nn)) else {
+                    continue;
+                };
+                for ((subject_type, object_type), triples) in types {
+                    let (from, to) = if rev {
+                        (object_type, subject_type)
+                    } else {
+                        (subject_type, object_type)
+                    };
+                    if !from.is_iri() {
+                        continue;
+                    }
+                    if !to.is_iri() {
+                        return None;
+                    }
+                    ts.push(triples);
+                }
+            }
+            tables.insert((leaf, rev), ts);
+        }
+        Some(CodeWalk {
+            tables,
+            cats,
+            lookups: Cell::new(0),
+            rows: Cell::new(0),
+        })
+    }
+
+    /// The (subject, object) code pairs of the paths matching `ppe` that start (or, if
+    /// `reversed`, end) at one of the sorted, distinct `starts`.
+    fn paths_from(
+        self,
+        ppe: &PropertyPathExpression,
+        starts: &[u32],
+        reversed: bool,
+    ) -> Result<(Vec<u32>, Vec<u32>), WalkAborted> {
+        let walk = Walk::Codes(self);
+        let initial: Reached = starts.iter().map(|s| vec![*s]).collect();
+        let reached = follow(ppe, initial, reversed, &walk)?;
+        Ok(reached_pairs(starts.to_vec(), reached, reversed))
+    }
+
+    fn spend(budget: &Cell<usize>, amount: usize, limit: usize) -> Result<(), WalkAborted> {
+        let spent = budget.get() + amount;
+        budget.set(spent);
+        if spent > limit {
+            Err(WalkAborted)
+        } else {
+            Ok(())
+        }
+    }
+
+    fn step(&self, key: &(PathLeaf, bool), reached: &Reached) -> Result<Reached, WalkAborted> {
+        let empty = || vec![vec![]; reached.len()];
+        let Some(tables) = self.tables.get(key).filter(|t| !t.is_empty()) else {
+            return Ok(empty());
+        };
+        let mut codes: Vec<u32> = reached.iter().flatten().copied().collect();
+        codes.sort_unstable();
+        codes.dedup();
+        if codes.is_empty() {
+            return Ok(empty());
+        }
+        let mut names = Vec::with_capacity(codes.len());
+        for c in &codes {
+            names.push(
+                self.cats
+                    .maybe_decode_of_type(c, &BaseRDFNodeType::IRI)
+                    .ok_or(WalkAborted)?,
+            );
+        }
+        let mut strings: Vec<&str> = names.iter().map(|s| s.as_ref()).collect();
+        strings.sort_unstable();
+        let mut edges = vec![];
+        for t in tables {
+            Self::spend(&self.lookups, t.n_segments(), WALK_MAX_LOOKUPS)?;
+            let rows = t
+                .in_memory_edges_from(&strings, &codes, key.1, &mut edges)
+                .ok()
+                .flatten()
+                .ok_or(WalkAborted)?;
+            Self::spend(&self.rows, rows, WALK_MAX_ROWS)?;
+        }
+        edges.sort_unstable();
+        edges.dedup();
+        Ok(reached
+            .iter()
+            .map(|nodes| {
+                let mut out = vec![];
+                for u in nodes {
+                    let i = edges.partition_point(|(f, _)| f < u);
+                    out.extend(
+                        edges[i..]
+                            .iter()
+                            .take_while(|(f, _)| f == u)
+                            .map(|(_, t)| *t),
+                    );
+                }
+                out.sort_unstable();
+                out.dedup();
+                out
+            })
+            .collect())
     }
 }
 
@@ -1798,71 +1787,93 @@ pub(super) fn path_leaves(
     }
 }
 
+/// The leaf and direction of a step that is a single predicate or negated property set, maybe
+/// backwards.
+fn single_leaf(ppe: &PropertyPathExpression, reversed: bool) -> Option<(PathLeaf, bool)> {
+    match ppe {
+        PropertyPathExpression::NamedNode(nn) => Some((PathLeaf::NamedNode(nn.clone()), reversed)),
+        PropertyPathExpression::NegatedPropertySet(nns) => {
+            Some((PathLeaf::negated(nns), reversed))
+        }
+        PropertyPathExpression::Reverse(inner) => single_leaf(inner, !reversed),
+        _ => None,
+    }
+}
+
 /// The nodes reached from each set of `reached` nodes by one match of `ppe` (backwards if
 /// `reversed`).
 fn follow(
     ppe: &PropertyPathExpression,
     reached: Reached,
     reversed: bool,
-    adjacencies: &HashMap<(PathLeaf, bool), Adjacency>,
-) -> Reached {
-    match ppe {
-        PropertyPathExpression::NamedNode(nn) => step(
-            adjacencies.get(&(PathLeaf::NamedNode(nn.clone()), reversed)),
-            &reached,
-        ),
-        PropertyPathExpression::NegatedPropertySet(nns) => step(
-            adjacencies.get(&(PathLeaf::negated(nns), reversed)),
-            &reached,
-        ),
-        PropertyPathExpression::Reverse(inner) => follow(inner, reached, !reversed, adjacencies),
+    walk: &Walk,
+) -> Result<Reached, WalkAborted> {
+    Ok(match ppe {
+        PropertyPathExpression::NamedNode(nn) => {
+            walk.step((PathLeaf::NamedNode(nn.clone()), reversed), &reached)?
+        }
+        PropertyPathExpression::NegatedPropertySet(nns) => {
+            walk.step((PathLeaf::negated(nns), reversed), &reached)?
+        }
+        PropertyPathExpression::Reverse(inner) => follow(inner, reached, !reversed, walk)?,
         PropertyPathExpression::Sequence(a, b) => {
             let (first, second) = if reversed { (b, a) } else { (a, b) };
-            let mid = follow(first, reached, reversed, adjacencies);
-            follow(second, mid, reversed, adjacencies)
+            let mid = follow(first, reached, reversed, walk)?;
+            follow(second, mid, reversed, walk)?
         }
         PropertyPathExpression::Alternative(a, b) => {
-            let left = follow(a, reached.clone(), reversed, adjacencies);
-            let right = follow(b, reached, reversed, adjacencies);
+            let left = follow(a, reached.clone(), reversed, walk)?;
+            let right = follow(b, reached, reversed, walk)?;
             zip_reached(left, right, |l, r| union_sorted(&l, &r))
         }
         PropertyPathExpression::ZeroOrOne(inner) => {
-            let once = follow(inner, reached.clone(), reversed, adjacencies);
+            let once = follow(inner, reached.clone(), reversed, walk)?;
             zip_reached(reached, once, |l, r| union_sorted(&l, &r))
         }
         PropertyPathExpression::OneOrMore(inner) => {
-            one_or_more_from(inner, reached, reversed, adjacencies)
+            one_or_more_from(inner, reached, reversed, walk)?
         }
         PropertyPathExpression::ZeroOrMore(inner) => {
-            let more = one_or_more_from(inner, reached.clone(), reversed, adjacencies);
+            let more = one_or_more_from(inner, reached.clone(), reversed, walk)?;
             zip_reached(reached, more, |l, r| union_sorted(&l, &r))
         }
-    }
+    })
 }
 
-/// The nodes reached by one or more matches of `inner`: the newly reached nodes are followed
-/// until no new nodes are reached.
+/// The nodes reached by one or more matches of `inner`. On lookup keys, a depth first search
+/// from each set of nodes over the adjacency of `inner`; otherwise the newly reached nodes are
+/// followed until no new nodes are reached.
 fn one_or_more_from(
     inner: &PropertyPathExpression,
     reached: Reached,
     reversed: bool,
-    adjacencies: &HashMap<(PathLeaf, bool), Adjacency>,
-) -> Reached {
-    let mut all = follow(inner, reached, reversed, adjacencies);
+    walk: &Walk,
+) -> Result<Reached, WalkAborted> {
+    if let Walk::Dense { adjacencies, n } = walk {
+        if let Some(key) = single_leaf(inner, reversed) {
+            return Ok(closure(adjacencies.get(&key), reached, *n));
+        }
+        if reached.len().saturating_mul(SELECTIVE_START_FACTOR) >= *n {
+            let every_node: Reached = (0..*n as u32).map(|u| vec![u]).collect();
+            let adjacency = Adjacency::from_reached(follow(inner, every_node, reversed, walk)?);
+            return Ok(closure(Some(&adjacency), reached, *n));
+        }
+    }
+    let mut all = follow(inner, reached, reversed, walk)?;
     let mut frontier = all.clone();
     loop {
         // The query timed out or was cancelled: the caller discards the result.
         if utils::cancel::stopped().is_some() {
-            return all;
+            return Ok(all);
         }
-        let next = follow(inner, frontier, reversed, adjacencies);
+        let next = follow(inner, frontier, reversed, walk)?;
         let new: Reached = next
             .into_par_iter()
             .zip(all.par_iter())
             .map(|(n, a)| difference_sorted(&n, a))
             .collect();
         if new.iter().all(|x| x.is_empty()) {
-            return all;
+            return Ok(all);
         }
         all = all
             .into_par_iter()
@@ -1871,6 +1882,46 @@ fn one_or_more_from(
             .collect();
         frontier = new;
     }
+}
+
+/// The nodes reached from each set of nodes by one or more steps over `adjacency` (over the
+/// nodes `0..n`), by a depth first search. Each search marks the nodes it reaches with its own
+/// stamp, so a thread's marks are reset only when the stamps run out.
+fn closure(adjacency: Option<&Adjacency>, reached: Reached, n: usize) -> Reached {
+    let Some(adjacency) = adjacency else {
+        return vec![vec![]; reached.len()];
+    };
+    reached
+        .into_par_iter()
+        .with_min_len(256)
+        .map_init(
+            || (vec![0u32; n], 0u32, Vec::new()),
+            |(stamps, stamp, stack), nodes| {
+                if utils::cancel::stopped().is_some() {
+                    return vec![];
+                }
+                *stamp = stamp.wrapping_add(1);
+                if *stamp == 0 {
+                    stamps.fill(0);
+                    *stamp = 1;
+                }
+                let mut out = vec![];
+                stack.extend_from_slice(&nodes);
+                while let Some(u) = stack.pop() {
+                    for &v in adjacency.neighbours(u) {
+                        let s = &mut stamps[v as usize];
+                        if *s != *stamp {
+                            *s = *stamp;
+                            out.push(v);
+                            stack.push(v);
+                        }
+                    }
+                }
+                out.sort_unstable();
+                out
+            },
+        )
+        .collect()
 }
 
 fn step(adjacency: Option<&Adjacency>, reached: &Reached) -> Reached {
@@ -1946,6 +1997,38 @@ fn difference_sorted(a: &[u32], b: &[u32]) -> Vec<u32> {
         }
     }
     out
+}
+
+/// The smaller of two sets of nodes, either of which may be unknown.
+fn fewer(a: Option<Vec<u32>>, b: Option<Vec<u32>>) -> Option<Vec<u32>> {
+    match (a, b) {
+        (Some(a), Some(b)) => Some(if b.len() < a.len() { b } else { a }),
+        (a, b) => a.or(b),
+    }
+}
+
+/// The name of the variable of `t` when its column holds only IRIs with global codes.
+fn global_iri_column(t: &TermPattern, types: &HashMap<String, RDFNodeState>) -> Option<String> {
+    let name = term_variable_name(t)?;
+    let state = types.get(&name)?;
+    (has_only_type(state, &BaseRDFNodeType::IRI)
+        && matches!(
+            state.map.get(&BaseRDFNodeType::IRI),
+            Some(BaseCatState::CategoricalNative(None))
+        ))
+    .then_some(name)
+}
+
+/// The distinct global codes of the IRIs that the variable of `t` is bound to in the solution
+/// mappings, when its column holds only IRIs with global codes.
+fn mapped_iri_codes(t: &TermPattern, sm: &EagerSolutionMappings) -> Option<Vec<u32>> {
+    let name = global_iri_column(t, &sm.rdf_node_types)?;
+    let column = sm.mappings.column(&name).ok()?;
+    let codes = column.u32().ok()?;
+    let mut out: Vec<u32> = codes.iter().flatten().collect();
+    out.sort_unstable();
+    out.dedup();
+    Some(out)
 }
 
 /// True if every value of a column of this type is of the given type.

@@ -637,6 +637,69 @@ impl Triples {
         Ok(Some(out))
     }
 
+    /// The (from, to) dictionary codes of the rows whose subject (or object, if `by_object`) is
+    /// one of the nodes with the sorted `strings` and the sorted `codes`, appended to `out`, read
+    /// from the sparse index ranges of each segment. Returns the number of rows read, or None
+    /// when a segment is not in memory or, for `by_object`, has no object sort; the caller then
+    /// reads the table some other way. Both columns must hold dictionary codes (u32).
+    pub(crate) fn in_memory_edges_from(
+        &self,
+        strings: &[&str],
+        codes: &[u32],
+        by_object: bool,
+        out: &mut Vec<(u32, u32)>,
+    ) -> Result<Option<usize>, TriplestoreError> {
+        let (from_col, to_col) = if by_object {
+            (OBJECT_COL_NAME, SUBJECT_COL_NAME)
+        } else {
+            (SUBJECT_COL_NAME, OBJECT_COL_NAME)
+        };
+        let mut rows = 0;
+        for s in &self.segments {
+            let (sort, index) = if by_object {
+                (&s.object_sort, &s.object_sparse_index)
+            } else {
+                (&s.subject_sort, &s.subject_sparse_index)
+            };
+            let (Some(StoredTriples::TriplesInMemory(mem)), Some(index)) = (sort, index) else {
+                return Ok(None);
+            };
+            let Some(df) = mem.df.as_ref() else {
+                return Ok(None);
+            };
+            if s.height == 0 || df.height() == 0 {
+                continue;
+            }
+            let offsets = get_lookup_offsets(strings, &index.map, s.height);
+            let ranges = coalesce_lookup_ranges(offsets, s.height)
+                .unwrap_or_else(|| vec![(0, df.height())]);
+            let (Ok(from), Ok(to)) = (
+                df.column(from_col).and_then(|c| c.u32().cloned()),
+                df.column(to_col).and_then(|c| c.u32().cloned()),
+            ) else {
+                return Ok(None);
+            };
+            for (offset, len) in ranges {
+                rows += len;
+                let from = from.slice(offset as i64, len);
+                let to = to.slice(offset as i64, len);
+                for (f, t) in from.iter().zip(to.iter()) {
+                    if let (Some(f), Some(t)) = (f, t) {
+                        if codes.binary_search(&f).is_ok() {
+                            out.push((f, t));
+                        }
+                    }
+                }
+            }
+        }
+        Ok(Some(rows))
+    }
+
+    /// The number of segments, each of which is one lookup in [Self::in_memory_edges_from].
+    pub(crate) fn n_segments(&self) -> usize {
+        self.segments.len()
+    }
+
     pub(crate) fn get_all_triples_lazy_frames(
         &self,
         subject_sort: bool,
