@@ -1053,10 +1053,27 @@ case("inl_optional_around",
 # Fixed cost per query: plans of at most 16,384 rows per step are collected on a helper thread
 # (utils polars.rs TINY_COLLECT_ROWS), larger ones by Polars' thread pool; the stack grows only
 # for deeply nested queries (model.rs on_query_stack; results only, it has no counter).
-case("collect_tiny", "SELECT ?s ?a ?b WHERE { ?s :sa ?a . ?s :sb ?b }", ["s", "a", "b"],
-     hits={"collect.tiny": True})
+def collected_in_memory(w: World) -> Optional[bool]:
+    """Disk storage collects with another engine, and with statistics off plans may take other
+    collects: asserted in memory and hybrid storage with statistics on."""
+    return None if w.storage == "disk" or w.filters == "stats_off" else True
+
+
+def tiny(expected: bool):
+    return {"collect.tiny": lambda w: collected_in_memory(w) and expected,
+            "collect.concurrent": lambda w: collected_in_memory(w) and not expected}
+
+
+# A plan is tiny when the product of a join's inputs is at most 16,384 rows, not its result: a
+# 200 x 200 join of 200 solutions is collected by the pool.
+case("collect_tiny_single", "SELECT ?s ?a WHERE { ?s :sa ?a }", ["s", "a"], hits=tiny(True))
+case("collect_tiny_join_10000", "SELECT ?s ?a ?b WHERE { ?s :lit ?a . ?s :lit ?b }",
+     ["s", "a", "b"], hits=tiny(True))
+case("collect_join_40000_inputs", "SELECT ?s ?a ?b WHERE { ?s :sa ?a . ?s :sb ?b }",
+     ["s", "a", "b"],
+     hits={"collect.concurrent": lambda w: collected_in_memory(w), "collect.tiny": None})
 case("collect_concurrent", "SELECT ?s ?o ?x WHERE { ?s :cd65537 ?o . ?s :one ?x }",
-     ["s", "o", "x"], hits={"collect.concurrent": True})
+     ["s", "o", "x"], hits={"collect.concurrent": lambda w: collected_in_memory(w)})
 
 
 def nested_optionals(depth: int) -> str:
