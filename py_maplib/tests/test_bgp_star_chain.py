@@ -311,3 +311,26 @@ def test_optional_subquery_sees_no_left_values(seed):
     check(seed, "SELECT * WHERE { ?s :a :n3 OPTIONAL { SELECT ?s (COUNT(*) AS ?c) WHERE { ?s :b ?y } GROUP BY ?s ORDER BY DESC(?c) ?s LIMIT 1 } }")
     check(seed, "SELECT * WHERE { ?s :a :n3 OPTIONAL { SELECT (COUNT(*) AS ?c) WHERE { ?s :b ?y } } }")
     check(seed, "SELECT * WHERE { ?s :a :n3 OPTIONAL { ?s :b ?y { SELECT ?y WHERE { ?y :h ?z } ORDER BY ?y LIMIT 3 } } }")
+
+
+def test_after_small_inserts():
+    # Small inserts go to the tables' write buffers, which the estimates must count too.
+    data = build_data(3)
+    store = ox.Store()
+    store.load(data.encode(), ox.RdfFormat.N_TRIPLES)
+    m = Model()
+    m.reads(data, format="ntriples")
+    ins = (PFX + "INSERT DATA { :n1 :a :n2 . :n1 :a :n3 . :n1 :a :n4 . :n2 :b :n1 . :n2 :h :n5 . "
+           ":n5 :d 7 . :n4 :e \"s9\" . :big1 :big :n7 . _:x :c :n1 }")
+    store.update(ins)
+    m.update(ins)
+    _ENGINES["ins"] = (store, m)
+    for q in [
+        f"SELECT * WHERE {{ {star(['a', 'b', 'h'])} }}",
+        f"SELECT * WHERE {{ {chain(['a', 'b', 'h', 'a'])} }}",
+        f"SELECT * WHERE {{ {chain(['a', 'h', 'd'])} }}",
+        "SELECT * WHERE { :n1 :a ?x OPTIONAL { ?x :b ?y } OPTIONAL { ?x :e ?z } }",
+        "SELECT * WHERE { ?s :a :n3 OPTIONAL { ?s :big ?b } }",
+        f"SELECT (COUNT(*) AS ?c) WHERE {{ {star(['a', 'a', 'a'])} }}",
+    ]:
+        check("ins", q)

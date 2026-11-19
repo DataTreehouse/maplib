@@ -772,6 +772,18 @@ impl Triples {
             }
             total = total.saturating_add(max);
         }
+        // The write buffer is small and in no order: count its keys.
+        if let Some(buffer) = self.buffer.as_ref().filter(|b| b.height() > 0) {
+            let codes = buffer.column(column).ok()?.u32().ok()?;
+            let mut counts: HashMap<u32, usize> = HashMap::new();
+            let mut max = 0usize;
+            for c in codes.iter().flatten() {
+                let n = counts.entry(c).or_insert(0);
+                *n += 1;
+                max = max.max(*n);
+            }
+            total = total.saturating_add(max);
+        }
         Some(total)
     }
 
