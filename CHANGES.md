@@ -29,6 +29,7 @@
 - Zero-length property paths whose ends are both unbound, e.g. `?s ex:p* ?o`, `?s ex:p? ?o` and `?x ex:p* ?x`, match every subject and object of the graph to itself, as SPARQL defines them; they matched only the nodes with `ex:p` edges. **This changes results**: such queries return more rows than before (as in Jena and Oxigraph), and take longer, since every node of the graph is read
 - N-Triples, N-Quads and SPARQL JSON escape every control character below U+0020 in literals, as `\b`, `\f` or `\u00XX`; only tab, newline and carriage return were escaped before, and the others were written as is
 - A `FILTER` on a `RANK` that maplib answers without ranking the rows, e.g. keeping only `?rank = 1`, gave the rank column the type Int32 instead of Int64, so a `UNION` or `LATERAL` that combined it with ranked solutions failed with a type mismatch
+- maplib Enterprise Edition: validating a model in hybrid or disk storage a second time panicked with "not yet implemented" when the on-disk dictionary already had strings cached in memory. The strings of the codes that are not cached yet are now added to the cache
 
 ## v0.23.1
 ### Bug fixes
