@@ -16,6 +16,7 @@ use representation::literal_iri_to_namednode;
 use spargebra::term::{NamedNodePattern, TermPattern, TriplePattern};
 use std::collections::{HashMap, HashSet};
 use tracing::{instrument, trace};
+use utils::fast_path::{self, FastPath};
 
 impl Triplestore {
     #[instrument(skip_all)]
@@ -235,6 +236,10 @@ impl Triplestore {
                     query_settings.max_rows,
                 )?;
                 if let Some(b) = bound {
+                    fast_path::hit_when(
+                        b < joined.height_estimate,
+                        FastPath::JoinEstimateBoundedPerKey,
+                    );
                     joined.height_estimate = joined.height_estimate.min(b);
                 }
                 solution_mappings = Some(joined);

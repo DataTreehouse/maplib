@@ -11,6 +11,7 @@ use representation::{OBJECT_COL_NAME, SUBJECT_COL_NAME};
 use std::path::Path;
 use std::time::Instant;
 use tracing::trace;
+use utils::fast_path::{self, FastPath};
 use utils::polars::collect_in_memory;
 
 /// A trailing run of segments is merged when the segment before it is at most this many times
@@ -65,6 +66,7 @@ impl Triples {
         // A small insert goes to the buffer: no sort, no sparse index, no compaction.
         let buffered = self.buffer_height() + new_height;
         if !self.segments.is_empty() && buffered <= MAX_BUFFER_HEIGHT {
+            fast_path::hit(FastPath::InsertBuffered);
             let so = new_df.select([SUBJECT_COL_NAME, OBJECT_COL_NAME]).unwrap();
             match &mut self.buffer {
                 Some(buffer) => {
@@ -82,6 +84,8 @@ impl Triples {
         // The buffer is merged with the new triples (and possibly trailing segments).
         let buffer = self.buffer.take();
         let new_height = buffered;
+        fast_path::hit(FastPath::InsertSegment);
+        fast_path::hit_when(buffer.is_some(), FastPath::BufferFlush);
 
         // The trailing segments to merge with the new triples: segments[first..].
         let n = self.segments.len();
@@ -109,6 +113,7 @@ impl Triples {
                 triples_folder.as_deref(),
             )?
         } else {
+            fast_path::hit_when(first < n, FastPath::SegmentCompaction);
             let compacting_now = Instant::now();
             let mut dfs = Vec::with_capacity(n - first + 1);
             for seg in self.segments.drain(first..) {

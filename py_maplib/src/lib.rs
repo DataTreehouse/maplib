@@ -181,6 +181,21 @@ fn memory_limit() -> u64 {
     utils::memory::memory_budget()
 }
 
+/// Turns counting of the query engine's fast paths on and sets the counts to zero (for tests).
+#[pyfunction]
+fn _reset_fast_path_counts() {
+    utils::fast_path::reset()
+}
+
+/// The count of each fast path since `_reset_fast_path_counts` (for tests).
+#[pyfunction]
+fn _fast_path_counts() -> HashMap<String, u64> {
+    utils::fast_path::counts()
+        .into_iter()
+        .map(|(l, c)| (l.to_string(), c))
+        .collect()
+}
+
 /// Sets the process-wide outbound policy (see maplib.outbound.set_outbound_policy).
 #[pyfunction]
 fn _set_outbound_policy(mode: &str, allow: Vec<String>) -> PyResult<()> {
@@ -317,6 +332,8 @@ fn _maplib(py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
     py_storage::register(m)?;
     m.add_function(wrap_pyfunction!(_set_outbound_policy, m)?)?;
     m.add_function(wrap_pyfunction!(_check_outbound, m)?)?;
+    m.add_function(wrap_pyfunction!(_reset_fast_path_counts, m)?)?;
+    m.add_function(wrap_pyfunction!(_fast_path_counts, m)?)?;
     m.add("MaplibException", py.get_type::<MaplibException>())?;
     m.add("QueryTimeoutError", py.get_type::<QueryTimeoutError>())?;
     m.add("QueryMemoryLimitError", py.get_type::<QueryMemoryLimitError>())?;

@@ -46,6 +46,7 @@ use spargebra::term::{
 use spargebra::{GraphUpdateOperation, Query, Update};
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
+use utils::fast_path::{self, FastPath};
 
 pub struct InsertResult {
     pub new_triples: Vec<NewTriples>,
@@ -489,6 +490,7 @@ impl Triplestore {
                         if let Some((delete_data, insert_data)) =
                             ground_templates_of_empty_pattern(delete, insert, pattern, &target)
                         {
+                            fast_path::hit(FastPath::UpdateEmptyWhereAsData);
                             self.delete_data(delete_data, keep_triples, &mut changes)?;
                             self.insert_data(insert_data, &mut changes)?;
                             continue;

@@ -26,6 +26,7 @@ use spargebra::algebra::{Expression, GraphPattern, PropertyPathExpression};
 use spargebra::term::{GroundTerm, NamedNodePattern, TermPattern, TriplePattern};
 use std::cell::Cell;
 use std::collections::{HashMap, HashSet};
+use utils::fast_path::{self, FastPath};
 
 const NAMED_NODE_INDEX_COL: &str = "named_node_index_column";
 pub(crate) const VALUE_COLUMN: &str = "value";
@@ -222,6 +223,8 @@ impl Triplestore {
                 let cats = self.global_cats.read().unwrap();
                 CodeWalk::new(self, ppe, *reversed, dataset, &cats)
                     .and_then(|walk| walk.paths_from(ppe, starts, *reversed).ok())
+                    .inspect(|_| fast_path::hit(FastPath::PathCodeWalk))
+                    .or_else(|| fast_path::hit_none(FastPath::PathCodeWalkAborted))
             }
             _ => None,
         };
@@ -251,11 +254,13 @@ impl Triplestore {
                 ))
             });
             let (mut subject_vec, mut object_vec) = if let Some((starts, reversed)) = bound {
+                fast_path::hit(FastPath::PathKeyedBound);
                 // Only the paths from the nodes an end is bound to are followed.
                 paths_from(ppe, starts, reversed, &namednode_dfs, n_values)
             } else {
                 // Every path begins at a node of its first step, when that is a single predicate
                 // (e.g. `rdf:rest+`), and otherwise at any node.
+                fast_path::hit(FastPath::PathKeyedUnbound);
                 let starts = first_step_starts(ppe, &namednode_dfs)
                     .unwrap_or_else(|| (0..n_values as u32).collect());
                 paths_from(ppe, starts, false, &namednode_dfs, n_values)
@@ -1872,6 +1877,7 @@ fn one_or_more_from(
             return Ok(closure(adjacencies.get(&key), reached, *n));
         }
         if reached.len().saturating_mul(SELECTIVE_START_FACTOR) >= *n {
+            fast_path::hit(FastPath::PathEveryNodeStep);
             let every_node: Reached = (0..*n as u32).map(|u| vec![u]).collect();
             let adjacency = Adjacency::from_reached(follow(inner, every_node, reversed, walk)?);
             return Ok(closure(Some(&adjacency), reached, *n));

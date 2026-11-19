@@ -22,6 +22,7 @@ use polars_core::series::IsSorted;
 use representation::cats::{distinct_codes, extend_codes, Cats};
 use representation::{BaseRDFNodeType, OBJECT_COL_NAME, SUBJECT_COL_NAME};
 use std::sync::Arc;
+use utils::fast_path::{self, FastPath};
 use utils::polars::collect_in_memory;
 
 /// A frame in memory is cut into at most this many slices by one deletion; deleting more rows
@@ -474,8 +475,10 @@ fn matching_rows(
         .map(|t| get_lookup_offsets(t, &sparse.map, height))
         .filter(|r| r.iter().map(|(_, len)| len).sum::<usize>() * 2 <= height);
     if let Some(found) = matching_code_rows(stored, ranges.as_deref(), height, to_delete)? {
+        fast_path::hit(FastPath::DeleteByCodePairs);
         return Ok(found);
     }
+    fast_path::hit(FastPath::DeleteByJoin);
     let (lf, ranges) = match ranges {
         Some(ranges) if ranges.is_empty() => {
             return Ok((vec![], to_delete.clear()));

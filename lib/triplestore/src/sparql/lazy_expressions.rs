@@ -24,6 +24,7 @@ use representation::query_context::{Context, PathEntry};
 use representation::solution_mapping::{BaseCatState, EagerSolutionMappings, SolutionMappings};
 use representation::{BaseRDFNodeType, RDFNodeState};
 use spargebra::algebra::{Expression, Function, GraphPattern};
+use utils::fast_path::{self, FastPath};
 
 impl Triplestore {
     #[allow(clippy::too_many_arguments)]
@@ -727,6 +728,11 @@ impl Triplestore {
         }
         // The keys come from the solutions, which the join back evaluates again: collecting
         // them to push their values into P pays only when they are few.
+        fast_path::hit_if(
+            incoming.height_estimate > SMALL_HEIGHT,
+            FastPath::ExistsKeysLazy,
+            FastPath::ExistsKeysCollected,
+        );
         if incoming.height_estimate > SMALL_HEIGHT {
             inner_pushdowns.keep_lazy = true;
         }
@@ -927,6 +933,11 @@ impl Triplestore {
             inner_pushdowns.keep_lazy = true;
         }
         // As in lazy_exists: the keys are evaluated again by the semi or anti join.
+        fast_path::hit_if(
+            keys.height_estimate > SMALL_HEIGHT,
+            FastPath::ExistsKeysLazy,
+            FastPath::ExistsKeysCollected,
+        );
         if keys.height_estimate > SMALL_HEIGHT {
             inner_pushdowns.keep_lazy = true;
         }

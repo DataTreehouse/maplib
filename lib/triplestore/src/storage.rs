@@ -45,6 +45,7 @@ use std::sync::{Arc, OnceLock};
 use std::time::Instant;
 use tracing::{debug, instrument, trace, warn};
 use utils::bloom::SplitBlockBloom;
+use utils::fast_path::{self, FastPath};
 use utils::polars::collect_in_memory;
 use uuid::Uuid;
 
@@ -109,12 +110,16 @@ fn filter_targets<'a, T: ?Sized>(
     filter: &Option<CodeFilter>,
 ) -> Vec<&'a T> {
     match (codes, filter) {
-        (Some(codes), Some(f)) => targets
-            .iter()
-            .zip(codes)
-            .filter(|(_, c)| c.is_none_or(|c| f.may_contain_code(c)))
-            .map(|(t, _)| *t)
-            .collect(),
+        (Some(codes), Some(f)) => {
+            let kept: Vec<&'a T> = targets
+                .iter()
+                .zip(codes)
+                .filter(|(_, c)| c.is_none_or(|c| f.may_contain_code(c)))
+                .map(|(t, _)| *t)
+                .collect();
+            fast_path::hit_when(kept.len() < targets.len(), FastPath::TableFilterSkip);
+            kept
+        }
         _ => targets.to_vec(),
     }
 }
@@ -1159,8 +1164,9 @@ impl TriplesSegment {
     /// False if the segment holds no subject (or object, if `by_object`) with `code`.
     #[inline]
     pub(crate) fn may_hold_code(&self, code: u32, by_object: bool) -> bool {
-        self.code_filter(by_object)
-            .is_none_or(|f| f.may_contain_code(code))
+        let may = self.code_filter(by_object).is_none_or(|f| f.may_contain_code(code));
+        fast_path::hit_when(!may, FastPath::SegmentFilterSkip);
+        may
     }
 
     pub(crate) fn get_sparse_index_as_data_frame(

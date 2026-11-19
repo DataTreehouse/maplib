@@ -11,6 +11,7 @@ use representation::query_context::{Context, PathEntry};
 use representation::solution_mapping::{EagerSolutionMappings, SolutionMappings};
 use spargebra::algebra::GraphPattern;
 use std::collections::HashMap;
+use utils::fast_path::{self, FastPath};
 
 impl Triplestore {
     #[instrument(skip_all)]
@@ -49,6 +50,7 @@ impl Triplestore {
             dataset,
         )?;
 
+        fast_path::hit(FastPath::MinusAntiJoin);
         Ok(minus(
             left_solution_mappings,
             &maybe_unbound_variables(left),

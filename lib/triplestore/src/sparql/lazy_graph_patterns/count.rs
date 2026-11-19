@@ -31,6 +31,7 @@ use representation::{
 use spargebra::algebra::{AggregateExpression, AggregateFunction, Expression, Function, GraphPattern};
 use spargebra::term::{NamedNodePattern, TermPattern};
 use std::collections::{HashMap, HashSet};
+use utils::fast_path::{self, FastPath};
 
 /// The term kinds a FILTER can ask for.
 #[derive(Clone, Copy, PartialEq)]
@@ -309,9 +310,15 @@ fn distinct_codes_count(columns: &[&UInt32Chunked]) -> usize {
         }
         codes.par_sort_unstable();
         codes.dedup();
+        fast_path::hit(FastPath::CountDistinctSorted);
         return codes.len();
     }
 
+    fast_path::hit_if(
+        rows <= SERIAL_CODES,
+        FastPath::CountDistinctBitset,
+        FastPath::CountDistinctBitsetParallel,
+    );
     let threads = if rows <= SERIAL_CODES {
         1
     } else {

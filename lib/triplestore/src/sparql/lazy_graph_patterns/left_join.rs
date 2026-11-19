@@ -22,6 +22,7 @@ use representation::solution_mapping::{EagerSolutionMappings, SolutionMappings};
 use representation::BaseRDFNodeType;
 use spargebra::algebra::{Expression, GraphPattern};
 use std::collections::{HashMap, HashSet};
+use utils::fast_path::{self, FastPath};
 
 /// The left side of OPTIONAL is collected to evaluate the right side with its values when it is
 /// estimated to have at most this many solutions, and they are used when it has.
@@ -123,6 +124,11 @@ impl Triplestore {
         } else {
             self.optional_keys(left_solution_mappings, left, right)?
         };
+        fast_path::hit_if(
+            right_incoming.is_some(),
+            FastPath::OptionalLeftKeys,
+            FastPath::OptionalNoKeys,
+        );
         let right_expression_pushdowns = expression_pushdowns
             .as_ref()
             .map(|p| pushdowns_for_expression(p, right, right_incoming.as_ref(), parameters));

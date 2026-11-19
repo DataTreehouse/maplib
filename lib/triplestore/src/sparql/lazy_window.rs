@@ -10,6 +10,7 @@ use representation::solution_mapping::{EagerSolutionMappings, SolutionMappings};
 use spargebra::algebra::OrderExpression;
 use spargebra::window::{WindowCall, WindowFunction};
 use std::collections::HashMap;
+use utils::fast_path::{self, FastPath};
 
 /// The arguments of a window call, evaluated into columns.
 struct WindowInputs {
@@ -96,6 +97,7 @@ impl Triplestore {
         } else {
             (self.window_of_inputs(window, sm, &inputs, context)?, false)
         };
+        fast_path::hit_if(filtered, FastPath::RankOne, FastPath::RankOneWindow);
         Ok((inputs.drop(sm), filtered))
     }
 

@@ -11,6 +11,7 @@ use representation::solution_mapping::SolutionMappings;
 use spargebra::algebra::{Expression, Function, GraphPattern};
 use spargebra::term::{GroundTerm, NamedNodePattern, TermPattern, TriplePattern};
 use std::collections::{HashMap, HashSet};
+use utils::fast_path::{self, FastPath};
 
 /// Solution mappings estimated to have at most this many rows are collected to check whether
 /// their values can be pushed down.
@@ -99,6 +100,12 @@ impl Pushdowns {
         // Joining a small table within the plan only pays when the solutions so far are
         // estimated small too: a collect also replaces a loose estimate (e.g. that of a lookup
         // by a constant object) by the real height, which decides the engine of the query.
+        fast_path::hit_when(
+            !self.keep_lazy
+                && sm.height_estimate <= SMALL_TABLE_HEIGHT
+                && table_height.is_some_and(|t| t <= SMALL_TABLE_HEIGHT),
+            FastPath::BgpSmallTableInPlan,
+        );
         if self.keep_lazy
             || sm.height_estimate > CHECK_SMALL_HEIGHT
             || (table_height.is_some_and(|t| t <= SMALL_TABLE_HEIGHT)
@@ -136,6 +143,7 @@ impl Pushdowns {
             vec![]
         };
         if !columns.is_empty() {
+            fast_path::hit(FastPath::BgpValuesPushed);
             let pushdowns: HashMap<_, _> = columns
                 .into_par_iter()
                 .map(|x| {

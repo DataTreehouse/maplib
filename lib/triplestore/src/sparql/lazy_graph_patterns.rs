@@ -43,6 +43,7 @@ use representation::solution_mapping::{EagerSolutionMappings, SolutionMappings};
 use spargebra::algebra::GraphPattern;
 use spargebra::term::{NamedNodePattern, TriplePattern};
 use std::collections::HashMap;
+use utils::fast_path::{self, FastPath};
 use utils::polars::{pl_interruptable_collect_sorted_slice, InterruptableCollectError};
 
 impl Triplestore {
@@ -208,6 +209,7 @@ impl Triplestore {
                 // read, and the solutions so far are not collected.
                 let proven_empty = self.bgp_proven_empty(&patterns, dataset);
                 let mut updated_solution_mappings = if proven_empty {
+                    fast_path::hit(FastPath::BgpProvenEmpty);
                     Some(self.empty_bgp_solution_mappings(&patterns, solution_mappings))
                 } else {
                     solution_mappings
