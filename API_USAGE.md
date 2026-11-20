@@ -2125,6 +2125,7 @@ m.reads("""
 @prefix cim: <http://iec.ch/TC57/CIM100#> .
 @prefix ex: <http://example.org/grid#> .
 ex:line1 a cim:ACLineSegment ; cim:IdentifiedObject.name "Line 1" .
+ex:EndDeviceEventType.3.26.38.185 a cim:EndDeviceEventType ; cim:IdentifiedObject.name "Power off" .
 """, format="turtle")
 m.cim.add_event_timeseries(pl.DataFrame({"source": ["http://example.org/grid#line1"], "externalId": ["L-1"]}),
                            resource="scada_faults")
@@ -2148,21 +2149,20 @@ m.add_virtualization(
 df = m.query("""
 PREFIX cim: <http://iec.ch/TC57/CIM100#>
 PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
-SELECT ?line ?km ?meter ?type WHERE {
+SELECT ?line ?km ?meter ?typename WHERE {
     ?l a cim:ACLineSegment ; cim:IdentifiedObject.name ?line ; cim:ACLineSegment.LineFaults ?f .
     ?f cim:Fault.occurredDateTime ?tf ; cim:Fault.kind cim:PhaseConnectedFaultKind.lineToGround ;
        cim:LineFault.lengthFromTerminal1 ?km .
     ?m a cim:Meter ; cim:IdentifiedObject.name ?meter ; cim:EndDevice.EndDeviceEvents ?e .
     ?e cim:ActivityRecord.createdDateTime ?te ; cim:EndDeviceEvent.EndDeviceEventType ?type .
+    ?type cim:IdentifiedObject.name ?typename .
     FILTER(?te >= ?tf && ?te <= ?tf + "PT1M"^^xsd:dayTimeDuration)
 }""")
-# Line 1, 1.2 km, M-1, <http://example.org/grid#EndDeviceEventType.3.26.38.185>.
-# The kind of fault is a condition in the SQL.
+# Line 1, 1.2 km, M-1, Power off. The kind of fault is a condition in the SQL, and the name of
+# the event type is found in the graph for the type IRIs from the database.
 ```
 
 Use `xsd:dayTimeDuration` for time arithmetic: maplib adds no `xsd:duration` to a date and time.
-Look up what the graph says about an IRI from the database, such as the name of an event type, in a
-query of its own: a triple pattern whose subject is a value from the database is not yet evaluated.
 
 ### Industrial sources: map_cdf, map_osipi, map_pi_points, map_insights_hub and maplib.ip21
 
