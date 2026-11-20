@@ -34,7 +34,7 @@ use super::magic_paths::{
 use super::path::{LOOKUP_COLUMN, VALUE_COLUMN};
 use super::path_search::algo::{Direction, SearchGraph};
 use super::path_search::{
-    add_endpoint, connected_groups, constant_mappings, key_col, output_var, pattern_vars,
+    add_endpoint, collect_once, connected_groups, constant_mappings, key_col, output_var, pattern_vars,
     u32_state, var_name, BuiltGraph, Endpoint,
 };
 use crate::sparql::errors::SparqlError;
@@ -315,7 +315,9 @@ impl Triplestore {
                     dataset,
                 )?
             };
-            components.push((vars, sm));
+            // Read more than once (edges, keys, restrictions and the final join): collected
+            // once, so that every read gives the same rows (see collect_once).
+            components.push((vars, collect_once(sm)?));
         }
         let component_of = |v: &str| components.iter().position(|(vars, _)| vars.contains(v));
 

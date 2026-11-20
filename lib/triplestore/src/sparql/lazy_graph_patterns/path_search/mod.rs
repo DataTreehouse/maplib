@@ -54,6 +54,7 @@ use spargebra::term::{NamedNodePattern, TermPattern, TriplePattern};
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex};
 use tracing::debug;
+use utils::polars::InterruptableCollectError;
 
 /// The scratch memory of the parallel searches, in bytes.
 const SCRATCH_BUDGET: usize = 2 << 30;
@@ -366,7 +367,10 @@ impl Triplestore {
                     dataset,
                 )?
             };
-            components.push((vars, sm));
+            // Each component is read more than once (for the keys of the search and in the
+            // final join), so it is collected once: a slice without ORDER BY, e.g. a subquery's
+            // LIMIT 1, may give other rows each time it is collected.
+            components.push((vars, collect_once(sm)?));
         }
         let component_of = |v: &str| components.iter().position(|(vars, _)| vars.contains(v));
 
@@ -1135,4 +1139,17 @@ fn term_strings(
         }
     }
     Ok(out)
+}
+
+/// The solutions collected, so that the components of a path search or a graph algorithm, which
+/// are read more than once (for the keys of the search and in the final join), give the same
+/// rows every time: a slice without ORDER BY, e.g. a subquery's `LIMIT 1`, may give other rows
+/// each time it is collected.
+pub(crate) fn collect_once(sm: SolutionMappings) -> Result<SolutionMappings, SparqlError> {
+    match sm.as_eager_interruptable() {
+        Ok(eager) => Ok(eager.as_lazy()),
+        Err(InterruptableCollectError::Cancelled(c)) => Err(SparqlError::Cancelled(c)),
+        Err(InterruptableCollectError::Interrupted) => Err(SparqlError::InterruptSignal),
+        Err(e) => Err(SparqlError::QueryExecutionError(e.to_string())),
+    }
 }
