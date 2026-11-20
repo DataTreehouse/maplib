@@ -539,10 +539,10 @@ impl Triplestore {
         if matches_zero_length(ppe) && !subject_constant && !object_constant {
             let s = term_variable_name(subject).unwrap();
             let o = term_variable_name(object).unwrap();
-            if let Some(sm) = &mut solution_mappings {
-                // The mappings are read twice, so they are computed once.
-                let df = sm.mappings.clone().collect().unwrap();
-                sm.mappings = df.lazy();
+            if let Some(sm) = solution_mappings.take() {
+                // The mappings are read twice, so they are computed once; a cancelled or timed
+                // out query stops here with its error instead of panicking.
+                solution_mappings = Some(super::path_search::collect_once(sm)?);
             }
             let in_mappings = solution_mappings.as_ref().and_then(|sm| {
                 [&s, &o]

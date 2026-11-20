@@ -5,6 +5,7 @@
 - `Model.cim` (maplib Enterprise Edition) exposes the CIM grid tools bound to the model, e.g. `m.cim.cut_to_graph(...)`; also `cut`, `add_serves` and the other serves relations, `add_reading_types`, and the time series of meter readings. In open source maplib, `m.cim` raises an AttributeError saying it needs maplib Enterprise Edition
 - maplib Enterprise Edition: the time series of CIM measurements (Analog, Discrete, Accumulator and StringMeasurement values) can stay in a database and be queried with CIM predicates only. `m.cim.add_measurement_timeseries` links each measurement to its id in the database, and `m.cim.add_measurement_virtualization` adds the templates. These are the templates of the Model portal's CIM measurement values pattern. The usage guide shows this with DuckDB, together with meter readings
 ### Bug fixes
+- A query with a zero-length or `*` property path between two variables that timed out or was cancelled panicked ("called `Result::unwrap()` on an `Err` value") instead of raising its timeout or cancellation error.
 - maplib Enterprise Edition: a query over virtualized time series whose static part joins a join of patterns, such as `?r a X . ?r path* ?n` under a root, failed: the static query was placed at the inner join, which is never evaluated on its own. Each part of the join now gets its own static query.
 
 ## v0.24.0
