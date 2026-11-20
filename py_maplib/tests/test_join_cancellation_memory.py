@@ -109,10 +109,10 @@ def test_timed_out_large_join_stops():
 
 
 def test_memory_limit_stops_a_large_join_without_aborting():
-    # The join's result needs over 0.6 GB. The query is stopped at 90% of the limit, checked between
-    # batches of the join, so the limit leaves room for the memory used between two checks. The
-    # small query after each stopped join must succeed, though the join may still be freeing its
-    # memory when that query starts.
+    # The join's result needs over 0.6 GB. The query is stopped below the limit (at 90%, or lower
+    # with many threads), checked between batches of the join, so the limit leaves room for the
+    # memory used between two checks. The small query after each stopped join must succeed, though
+    # the join may still be freeing its memory when that query starts.
     lines = run("500")
     assert "small_error" not in lines, lines["small_error"]
     assert lines["error"] == ["MemoryError"] * ROUNDS

@@ -76,8 +76,8 @@ impl fmt::Display for Cancelled {
             Cancelled::Cancelled => write!(f, "The query was cancelled"),
             Cancelled::MemoryLimit(limit) => write!(
                 f,
-                "The query was stopped as the process used more than {} MB, 90% of the memory \
-                 limit abort_above_mb",
+                "The query was stopped as the process used more than {} MB, the part of the \
+                 memory limit abort_above_mb that queries may use",
                 limit / 1_000_000
             ),
             Cancelled::QueryMemoryLimit(limit) => write!(
@@ -246,6 +246,8 @@ impl CancelToken {
 /// The number of [Leftover]s that were left to run in the background and have not ended.
 static LEFTOVERS: Mutex<usize> = Mutex::new(0);
 static LEFTOVER_ENDED: Condvar = Condvar::new();
+/// When the last [Leftover] ended, see [wait_for_leftovers].
+static LAST_LEFTOVER_END: Mutex<Option<Instant>> = Mutex::new(None);
 
 /// Polars work of a query that may keep running after the query stopped waiting for it: a
 /// cancelled collect returns at once, while its running operators or batches finish on another
@@ -278,6 +280,8 @@ impl Leftover {
             s.ended = true;
             if s.left {
                 *LEFTOVERS.lock().unwrap_or_else(|e| e.into_inner()) -= 1;
+                *LAST_LEFTOVER_END.lock().unwrap_or_else(|e| e.into_inner()) =
+                    Some(Instant::now());
                 LEFTOVER_ENDED.notify_all();
             }
         }
@@ -287,28 +291,32 @@ impl Leftover {
 /// The longest a query waits for leftover work of stopped queries, see [wait_for_leftovers].
 const MAX_LEFTOVER_WAIT: Duration = Duration::from_secs(60);
 
-/// Waits until the process uses no more memory than queries may
-/// ([crate::memory::query_memory_limit]), or no work of stopped queries is left running (see
-/// [Leftover]), whichever comes first. Called by [with_token] before a query starts.
+/// Waits until no work of stopped queries is left running (see [Leftover]) and the process uses
+/// no more memory than queries may ([crate::memory::query_memory_limit]), when the query has a
+/// memory limit (of its own, or of the process). Called by [with_token] before a query starts.
 ///
 /// A query stopped for using too much memory returns before its join has ended and freed its
-/// memory. A query started right after it would otherwise see that memory and be stopped at once.
-/// The wait ends at the token's deadline, when the token is cancelled, or after a minute.
+/// memory, and the join's tasks go on for a while with the batches they hold. A query started
+/// right after it would otherwise see that memory, or the memory those tasks still allocate, and
+/// be stopped. A query with its own limit counts its growth from the least memory seen since it
+/// started, but memory freed meanwhile by the leftovers hides what it allocates, so it could reach
+/// the limit of the process (a MemoryError, or Polars aborting the process) before its own limit
+/// stopped it. The wait ends at the token's deadline, when the token is cancelled, or after a
+/// minute.
 fn wait_for_leftovers(token: &CancelToken) {
-    let Some(limit) = crate::memory::query_memory_limit() else {
-        return;
-    };
-    let over = || crate::memory::memory_usage() > limit;
-    if !over() {
+    let limit = crate::memory::query_memory_limit();
+    if limit.is_none() && token.memory_limit().is_none() {
         return;
     }
+    let over = || limit.is_some_and(|l| crate::memory::memory_usage() > l);
     let mut until = Instant::now() + MAX_LEFTOVER_WAIT;
     if let Some(deadline) = token.deadline() {
         until = until.min(deadline);
     }
+    let running = || token.0.state.load(Ordering::Relaxed) == RUNNING;
     let mut n = LEFTOVERS.lock().unwrap_or_else(|e| e.into_inner());
     // Memory is counted by the allocator, so it can drop without a notification: check it often.
-    while *n > 0 && over() && token.0.state.load(Ordering::Relaxed) == RUNNING {
+    while *n > 0 && running() {
         let now = Instant::now();
         if now >= until {
             break;
@@ -319,7 +327,25 @@ fn wait_for_leftovers(token: &CancelToken) {
             .unwrap_or_else(|e| e.into_inner())
             .0;
     }
+    drop(n);
+    // A leftover ends when its collect has returned, but the tasks of the streaming engine it
+    // stopped may still be freeing their memory: measured with 64 threads, the process stayed
+    // over the limit for up to about 0.1 s after the join was stopped. While the process is over
+    // the limit and a leftover ended shortly before, the query waits for that memory too.
+    let ended_recently = || {
+        LAST_LEFTOVER_END
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .is_some_and(|t| t.elapsed() < LEFTOVER_FREEING_GRACE)
+    };
+    while over() && running() && ended_recently() && Instant::now() < until {
+        std::thread::sleep(Duration::from_millis(2));
+    }
 }
+
+/// How long after the last leftover ended a query over the limit waits for the memory of the
+/// process to go down, see [wait_for_leftovers].
+const LEFTOVER_FREEING_GRACE: Duration = Duration::from_secs(1);
 
 /// The number of leftovers of stopped queries that are still running.
 #[cfg(test)]
