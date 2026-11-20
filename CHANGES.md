@@ -1,6 +1,6 @@
 # Change log
 
-## Unreleased
+## v0.25.2
 ### Bug fixes
 - Time zone aware Polars `Datetime` columns mapped to an `xsd:dateTime` template parameter lost their time zone, e.g. a `Datetime("us", "UTC")` value was written as `"2026-07-07T14:03:41"^^xsd:dateTime`. They are now UTC instants with the time zone `Z` (`"2026-07-07T14:03:41Z"^^xsd:dateTime`), as dateTimes parsed from RDF with a time zone, and columns in other time zones are converted to UTC. Naive columns still have no time zone. As for other dateTimes with and without a time zone, they are no longer equal to literals without a time zone, so filter them with e.g. `"2026-07-07T14:03:41Z"^^xsd:dateTime`. Time zone aware columns mapped to an `xsd:dateTimeStamp` parameter, which always has a time zone, were written without one, and now get `Z` ([#91](https://github.com/DataTreehouse/maplib/issues/91))
 - maplib Enterprise Edition: a triple pattern on a value from a virtualized database with a predicate of no template, e.g. `?type cim:IdentifiedObject.name ?name` where `?type` is the type of a meter event, was dropped, and `?name` was never bound. It is now matched in the graph with the values the virtualized queries return
