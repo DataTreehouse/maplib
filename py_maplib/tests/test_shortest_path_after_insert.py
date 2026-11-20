@@ -11,9 +11,15 @@ time it is collected, so the paths were found from one start and joined with sol
 another: no rows. The solutions are now collected once. The cases are repeated, under each
 Polars engine, since a wrong result depended on which row each collect happened to give."""
 
+import os
+import shutil
+import tempfile
+
 import pytest
 
 from maplib import Model
+
+from .disk import disk_params
 
 P = "PREFIX maplib: <https://datatreehouse.github.io/maplib/vocab#>\n"
 TRIPLES = "<urn:probe:a> <urn:probe:p> <urn:probe:b> . <urn:probe:b> <urn:probe:p> <urn:probe:c> ."
@@ -30,14 +36,37 @@ FROM_CONSTANT = P + """SELECT ?length WHERE {
 REPEATS = 20
 
 
+_STORAGE = {"kwargs": {}}
+
+
+def new_model() -> Model:
+    return Model(**_STORAGE["kwargs"])
+
+
+@pytest.fixture(autouse=True, params=disk_params())
+def storage(request):
+    """Every case in every storage mode (hybrid and disk need maplib Enterprise Edition)."""
+    folder = None
+    if request.param == "memory":
+        _STORAGE["kwargs"] = {}
+    else:
+        folder = tempfile.mkdtemp(prefix=f"maplib_sp_insert_{request.param}_")
+        _STORAGE["kwargs"] = {"storage": request.param,
+                              "storage_folder": os.path.join(folder, "storage")}
+    yield request.param
+    _STORAGE["kwargs"] = {}
+    if folder:
+        shutil.rmtree(folder, ignore_errors=True)
+
+
 def inserted() -> Model:
-    m = Model()
+    m = new_model()
     m.insert(f"CONSTRUCT {{ {TRIPLES} }} WHERE {{}}")
     return m
 
 
 def read() -> Model:
-    m = Model()
+    m = new_model()
     m.reads(TRIPLES.replace(" . ", " .\n") + "\n", format="ntriples")
     return m
 
@@ -45,7 +74,7 @@ def read() -> Model:
 def updated() -> Model:
     """The table of <urn:probe:p> with a segment (c p d), and a p b, b p c in its write buffer
     from a small update: a chain a, b, c, d."""
-    m = Model()
+    m = new_model()
     m.reads("<urn:probe:c> <urn:probe:p> <urn:probe:d> .\n", format="ntriples")
     m.update(f"INSERT DATA {{ {TRIPLES} }}")
     return m
