@@ -30,6 +30,7 @@ import pytest
 
 from maplib import Model
 
+from .disk import suite_storage_kwargs
 from .test_w3c_sparql11 import dump_graph
 from .w3c_entailment import (
     entails,
@@ -99,7 +100,7 @@ def build_params():
 
 
 def read_ontology(rdf_xml: str) -> Model:
-    m = Model()
+    m = Model(**suite_storage_kwargs())
     m.reads(rdf_xml, format="rdf/xml")
     return m
 
