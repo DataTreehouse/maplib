@@ -1,6 +1,6 @@
 # Change log
 
-## Unreleased
+## v0.25.1
 ### Features
 - maplib Enterprise Edition: CIM events can stay in a database and be queried with CIM predicates only, like the time series of measurements. `m.cim.fault_template` covers faults such as earth faults, on lines, terminals or any equipment (`cim:Fault.kind cim:PhaseConnectedFaultKind.lineToGround`, `cim:LineFault.lengthFromTerminal1`). `m.cim.end_device_event_template` covers meter events (IEC 61968-9 `cim:EndDeviceEvent`, e.g. power off and power restored), `m.cim.psr_event_template` covers in and out of service events (`cim:PSREvent`), and `m.cim.event_template` any other CIM event. `m.cim.add_event_timeseries` links meters, lines and equipment to their ids in the database. The usage guide shows earth faults and meter events in DuckDB
 ### Bug fixes
