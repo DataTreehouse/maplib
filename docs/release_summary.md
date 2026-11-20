@@ -1,3 +1,12 @@
+# What's new in v0.25.3
+
+A release of maplib Enterprise Edition with two speed-ups and three fixes. [CHANGES.md](../CHANGES.md) has every change.
+
+- **Faster paths and aggregates.** A zero-length property path between two unbound variables, e.g. `?a ex:p* ?b`, reads the graph's nodes from the stored columns: on 10M nodes a `COUNT` over it takes 0.11 s instead of 1.22 s. `MIN` and `MAX` over a column of several types scan each group once instead of sorting it, 15 to 35 times faster.
+- **Virtualized queries (EE).** With several time series resources, a virtualized query goes only to the resources whose template has its predicates, so queries without a class pattern no longer give empty rows or fail.
+- **Memory limits.** With `abort_above_mb` on a machine with many cores, a large join is stopped with a `MemoryError` before the process is aborted.
+- **Graph portal (EE).** The bundled portal stores the times of its model summaries as UTC without a time zone again, so it no longer rewrites them on every start.
+
 # What's new in v0.25.2
 
 A fix release of maplib Enterprise Edition. [CHANGES.md](../CHANGES.md) has every change.
