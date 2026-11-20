@@ -1,3 +1,10 @@
+# What's new in v0.25.2
+
+A fix release of maplib Enterprise Edition. [CHANGES.md](../CHANGES.md) has every change.
+
+- **Time zones of mapped date-times.** A time zone aware Polars `Datetime` column mapped to an `xsd:dateTime` or `xsd:dateTimeStamp` template parameter keeps its time zone, written as `Z`; it was dropped. A value with a time zone no longer equals the same value without one, as XSD defines them.
+- **Virtualized values (EE).** A triple pattern on a value from a virtualized database whose predicate has no template, e.g. `?type cim:IdentifiedObject.name ?name` for the type of a meter event, is now evaluated on the virtualized results instead of being dropped, so its variables are bound.
+
 # What's new in v0.25.1
 
 A release of maplib Enterprise Edition with CIM events and two fixes for virtualized time series. [CHANGES.md](../CHANGES.md) has every change.
