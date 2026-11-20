@@ -167,9 +167,6 @@ class CIM:
         ...     "scada_analogs": 'SELECT tag AS id, ts AS "timestamp", val AS value FROM analogs'})
         >>> m.add_virtualization(vdb, resources={"scada_analogs": m.cim.measurement_template("analog", "scada_analogs")})
 
-        When one database holds several kinds, give the class of the measurements in queries
-        (``?a a cim:Analog``): chrontext otherwise also asks the other kinds' resources for the values.
-
         :param kind: "analog" (cim:Analog.AnalogValues, cim:AnalogValue.value, xsd:double), "discrete"
             (cim:Discrete..., xsd:integer), "accumulator" (cim:Accumulator..., xsd:integer) or "string"
             (cim:StringMeasurement..., xsd:string).
