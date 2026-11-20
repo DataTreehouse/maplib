@@ -1,6 +1,6 @@
 # Change log
 
-## Unreleased
+## v0.24.0
 ### Features
 - The SHACL 1.2 list constraints (maplib Enterprise Edition): `sh:memberShape` (every member of a list must conform to a node shape), `sh:minListLength`, `sh:maxListLength` and `sh:uniqueMembers`. Each value node must be a SHACL list (`rdf:nil`, or a chain of nodes with exactly one `rdf:first` and one `rdf:rest` ending in `rdf:nil`), else it is a result with the value node as `sh:value`. They work under `sh:not`, `sh:or`, `sh:xone` and in nested lists. The shapes graph published at https://www.w3.org/ns/shacl-shacl (the SHACL 1.2 draft of SHACL for SHACL) uses them, and validating shapes against it failed with "The or constraint on ... is referring to an unknown node". The W3C SHACL 1.2 tests of these constraints are included in the tests. They are not yet supported in the conditions of SHACL rules
 ### Performance
