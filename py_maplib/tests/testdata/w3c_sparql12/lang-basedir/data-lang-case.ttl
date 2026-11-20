@@ -1,0 +1,4 @@
+PREFIX : <http://example/>
+
+:x :p "abc"@en .
+:x :q "abc"@EN .

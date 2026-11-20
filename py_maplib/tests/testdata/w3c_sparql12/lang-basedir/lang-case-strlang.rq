@@ -1,0 +1,8 @@
+PREFIX : <http://example/>
+
+SELECT ?x {
+  BIND ( STRLANG("abc", "EN") AS ?v1 )
+  BIND ( STRLANG("abc", "en") AS ?v2 )
+  ?x :p ?v1 ;
+     :q ?v2 .
+}

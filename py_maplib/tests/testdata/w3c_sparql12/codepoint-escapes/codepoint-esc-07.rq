@@ -1,0 +1,8 @@
+# Codepoint escape in a string
+
+SELECT ?v {
+  VALUES ?v {
+    # "abc👾"
+    '\U00000061\u0062\U00000063\U0001F47E'
+  }
+}

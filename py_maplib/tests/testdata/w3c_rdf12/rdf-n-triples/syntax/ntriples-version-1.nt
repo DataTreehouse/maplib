@@ -1,0 +1,2 @@
+VERSION "1.2"
+<http://example/a> <http://example/b> "Hello"@en--ltr .

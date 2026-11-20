@@ -1,0 +1,3 @@
+PREFIX : <http://example/>
+
+:G { <http://example/a> <http://example/b> "Hello"@cantbethislong }

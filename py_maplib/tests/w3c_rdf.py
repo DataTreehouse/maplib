@@ -1,5 +1,6 @@
 """
-Harness for the W3C RDF compliance test suites, used by test_w3c_rdf11.py (RDF 1.1).
+Harness for the W3C RDF compliance test suites, used by test_w3c_rdf11.py (RDF 1.1) and
+test_w3c_rdf12.py (RDF 1.2).
 
 The manifests are read with maplib and a pytest case is generated for each of:
 
@@ -59,7 +60,13 @@ RDF11 = Suite(
     known_failures=TESTS_DIR / "w3c_rdf11_known_failures.txt",
 )
 
-SUITES = (RDF11,)
+RDF12 = Suite(
+    base="https://w3c.github.io/rdf-tests/rdf/rdf12/",
+    directory=TESTS_DIR / "testdata" / "w3c_rdf12",
+    known_failures=TESTS_DIR / "w3c_rdf12_known_failures.txt",
+)
+
+SUITES = (RDF11, RDF12)
 
 
 class Namespace(str):
