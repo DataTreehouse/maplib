@@ -91,17 +91,76 @@ def test_non_utc_time_zone_column_is_stored_as_utc():
         }
     ).with_columns(pl.col("t").dt.replace_time_zone("Europe/Oslo"))
     m.map("ex:WorkOrder", df)
-    # The column is declared xsd:dateTime, which has no time zone in its type, so the
-    # instant is kept as its UTC wall clock time.
+    # The instant is stored in UTC and keeps a time zone (Z).
+    nt = m.writes(format="ntriples")
+    assert '"2026-11-14T06:12:00Z"^^<http://www.w3.org/2001/XMLSchema#dateTime>' in nt
     df = m.query(
         PREFIXES
         + """
 SELECT ?t WHERE {
     ?wo ex:time ?t .
-    FILTER(?t = "2026-11-14T06:12:00"^^xsd:dateTime)
+    FILTER(?t = "2026-11-14T06:12:00Z"^^xsd:dateTime)
 }"""
     )
     assert df["t"].to_list() == [datetime(2026, 11, 14, 6, 12, tzinfo=timezone.utc)]
+
+
+XSD = "http://www.w3.org/2001/XMLSchema#"
+
+
+@pytest.mark.parametrize("time_zone", ["UTC", "+00:00", "Etc/UTC"])
+def test_utc_aware_mapped_datetime_keeps_time_zone(time_zone):
+    """Issue #91: UTC-aware columns keep their time zone as xsd:dateTime."""
+    m = Model()
+    m.add_template(TEMPLATE)
+    df = pl.DataFrame(
+        {"wo": ["http://example.org/wo1"], "t": [datetime(2026, 7, 7, 14, 3, 41)]}
+    ).with_columns(pl.col("t").dt.replace_time_zone(time_zone))
+    m.map("ex:WorkOrder", df)
+    nt = m.writes(format="ntriples")
+    assert f'"2026-07-07T14:03:41Z"^^<{XSD}dateTime>' in nt
+    # Equal to a parsed literal with a time zone, as the same term
+    df = m.query(
+        PREFIXES
+        + """
+SELECT ?wo WHERE { ?wo ex:time "2026-07-07T14:03:41Z"^^xsd:dateTime }"""
+    )
+    assert df["wo"].to_list() == ["<http://example.org/wo1>"]
+
+
+STAMP_TEMPLATE = (
+    PREFIXES
+    + """
+ex:Stamp [ottr:IRI ?wo, xsd:dateTimeStamp ?t] :: {
+    ottr:Triple(?wo, ex:time, ?t)
+} .
+"""
+)
+
+
+@pytest.mark.parametrize("time_zone", ["UTC", "Europe/Oslo"])
+def test_mapped_datetime_stamp_has_time_zone(time_zone):
+    """Issue #91: an xsd:dateTimeStamp always has a time zone (XSD 1.1 Part 2, 3.4.28)."""
+    m = Model()
+    m.add_template(STAMP_TEMPLATE)
+    df = pl.DataFrame(
+        {"wo": ["http://example.org/wo1"], "t": [datetime(2026, 7, 7, 14, 3, 41)]}
+    ).with_columns(pl.col("t").dt.replace_time_zone(time_zone))
+    m.map("ex:Stamp", df)
+    nt = m.writes(format="ntriples")
+    expected = "14:03:41" if time_zone == "UTC" else "12:03:41"
+    assert f'"2026-07-07T{expected}Z"^^<{XSD}dateTimeStamp>' in nt
+
+
+def test_naive_column_is_rejected_for_datetime_stamp():
+    """A naive column has no time zone, so it can not be an xsd:dateTimeStamp."""
+    m = Model()
+    m.add_template(STAMP_TEMPLATE)
+    df = pl.DataFrame(
+        {"wo": ["http://example.org/wo1"], "t": [datetime(2026, 7, 7, 14, 3, 41)]}
+    )
+    with pytest.raises(Exception, match="incompatible"):
+        m.map("ex:Stamp", df)
 
 
 @pytest.mark.parametrize(

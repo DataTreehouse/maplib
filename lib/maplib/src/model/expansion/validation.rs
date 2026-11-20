@@ -378,7 +378,8 @@ fn infer_validate_mapping_column_type_from_ptype(
                         .map_err(MappingError::DatatypeInferenceError)?;
                     Ok((MappingColumnType::Flat(series_inferred_rdf_node_type), None))
                 } else {
-                    let ptype_rdf_node_type = BaseRDFNodeType::Literal(nn.clone(), None);
+                    let ptype_rdf_node_type =
+                        BaseRDFNodeType::Literal(nn.clone(), mapped_time_zone_offset(nn, datatype));
                     let ptype_dt = ptype_rdf_node_type.default_input_polars_data_type();
                     if ptype_dt.is_string() && datatype.is_string() || &ptype_dt == datatype {
                         Ok((
@@ -401,7 +402,10 @@ fn infer_validate_mapping_column_type_from_ptype(
                                     unreachable!("Should never happen")
                                 };
                             if is_literal_subtype_ext(inferred_nn.as_ref(), nn.as_ref()) {
-                                let super_t = BaseRDFNodeType::Literal(nn.clone(), None);
+                                let super_t = BaseRDFNodeType::Literal(
+                                    nn.clone(),
+                                    mapped_time_zone_offset(nn, datatype),
+                                );
                                 let expr = if inferred_nn != nn {
                                     Some(expr.cast(super_t.default_input_polars_data_type()))
                                 } else {
@@ -446,6 +450,19 @@ fn infer_validate_mapping_column_type_from_ptype(
                 ))
             }
         }
+    }
+}
+
+/// The time zone offset of the literals mapped from a column of the given data type to a
+/// parameter of the given literal type. Time zone aware columns are stored as UTC instants, so
+/// as xsd:dateTime they keep the offset 0 (`Z`), as dateTimes parsed from RDF with a time zone do.
+/// Naive columns have no time zone as xsd:dateTime. An xsd:dateTimeStamp always has a time zone
+/// (naive columns are rejected for it), so it always has the offset 0.
+fn mapped_time_zone_offset(nn: &NamedNode, datatype: &DataType) -> Option<i16> {
+    match nn.as_ref() {
+        xsd::DATE_TIME_STAMP => Some(0),
+        xsd::DATE_TIME if matches!(datatype, DataType::Datetime(_, Some(_))) => Some(0),
+        _ => None,
     }
 }
 
