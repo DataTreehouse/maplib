@@ -11,9 +11,14 @@ process was aborted instead of the query raising a MemoryError. Each case runs i
 process, as memory limits apply to the whole process.
 """
 
+import os
 import subprocess
 import sys
 import textwrap
+
+# Without RUST_LOG, which CI sets to debug: logging every step of the join slows it enough between
+# memory checks for Polars' own abort threshold to fire first.
+_CHILD_ENV = {k: v for k, v in os.environ.items() if k != "RUST_LOG"}
 
 N = 15_000
 # Times the memory case runs the large join, each followed by a small query.
@@ -86,6 +91,7 @@ def run(case):
         capture_output=True,
         text=True,
         timeout=600,
+        env=_CHILD_ENV,
     )
     assert p.returncode == 0, f"exit {p.returncode}\n{p.stdout}\n{p.stderr[-2000:]}"
     lines = {}

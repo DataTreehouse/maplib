@@ -7,6 +7,7 @@ taking the machine's memory.
 """
 
 import ctypes
+import os
 import subprocess
 import sys
 import textwrap
@@ -79,8 +80,17 @@ def _run_capped(script, timeout_s=60):
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
         text=True,
+        # Without RUST_LOG, which CI sets to debug, so the child's first line is its own.
+        env={k: v for k, v in os.environ.items() if k != "RUST_LOG"},
     )
-    assert p.stdout.readline().strip() == "ready"
+    before = []
+    for line in p.stdout:
+        if line.strip() == "ready":
+            break
+        before.append(line)
+    else:
+        p.wait()
+        raise AssertionError(f"the child exited ({p.returncode}) before it was ready:\n" + "".join(before))
     peak = 0.0
     started = time.monotonic()
     killed = False
