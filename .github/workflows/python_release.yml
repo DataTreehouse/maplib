@@ -40,122 +40,80 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
 
-  manylinux_x86_64:
+
+  # One abi3 wheel per platform covers every supported Python version, so the matrix is over
+  # platforms only.
+  wheels:
+    name: Wheel ${{ matrix.name }}
     needs: security_audit
-    if: github.event_name != 'workflow_dispatch' || !inputs.only_aarch64
-    runs-on: ubuntu-latest
-    environment: release
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ inputs.ref || github.ref }}
-      - uses: actions/setup-python@v4
-        with:
-          python-version: ${{ env.PYTHON_VERSION }}
-
-      - name: Fix README symlink
-        run: |
-          rm py_maplib/README.md
-          cp README.md py_maplib/README.md
-
-      - name: Publish wheel
-        uses: PyO3/maturin-action@v1
-        env:
-          RUSTFLAGS: -C target-feature=+fxsr,+sse,+sse2,+sse3,+ssse3,+sse4.1,+sse4.2,+popcnt,+avx,+fma
-        with:
-          command: publish
-          args: -m py_maplib/Cargo.toml --skip-existing -o wheels -u magbak --features abi3
-          maturin-version: ${{ env.MATURIN_VERSION }}
-          rust-toolchain: ${{ env.RUST_TOOLCHAIN }}
-          manylinux: 2_28
-
-  manylinux_aarch64:
-    needs: security_audit
-    runs-on: ubuntu-latest
-    environment: release
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ inputs.ref || github.ref }}
-      - uses: actions/setup-python@v4
-        with:
-          python-version: ${{ env.PYTHON_VERSION }}
-
-      - name: Fix README symlink
-        run: |
-          rm py_maplib/README.md
-          cp README.md py_maplib/README.md
-
-      - name: Publish wheel
-        uses: PyO3/maturin-action@v1
-        env:
-          # Fat LTO with one codegen unit runs the cross-compiling runner out of memory (rustc is
-          # killed) since v0.24.0, so this wheel links with thin LTO.
-          CARGO_PROFILE_RELEASE_LTO: thin
-          CARGO_PROFILE_RELEASE_CODEGEN_UNITS: '16'
-        with:
-          command: publish
-          args: -m py_maplib/Cargo.toml --skip-existing --target aarch64-unknown-linux-gnu -o wheels -u magbak --features abi3
-          maturin-version: ${{ env.MATURIN_VERSION }}
-          rust-toolchain: ${{ env.RUST_TOOLCHAIN }}
-          manylinux: 2_28
-
-  win-macos:
-    needs: security_audit
-    if: github.event_name != 'workflow_dispatch' || !inputs.only_aarch64
     runs-on: ${{ matrix.os }}
+    environment: release
     strategy:
       fail-fast: false
       matrix:
-        os: [ macos-latest, windows-latest ]
-    environment: release
+        include:
+          # The linux jobs also publish the sdist.
+          - name: manylinux x86-64
+            os: ubuntu-latest
+            manylinux: '2_28'
+            env: |
+              RUSTFLAGS=-C target-feature=+fxsr,+sse,+sse2,+sse3,+ssse3,+sse4.1,+sse4.2,+popcnt,+avx,+fma
+          # Fat LTO with one codegen unit runs the cross-compiling runner out of memory (rustc is
+          # killed) since v0.24.0, so this wheel links with thin LTO.
+          - name: manylinux aarch64
+            os: ubuntu-latest
+            manylinux: '2_28'
+            args: --target aarch64-unknown-linux-gnu
+            env: |
+              CARGO_PROFILE_RELEASE_LTO=thin
+              CARGO_PROFILE_RELEASE_CODEGEN_UNITS=16
+          - name: windows x86-64
+            os: windows-latest
+            args: --no-sdist
+            env: |
+              RUSTFLAGS=-C target-feature=+fxsr,+sse,+sse2,+sse3,+sse4.1,+sse4.2
+          - name: mac aarch64
+            os: macos-latest
+            args: --no-sdist
+          - name: mac x86-64
+            os: macos-latest
+            args: --no-sdist --target x86_64-apple-darwin
+            env: |
+              RUSTFLAGS=-C target-feature=+sse3,+ssse3,+sse4.1,+sse4.2,+popcnt,+cmpxchg16b,+avx,+avx2,+fma,+bmi1,+bmi2,+lzcnt,+pclmulqdq,+movbe
+    env:
+      # A job-level `if` cannot read the matrix, so the steps of the wheels left out of a manual
+      # aarch64-only run are skipped instead.
+      BUILD: ${{ !inputs.only_aarch64 || matrix.name == 'manylinux aarch64' }}
     steps:
       - uses: actions/checkout@v4
+        if: env.BUILD == 'true'
         with:
           ref: ${{ inputs.ref || github.ref }}
       - uses: actions/setup-python@v4
+        if: env.BUILD == 'true'
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
       - name: Fix README symlink
+        if: env.BUILD == 'true'
+        shell: bash
         run: |
           rm py_maplib/README.md
           cp README.md py_maplib/README.md
 
-      - name: Publish wheel
-        uses: PyO3/maturin-action@v1
+      - name: Set the build environment of the target
+        if: env.BUILD == 'true' && matrix.env
+        shell: bash
         env:
-          RUSTFLAGS: -C target-feature=+fxsr,+sse,+sse2,+sse3,+sse4.1,+sse4.2
-        with:
-          command: publish
-          args: -m py_maplib/Cargo.toml --no-sdist --skip-existing -o wheels -u magbak --features abi3
-          maturin-version: ${{ env.MATURIN_VERSION }}
-          rust-toolchain: ${{ env.RUST_TOOLCHAIN }}
-
-  mac_x86_64:
-    name: Build release mac x86-64
-    needs: security_audit
-    if: github.event_name != 'workflow_dispatch' || !inputs.only_aarch64
-    runs-on: macos-latest
-    environment: release
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ inputs.ref || github.ref }}
-      - uses: actions/setup-python@v4
-        with:
-          python-version: ${{ env.PYTHON_VERSION }}
-      - name: Fix README symlink
-        run: |
-          rm py_maplib/README.md
-          cp README.md py_maplib/README.md
+          TARGET_ENV: ${{ matrix.env }}
+        run: printf '%s' "$TARGET_ENV" >> "$GITHUB_ENV"
 
       - name: Publish wheel
+        if: env.BUILD == 'true'
         uses: PyO3/maturin-action@v1
-        env:
-          RUSTFLAGS: -C target-feature=+sse3,+ssse3,+sse4.1,+sse4.2,+popcnt,+cmpxchg16b,+avx,+avx2,+fma,+bmi1,+bmi2,+lzcnt,+pclmulqdq,+movbe
         with:
           command: publish
-          args: -m py_maplib/Cargo.toml --no-sdist --target x86_64-apple-darwin -u magbak --features abi3
+          args: -m py_maplib/Cargo.toml --skip-existing -o wheels -u magbak --features abi3 ${{ matrix.args }}
           maturin-version: ${{ env.MATURIN_VERSION }}
           rust-toolchain: ${{ env.RUST_TOOLCHAIN }}
+          manylinux: ${{ matrix.manylinux }}
