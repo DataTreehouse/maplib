@@ -27,6 +27,9 @@ fast_paths! {
     PathKeyedBound => "path.keyed_bound",
     PathKeyedUnbound => "path.keyed_unbound",
     PathEveryNodeStep => "path.every_node_step",
+    // The nodes of the graph for a zero-length path with both ends unbound, read from the
+    // stored columns of the tables.
+    PathNodesFromStoredColumns => "path.nodes_from_stored_columns",
     // COUNT(DISTINCT ?s) / COUNT(DISTINCT ?o) over dictionary codes.
     CountDistinctBitset => "count_distinct.bitset",
     CountDistinctBitsetParallel => "count_distinct.bitset_parallel",

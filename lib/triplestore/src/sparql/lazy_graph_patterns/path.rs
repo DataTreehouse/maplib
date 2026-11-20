@@ -5,9 +5,10 @@ use crate::storage::Triples;
 use oxrdf::vocab::xsd;
 use oxrdf::{NamedNode, Term, Variable};
 use polars::prelude::{
-    by_name, col, lit, DataFrame, IdxCa, IntoColumn, IntoLazy, JoinType, UInt32Chunked,
+    by_name, col, lit, ChunkAgg, DataFrame, IdxCa, IntoColumn, IntoLazy, JoinType, UInt32Chunked,
+    UniqueKeepStrategy,
 };
-use polars_core::prelude::{DataType, ExplodeOptions};
+use polars_core::prelude::{Column, DataType, ExplodeOptions};
 use query_processing::errors::QueryProcessingError;
 use query_processing::expressions::{literal_enc, named_node_enc, named_node_local_enc};
 use query_processing::graph_patterns::{distinct, group_by_workaround, join, union};
@@ -187,6 +188,18 @@ impl Triplestore {
             }
             None => None,
         };
+        // With neither end bound, a path that matches with zero length pairs every node of the
+        // graph with itself (see below): these pairs come from the node set, so they are left
+        // out of the paths that are followed, and the two parts need no DISTINCT.
+        let every_node = matches_zero_length(ppe)
+            && [subject, object].into_iter().all(|t| {
+                term_variable_name(t).is_some_and(|v| {
+                    !pushdowns.variables_values.contains_key(&v)
+                        && !solution_mappings
+                            .as_ref()
+                            .is_some_and(|sm| sm.rdf_node_types.contains_key(&v))
+                })
+            });
         let start_codes = {
             let cats = self.global_cats.read().unwrap();
             let [mapped_subject, mapped_object] = mapped_codes;
@@ -265,6 +278,17 @@ impl Triplestore {
                     .unwrap_or_else(|| (0..n_values as u32).collect());
                 paths_from(ppe, starts, false, &namednode_dfs, n_values)
             };
+            if every_node {
+                // Equal keys are equal nodes.
+                let (s, o): (Vec<u32>, Vec<u32>) = subject_vec
+                    .iter()
+                    .zip(object_vec.iter())
+                    .filter(|(s, o)| s != o)
+                    .map(|(s, o)| (*s, *o))
+                    .unzip();
+                subject_vec = s;
+                object_vec = o;
+            }
             utils::cancel::check()?;
             // Keys without a value (none should occur) are left out rather than gathered.
             let n_values = n_values as u32;
@@ -558,6 +582,7 @@ impl Triplestore {
             });
             // With neither end bound, every node of the graph (each subject and object) is a
             // zero length match, as in Oxigraph and Jena.
+            let all_nodes = bound.is_none();
             let zero_length = if let Some(b) = bound {
                 let sm = if in_mappings.is_some() {
                     solution_mappings.as_ref()
@@ -575,14 +600,20 @@ impl Triplestore {
                     dataset,
                 )?
             } else {
-                self.zero_length_nodes(&s, &s, &o, None, None, context, query_settings, dataset)?
+                debug_assert!(every_node);
+                self.graph_nodes(&s, &o, dataset)?
             };
             if let Some(zero_length) = zero_length {
-                path_solution_mappings = distinct(union(
+                path_solution_mappings = union(
                     vec![path_solution_mappings, zero_length],
                     false,
                     self.global_cats.clone(),
-                )?)?;
+                )?;
+                // The paths followed from every node are distinct and have no node paired with
+                // itself, and the nodes are distinct.
+                if !all_nodes {
+                    path_solution_mappings = distinct(path_solution_mappings)?;
+                }
             }
         }
         if let Some(mappings) = solution_mappings {
@@ -738,6 +769,157 @@ impl Triplestore {
         zero_length.rdf_node_types = types;
         Ok(Some(zero_length))
     }
+}
+
+impl Triplestore {
+    /// Every node of the queried graph (each subject and each object of a triple), as (`s`, `o`)
+    /// pairs of zero length paths; None if the graph has no triples.
+    ///
+    /// The nodes are gathered per stored type from the subject and object columns of the triple
+    /// tables, as they are stored. Terms of different stored types are different terms, so the
+    /// distinct values of each type are the distinct nodes. IRIs, blank nodes and strings are
+    /// stored as dictionary codes, whose distinct values are the bits set in a bitset over the
+    /// codes: the cost is a pass over the stored columns, without building rows of all triples.
+    fn graph_nodes(
+        &self,
+        s: &str,
+        o: &str,
+        dataset: &QueryGraph,
+    ) -> Result<Option<SolutionMappings>, SparqlError> {
+        let graphs: Vec<NamedGraph> = match dataset {
+            QueryGraph::NamedGraph(g) => vec![g.clone()],
+            QueryGraph::QueryDataset(qd) => qd
+                .default
+                .iter()
+                .map(|nn| NamedGraph::from_maybe_named_node(Some(nn)))
+                .collect(),
+        };
+        let mut by_type: HashMap<&BaseRDFNodeType, Vec<Column>> = HashMap::new();
+        for types in graphs
+            .iter()
+            .filter_map(|g| self.graph_triples_map.get(g))
+            .flat_map(|predicates| predicates.values())
+        {
+            for ((subject_type, object_type), triples) in types {
+                by_type
+                    .entry(subject_type)
+                    .or_default()
+                    .extend(triples.stored_columns(SUBJECT_COL_NAME)?);
+                by_type
+                    .entry(object_type)
+                    .or_default()
+                    .extend(triples.stored_columns(OBJECT_COL_NAME)?);
+            }
+        }
+        let mut by_type: Vec<_> = by_type.into_iter().collect();
+        by_type.sort_by(|(a, _), (b, _)| a.cmp(b));
+        let nodes = by_type
+            .into_par_iter()
+            .map(|(ty, columns)| Ok((ty, distinct_stored_values(ty, columns, s)?)))
+            .collect::<Result<Vec<(&BaseRDFNodeType, Column)>, SparqlError>>()?;
+        utils::cancel::check()?;
+        let sms: Vec<SolutionMappings> = nodes
+            .into_iter()
+            .filter(|(_, c)| !c.is_empty())
+            .map(|(ty, c)| {
+                let height = c.len();
+                SolutionMappings::new(
+                    DataFrame::new(height, vec![c]).unwrap().lazy(),
+                    HashMap::from([(
+                        s.to_string(),
+                        ty.clone().into_default_stored_rdf_node_state(),
+                    )]),
+                    height,
+                )
+            })
+            .collect();
+        if sms.is_empty() {
+            return Ok(None);
+        }
+        fast_path::hit(FastPath::PathNodesFromStoredColumns);
+        let mut nodes = union(sms, false, self.global_cats.clone())?;
+        if o != s {
+            let state = nodes.rdf_node_types.get(s).unwrap().clone();
+            nodes.mappings = nodes.mappings.with_column(col(s).alias(o));
+            nodes.rdf_node_types.insert(o.to_string(), state);
+        }
+        Ok(Some(nodes))
+    }
+}
+
+/// The distinct values of the stored columns of one type, as a column named `name`.
+fn distinct_stored_values(
+    ty: &BaseRDFNodeType,
+    columns: Vec<Column>,
+    name: &str,
+) -> Result<Column, SparqlError> {
+    if ty.stored_cat()
+        && !ty.is_lang_string()
+        && columns.iter().all(|c| c.dtype() == &DataType::UInt32)
+    {
+        let chunked: Vec<&UInt32Chunked> = columns.iter().map(|c| c.u32().unwrap()).collect();
+        return Ok(UInt32Chunked::from_vec(name.into(), distinct_codes(&chunked)).into_column());
+    }
+    let mut columns = columns.into_iter();
+    let mut values = columns
+        .next()
+        .expect("A type has at least one column")
+        .take_materialized_series();
+    for c in columns {
+        values
+            .append(c.as_materialized_series())
+            .map_err(crate::errors::TriplestoreError::LazyLoadError)?;
+    }
+    values.rename(name.into());
+    let height = values.len();
+    let df = DataFrame::new(height, vec![values.into_column()])
+        .unwrap()
+        .lazy()
+        .unique(None, UniqueKeepStrategy::Any)
+        .collect()
+        .map_err(crate::errors::TriplestoreError::LazyLoadError)?;
+    Ok(df.column(name).unwrap().clone())
+}
+
+/// The distinct codes of the columns, sorted: the bits set in a bitset over the codes, or, for
+/// codes too sparse for a bitset, the codes sorted.
+fn distinct_codes(columns: &[&UInt32Chunked]) -> Vec<u32> {
+    let rows: usize = columns.iter().map(|c| c.len() - c.null_count()).sum();
+    let Some(max) = columns.iter().filter_map(|c| c.max()).max() else {
+        return vec![];
+    };
+    // Arrays with nulls are not expected in stored columns.
+    let for_each_code = |f: &mut dyn FnMut(u32)| {
+        for c in columns {
+            for arr in c.downcast_iter() {
+                if arr.validity().is_none() {
+                    arr.values().as_slice().iter().for_each(|u| f(*u));
+                } else {
+                    arr.iter().flatten().for_each(|u| f(*u));
+                }
+            }
+        }
+    };
+    let words = (max as usize >> 6) + 1;
+    // A bitset of at most 2 bytes per code (plus 512 KiB), else sort.
+    if words > rows / 4 + (1 << 16) {
+        let mut out: Vec<u32> = Vec::with_capacity(rows);
+        for_each_code(&mut |u| out.push(u));
+        out.par_sort_unstable();
+        out.dedup();
+        return out;
+    }
+    let mut bits = vec![0u64; words];
+    for_each_code(&mut |u| bits[(u >> 6) as usize] |= 1u64 << (u & 63));
+    let n: usize = bits.iter().map(|w| w.count_ones() as usize).sum();
+    let mut out = Vec::with_capacity(n);
+    for (i, mut word) in bits.into_iter().enumerate() {
+        while word != 0 {
+            out.push(((i as u32) << 6) | word.trailing_zeros());
+            word &= word - 1;
+        }
+    }
+    out
 }
 
 pub fn create_graph_pattern(
