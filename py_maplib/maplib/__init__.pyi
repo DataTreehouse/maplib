@@ -807,7 +807,7 @@ class Model:
     ) -> "Model": ...
 
     def serialize(self, path: Union[Path, str] = "./model.maplib", raw_db: bool = False,
-                  single_file: bool = True, storage_options: Optional[Dict[str, str]] = None):
+                  single_file: bool = True, storage_options: Optional[Dict[str, str]] = None) -> None:
         """
         Serialization of named graphs in the Model object.
         The triple tables and the dictionaries of IRIs and literals are written as parquet files,
@@ -872,7 +872,7 @@ class Model:
         ...                       storage_folder="/mnt/nvme/maplib", cache_size=200 * 2**30)
         """
 
-    def add_template(self, template: Union["Template", str]):
+    def add_template(self, template: Union["Template", str]) -> None:
         """
         Add a template to the model. Overwrites any existing template with the same IRI.
         :param template: The template to add, as a stOTTR string or as a programmatically constructed Template.
@@ -1171,7 +1171,7 @@ class Model:
             df: DataFrame,
             graph: Optional[str] = None,
             uuid_namespace: Optional[str] = None,
-    ):
+    ) -> None:
         """
         Create a default template and map it based on a dataframe.
         Usage:
@@ -1238,7 +1238,7 @@ class Model:
             include_schema: bool = True,
             include_edges: bool = True,
             virtualize_time_series: bool = True,
-    ):
+    ) -> None:
         """
         Map the data model of a Cognite Data Fusion (CDF) project to RDF, using a cognite-sdk client.
         Datapoints are not read. Instead, the datapoints of time series (nodes in cdf_cdm:CogniteTimeSeries)
@@ -1285,7 +1285,7 @@ class Model:
             base_iri: str = None,
             graph: str = None,
             ignore_data_errors: bool = False,
-    ):
+    ) -> None:
         """
         Map relational data to RDF with an R2RML mapping (https://www.w3.org/TR/r2rml/).
 
@@ -1386,7 +1386,7 @@ class Model:
             page_size: int = 10000,
             max_concurrency: int = 8,
             timeout: Optional[float] = None,
-    ):
+    ) -> None:
         """
         Read an OSIsoft PI (AVEVA PI) Asset Framework model through the PI Web API, and
         virtualize the time series of its attributes so that their data points can be queried
@@ -1566,7 +1566,7 @@ class Model:
             page_size: int = 10000,
             max_concurrency: int = 8,
             timeout: Optional[float] = None,
-    ):
+    ) -> None:
         """
         Read the PI Points (tags) of an OSIsoft PI (AVEVA PI) Data Archive, the PI historian,
         through the data servers of the PI Web API, without the Asset Framework, and virtualize
@@ -2856,7 +2856,7 @@ class Model:
     def add_virtualization(self,
                            virtualized_database: "VirtualizedDatabase",
                            resources: Dict[str, Template],
-                           ):
+                           ) -> None:
         """
         Add a virtualized database, with the templates of the resources it holds.
 
@@ -2883,7 +2883,7 @@ class Model:
             func: Union[Callable[[pl.DataFrame], pl.Series], Callable[[pl.DataFrame], pl.DataFrame],],
             output_type: Union[RDFType, str, IRI],
             input_types: Optional[list[Union[RDFType, str, IRI]]] = None
-    ):
+    ) -> None:
         """
         Add a user-defined function
         Usage:
