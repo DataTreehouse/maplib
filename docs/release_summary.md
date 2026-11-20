@@ -1,3 +1,10 @@
+# What's new in v0.25.1
+
+A release of maplib Enterprise Edition with CIM events and two fixes for virtualized time series. [CHANGES.md](../CHANGES.md) has every change.
+
+- **CIM events (EE).** Faults, meter events and other CIM events can stay in a database and be queried with CIM predicates only, through the event templates of `m.cim`. The usage guide shows earth faults and meter events in DuckDB, and the Graph portal shows a grid's faults and meter events in an Events tab of the asset panel and a Faults list on the map.
+- **Fixes (EE).** A constant object of a virtualized triple pattern, e.g. a fault kind or an event reason, is now sent to the database as a condition; it was ignored, so every row came back. A template parameter of type `ottr:IRI` filled by the database now comes back as an IRI instead of a string, so comparisons with IRIs match.
+
 # What's new in v0.25.0
 
 A small release on top of v0.24.0. Features marked **EE** need [maplib Enterprise Edition](../README.md#open-source-and-enterprise-edition); [CHANGES.md](../CHANGES.md) has every change.
