@@ -84,6 +84,24 @@ def _opcua(self) -> "opcua.OPCUA":
 Model.opcua = property(_opcua)
 
 
+def _cim(self) -> "cim.CIM":
+    """The CIM grid tools of maplib Enterprise Edition, e.g. m.cim.cut_to_graph(...), see maplib.cim.CIM."""
+    try:
+        from .cim import CIM
+    except ModuleNotFoundError as e:
+        if e.name != __name__ + ".cim":
+            raise
+        raise AttributeError(
+            "Model.cim needs maplib Enterprise Edition, which ships the CIM grid tools "
+            "(cutting a part of a grid, serves relations, time series of meter readings and "
+            "measurements); this maplib does not include them"
+        ) from None
+    return CIM(self)
+
+
+Model.cim = property(_cim)
+
+
 @contextlib.contextmanager
 def _scratch_graphs(self, *graphs: Optional[str]):
     """Drops the graphs with Model.drop_graphs on exit, also when an error is raised.

@@ -848,7 +848,7 @@ m.write_cim_xml(
 
 ### Cutting a part of a CIM grid **EE**
 
-The `cim` package of maplib Enterprise Edition cuts the grid around interior equipment out of a
+`m.cim.cut_to_graph` (maplib Enterprise Edition) cuts the grid around interior equipment out of a
 model, stopping at border equipment, which is left out. The cut holds the equipment reached
 through terminals and connectivity nodes (by default the normal topology: normally open switches
 and equipment normally out of service are not passed), their terminals with connectivity nodes,
@@ -860,14 +860,11 @@ equipment, terminals or connectivity nodes. Every step is SPARQL that maplib eva
 
 <!-- skip: EE -->
 ```python
-from cim.scissors import cut_to_graph
-
 m = Model()
 m.read("EQ.xml", format="cim/xml", graph="urn:graph:eq")
 m.read("GL.xml", format="cim/xml", graph="urn:graph:gl")
 m.read("61970-600-2_Equipment-AP-Voc-RDFS2020_v3-0-0.rdf", format="rdf/xml", graph="urn:graph:rdfs")
-counts = cut_to_graph(
-    m,
+counts = m.cim.cut_to_graph(
     ["urn:uuid:busbar-in-the-area"],           # interior equipment
     ["urn:uuid:line-leaving-the-area"],        # border equipment, left out
     target_graph="urn:graph:cut",              # without it, nothing is written
@@ -881,7 +878,14 @@ The `graphs` are read as one dataset, so the instance data, the `rdf:type` tripl
 (EQ, SSH, TP, SV, GL) and the CIM vocabulary may each be in a graph of their own. The context
 follows the CIM properties whose range is not an XML Schema datatype in the vocabulary (any CIM
 predicate with IRI objects when there is none). `cim.cut(m, border_equipment_iris,
-interior_equipment_iri, ...)` returns the cut as a Model of its own.
+interior_equipment_iri, ...)` returns the cut as a Model of its own (`m.cim.cut(...)`).
+
+`m.cim` holds the CIM grid tools of maplib Enterprise Edition bound to the model: `cut_to_graph` and
+`cut`, the serves relations (`add_serves`, see its docstring), reading types, and the time series of
+measurements and meter readings ([CIM time series](#cim-time-series-mcim-ee)). Each is the function
+of the `cim` package with the same name, with the model as its first argument; `cim` also has the
+functions that need no model, such as the templates. In open source maplib, `m.cim` raises an
+`AttributeError`.
 
 ## 7. Named graphs and the transient graph
 
@@ -1947,6 +1951,148 @@ snow = VirtualizedDatabase(
 opcua = VirtualizedDatabase(database=OPCUAHistoryDatabase("opc.tcp://plant:4840/"))
 m.add_virtualization(snow, resources={"readings": readings})
 m.add_virtualization(opcua, resources={"history": readings})
+```
+
+### CIM time series: m.cim **EE**
+
+The time series of a CIM grid can stay in the database and be queried with CIM predicates only.
+`m.cim` sets this up with the templates that the Model portal's Connect page uses for CIM:
+
+| `kind` | Measurement class | Values (from the measurement, then the value) | Value datatype |
+|---|---|---|---|
+| `"analog"` | `cim:Analog` | `cim:Analog.AnalogValues`, `cim:AnalogValue.value` | `xsd:double` |
+| `"discrete"` | `cim:Discrete` | `cim:Discrete.DiscreteValues`, `cim:DiscreteValue.value` | `xsd:integer` |
+| `"accumulator"` | `cim:Accumulator` | `cim:Accumulator.AccumulatorValues`, `cim:AccumulatorValue.value` | `xsd:integer` |
+| `"string"` | `cim:StringMeasurement` | `cim:StringMeasurement.StringMeasurementValues`, `cim:StringMeasurementValue.value` | `xsd:string` |
+| meter readings | `cim:IntervalBlock` | `cim:IntervalBlock.IntervalReadings`, `cim:BaseReading.value` | `xsd:double` |
+
+Every value also has `cim:MeasurementValue.timeStamp`. Setting it up takes three steps:
+
+1. Annotate the measurements that have values in the database with `m.cim.add_measurement_timeseries(df, kind)`.
+   `df` has the IRI of each measurement in the column `measurement`, and its id in the database in `externalId`.
+   This adds `maplib:hasResource` and `maplib:hasExternalId` to each measurement.
+2. Make a `VirtualizedDatabase` whose `resource_sql_map` gives an SQL query for each kind.
+   The query returns the columns `id` (the external id), `timestamp` and `value`. The resources are
+   named `cim_analog_values`, `cim_discrete_values`, `cim_accumulator_values` and `cim_string_values`
+   (`cim.measurement_resource(kind)`), or as you name them with `resource=`.
+3. Call `m.cim.add_measurement_virtualization(vdb, kind=[...])` with the kinds in the database.
+
+The graph here stands in for your own CIM, e.g. `m.read("grid_EQ.xml", format="cim/xml")`, and
+the DuckDB tables for your own database, e.g. `DuckDBDatabase(database="readings.duckdb")`:
+
+<!-- skip: EE -->
+```python
+import duckdb
+import polars as pl
+from maplib import Model, VirtualizedDatabase
+from maplib.virtualization import DuckDBDatabase
+
+m = Model()
+m.reads("""
+@prefix cim: <http://iec.ch/TC57/CIM100#> .
+@prefix ex: <http://example.org/grid#> .
+ex:p1 a cim:Analog ; cim:IdentifiedObject.name "Line 1 P" .
+ex:p2 a cim:Analog ; cim:IdentifiedObject.name "Line 2 P" .
+ex:b1 a cim:Discrete ; cim:IdentifiedObject.name "Breaker 1 position" .
+""", format="turtle")
+
+con = duckdb.connect()
+con.execute("""
+CREATE TABLE analogs AS SELECT * FROM (VALUES
+    ('P-1', TIMESTAMPTZ '2024-01-01 00:00:00+00', 12.5::DOUBLE), ('P-1', TIMESTAMPTZ '2024-01-01 01:00:00+00', 14.0::DOUBLE),
+    ('P-2', TIMESTAMPTZ '2024-01-01 00:00:00+00', 30.0::DOUBLE), ('P-2', TIMESTAMPTZ '2024-01-01 01:00:00+00', 31.5::DOUBLE)
+) AS t(tag, ts, val);
+CREATE TABLE switches AS SELECT * FROM (VALUES
+    ('B-1', TIMESTAMPTZ '2024-01-01 00:00:00+00', 1), ('B-1', TIMESTAMPTZ '2024-01-01 00:30:00+00', 0)
+) AS t(tag, ts, val);
+""")
+
+# 1. which measurement is which time series in the database
+m.cim.add_measurement_timeseries(
+    pl.DataFrame({"measurement": ["http://example.org/grid#p1", "http://example.org/grid#p2"],
+                  "externalId": ["P-1", "P-2"]}),
+    kind="analog",
+)
+m.cim.add_measurement_timeseries(
+    pl.DataFrame({"measurement": ["http://example.org/grid#b1"], "externalId": ["B-1"]}),
+    kind="discrete",
+)
+# 2. an SQL query with the columns id, timestamp and value for each kind
+vdb = VirtualizedDatabase(
+    DuckDBDatabase(connection=con),
+    resource_sql_map={
+        "cim_analog_values": 'SELECT tag AS id, ts AS "timestamp", val AS value FROM analogs',
+        "cim_discrete_values": 'SELECT tag AS id, ts AS "timestamp", val AS value FROM switches',
+    },
+)
+# 3. the templates of the kinds
+m.cim.add_measurement_virtualization(vdb, kind=["analog", "discrete"])
+
+df = m.query("""
+PREFIX cim: <http://iec.ch/TC57/CIM100#>
+PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
+SELECT ?name (AVG(?v) AS ?avg) WHERE {
+    ?a a cim:Analog ; cim:IdentifiedObject.name ?name ; cim:Analog.AnalogValues ?p .
+    ?p cim:MeasurementValue.timeStamp ?t ; cim:AnalogValue.value ?v .
+    FILTER(?t >= "2024-01-01T00:00:00Z"^^xsd:dateTime)
+} GROUP BY ?name ORDER BY ?name""")
+# Line 1 P: 13.25, Line 2 P: 30.75. The filter and the average run in DuckDB.
+```
+
+When one database holds several kinds, include the class of the measurement in the query
+(`?a a cim:Analog`). Without it, chrontext also asks the other kinds' resources for the values.
+
+Meter readings (IEC 61968-9 Metering) are virtualized the same way:
+- `m.cim.add_meter_reading_timeseries(df)` adds a `cim:MeterReading` of each meter, with a
+  `cim:IntervalBlock` of a reading type whose interval readings are in the database. Its columns
+  are `meterReading`, `meter`, `intervalBlock`, `readingType` and `externalId`.
+- `m.cim.add_meter_readings_virtualization(vdb)` adds the template of the resource
+  `cim_meter_readings`.
+- `m.cim.add_meter_readings_shapes(graph=...)` adds SHACL shapes that check the annotations.
+
+To keep meter readings and measurements in one database, merge their resources and call
+`add_virtualization` yourself:
+
+<!-- skip: EE -->
+```python
+import cim
+
+con.execute("""
+CREATE TABLE readings AS SELECT * FROM (VALUES
+    ('M-1/energy', TIMESTAMPTZ '2024-01-01 00:00:00+00', 1.5::DOUBLE), ('M-1/energy', TIMESTAMPTZ '2024-01-01 00:15:00+00', 2.5::DOUBLE)
+) AS t(block, ts, kwh);
+""")
+m.reads("""
+@prefix cim: <http://iec.ch/TC57/CIM100#> .
+@prefix ex: <http://example.org/grid#> .
+ex:meter1 a cim:Meter ; cim:IdentifiedObject.name "M-1" .
+ex:energy a cim:ReadingType .
+""", format="turtle")
+m.cim.add_meter_reading_timeseries(pl.DataFrame({
+    "meterReading": ["http://example.org/grid#mr1"], "meter": ["http://example.org/grid#meter1"],
+    "intervalBlock": ["http://example.org/grid#ib1"], "readingType": ["http://example.org/grid#energy"],
+    "externalId": ["M-1/energy"],
+}))
+vdb = VirtualizedDatabase(
+    DuckDBDatabase(connection=con),
+    resource_sql_map={
+        "cim_analog_values": 'SELECT tag AS id, ts AS "timestamp", val AS value FROM analogs',
+        "cim_discrete_values": 'SELECT tag AS id, ts AS "timestamp", val AS value FROM switches',
+        "cim_meter_readings": 'SELECT block AS id, ts AS "timestamp", kwh AS value FROM readings',
+    },
+)
+m.add_virtualization(vdb, resources={
+    **cim.measurement_resources(["analog", "discrete"]),
+    **cim.meter_readings_resources(),
+})
+df = m.query("""
+PREFIX cim: <http://iec.ch/TC57/CIM100#>
+SELECT ?meter (SUM(?v) AS ?kwh) WHERE {
+    ?mr cim:MeterReading.Meter/cim:IdentifiedObject.name ?meter .
+    ?ib a cim:IntervalBlock ; cim:IntervalBlock.MeterReading ?mr ; cim:IntervalBlock.IntervalReadings ?ir .
+    ?ir cim:BaseReading.value ?v .
+} GROUP BY ?meter""")
+# M-1: 4.0
 ```
 
 ### Industrial sources: map_cdf, map_osipi, map_pi_points, map_insights_hub and maplib.ip21

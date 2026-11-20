@@ -4,6 +4,7 @@ from typing import Any, overload, Union, List, Dict, Optional, Callable, Iterabl
 
 import polars as pl
 from maplib.opcua import OPCUA
+from maplib.cim import CIM
 
 DEFAULT_GRAPH: str
 """
@@ -1211,6 +1212,20 @@ class Model:
         Usage:
         >>> m.map_opc_ua("nodesets")
         >>> m.opcua.add_typing_shapes(shapes_graph="urn:shapes", instance_namespaces=["urn:my:instances"])
+        """
+
+    @property
+    def cim(self) -> CIM:
+        """
+        The CIM grid tools of maplib Enterprise Edition bound to this model, see maplib.cim.CIM:
+        cutting a part of a grid (cut_to_graph, cut), serves relations (add_serves, ...), reading
+        types, and time series of meter readings and measurements virtualized with chrontext.
+        In open source maplib it raises an AttributeError.
+
+        Usage:
+        >>> m.read("EQ.xml", format="cim/xml")
+        >>> m.cim.cut_to_graph(["urn:uuid:busbar-in-the-area"], ["urn:uuid:line-leaving-the-area"],
+        ...                    target_graph="urn:graph:cut")
         """
 
     def map_cdf(
