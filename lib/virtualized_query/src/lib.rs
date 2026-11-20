@@ -9,7 +9,9 @@ use spargebra::term::{NamedNodePattern, TermPattern, TriplePattern, Variable};
 use std::collections::{HashMap, HashSet};
 use std::error::Error;
 use std::fmt::{Display, Formatter};
-use templates::ast::{ConstantTerm, ConstantTermOrList, FunctionCall, StottrTerm, Template};
+
+const OTTR_IRI: &str = "http://ns.ottr.xyz/0.4/IRI";
+use templates::ast::{ConstantTerm, ConstantTermOrList, FunctionCall, PType, StottrTerm, Template};
 use templates::functions::{function_call_to_expression, FunctionLibrary};
 
 pub const ID_VARIABLE_NAME: &str = "id";
@@ -109,6 +111,9 @@ pub struct BasicVirtualizedQuery {
     /// template parameters the functions use, and the functions are evaluated when the results
     /// are attached.
     pub computed_variables: Vec<ComputedVariable>,
+    /// Query variables matched to template parameters of type ottr:IRI. The virtualized database
+    /// returns them as strings, and they are IRIs in the results.
+    pub iri_variables: HashSet<Variable>,
     pub resource_variable: Variable,
     pub query_source_context: Context,
     pub query_source_variable: Variable,
@@ -131,6 +136,17 @@ impl BasicVirtualizedQuery {
                 .signature
                 .parameter_list
                 .iter()
+                .map(|x| &x.variable)
+                .collect()
+        } else {
+            HashSet::new()
+        };
+        let iri_params: HashSet<&Variable> = if let Some(template) = template {
+            template
+                .signature
+                .parameter_list
+                .iter()
+                .filter(|x| matches!(&x.ptype, Some(PType::Basic(nn)) if nn.as_str() == OTTR_IRI))
                 .map(|x| &x.variable)
                 .collect()
         } else {
@@ -168,6 +184,11 @@ impl BasicVirtualizedQuery {
                                                                     StottrTerm::Variable(tobj) => {
                                                                         if param_vars.contains(tobj)
                                                                         {
+                                                                            if let TermPattern::Variable(obj) = &p.object {
+                                                                                if iri_params.contains(tobj) {
+                                                                                    self.iri_variables.insert(obj.clone());
+                                                                                }
+                                                                            }
                                                                             new_mappings.push((
                                                                                 tobj.clone(),
                                                                                 p.object.clone(),
@@ -188,7 +209,9 @@ impl BasicVirtualizedQuery {
                                                                             queue.push((obj, tobj));
                                                                         }
                                                                     }
-                                                                    StottrTerm::FunctionCall(fc) => {
+                                                                    StottrTerm::FunctionCall(
+                                                                        fc,
+                                                                    ) => {
                                                                         function_objects.push((
                                                                             fc,
                                                                             p.object.clone(),
@@ -533,6 +556,22 @@ impl VirtualizedQuery {
         }
     }
 
+    /// The query variables matched to template parameters of type ottr:IRI, see
+    /// [BasicVirtualizedQuery::iri_variables].
+    pub fn get_iri_variables(&self) -> HashSet<&Variable> {
+        match self {
+            VirtualizedQuery::Basic(b) => b.iri_variables.iter().collect(),
+            VirtualizedQuery::Filtered(inner, _)
+            | VirtualizedQuery::Sliced(inner, ..)
+            | VirtualizedQuery::Ordered(inner, ..)
+            | VirtualizedQuery::ExpressionAs(inner, ..) => inner.get_iri_variables(),
+            VirtualizedQuery::InnerJoin(inners, _) => {
+                inners.iter().flat_map(|i| i.get_iri_variables()).collect()
+            }
+            VirtualizedQuery::Grouped(grouped) => grouped.vq.get_iri_variables(),
+        }
+    }
+
     pub fn get_extend_functions(&self) -> Vec<(&Variable, &Expression)> {
         match self {
             VirtualizedQuery::Basic(_) => vec![],
@@ -700,6 +739,7 @@ impl BasicVirtualizedQuery {
             expected_unknown_cols: Default::default(),
             blank_node_variables: Default::default(),
             computed_variables: Default::default(),
+            iri_variables: Default::default(),
         }
     }
 }

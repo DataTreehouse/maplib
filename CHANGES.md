@@ -1,5 +1,12 @@
 # Change log
 
+## Unreleased
+### Features
+- maplib Enterprise Edition: CIM events can stay in a database and be queried with CIM predicates only, like the time series of measurements. `m.cim.fault_template` covers faults such as earth faults, on lines, terminals or any equipment (`cim:Fault.kind cim:PhaseConnectedFaultKind.lineToGround`, `cim:LineFault.lengthFromTerminal1`). `m.cim.end_device_event_template` covers meter events (IEC 61968-9 `cim:EndDeviceEvent`, e.g. power off and power restored), `m.cim.psr_event_template` covers in and out of service events (`cim:PSREvent`), and `m.cim.event_template` any other CIM event. `m.cim.add_event_timeseries` links meters, lines and equipment to their ids in the database. The usage guide shows earth faults and meter events in DuckDB
+### Bug fixes
+- maplib Enterprise Edition: a constant object of a virtualized triple pattern, e.g. `?f cim:Fault.kind cim:PhaseConnectedFaultKind.lineToGround` or `?e cim:ActivityRecord.reason "power off"`, was ignored, and every row of the resource came back. It is now a condition, run in the database for IRIs and strings
+- maplib Enterprise Edition: a template parameter of type `ottr:IRI` that a virtualized database fills, e.g. the kind of a fault, came back as a string literal, so it never equalled an IRI and did not join with the graph. It is now an IRI. Comparing it with an IRI, e.g. `FILTER(?kind = cim:PhaseConnectedFaultKind.lineToGround)`, runs in the database (SQL and KQL)
+
 ## v0.25.0
 ### Breaking changes
 - maplib Enterprise Edition: the `cim` package no longer names or registers chrontext resources, as the resources (names, SQL, database) vary between deployments. `METER_READINGS_RESOURCE` (`"cim_meter_readings"`), `meter_readings_resources` and `add_meter_readings_virtualization` are gone: use `m.add_virtualization(vdb, resources={name: cim.meter_readings_template(name)})`. The resource name is required: `meter_readings_template(resource, cim_prefix=..., value_datatype=None)`, `meter_readings_shapes(resource, cim_prefix=...)` and `add_meter_readings_shapes(m, resource, graph=None, cim_prefix=...)`, and `add_meter_reading_timeseries` takes `resource=` or a `resource` column. `tmpl:MeterReadingTimeseries` and `tmpl:VirtualizedIntervalBlock` have no default for `?resource`, and `meter_readings_templates` and `add_meter_reading_templates` no longer take `resource`

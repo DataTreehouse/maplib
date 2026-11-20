@@ -3,14 +3,14 @@ The CIM grid tools of maplib Enterprise Edition bound to a model, available as `
 
 Each method is the function of the ``cim`` package that maplib Enterprise Edition ships, with the
 model as its first argument: ``m.cim.cut_to_graph(...)`` is ``cim.cut_to_graph(m, ...)``. The
-chrontext templates of CIM time series (``measurement_template``, ``meter_readings_template``) need
-no model. The resources they are used for (names, SQL, database) vary between deployments, so they
+chrontext templates of CIM time series and events (``measurement_template``,
+``meter_readings_template``, ``fault_template``, ``end_device_event_template``, ...) need no model. The resources they are used for (names, SQL, database) vary between deployments, so they
 are never part of this API: give them to ``m.add_virtualization`` yourself. The other functions that
 need no model (``cim.serves_rulesets``, ``cim.meter_readings_sql``, ...) are in ``cim``.
 In open source maplib, ``m.cim`` raises an AttributeError.
 """
 
-from typing import Any, Dict, Iterable, List, Optional, Sequence, Union
+from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple, Union
 
 from polars import DataFrame
 
@@ -197,6 +197,112 @@ class CIM:
         :param cim_prefix: The CIM namespace of the graph.
         :param value_datatype: The datatype of the value column, defaults to xsd:double.
         :return: The template.
+        """
+
+    @staticmethod
+    def end_device_event_template(
+        resource: str,
+        fields: Optional[Sequence[str]] = ("event_type", "reason"),
+        on: str = "end_device",
+        cim_prefix: str = "http://iec.ch/TC57/CIM100#",
+    ) -> Template:
+        """
+        The chrontext template of a resource of meter events (IEC 61968-9 cim:EndDeviceEvent), e.g.
+        power off and power restored. The SQL of the resource has the columns id (the meter's
+        maplib:hasExternalId), timestamp and the fields, and each row is an event of the meter:
+        ``?meter cim:EndDevice.EndDeviceEvents ?e . ?e cim:ActivityRecord.createdDateTime ?timestamp ;
+        cim:EndDeviceEvent.EndDeviceEventType ?event_type ; cim:ActivityRecord.reason ?reason``.
+
+        :param resource: The resource name (the value of maplib:hasResource), as in the resource_sql_map.
+        :param fields: The columns besides id and timestamp: event_type (an IRI, given as a string by
+            the SQL), reason, severity, type, issuer_id, issuer_tracking_id, user_id. None for all.
+        :param on: "end_device" when the ids are meters' (cim:EndDevice.EndDeviceEvents), "usage_point"
+            when they are usage points' (cim:UsagePoint.EndDeviceEvents).
+        :param cim_prefix: The CIM namespace of the graph.
+        :return: The template.
+        """
+
+    @staticmethod
+    def fault_template(
+        resource: str,
+        fields: Optional[Sequence[str]] = ("kind",),
+        on: str = "equipment",
+        cim_prefix: str = "http://iec.ch/TC57/CIM100#",
+    ) -> Template:
+        """
+        The chrontext template of a resource of faults (IEC 61970-301 cim:Fault), such as earth faults.
+        The SQL of the resource has the columns id (the equipment's maplib:hasExternalId), timestamp and
+        the fields, and each row is a fault, e.g. on lines:
+        ``?line cim:ACLineSegment.LineFaults ?f . ?f cim:Fault.occurredDateTime ?timestamp ;
+        cim:Fault.kind ?kind ; cim:LineFault.lengthFromTerminal1 ?distance``.
+        Query the earth faults with ``?f cim:Fault.kind cim:PhaseConnectedFaultKind.lineToGround``.
+
+        :param resource: The resource name (the value of maplib:hasResource), as in the resource_sql_map.
+        :param fields: The columns besides id and timestamp: kind (an IRI, e.g.
+            'http://iec.ch/TC57/CIM100#PhaseConnectedFaultKind.' || kind in the SQL), phases (an IRI,
+            cim:PhaseCode.<code>) and, on lines, distance (km from terminal 1). None for all.
+        :param on: "equipment" (cim:Equipment.Faults), "line" (cim:ACLineSegment.LineFaults) or
+            "terminal" (cim:Terminal.EquipmentFaults): what the ids are of.
+        :param cim_prefix: The CIM namespace of the graph.
+        :return: The template.
+        """
+
+    @staticmethod
+    def psr_event_template(
+        resource: str,
+        fields: Optional[Sequence[str]] = ("kind",),
+        cim_prefix: str = "http://iec.ch/TC57/CIM100#",
+    ) -> Template:
+        """
+        The chrontext template of a resource of events of power system resources (cim:PSREvent), e.g.
+        in and out of service: ``?psr cim:PowerSystemResource.PSREvents ?e . ?e
+        cim:ActivityRecord.createdDateTime ?timestamp ; cim:PSREvent.kind ?kind``.
+
+        :param resource: The resource name (the value of maplib:hasResource), as in the resource_sql_map.
+        :param fields: The columns besides id and timestamp: kind (an IRI, cim:PSREventKind.<kind>),
+            reason, severity, type. None for all.
+        :param cim_prefix: The CIM namespace of the graph.
+        :return: The template.
+        """
+
+    @staticmethod
+    def event_template(
+        resource: str,
+        link: str,
+        timestamp: str,
+        fields: Dict[str, Tuple[str, str]],
+        cim_prefix: str = "http://iec.ch/TC57/CIM100#",
+    ) -> Template:
+        """
+        The chrontext template of a resource of CIM events of any kind: each row of its SQL (columns
+        id, timestamp and the fields) is an event of the source with maplib:hasExternalId equal to id:
+        ``?id cim:<link> ?event . ?event cim:<timestamp> ?timestamp ; cim:<field predicate> ?<field> ...``.
+
+        :param resource: The resource name (the value of maplib:hasResource), as in the resource_sql_map.
+        :param link: The local name of the CIM predicate from the source to its events, e.g. "Asset.ActivityRecords".
+        :param timestamp: The local name of the CIM predicate of the time of an event, e.g. "FailureEvent.failureDateTime".
+        :param fields: Each column besides id and timestamp, to the local name of its CIM predicate and its
+            datatype (an XSD datatype IRI, or "http://ns.ottr.xyz/0.4/IRI" for IRIs).
+        :param cim_prefix: The CIM namespace of the graph.
+        :return: The template.
+        """
+
+    def add_event_timeseries(
+        self,
+        df: DataFrame,
+        resource: Optional[str] = None,
+        graph: Optional[str] = None,
+    ) -> None:
+        """
+        Annotate the sources of events (meters, usage points, lines, equipment, ...) so that their
+        events are the rows of the resource's SQL where the id column is externalId: each gets
+        maplib:hasResource and maplib:hasExternalId.
+
+        :param df: A DataFrame with the IRI column source and the string column externalId, and
+            optionally the string column resource.
+        :param resource: The resource name (the value of maplib:hasResource), for a DataFrame without a
+            resource column.
+        :param graph: The graph to add the triples to.
         """
 
     def add_measurement_timeseries(

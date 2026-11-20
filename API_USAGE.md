@@ -2091,6 +2091,79 @@ SELECT ?meter (SUM(?v) AS ?kwh) WHERE {
 # M-1: 4.0
 ```
 
+#### Events: earth faults, meter events and others
+
+Events are virtualized the same way: each row of the SQL is an event of a meter, a line or other
+equipment, with a timestamp and fields. `m.cim` has the templates of the CIM events:
+
+| Template | From the source (the ids) | Event fields |
+|---|---|---|
+| `m.cim.fault_template(resource, fields, on="line")` | `cim:ACLineSegment.LineFaults` (`on="equipment"`: `cim:Equipment.Faults`, `"terminal"`: `cim:Terminal.EquipmentFaults`) | `cim:Fault.occurredDateTime`; `kind`: `cim:Fault.kind` (an earth fault is `cim:PhaseConnectedFaultKind.lineToGround`), `phases`: `cim:Fault.phases`, `distance`: `cim:LineFault.lengthFromTerminal1` |
+| `m.cim.end_device_event_template(resource, fields)` | `cim:EndDevice.EndDeviceEvents` (`on="usage_point"`: `cim:UsagePoint.EndDeviceEvents`) | `cim:ActivityRecord.createdDateTime`; `event_type`: `cim:EndDeviceEvent.EndDeviceEventType`, `reason`, `severity`, `type`, `issuer_id`, ... |
+| `m.cim.psr_event_template(resource, fields)` | `cim:PowerSystemResource.PSREvents` | `cim:ActivityRecord.createdDateTime`; `kind`: `cim:PSREvent.kind` (in or out of service), `reason`, ... |
+| `m.cim.event_template(resource, link, timestamp, fields)` | any CIM predicate, e.g. `Asset.ActivityRecords` | any, e.g. `{"mode": ("FailureEvent.failureMode", xsd string)}` |
+
+The SQL of a resource has the columns `id`, `timestamp` and one per field, named as the field.
+The kind of a fault and the type of a meter event are IRIs, which the SQL gives as strings.
+`m.cim.add_event_timeseries(df, resource=...)` links the sources (the column `source`) to their
+ids in the database (`externalId`). For example, earth faults followed within a minute by a meter
+losing power, in the DuckDB and with the meter from above:
+
+<!-- skip: EE -->
+```python
+con.execute("""
+CREATE TABLE faults AS SELECT * FROM (VALUES
+    ('L-1', TIMESTAMPTZ '2024-01-01 00:09:58+00', 'lineToGround', 1.2::DOUBLE),
+    ('L-1', TIMESTAMPTZ '2024-02-01 10:00:00+00', 'lineToLine', 3.4::DOUBLE)
+) AS t(line, ts, kind, km);
+CREATE TABLE meter_events AS SELECT * FROM (VALUES
+    ('M-1', TIMESTAMPTZ '2024-01-01 00:10:00+00', '3.26.38.185', 'power off'),
+    ('M-1', TIMESTAMPTZ '2024-01-01 00:40:00+00', '3.26.38.216', 'power restored')
+) AS t(meter, ts, code, reason);
+""")
+m.reads("""
+@prefix cim: <http://iec.ch/TC57/CIM100#> .
+@prefix ex: <http://example.org/grid#> .
+ex:line1 a cim:ACLineSegment ; cim:IdentifiedObject.name "Line 1" .
+""", format="turtle")
+m.cim.add_event_timeseries(pl.DataFrame({"source": ["http://example.org/grid#line1"], "externalId": ["L-1"]}),
+                           resource="scada_faults")
+m.cim.add_event_timeseries(pl.DataFrame({"source": ["http://example.org/grid#meter1"], "externalId": ["M-1"]}),
+                           resource="ami_events")
+m.add_virtualization(
+    VirtualizedDatabase(
+        DuckDBDatabase(connection=con),
+        resource_sql_map={
+            "scada_faults": """SELECT line AS id, ts AS "timestamp",
+                'http://iec.ch/TC57/CIM100#PhaseConnectedFaultKind.' || kind AS kind, km AS distance FROM faults""",
+            "ami_events": """SELECT meter AS id, ts AS "timestamp",
+                'http://example.org/grid#EndDeviceEventType.' || code AS event_type, reason FROM meter_events""",
+        },
+    ),
+    resources={
+        "scada_faults": m.cim.fault_template("scada_faults", fields=["kind", "distance"], on="line"),
+        "ami_events": m.cim.end_device_event_template("ami_events", fields=["event_type", "reason"]),
+    },
+)
+df = m.query("""
+PREFIX cim: <http://iec.ch/TC57/CIM100#>
+PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
+SELECT ?line ?km ?meter ?type WHERE {
+    ?l a cim:ACLineSegment ; cim:IdentifiedObject.name ?line ; cim:ACLineSegment.LineFaults ?f .
+    ?f cim:Fault.occurredDateTime ?tf ; cim:Fault.kind cim:PhaseConnectedFaultKind.lineToGround ;
+       cim:LineFault.lengthFromTerminal1 ?km .
+    ?m a cim:Meter ; cim:IdentifiedObject.name ?meter ; cim:EndDevice.EndDeviceEvents ?e .
+    ?e cim:ActivityRecord.createdDateTime ?te ; cim:EndDeviceEvent.EndDeviceEventType ?type .
+    FILTER(?te >= ?tf && ?te <= ?tf + "PT1M"^^xsd:dayTimeDuration)
+}""")
+# Line 1, 1.2 km, M-1, <http://example.org/grid#EndDeviceEventType.3.26.38.185>.
+# The kind of fault is a condition in the SQL.
+```
+
+Use `xsd:dayTimeDuration` for time arithmetic: maplib adds no `xsd:duration` to a date and time.
+Look up what the graph says about an IRI from the database, such as the name of an event type, in a
+query of its own: a triple pattern whose subject is a value from the database is not yet evaluated.
+
 ### Industrial sources: map_cdf, map_osipi, map_pi_points, map_insights_hub and maplib.ip21
 
 These read a source's own asset model into the graph and virtualize its time series in one call.
