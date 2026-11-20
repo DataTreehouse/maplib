@@ -2,8 +2,9 @@
 
 A small release on top of v0.24.0. Features marked **EE** need [maplib Enterprise Edition](../README.md#open-source-and-enterprise-edition); [CHANGES.md](../CHANGES.md) has every change.
 
-- **`m.cim` (EE).** The CIM grid tools are bound to the model: `m.cim.cut_to_graph(...)` cuts part of a grid out, and `m.cim.add_serves`, `m.cim.add_reading_types` and the meter reading templates work on the model directly. In open-source maplib, `m.cim` raises an `AttributeError` that says it needs maplib Enterprise Edition. `import cim` still works as before.
-- **CIM measurement time series (EE).** The values of Analog, Discrete, Accumulator and StringMeasurement measurements can stay in a database and be queried with CIM predicates only, with `m.cim.add_measurement_timeseries` and `m.cim.add_measurement_virtualization`. The usage guide shows it with DuckDB.
+- **`m.cim` (EE).** The CIM grid tools are bound to the model: `m.cim.cut_to_graph(...)` cuts part of a grid out, and `m.cim.add_serves`, `m.cim.add_reading_types` and the meter reading templates work on the model directly. In open-source maplib, `m.cim` raises an `AttributeError` that says it needs maplib Enterprise Edition. `import cim` still works.
+- **CIM measurement time series (EE).** The values of Analog, Discrete, Accumulator and StringMeasurement measurements, and meter readings, can stay in a database and be queried with CIM predicates only. `m.cim.measurement_template` and `m.cim.meter_readings_template` are the Model portal's CIM templates, which you give to `m.add_virtualization` for your own resources. The usage guide shows it with DuckDB.
+- **Breaking (EE).** `cim` no longer has default chrontext resources, since they vary between deployments: `add_meter_readings_virtualization`, `meter_readings_resources` and `METER_READINGS_RESOURCE` are gone, and the meter reading templates, shapes and annotations take the resource name. Register resources with `m.add_virtualization(vdb, resources={name: m.cim.meter_readings_template(name)})`.
 - **Fix (EE).** A query over virtualized time series whose static part is a join of joins, such as the meter readings under a root on the Model portal's Served power page, failed; it now answers.
 
 # What's new in v0.24.0
