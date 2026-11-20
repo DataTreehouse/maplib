@@ -4,6 +4,7 @@ pub mod cats;
 pub mod constants;
 pub mod errors;
 pub mod expressions;
+mod extreme_value;
 pub mod find_query_variables;
 pub mod graph_patterns;
 pub mod pushdown_values;

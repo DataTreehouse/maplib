@@ -3,6 +3,7 @@
 ## Unreleased
 ### Performance
 - A zero-length property path between two unbound variables, e.g. `?a ex:p* ?b` or `?a ex:p? ?b`, reads the nodes of the graph from the stored subject and object columns of the triple tables, with a bitset over the dictionary codes of IRIs, blank nodes and strings, instead of a DISTINCT over every triple, and no longer needs a second DISTINCT to join the nodes with the paths. On a model of 10M nodes and 44M triples with 800 triples of the path's predicate, counting the solutions takes 0.1 s instead of 1.2 s, and 0.5 GB of memory instead of 3.8 GB
+- `MIN` and `MAX` over a column with values of several types, e.g. the nodes of a graph, scan each group once and only decode and compare the values of the first kind present in it (the last for `MAX`), in the order blank nodes, IRIs, numbers, other literals, instead of sorting every field of the column by all the keys of the ordering. `MIN` and `MAX` over IRIs or strings alone are scanned the same way, decoding a batch at a time. On a model of 10M nodes, `SELECT (MIN(?b) AS ?m) WHERE { ?a ex:p* ?b }` took 9.6 s and 4.0 GB, and now 0.6 s and 2.0 GB. The results are unchanged
 
 ## v0.25.2
 ### Bug fixes

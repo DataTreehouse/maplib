@@ -23,7 +23,8 @@
 //! row of their partition, without ranking them.
 
 use crate::aggregates::{
-    avg, count_with_expression, group_concat, max, min, sample, statistical_aggregate, sum,
+    avg, count_with_expression, group_concat, max_over_frames, min_over_frames, sample,
+    statistical_aggregate, sum,
 };
 use crate::errors::QueryProcessingError;
 use crate::graph_patterns::{ordering_exprs, sort_options};
@@ -437,8 +438,8 @@ fn aggregate(
         AggregateFunction::Count => count_with_expression(solution_mappings, arg, *distinct),
         AggregateFunction::Sum => sum(solution_mappings, arg, *distinct),
         AggregateFunction::Avg => avg(solution_mappings, arg, *distinct),
-        AggregateFunction::Min => min(solution_mappings, arg, global_cats.clone()),
-        AggregateFunction::Max => max(solution_mappings, arg, global_cats.clone()),
+        AggregateFunction::Min => min_over_frames(solution_mappings, arg, global_cats.clone()),
+        AggregateFunction::Max => max_over_frames(solution_mappings, arg, global_cats.clone()),
         AggregateFunction::Sample => sample(solution_mappings, arg),
         AggregateFunction::GroupConcat { separator } => group_concat(
             solution_mappings,

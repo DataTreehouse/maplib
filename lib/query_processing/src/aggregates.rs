@@ -1,5 +1,6 @@
 use crate::expressions::functions::str_function::str_function;
 use crate::expressions::operations::numeric_promotion_level;
+use crate::extreme_value::{extreme_value, ExtremeField, ExtremeKey};
 use oxrdf::vocab::xsd;
 use polars::datatypes::DataType;
 use polars::prelude::{
@@ -160,7 +161,7 @@ pub fn min(
     column_context: &Context,
     global_cats: LockedCats,
 ) -> (Expr, RDFNodeState) {
-    min_max(solution_mappings, column_context, global_cats, false)
+    min_max(solution_mappings, column_context, global_cats, false, false)
 }
 
 pub fn max(
@@ -168,7 +169,26 @@ pub fn max(
     column_context: &Context,
     global_cats: LockedCats,
 ) -> (Expr, RDFNodeState) {
-    min_max(solution_mappings, column_context, global_cats, true)
+    min_max(solution_mappings, column_context, global_cats, true, false)
+}
+
+/// MIN over the frames of a window function. Frames overlap, so the values of a frame are
+/// ordered where they are instead of being gathered for a scan.
+pub fn min_over_frames(
+    solution_mappings: &SolutionMappings,
+    column_context: &Context,
+    global_cats: LockedCats,
+) -> (Expr, RDFNodeState) {
+    min_max(solution_mappings, column_context, global_cats, false, true)
+}
+
+/// MAX over the frames of a window function, see `min_over_frames`.
+pub fn max_over_frames(
+    solution_mappings: &SolutionMappings,
+    column_context: &Context,
+    global_cats: LockedCats,
+) -> (Expr, RDFNodeState) {
+    min_max(solution_mappings, column_context, global_cats, true, true)
 }
 
 fn min_max(
@@ -176,10 +196,11 @@ fn min_max(
     column_context: &Context,
     global_cats: LockedCats,
     max: bool,
+    frames: bool,
 ) -> (Expr, RDFNodeState) {
     let expr_rdf_node_type = rdf_node_type_from_context(column_context, solution_mappings);
     if expr_rdf_node_type.is_multi() {
-        return multi_min_max(column_context, expr_rdf_node_type, max, global_cats);
+        return multi_min_max(column_context, expr_rdf_node_type, max, frames, global_cats);
     }
     let out_rdf_node_type = if expr_rdf_node_type.is_bool() {
         BaseRDFNodeType::Literal(xsd::UNSIGNED_LONG.into_owned(), None)
@@ -190,13 +211,22 @@ fn min_max(
     let c = col(column_context.as_str());
     // Dictionary encoded values (strings, IRIs) are ordered by their decoded value, not by
     // their codes, which are in insertion order. The code of the smallest value is kept.
-    let key = match (
-        expr_rdf_node_type.get_base_type(),
-        expr_rdf_node_type.get_base_state(),
-    ) {
-        (Some(bt), Some(bs)) => sort_key(c.clone(), bt, bs, global_cats),
-        _ => None,
-    };
+    let base = expr_rdf_node_type
+        .get_base_type()
+        .zip(expr_rdf_node_type.get_base_state());
+    if let (false, Some((bt, BaseCatState::CategoricalNative(local_cats)))) = (frames, base) {
+        if !bt.is_lang_string() {
+            // The smallest decoded value is found in a scan, decoding a batch at a time
+            let field = ExtremeField {
+                name: None,
+                kind: 0,
+                key: ExtremeKey::Decoded(bt.clone(), local_cats.clone()),
+            };
+            let out_expr = extreme_value(c, vec![field], max, global_cats);
+            return (out_expr, out_rdf_node_type);
+        }
+    }
+    let key = base.and_then(|(bt, bs)| sort_key(c.clone(), bt, bs, global_cats));
     let out_expr = if let Some(key) = key {
         let options = SortMultipleOptions::default()
             .with_order_descending(max)
@@ -579,10 +609,43 @@ fn multi_min_max(
     column_context: &Context,
     state: &RDFNodeState,
     max: bool,
+    frames: bool,
     global_cats: LockedCats,
 ) -> (Expr, RDFNodeState) {
     let multi = col(column_context.as_str());
     let types: Vec<_> = state.get_sorted_types();
+    if !frames {
+        let mut fields = vec![];
+        let mut next_other_kind = 4;
+        for t in &types {
+            if t.is_none() {
+                continue;
+            }
+            let numeric = numeric_level(t).is_some();
+            let kind = match t {
+                BaseRDFNodeType::BlankNode => 1,
+                BaseRDFNodeType::IRI => 2,
+                _ if numeric => 3,
+                _ => {
+                    next_other_kind += 1;
+                    next_other_kind
+                }
+            };
+            let key = match state.map.get(*t).unwrap() {
+                _ if numeric => ExtremeKey::Numeric,
+                BaseCatState::CategoricalNative(local_cats) if !t.is_lang_string() => {
+                    ExtremeKey::Decoded((*t).clone(), local_cats.clone())
+                }
+                _ => ExtremeKey::Stored,
+            };
+            fields.push(ExtremeField {
+                name: Some(t.field_col_name()),
+                kind,
+                key,
+            });
+        }
+        return (extreme_value(multi, fields, max, global_cats), state.clone());
+    }
     let mut ranks = vec![];
     let mut numeric_keys = vec![];
     let mut other_keys = vec![];
