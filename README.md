@@ -21,7 +21,7 @@ maplib is written in Rust and stores triples column-wise in [Apache Arrow](https
 pip install maplib
 ```
 
-Prebuilt wheels are available for Linux, macOS and Windows (Python 3.9+).
+Prebuilt wheels are available for Linux, macOS and Windows (Python 3.10+).
 
 ## Quickstart
 
