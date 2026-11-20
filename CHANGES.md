@@ -1,5 +1,10 @@
 # Change log
 
+## Unreleased
+### Bug fixes
+- maplib Enterprise Edition: `cim.add_reading_types` (and `m.cim.add_reading_types`) types the reading types in the CIM namespace it is given; it always used CIM100. `cim.detect_cim_namespace` and `cim.CIM_NAMESPACES` are exported from `cim`, and the namespace is detected from the default graph by default.
+- maplib Enterprise Edition: the Graph portal loads a grid in the CIM namespace of its data, CIM16 or CIM100, including its time series, meter readings, events, serves relations and geometries; it assumed one namespace.
+
 ## v0.25.3
 ### Performance
 - A zero-length property path between two unbound variables, e.g. `?a ex:p* ?b` or `?a ex:p? ?b`, reads the nodes of the graph from the stored subject and object columns of the triple tables, with a bitset over the dictionary codes of IRIs, blank nodes and strings, instead of a DISTINCT over every triple, and no longer needs a second DISTINCT to join the nodes with the paths. On a model of 10M nodes and 44M triples with 800 triples of the path's predicate, counting the solutions takes 0.1 s instead of 1.2 s, and 0.5 GB of memory instead of 3.8 GB
