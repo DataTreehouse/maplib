@@ -1,3 +1,21 @@
+# What's new in v0.24.0
+
+A performance release: most SPARQL queries run on maplib's dictionary codes instead of building RDF terms, and small queries cost about half as much. It also fixes wrong or failing results for `OPTIONAL`, `MINUS`, `ORDER BY` and property paths. Features marked **EE** need [maplib Enterprise Edition](../README.md#open-source-and-enterprise-edition). [CHANGES.md](../CHANGES.md) has every change.
+
+## Changed results
+
+- Sequence property paths with a closure step, e.g. `?s ex:includes/rdf:rest+ ?o`, give one solution per intermediate node, as SPARQL joins the steps of a sequence. They gave each pair of ends once, so queries that relied on that now need `DISTINCT`.
+- Zero-length paths whose ends are both unbound, e.g. `?s ex:p* ?o`, match every subject and object of the graph to itself, as SPARQL defines them.
+
+## Highlights
+
+- **Smaller fixed cost per query.** A query no longer switches to a fresh 1 GB stack, and small plans are collected on a helper thread instead of Polars' thread pool: small queries take about half as long.
+- **Joins on codes.** Joins push their values into the next lookup as dictionary codes, `COUNT(*)` over stars, chains, `EXISTS`, `OPTIONAL`, `MINUS` and `UNION` is counted without building rows, and selective basic graph patterns from a constant subject or object are evaluated by index nested loops when their estimated time is below the general path's (BSBM explore mix 1.6 times as fast).
+- **Statistics.** Each segment keeps a sketch of its subjects and objects, exact distinct counts and Bloom filters, used to order joins and skip segments; `Model.analyze(deep=True)` adds exact counts of the codes two tables share.
+- **Counts and paths.** Whole-graph counts are answered from the stored tables, `COUNT(DISTINCT)` uses a bitset over codes and is cached, and transitive paths walk the tables' indexes on codes.
+- **Updates and storage (EE).** Small updates are buffered per table, hybrid and disk dictionaries stay out of memory with a Bloom filter for absent strings, and dropped models give back their memory and threads.
+- **Fixes.** `OPTIONAL` over `UNION`, `MINUS` and `OPTIONAL` on variables of several types, nested negations in linear time, `ORDER BY` across numeric datatypes, control characters in N-Triples and SPARQL JSON, and SHACL-SPARQL `MINUS` with pre-bound variables (EE).
+
 # What's new in v0.23.1
 
 A fix release for v0.23.0: `FILTER (NOT) EXISTS` over virtualized time series (maplib Enterprise Edition) works again, and the Linux wheels that were missing from PyPI for v0.23.0 are published. It also uses less memory and time in three places: a small `DELETE DATA` no longer takes time in proportion to the model (about 2 ms for one triple in a model of 1.4M triples, in every storage mode), writing Turtle, RDF/XML and JSON-LD no longer holds the whole output in memory (68 MB instead of 587 MB above the model for 117 MB of N-Triples), and reading files with many predicates has no fixed cost per predicate (204 MB instead of 507 MB for 2,000 predicates, and 2 to 3 times faster). See [CHANGES.md](../CHANGES.md).
