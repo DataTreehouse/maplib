@@ -156,21 +156,29 @@ def test_bsbm_bi4_not_exists_answers_and_memory():
         stderr=subprocess.STDOUT,
         text=True,
     )
-    # Read on a thread, so that a child that never gets ready fails the test with its output
-    # instead of blocking the run (CI cancels it after 90 minutes without saying where).
-    first = []
-    reader = threading.Thread(target=lambda: first.append(p.stdout.readline()), daemon=True)
+    # Read on a thread until the child says it is ready, skipping what it prints before (stderr
+    # is merged in, so warnings come first), so that a child that never gets ready fails the test
+    # with its output instead of blocking the run (CI cancels it after 90 minutes).
+    before = []
+    ready = threading.Event()
+
+    def read_until_ready():
+        for line in p.stdout:
+            if line.strip() == "ready":
+                ready.set()
+                return
+            before.append(line)
+
+    reader = threading.Thread(target=read_until_ready, daemon=True)
     reader.start()
     reader.join(READY_TIMEOUT_S)
-    if not first:
+    if not ready.is_set():
         p.kill()
         reader.join(10)
-        out = first[0] if first else ""
-        if not reader.is_alive():
-            out += p.stdout.read()
-        pytest.fail(f"the child was not ready after {READY_TIMEOUT_S} s:\n{out}")
-    line = first[0].strip()
-    assert line == "ready", line + p.stdout.read()
+        pytest.fail(
+            f"the child was not ready after {READY_TIMEOUT_S} s (exit {p.poll()}):\n"
+            + "".join(before)
+        )
     time.sleep(0.2)
     base = _footprint_mb(p.pid)
     peak = base
