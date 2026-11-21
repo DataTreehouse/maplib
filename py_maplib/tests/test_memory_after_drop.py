@@ -27,6 +27,11 @@ def test_dropped_model_gives_memory_back(tmp_path):
     with open(path, "w") as f:
         for i in range(300_000):
             f.write(f'<http://example.net/s{i}> <http://example.net/p{i % 7}> "value {i}" .\n')
+    # Reading a file this large purges the allocator, which also gives back what earlier tests in
+    # the same process freed; read and drop once first so the baseline is measured after that purge.
+    warm_up = Model()
+    warm_up.read(path)
+    del warm_up
     gc.collect()
     base = rss_mb()
     m = Model()
