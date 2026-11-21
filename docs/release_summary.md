@@ -1,3 +1,10 @@
+# What's new in v0.26.2
+
+A fix release of maplib Enterprise Edition for the Graph portal's Served power page. [CHANGES.md](../CHANGES.md) has every change.
+
+- **Meter readings through usage points (EE).** Queries that aggregate the readings of many consumers ask the virtualized database only for the time series and aggregates they need: an OPTIONAL sub-select per consumer is evaluated with the consumers it is joined with, also under another name, and GROUP BY is pushed down past `EXISTS`, `NOT EXISTS` and `MINUS` without time series. On a stand-in with 164,000 consumers, one consumer's Served power series takes 0.06 s instead of 104 s, and the coverage of every consumer for a day 9.9 s instead of 105 s.
+- **Filters on static and virtualized variables (EE).** `FILTER(?x = <...> && ?t >= ...)` with `?x` not projected gave no solutions; it now filters as written.
+
 # What's new in v0.26.1
 
 A fix release of maplib Enterprise Edition. [CHANGES.md](../CHANGES.md) has every change.

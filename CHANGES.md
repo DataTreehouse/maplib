@@ -1,6 +1,6 @@
 # Change log
 
-## Unreleased
+## v0.26.2
 ### Performance
 - maplib Enterprise Edition: the Graph portal's Served power queries over meter readings reached through usage points ask the virtualized database only for the time series and aggregates they need. An OPTIONAL sub-select, e.g. the aggregates per consumer, is evaluated with the left side's values of the variables it groups by or projects, also under another name, `(?x AS ?c)`, or joined with more patterns; a GROUP BY is pushed down past an `EXISTS`, `NOT EXISTS` or `MINUS` without time series, such as a filter on a reading type's flow direction; and the blank nodes of virtualized rows are hashed column by column. On a stand-in of 164,000 consumers in DuckDB split like Azure Data Explorer, one consumer's Served power series takes 0.06 s instead of 104 s (4 queries and rows instead of 444 queries and 21.2M rows), and the coverage of every consumer for a day 9.9 s instead of 105 s
 

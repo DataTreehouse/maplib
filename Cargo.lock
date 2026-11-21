@@ -3618,7 +3618,7 @@ dependencies = [
 
 [[package]]
 name = "py_maplib"
-version = "0.26.1"
+version = "0.26.2"
 dependencies = [
  "bytes",
  "cdf",
