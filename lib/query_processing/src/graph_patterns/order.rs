@@ -531,7 +531,12 @@ fn time_zone_rank_expr(c: &str, types: &[&BaseRDFNodeType]) -> Expr {
     )
 }
 
-fn make_ordering_expr(e: Expr, cats: LockedCats, t: BaseRDFNodeType, s: BaseCatState) -> Expr {
+pub(crate) fn make_ordering_expr(
+    e: Expr,
+    cats: LockedCats,
+    t: BaseRDFNodeType,
+    s: BaseCatState,
+) -> Expr {
     if let BaseCatState::CategoricalNative(local) = s {
         let output_dtype = if t.is_lang_string() {
             DataType::Struct(vec![

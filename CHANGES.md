@@ -4,6 +4,9 @@
 ### Performance
 - A cast chain over a dictionary-encoded literal, e.g. `xsd:float(xsd:string(?price))` in BSBM BI Q4 and Q8, finds the value of each row through a table indexed by dictionary code (or, when the codes are spread over more than four times the rows, a hash map with Polars' fast hasher) instead of a SipHash `HashMap`. BSBM BI Q4 takes 16.6 ms instead of 28.3 ms on 300 products and 36.2 ms instead of 69.9 ms on 2,785 products. The per-row lookup made the query's time depend on how the crate was split into codegen units: it was 21 ms in some builds and 28 ms in others. The results are unchanged
 
+### Bug fixes
+- `MIN` and `MAX` over language-tagged strings, e.g. `SELECT (MIN(?label) AS ?m) WHERE { ?s rdfs:label ?label }` over labels that all have a language, follow the order of `ORDER BY`: by the value, then by the language. They gave an unbound value, since the minimum of the struct of value and language codes was taken with Polars, which has no order for it (a later Polars orders the codes, which are in insertion order, and would give a wrong label). Over the 66,074 labels of RINF 0076 (Sparqloscope's `group-by-implicit-string-min` and `-max`), they now give the first and the last label of `ORDER BY ?label`
+
 ## v0.26.0
 ### Breaking changes
 - maplib requires Python 3.10 or newer. The wheels were already built for Python 3.10 and newer (`cp310-abi3`), but the package still declared Python 3.9 support

@@ -1,6 +1,7 @@
 use crate::expressions::functions::str_function::str_function;
 use crate::expressions::operations::numeric_promotion_level;
 use crate::extreme_value::{extreme_value, ExtremeField, ExtremeKey};
+use crate::graph_patterns::make_ordering_expr;
 use oxrdf::vocab::xsd;
 use polars::datatypes::DataType;
 use polars::prelude::{
@@ -12,7 +13,9 @@ use representation::multitype::all_multi_cols;
 use representation::null::expr_is_null_workaround;
 use representation::query_context::Context;
 use representation::solution_mapping::{BaseCatState, SolutionMappings};
-use representation::{BaseRDFNodeType, RDFNodeState};
+use representation::{
+    BaseRDFNodeType, RDFNodeState, LANG_STRING_LANG_FIELD, LANG_STRING_VALUE_FIELD,
+};
 use spargebra::statistics::StatisticalAggregate;
 use std::collections::{BTreeMap, HashMap};
 
@@ -226,13 +229,13 @@ fn min_max(
             return (out_expr, out_rdf_node_type);
         }
     }
-    let key = base.and_then(|(bt, bs)| sort_key(c.clone(), bt, bs, global_cats));
-    let out_expr = if let Some(key) = key {
+    let keys = base.and_then(|(bt, bs)| sort_keys(c.clone(), bt, bs, global_cats));
+    let out_expr = if let Some(keys) = keys {
         let options = SortMultipleOptions::default()
             .with_order_descending(max)
             .with_nulls_last(true)
             .with_maintain_order(true);
-        c.sort_by([key], options).first()
+        c.sort_by(keys, options).first()
     } else if max {
         c.max()
     } else {
@@ -243,16 +246,27 @@ fn min_max(
 }
 
 /// The decoded values of a dictionary encoded (non language-tagged) column, to order it by.
-fn sort_key(
+/// The keys that order the values of a column as ORDER BY does: language-tagged strings by the
+/// rank of their value, then of their language (a struct of codes has no order of its own).
+fn sort_keys(
     e: Expr,
     t: &BaseRDFNodeType,
     s: &BaseCatState,
     global_cats: LockedCats,
-) -> Option<Expr> {
+) -> Option<Vec<Expr>> {
     if t.is_lang_string() {
-        return None;
+        if !matches!(s, BaseCatState::CategoricalNative(_)) {
+            return None;
+        }
+        let ranks = make_ordering_expr(e, global_cats, t.clone(), s.clone());
+        return Some(
+            [LANG_STRING_VALUE_FIELD, LANG_STRING_LANG_FIELD]
+                .into_iter()
+                .map(|f| ranks.clone().struct_().field_by_name(f))
+                .collect(),
+        );
     }
-    optional_maybe_decode_expr(e, t, s, global_cats)
+    optional_maybe_decode_expr(e, t, s, global_cats).map(|k| vec![k])
 }
 
 /// GROUP_CONCAT: joins the string values of the group (as with STR()) with the separator,
@@ -671,10 +685,10 @@ fn multi_min_max(
         );
         if numeric_level(t).is_some() {
             numeric_keys.push(f.cast(DataType::Float64));
-        } else if let Some(key) =
-            sort_key(f.clone(), t, state.map.get(t).unwrap(), global_cats.clone())
+        } else if let Some(keys) =
+            sort_keys(f.clone(), t, state.map.get(t).unwrap(), global_cats.clone())
         {
-            other_keys.push(key);
+            other_keys.extend(keys);
         } else {
             other_keys.push(f);
         }
