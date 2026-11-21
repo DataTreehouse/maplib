@@ -1,5 +1,12 @@
 # Change log
 
+## Unreleased
+### Performance
+- maplib Enterprise Edition: the Graph portal's Served power queries over meter readings reached through usage points ask the virtualized database only for the time series and aggregates they need. An OPTIONAL sub-select, e.g. the aggregates per consumer, is evaluated with the left side's values of the variables it groups by or projects, also under another name, `(?x AS ?c)`, or joined with more patterns; a GROUP BY is pushed down past an `EXISTS`, `NOT EXISTS` or `MINUS` without time series, such as a filter on a reading type's flow direction; and the blank nodes of virtualized rows are hashed column by column. On a stand-in of 164,000 consumers in DuckDB split like Azure Data Explorer, one consumer's Served power series takes 0.06 s instead of 104 s (4 queries and rows instead of 444 queries and 21.2M rows), and the coverage of every consumer for a day 9.9 s instead of 105 s
+
+### Bug fixes
+- maplib Enterprise Edition: a filter that mixes a condition on a static variable that is not projected with one on virtualized values, e.g. `FILTER(?x = <...> && ?t >= ...)`, kept the static condition in the virtualized query and gave no solutions
+
 ## v0.26.1
 ### Performance
 - A cast chain over a dictionary-encoded literal, e.g. `xsd:float(xsd:string(?price))` in BSBM BI Q4 and Q8, finds the value of each row through a table indexed by dictionary code (or, when the codes are spread over more than four times the rows, a hash map with Polars' fast hasher) instead of a SipHash `HashMap`. BSBM BI Q4 takes 16.6 ms instead of 28.3 ms on 300 products and 36.2 ms instead of 69.9 ms on 2,785 products. The per-row lookup made the query's time depend on how the crate was split into codegen units: it was 21 ms in some builds and 28 ms in others. The results are unchanged
