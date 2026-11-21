@@ -145,6 +145,39 @@ pub fn query_memory_limit() -> Option<u64> {
     }
 }
 
+/// Gives the memory that the allocators hold but no longer use back to the OS: every arena of
+/// jemalloc (maplib's global allocator on Unix) is purged and the system allocator (DuckDB's) is
+/// trimmed. Without this, the freed memory of a large operation stays resident: jemalloc purges an
+/// arena only when it allocates again (or from background threads, which macOS lacks), and the
+/// system allocators keep freed regions for reuse.
+pub fn release_freed_memory() {
+    #[cfg(all(unix, not(target_os = "emscripten")))]
+    unsafe {
+        // 4096 is MALLCTL_ARENAS_ALL.
+        tikv_jemalloc_sys::mallctl(
+            c"arena.4096.purge".as_ptr(),
+            std::ptr::null_mut(),
+            std::ptr::null_mut(),
+            std::ptr::null_mut(),
+            0,
+        );
+    }
+    #[cfg(all(target_os = "linux", target_env = "gnu"))]
+    unsafe {
+        unsafe extern "C" {
+            fn malloc_trim(pad: usize) -> i32;
+        }
+        malloc_trim(0);
+    }
+    #[cfg(target_os = "macos")]
+    unsafe {
+        unsafe extern "C" {
+            fn malloc_zone_pressure_relief(zone: *mut std::ffi::c_void, goal: usize) -> usize;
+        }
+        malloc_zone_pressure_relief(std::ptr::null_mut(), 0);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -64,6 +64,9 @@ use virtualization::osipi::{
 use virtualization::python::VirtualizedPythonDatabase;
 use virtualization::{Virtualization, VirtualizedDatabase};
 
+/// Reads of files at least this large give the memory they freed back to the OS.
+const RELEASE_AFTER_READ_BYTES: u64 = 16 << 20;
+
 /// CGMES 3.0 and CGMES 2.4.15 namespaces.
 const CIM_NAMESPACES: [&str; 2] = [
     "http://iec.ch/TC57/CIM100#",
@@ -611,7 +614,13 @@ impl Model {
                 triples_batch_size,
                 known_contexts,
             )
-            .map_err(MaplibError::TriplestoreError)
+            .map_err(MaplibError::TriplestoreError)?;
+        // Parsing and encoding a large file frees several times its size, which the allocators
+        // would otherwise keep (see release_freed_memory).
+        if std::fs::metadata(p).is_ok_and(|m| m.len() >= RELEASE_AFTER_READ_BYTES) {
+            utils::memory::release_freed_memory();
+        }
+        Ok(())
     }
 
     /// Add GeoSPARQL geometries for the cim:Location resources in the graph, built from their

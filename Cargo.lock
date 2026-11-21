@@ -2266,6 +2266,7 @@ dependencies = [
  "thiserror",
  "tracing",
  "triplestore",
+ "utils",
  "uuid",
  "virtualization",
 ]
@@ -5274,6 +5275,7 @@ dependencies = [
  "pyo3",
  "rayon",
  "thiserror",
+ "tikv-jemalloc-sys",
 ]
 
 [[package]]

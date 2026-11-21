@@ -23,6 +23,7 @@ chrontext = { path = "../chrontext" }
 virtualization = { path = "../virtualization" }
 external_sparql = { path = "../external_sparql" }
 spargebra = { path = "../spargebra" }
+utils = { path = "../utils" }
 
 uuid = { workspace = true }
 rayon = { workspace = true }
