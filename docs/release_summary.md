@@ -1,3 +1,11 @@
+# What's new in v0.26.1
+
+A fix release of maplib Enterprise Edition. [CHANGES.md](../CHANGES.md) has every change.
+
+- **Whole-grid queries to Azure Data Explorer (EE).** A virtualized query over many time series is sent as several KQL queries of at most `KustoDatabase(max_ids_per_query=2000)` ids, up to `max_concurrent_queries=4` at once, and their answers are combined. Queries over a grid's 200,000 usage points no longer go over Azure Data Explorer's 2 MB query limit; with a 50 ms round trip such a query takes 2.2 s.
+- **`MIN` and `MAX` over language-tagged strings.** They follow the order of `ORDER BY`, by value and then language, instead of giving an unbound value.
+- **Faster casts and less memory after reads.** A cast chain over dictionary-encoded literals, as in BSBM BI Q4, is 1.7 times as fast. Reading a file of 16 MiB or more gives the memory it freed back to the OS (613 MB kept instead of 916 MB for 2M long strings), and hybrid and disk storage keep 1081 MB instead of 1760 MB after reading them in batches.
+
 # What's new in v0.26.0
 
 A release of maplib Enterprise Edition. It needs Python 3.10 or newer (see Breaking changes in [CHANGES.md](../CHANGES.md), which has every change).

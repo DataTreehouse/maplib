@@ -1,6 +1,6 @@
 # Change log
 
-## Unreleased
+## v0.26.1
 ### Performance
 - A cast chain over a dictionary-encoded literal, e.g. `xsd:float(xsd:string(?price))` in BSBM BI Q4 and Q8, finds the value of each row through a table indexed by dictionary code (or, when the codes are spread over more than four times the rows, a hash map with Polars' fast hasher) instead of a SipHash `HashMap`. BSBM BI Q4 takes 16.6 ms instead of 28.3 ms on 300 products and 36.2 ms instead of 69.9 ms on 2,785 products. The per-row lookup made the query's time depend on how the crate was split into codegen units: it was 21 ms in some builds and 28 ms in others. The results are unchanged
 - Reading a file of 16 MiB or more gives the memory the parse and encoding freed back to the OS, by purging the arenas of maplib's allocator and trimming the system allocator. Without it, jemalloc only returned the memory of an arena when that arena allocated again (it has no background threads on macOS, and on Linux they wait 10 s), so most of a large read's high-water stayed resident. Reading 2M triples with distinct 200-character strings keeps 613 MB instead of 916 MB in memory storage, and 200k triples 103 MB instead of 210 MB (macOS, fresh process). Read times are unchanged
