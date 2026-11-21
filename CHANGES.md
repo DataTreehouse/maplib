@@ -1,6 +1,6 @@
 # Change log
 
-## Unreleased
+## v0.26.0
 ### Breaking changes
 - maplib requires Python 3.10 or newer. The wheels were already built for Python 3.10 and newer (`cp310-abi3`), but the package still declared Python 3.9 support
 
