@@ -1,3 +1,14 @@
+# What's new in v0.26.0
+
+A release of maplib Enterprise Edition. It needs Python 3.10 or newer (see Breaking changes in [CHANGES.md](../CHANGES.md), which has every change).
+
+- **Python 3.10 or newer.** maplib no longer declares Python 3.9 support; the wheels were already built for Python 3.10 and newer. The Enterprise Edition release has one wheel per platform.
+- **`geof:simplify` (EE).** Simplifies a geometry with the Douglas-Peucker algorithm, as in the GeoSPARQL draft after 1.1. The Graph portal's map uses it to read lighter grid lines.
+- **Fewer ids sent to virtualized databases (EE).** A query that restricts time series in one part, e.g. a usage point by its EAN before an `OPTIONAL` or a joined subquery, or with an aggregate named like a variable of its pattern, sends only the ids of the matching time series, not all of them. A query over 222,217 usage points no longer goes over Azure Data Explorer's 2 MB query limit.
+- **Time zones of virtualized databases (EE).** Timestamps a database answers with in a time zone other than UTC are read as UTC instants.
+- **Any CIM version (EE).** The Graph portal loads a grid in the CIM namespace of its data, CIM16 or CIM100, and `cim.add_reading_types` types reading types in the namespace it is given.
+- **Graph portal (EE).** Large areas sum their time series in the database, the map reads the grid only when the view leaves what was read, and queries an endpoint dropped after a long time are not sent again.
+
 # What's new in v0.25.3
 
 A release of maplib Enterprise Edition with two speed-ups and three fixes. [CHANGES.md](../CHANGES.md) has every change.
