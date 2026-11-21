@@ -236,9 +236,22 @@ impl Triplestore {
         // A constant subject or object already makes the right side selective on its own.
         // Patterns that see their incoming solutions (LATERAL, subqueries with LIMIT or
         // aggregates) would give other solutions when evaluated with the left side's values.
+        // A sub-select (e.g. an aggregate per consumer) is evaluated on its own and joined with
+        // the left side's values, which keeps only its solutions with these values. This is the
+        // same left join when the values are those of variables that keep or drop its solutions
+        // as a whole, such as the GROUP BY variables. A hook (chrontext) then only evaluates the
+        // solutions with these values, e.g. sends only their identifiers to a time series
+        // database.
+        let key_variables = if keys_keep_solutions(right) {
+            if has_constant_term(right) {
+                return Ok((left_solution_mappings, None));
+            }
+            None
+        } else {
+            Some(sub_select_key_variables(right))
+        };
         if left_solution_mappings.height_estimate > OPTIONAL_KEYS_HEIGHT
-            || has_constant_term(right)
-            || !keys_keep_solutions(right)
+            || key_variables.as_ref().is_some_and(|k| k.is_empty())
         {
             return Ok((left_solution_mappings, None));
         }
@@ -250,6 +263,7 @@ impl Triplestore {
             .filter(|(v, t)| {
                 left_certain.contains(*v)
                     && right_certain.contains(*v)
+                    && key_variables.as_ref().is_none_or(|k| k.contains(*v))
                     && !t.is_multi()
                     && !t.is_none()
             })
@@ -502,6 +516,81 @@ fn has_constant_term(gp: &GraphPattern) -> bool {
         | GraphPattern::Distinct { inner }
         | GraphPattern::Reduced { inner } => has_constant_term(inner),
         _ => false,
+    }
+}
+
+/// The variables of a sub-select whose values keep or drop its solutions as a whole: those it
+/// projects from a pattern that keys keep the solutions of (see keys_keep_solutions), or that it
+/// groups by, also when projected under another name, (?x AS ?c). Restricting the solutions
+/// inside to some values of these gives the solutions of the sub-select with these values.
+/// Empty for anything else (e.g. a LIMIT, or a group without variables).
+fn sub_select_key_variables(gp: &GraphPattern) -> HashSet<String> {
+    match gp {
+        GraphPattern::Project { inner, variables } => {
+            let inner_keys = sub_select_key_variables(inner);
+            variables
+                .iter()
+                .map(|v| v.as_str().to_string())
+                .filter(|v| inner_keys.contains(v))
+                .collect()
+        }
+        GraphPattern::Group {
+            inner, variables, ..
+        } => {
+            let inner_keys = sub_select_key_variables(inner);
+            variables
+                .iter()
+                .map(|v| v.as_str().to_string())
+                .filter(|v| inner_keys.contains(v))
+                .collect()
+        }
+        GraphPattern::Extend {
+            inner,
+            variable,
+            expression,
+        } => {
+            let mut keys = sub_select_key_variables(inner);
+            if let Expression::Variable(v) = expression {
+                if keys.contains(v.as_str()) {
+                    keys.insert(variable.as_str().to_string());
+                }
+            }
+            keys
+        }
+        GraphPattern::Filter { inner, .. }
+        | GraphPattern::OrderBy { inner, .. }
+        | GraphPattern::Distinct { inner }
+        | GraphPattern::Reduced { inner } => sub_select_key_variables(inner),
+        gp if keys_keep_solutions(gp) => {
+            let mut keys = HashSet::new();
+            gp.on_in_scope_variable(|v| {
+                keys.insert(v.as_str().to_string());
+            });
+            keys
+        }
+        // A solution of a join with a value of a variable that one side always binds comes
+        // from solutions of that side with the value (e.g. a sub-select per consumer joined with
+        // the unit of its reading types). Of an OPTIONAL, the left side's.
+        GraphPattern::Join { left, right } => {
+            let mut keys = HashSet::new();
+            for side in [left, right] {
+                let certain = certainly_bound_variables(side);
+                keys.extend(
+                    sub_select_key_variables(side)
+                        .into_iter()
+                        .filter(|v| certain.contains(v)),
+                );
+            }
+            keys
+        }
+        GraphPattern::LeftJoin { left, .. } => {
+            let certain = certainly_bound_variables(left);
+            sub_select_key_variables(left)
+                .into_iter()
+                .filter(|v| certain.contains(v))
+                .collect()
+        }
+        _ => HashSet::new(),
     }
 }
 

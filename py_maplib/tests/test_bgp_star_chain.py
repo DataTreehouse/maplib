@@ -338,3 +338,23 @@ def test_after_small_inserts():
         f"SELECT (COUNT(*) AS ?c) WHERE {{ {star(['a', 'a', 'a'])} }}",
     ]:
         check("ins", q)
+
+
+@pytest.mark.parametrize("seed", [1, 2])
+def test_optional_subquery_with_left_keys(seed):
+    # A sub-select grouped by (or projecting) the variable it shares with the left side is
+    # evaluated with the left side's values of it, also when it projects it under another name,
+    # and gives the same left join; with a LIMIT, a group without variables or a key that is not
+    # grouped by, it is not.
+    check(seed, "SELECT * WHERE { ?s :a :n3 OPTIONAL { SELECT ?s (COUNT(*) AS ?c) WHERE { ?s :b ?y } GROUP BY ?s } }")
+    check(seed, "SELECT * WHERE { ?t :a :n3 OPTIONAL { SELECT (?s AS ?t) (COUNT(*) AS ?c) WHERE { ?s :b ?y } GROUP BY ?s } }")
+    check(seed, "SELECT * WHERE { ?s :a :n3 OPTIONAL { SELECT ?s ?y WHERE { ?s :b ?y } } }")
+    check(seed, "SELECT * WHERE { ?s :a :n3 OPTIONAL { SELECT DISTINCT ?s WHERE { ?s :b ?y FILTER(?y != :n1) } } }")
+    check(seed, "SELECT * WHERE { ?s :a ?o OPTIONAL { SELECT ?s (SUM(?d) AS ?sum) WHERE { ?s :d ?d } GROUP BY ?s HAVING (SUM(?d) > 1) } }")
+    check(seed, "SELECT * WHERE { ?y :a :n3 OPTIONAL { SELECT ?y (COUNT(*) AS ?c) WHERE { ?s :b ?y } GROUP BY ?s ?y } }")
+    check(seed, "SELECT * WHERE { ?s :a :n3 OPTIONAL { SELECT ?s (COUNT(?y) AS ?c) WHERE { ?s :b ?y } GROUP BY ?s ORDER BY ?s LIMIT 2 } }")
+    check(seed, "SELECT * WHERE { ?s :a :n3 OPTIONAL { SELECT ?y (COUNT(*) AS ?c) WHERE { ?s :b ?y } GROUP BY ?y } }")
+    # The sub-select joined with more patterns inside the OPTIONAL, and inside a sub-select
+    check(seed, "SELECT * WHERE { ?s :a :n3 OPTIONAL { { SELECT ?s (COUNT(*) AS ?c) WHERE { ?s :b ?y } GROUP BY ?s } ?s :c ?z OPTIONAL { ?z :h ?w } } }")
+    check(seed, "SELECT * WHERE { ?t :a :n3 OPTIONAL { SELECT (?s AS ?t) (MAX(?c) AS ?m) WHERE { { SELECT ?s ?y (COUNT(*) AS ?c) WHERE { ?s :b ?y } GROUP BY ?s ?y } OPTIONAL { ?y :h ?w } } GROUP BY ?s } }")
+    check(seed, "SELECT * WHERE { ?s :a :n3 OPTIONAL { ?s :c ?z { SELECT ?z WHERE { ?z :h ?w } ORDER BY ?z LIMIT 3 } } }")
