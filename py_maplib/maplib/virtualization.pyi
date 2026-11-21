@@ -299,11 +299,13 @@ class KustoDatabase:
     database: str
     client: Any
     sql_dialect: "KQLDialect"
+    max_ids_per_query: Optional[int]
 
     def __init__(self, cluster: Optional[str] = None, database: Optional[str] = None,
                  tenant_id: Optional[str] = None, client_id: Optional[str] = None,
                  client_secret: Optional[str] = None, authentication: Optional[str] = None,
-                 client: Any = None, sql_dialect: Optional["KQLDialect"] = None):
+                 client: Any = None, sql_dialect: Optional["KQLDialect"] = None,
+                 max_ids_per_query: Optional[int] = 2000):
         """
         :param cluster: The cluster or query URI, e.g. https://mycluster.westeurope.kusto.windows.net,
             or the query URI of a Fabric Eventhouse (https://<id>.<region>.kusto.fabric.microsoft.com).
@@ -316,6 +318,10 @@ class KustoDatabase:
             Chosen from the other arguments when not given.
         :param client: An azure.kusto.data.KustoClient to use instead of connecting.
         :param sql_dialect: Override the KQL dialect, e.g. with a subclass of KQLDialect.
+        :param max_ids_per_query: The most time series ids one KQL query names. The ids (and the groups of a
+            pushed down GROUP BY) are written into the query text, and Kusto refuses queries longer than 2 MB,
+            so a query over more time series is sent as several queries whose answers are combined.
+            None sends each query whole.
         """
     def query(self, kql: str) -> pl.DataFrame:
         """Run a KQL query and return the result as a polars DataFrame."""
