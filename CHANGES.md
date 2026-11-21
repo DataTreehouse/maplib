@@ -1,5 +1,9 @@
 # Change log
 
+## Unreleased
+### Performance
+- A cast chain over a dictionary-encoded literal, e.g. `xsd:float(xsd:string(?price))` in BSBM BI Q4 and Q8, finds the value of each row through a table indexed by dictionary code (or, when the codes are spread over more than four times the rows, a hash map with Polars' fast hasher) instead of a SipHash `HashMap`. BSBM BI Q4 takes 16.6 ms instead of 28.3 ms on 300 products and 36.2 ms instead of 69.9 ms on 2,785 products. The per-row lookup made the query's time depend on how the crate was split into codegen units: it was 21 ms in some builds and 28 ms in others. The results are unchanged
+
 ## v0.26.0
 ### Breaking changes
 - maplib requires Python 3.10 or newer. The wheels were already built for Python 3.10 and newer (`cp310-abi3`), but the package still declared Python 3.9 support

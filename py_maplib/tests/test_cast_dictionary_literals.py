@@ -63,6 +63,8 @@ QUERIES = {
     "double_of_plain_string": "SELECT ?o (xsd:double(?n) AS ?x) WHERE { ?o ex:name ?n FILTER(!isLiteral(?n) || lang(?n) = '') }",
     "avg_by_group": "SELECT ?g (AVG(xsd:float(xsd:string(?p))) AS ?x) WHERE { ?o ex:group ?g ; ex:price ?p } GROUP BY ?g",
     "filter_on_cast": "SELECT ?o WHERE { ?o ex:price ?p FILTER(xsd:double(xsd:string(?p)) > 100) }",
+    # o7 has no price: the cast is gathered back to a row whose code is unbound
+    "float_of_string_optional": "SELECT ?o (xsd:float(xsd:string(?p)) AS ?x) WHERE { ?o ex:name ?n OPTIONAL { ?o ex:price ?p } }",
 }
 
 XSD = "http://www.w3.org/2001/XMLSchema#"
@@ -106,3 +108,33 @@ def test_cast_matches_oxigraph(name):
         tuple(sorted((n, _term(b)) for n, b in row.items())) for row in j["results"]["bindings"]
     )
     assert got == expected
+
+
+def _compare(data, q):
+    m = Model()
+    m.reads(data, format="ntriples")
+    store = pyoxigraph.Store()
+    store.load(data.encode(), pyoxigraph.RdfFormat.N_TRIPLES)
+    res = store.query(q)
+    names = [v.value for v in res.variables]
+    expected = Counter(
+        tuple(sorted((n, _term(sol[n])) for n in names if sol[n] is not None)) for sol in res
+    )
+    j = json.loads(m.query(q, return_format="json"))
+    got = Counter(
+        tuple(sorted((n, _term(b)) for n, b in row.items())) for row in j["results"]["bindings"]
+    )
+    assert got == expected
+
+
+def test_cast_of_few_rows_with_codes_far_apart():
+    """The values cast once per distinct code are gathered back to the rows by code: through a table
+    indexed by code when the codes span at most a few times the rows, else through a hash map. Here
+    300,000 other prices come first in the dictionary, so the six prices queried have codes far
+    above the number of rows, and an OPTIONAL leaves one of them unbound."""
+    filler = "".join(f'<{EX}f{i}> <{EX}other> "{i}.25"^^<{USD}> .\n' for i in range(300_000))
+    q = (
+        f"PREFIX ex: <{EX}> PREFIX xsd: <{XSD}>\n"
+        "SELECT ?o (xsd:float(xsd:string(?p)) AS ?x) WHERE { ?o ex:name ?n OPTIONAL { ?o ex:price ?p } }"
+    )
+    _compare(filler + DATA, q)

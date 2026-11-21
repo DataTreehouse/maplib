@@ -4,13 +4,15 @@ use crate::expressions::functions::cast_literal_::cast_literal;
 use oxrdf::vocab::xsd;
 use oxrdf::{NamedNode, NamedNodeRef};
 use polars::prelude::{
-    coalesce, col, lit, polars_err, ChunkUnique, Column, DataFrame, Engine, Expr, Field, IdxCa,
-    IdxSize, IntoColumn, IntoLazy, IntoSeries, LiteralValue,
+    coalesce, col, lit, polars_err, ChunkAgg, ChunkUnique, Column, DataFrame, Engine, Expr, Field,
+    IdxCa, IdxSize, IntoColumn, IntoLazy, IntoSeries, LiteralValue, PlHashMap, UInt32Chunked,
 };
 use representation::cats::LockedCats;
 use representation::solution_mapping::BaseCatState;
 use representation::{BaseRDFNodeType, RDFNodeState, LANG_STRING_VALUE_FIELD};
-use std::collections::HashMap;
+
+/// The largest code range, as a multiple of the rows (at least 2^16), looked up in a dense table.
+const DENSE_CODE_RANGE_PER_ROW: usize = 4;
 
 /// Whether `nn(x)` is a cast to an XSD datatype (SPARQL 1.1 17.5).
 pub fn is_xsd_cast_function(nn: NamedNodeRef) -> bool {
@@ -95,20 +97,50 @@ pub fn xsd_cast_chain_on_codes(
                 .column("v")?
                 .as_materialized_series()
                 .clone();
-            let positions: HashMap<u32, IdxSize> = distinct
-                .iter()
-                .enumerate()
-                .filter_map(|(i, code)| code.map(|code| (code, i as IdxSize)))
-                .collect();
-            let idx: IdxCa = codes
-                .iter()
-                .map(|code| code.and_then(|code| positions.get(&code).copied()))
-                .collect();
+            let idx = positions_of_codes(&codes, &distinct);
             Ok(values.take(&idx)?.with_name(name).into_column())
         },
         move |_, f| Ok(Field::new(f.name().clone(), out_dtype.clone())),
     );
     Some((expr, out_state))
+}
+
+/// The position in `distinct` of each row's code, for gathering the values cast once per distinct
+/// code back to the rows. This runs once per row, so it must be cheap: a table indexed by code when
+/// the codes span at most a few times the rows, else a hash map with Polars' fast hasher. (A
+/// SipHash `HashMap` here made BSBM BI Q4's cast of a million prices depend on code layout.)
+fn positions_of_codes(codes: &UInt32Chunked, distinct: &UInt32Chunked) -> IdxCa {
+    let max_code = distinct.max().unwrap_or(0) as usize;
+    if max_code < DENSE_CODE_RANGE_PER_ROW * codes.len().max(1 << 16) {
+        let mut table = vec![IdxSize::MAX; max_code + 1];
+        for (i, code) in distinct.iter().enumerate() {
+            if let Some(code) = code {
+                table[code as usize] = i as IdxSize;
+            }
+        }
+        if codes.null_count() == 0 {
+            let mut out = Vec::with_capacity(codes.len());
+            for arr in codes.downcast_iter() {
+                out.extend(arr.values().iter().map(|c| table[*c as usize]));
+            }
+            IdxCa::from_vec(codes.name().clone(), out)
+        } else {
+            codes
+                .iter()
+                .map(|code| code.map(|c| table[c as usize]))
+                .collect()
+        }
+    } else {
+        let positions: PlHashMap<u32, IdxSize> = distinct
+            .iter()
+            .enumerate()
+            .filter_map(|(i, code)| code.map(|code| (code, i as IdxSize)))
+            .collect();
+        codes
+            .iter()
+            .map(|code| code.and_then(|code| positions.get(&code).copied()))
+            .collect()
+    }
 }
 
 pub fn xsd_cast_literal(
