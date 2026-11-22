@@ -122,7 +122,7 @@ impl Triplestore {
             let keys = self.bind_keys(&left_eager, &in_scope_variables(right))?;
             (left_eager.as_lazy(), keys.map(|k| k.as_lazy()))
         } else {
-            self.optional_keys(left_solution_mappings, left, right)?
+            self.optional_keys(left_solution_mappings, left, right, query_settings)?
         };
         fast_path::hit_if(
             right_incoming.is_some(),
@@ -232,6 +232,7 @@ impl Triplestore {
         left_solution_mappings: SolutionMappings,
         left: &GraphPattern,
         right: &GraphPattern,
+        query_settings: &QuerySettings,
     ) -> Result<(SolutionMappings, Option<SolutionMappings>), SparqlError> {
         // A constant subject or object already makes the right side selective on its own.
         // Patterns that see their incoming solutions (LATERAL, subqueries with LIMIT or
@@ -241,12 +242,17 @@ impl Triplestore {
         // same left join when the values are those of variables that keep or drop its solutions
         // as a whole, such as the GROUP BY variables. A hook (chrontext) then only evaluates the
         // solutions with these values, e.g. sends only their identifiers to a time series
-        // database.
+        // database. Without a hook, a right side that is a sub-select as a whole is evaluated
+        // in full either way, so the values only cost: collecting the left side and joining its
+        // values with each sub-select doubled the time of a query with OPTIONAL sub-selects per
+        // equipment (8 to 15 ms).
         let key_variables = if keys_keep_solutions(right) {
             if has_constant_term(right) {
                 return Ok((left_solution_mappings, None));
             }
             None
+        } else if query_settings.evaluation_hook.is_none() && is_sub_select(right) {
+            return Ok((left_solution_mappings, None));
         } else {
             Some(sub_select_key_variables(right))
         };
@@ -515,6 +521,21 @@ fn has_constant_term(gp: &GraphPattern) -> bool {
         | GraphPattern::Graph { inner, .. }
         | GraphPattern::Distinct { inner }
         | GraphPattern::Reduced { inner } => has_constant_term(inner),
+        _ => false,
+    }
+}
+
+/// Whether the pattern is a sub-select as a whole, which the triplestore evaluates on its own and
+/// then joins with the incoming solutions.
+fn is_sub_select(gp: &GraphPattern) -> bool {
+    match gp {
+        GraphPattern::Project { .. } | GraphPattern::Group { .. } => true,
+        GraphPattern::Filter { inner, .. }
+        | GraphPattern::Extend { inner, .. }
+        | GraphPattern::OrderBy { inner, .. }
+        | GraphPattern::Slice { inner, .. }
+        | GraphPattern::Distinct { inner }
+        | GraphPattern::Reduced { inner } => is_sub_select(inner),
         _ => false,
     }
 }
