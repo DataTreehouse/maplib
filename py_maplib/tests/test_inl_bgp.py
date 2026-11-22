@@ -270,6 +270,19 @@ TAKEN = {
     "chain_of_three": f"SELECT * WHERE {{ {P} :producer ?pr . ?pr :country ?c . ?p :producer ?pr }}",
 }
 
+# Chains through a bound object from several rows: without an object sort (the default), the
+# table is scanned once for the objects of all rows.
+ONE_SCAN = {
+    # The other offers of the vendors of a product's offers: many rows per vendor.
+    "same_vendor": f"SELECT * WHERE {{ ?o :product {P} . ?o :vendor ?v . ?o2 :vendor ?v }}",
+    # Products that share a feature with a product, and those that share their producers.
+    "shared_feature": f"SELECT * WHERE {{ {P} :feature ?f . ?p2 :feature ?f . ?p2 :producer ?pr . ?p3 :producer ?pr }}",
+    # A bound string object that some rows share (probed in the object sort of the labels).
+    "shared_label_objects": f"SELECT * WHERE {{ ?p a {T} . ?p rdfs:label ?l . ?p2 rdfs:label ?l }}",
+    # Native values gathered after a scan, and a check of both ends after it.
+    "scan_then_native": f"SELECT * WHERE {{ {P} :feature ?f . ?p2 :feature ?f . ?p2 :num1 ?n . ?p2 :producer ?pr . ?p2 :publisher ?pr }}",
+}
+
 EMPTY = {
     "absent_constant": f"SELECT * WHERE {{ <{EX}NoSuchProduct> rdfs:label ?l . <{EX}NoSuchProduct> :num1 ?n }}",
     "absent_string": 'SELECT * WHERE { ?p rdfs:label "no such label" . ?p :num1 ?n }',
@@ -290,6 +303,58 @@ DECLINED = {
 @pytest.mark.parametrize("name", TAKEN)
 def test_taken(eng, name):
     check(eng, TAKEN[name], "inl.taken")
+
+
+@pytest.mark.parametrize("name", ONE_SCAN)
+def test_one_scan_for_bound_objects(eng, name, monkeypatch):
+    """Rows whose bound object is looked up in a table without an object sort: one scan of the
+    table for all rows gives what a scan per row gave, also over the write buffer and several
+    segments (see test_after_updates). The cost comparison is off, so that only the path is
+    tested, not where the estimate puts it."""
+    monkeypatch.setenv("MAPLIB_INL_COST_RATIO", "0")
+    (_, rows), counts = counted(lambda: rows_maplib(eng, ONE_SCAN[name]))
+    assert check(eng, ONE_SCAN[name], "inl.taken") == sum(rows.values()) > 1
+    # String objects have an object sort from the start, so their rows are probed one by one.
+    if HAS_COUNTERS and eng.storage == "memory" and name != "shared_label_objects":
+        assert counts.get("inl.one_scan", 0) > 0, counts
+
+
+def test_bom_chain_taken():
+    """A bill of materials followed five levels down through edge nodes (parent as object,
+    child and quantity as properties): 4 + 16 + 64 + 256 rows each look up their children in
+    a table of 27,280 edges without an object sort. One scan per level keeps the estimated
+    work under the limit, where a scan per row was declined (2026-11-22)."""
+    import polars as pl
+
+    s, o, qty = [], [], []
+    for p in range(20):
+        frontier = [f"{EX}prod{p}"]
+        for lvl in range(5):
+            nxt = []
+            for x in frontier:
+                for j in range(4):
+                    c = f"{x}_{j}" if lvl < 4 else f"{EX}leaf{j}"
+                    s.append(x)
+                    o.append(c)
+                    qty.append(j + 1)
+                    if lvl < 4:
+                        nxt.append(c)
+            frontier = nxt
+    edges = pl.DataFrame({"subject": [f"{EX}edge{i}" for i in range(len(s))], "parent": s, "child": o, "q": qty})
+    m = Model()
+    m.map_triples(edges.select("subject", pl.col("parent").alias("object")), predicate=EX + "edge")
+    m.map_triples(edges.select("subject", pl.col("child").alias("object")), predicate=EX + "child")
+    m.map_triples(edges.select("subject", pl.col("q").alias("object")), predicate=EX + "qty")
+    q = PFX + f"""SELECT ?leaf (SUM(?q1 * ?q2 * ?q3 * ?q4 * ?q5) AS ?total) (COUNT(*) AS ?n) WHERE {{
+        ?e1 :edge <{EX}prod0> ; :child ?c1 ; :qty ?q1 . ?e2 :edge ?c1 ; :child ?c2 ; :qty ?q2 .
+        ?e3 :edge ?c2 ; :child ?c3 ; :qty ?q3 . ?e4 :edge ?c3 ; :child ?c4 ; :qty ?q4 .
+        ?e5 :edge ?c4 ; :child ?leaf ; :qty ?q5 }} GROUP BY ?leaf"""
+    df, counts = counted(lambda: m.query(q, cache=False))
+    assert sorted(df["total"].to_list()) == [10**4 * k for k in (1, 2, 3, 4)]
+    assert df["n"].to_list() == [256] * 4
+    if HAS_COUNTERS:
+        assert counts.get("inl.taken", 0) == 1, counts
+        assert counts.get("inl.one_scan", 0) == 4, counts
 
 
 @pytest.mark.parametrize("name", EMPTY)
@@ -340,6 +405,8 @@ def test_after_updates(eng):
     eng.update(UPDATE_DELETE)
     for name in TAKEN:
         check(eng, TAKEN[name], "inl.taken")
+    for name in ONE_SCAN:
+        check(eng, ONE_SCAN[name])
     more = "\n".join(
         f"<{EX}Extra{i}> <{EX}feature> <{EX}F{i % N_FEATURES}> .\n"
         f'<{EX}Extra{i}> <http://www.w3.org/2000/01/rdf-schema#label> "extra {i}" .\n'
@@ -350,6 +417,8 @@ def test_after_updates(eng):
     eng.ox.load(more.encode(), ox.RdfFormat.N_TRIPLES)
     for name in TAKEN:
         check(eng, TAKEN[name])
+    for name in ONE_SCAN:
+        check(eng, ONE_SCAN[name])
     check(eng, f"SELECT ?p ?l WHERE {{ ?p :feature {F} . ?p rdfs:label ?l }}")
 
 

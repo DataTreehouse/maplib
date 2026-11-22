@@ -23,7 +23,7 @@ use representation::dataset::{NamedGraph, QueryGraph};
 use oxrdf::vocab::xsd;
 use polars_core::frame::DataFrame;
 use polars_core::prelude::{
-    Column, IdxCa, IdxSize, IntoColumn, NewChunkedArray, PlSmallStr, UInt32Chunked,
+    Column, IdxCa, IdxSize, IntoColumn, NewChunkedArray, PlHashMap, PlSmallStr, UInt32Chunked,
 };
 use representation::cats::maps::CatMaps;
 use representation::cats::Cats;
@@ -56,6 +56,10 @@ pub const INL_COST_RATIO_ENV: &str = "MAPLIB_INL_COST_RATIO";
 // joins the rows it reads.
 const SEEK_STEP_NS: f64 = 10.0;
 const SCAN_NS: f64 = 1.0;
+/// A row of a table scanned once for the objects of all rows, each looked up in a hash table.
+const HASH_SCAN_NS: f64 = 4.0;
+/// A row of the bindings whose object goes into that hash table.
+const HASH_BUILD_NS: f64 = 25.0;
 const EMIT_NS: f64 = 3.0;
 const POLARS_PATTERN_NS: f64 = 300_000.0;
 const POLARS_ROW_NS: f64 = 30.0;
@@ -625,7 +629,35 @@ fn run(
                 Pos::Var(v) => cols[v].as_ref().map(|c| c[row] as u32),
             }
         };
-        for row in 0..n_rows {
+        // A bound object variable of a table without an object sort: one scan for all rows.
+        let one_scan = match (p.s, p.o) {
+            (Pos::Var(sv), Pos::Var(ov))
+                if cols[sv].is_none()
+                    && !p.view.object_sorted
+                    && n_rows >= ONE_SCAN_MIN_ROWS =>
+            {
+                cols[ov].as_deref()
+            }
+            _ => None,
+        };
+        if let Some(objects) = one_scan {
+            hit(FastPath::InlOneScan);
+            scan_bound_objects(
+                &p.view,
+                p.o_order.as_ref().unwrap(),
+                objects,
+                &mut parent,
+                &mut new_s,
+                &mut work,
+            )?;
+            if parent.len() > max_rows {
+                return decline(Decline::Aborted, "too many rows");
+            }
+            if work > max_run_work {
+                return decline(Decline::Aborted, "too much work");
+            }
+        }
+        for row in 0..if one_scan.is_some() { 0 } else { n_rows } {
             if row % CANCEL_CHECK_ROWS == CANCEL_CHECK_ROWS - 1 {
                 utils::cancel::check()?;
             }
@@ -743,6 +775,95 @@ fn run(
     }
     let df = DataFrame::new(n_rows, out_cols).unwrap();
     Ok(EagerSolutionMappings::new(df, types(&vars)))
+}
+
+/// From this many rows of bindings, a table without an object sort is scanned once for the
+/// objects of all rows instead of once per row.
+const ONE_SCAN_MIN_ROWS: usize = 2;
+
+/// Extends every row of the bindings, whose bound object codes are `objects`, with the subjects
+/// of the triples of `view` that have that object, where not every segment of `view` has an
+/// object sort: the rows are grouped by their object, the segments without an object sort (and
+/// the write buffer) are scanned once with each object code looked up among the groups, and the
+/// segments with an object sort are probed once per distinct object. The rows that scanning the
+/// table once per row would give, in the same order, for the table's rows plus the bindings'
+/// rows of work instead of their product.
+fn scan_bound_objects(
+    view: &TableView,
+    ord: &Order,
+    objects: &[u64],
+    parent: &mut Vec<u32>,
+    new_s: &mut Vec<u64>,
+    work: &mut usize,
+) -> R<()> {
+    // The rows of each distinct object: rows sorted by object, and the range of each object.
+    let mut by_object: Vec<(u32, u32)> = objects
+        .iter()
+        .enumerate()
+        .map(|(row, o)| (*o as u32, row as u32))
+        .collect();
+    by_object.sort_unstable();
+    let mut groups: PlHashMap<u32, (u32, u32)> = PlHashMap::default();
+    let mut start = 0;
+    while start < by_object.len() {
+        let code = by_object[start].0;
+        let mut end = start + 1;
+        while end < by_object.len() && by_object[end].0 == code {
+            end += 1;
+        }
+        groups.insert(code, (start as u32, end as u32));
+        start = end;
+    }
+    *work += objects.len();
+    // (row of the bindings, subject), segment by segment in the order of each segment.
+    let mut found: Vec<(u32, u32)> = Vec::new();
+    for seg in &view.segs {
+        utils::cancel::check()?;
+        match &seg.osort {
+            Some(chunks) => {
+                for (code, (start, end)) in &groups {
+                    if seg.seg.is_some_and(|sg| !sg.may_hold_code(*code, true)) {
+                        continue;
+                    }
+                    for (os, ss) in chunks {
+                        *work += (usize::BITS - os.len().leading_zeros()) as usize;
+                        let range = ord.equal_range(os, *code);
+                        *work += range.len() * (end - start) as usize;
+                        for (_, row) in &by_object[*start as usize..*end as usize] {
+                            found.extend(ss[range.clone()].iter().map(|s| (*row, *s)));
+                        }
+                    }
+                }
+            }
+            None => {
+                for part in &seg.parts {
+                    let oc = part.obj_codes.unwrap();
+                    *work += oc.len();
+                    for (r, c) in oc.iter().enumerate() {
+                        if let Some((start, end)) = groups.get(c) {
+                            let s = part.subj[r];
+                            *work += (end - start) as usize;
+                            found.extend(
+                                by_object[*start as usize..*end as usize]
+                                    .iter()
+                                    .map(|(_, row)| (*row, s)),
+                            );
+                        }
+                    }
+                }
+            }
+        }
+    }
+    // By row, and within a row segment by segment (the sort is stable), as probing row by row
+    // gives them.
+    found.sort_by_key(|(row, _)| *row);
+    parent.reserve(found.len());
+    new_s.reserve(found.len());
+    for (row, s) in found {
+        parent.push(row);
+        new_s.push(s as u64);
+    }
+    Ok(())
 }
 
 fn types(vars: &[VarInfo]) -> HashMap<String, RDFNodeState> {
@@ -870,15 +991,23 @@ fn plan(
         let Some((i, class, fanout, cost)) = next else {
             return decline(Decline::Shape, "patterns not connected");
         };
-        work = work.saturating_add((rows.ceil() as usize).saturating_mul(cost));
         let rows_in = rows;
         rows *= fanout;
-        let per_probe_ns = if class == 3 {
-            cost as f64 * SCAN_NS
+        // Without an object sort, the table is scanned once for the objects of all rows (see
+        // [scan_bound_objects]), not once per row.
+        let one_scan = class == 3 && rows_in.ceil() as usize >= ONE_SCAN_MIN_ROWS;
+        if one_scan {
+            work = work.saturating_add(cost.saturating_add(rows_in.ceil() as usize));
+            inl_ns += cost as f64 * HASH_SCAN_NS + rows_in * HASH_BUILD_NS + rows * EMIT_NS;
         } else {
-            cost as f64 * SEEK_STEP_NS
-        };
-        inl_ns += rows_in * per_probe_ns + rows * EMIT_NS;
+            work = work.saturating_add((rows_in.ceil() as usize).saturating_mul(cost));
+            let per_probe_ns = if class == 3 {
+                cost as f64 * SCAN_NS
+            } else {
+                cost as f64 * SEEK_STEP_NS
+            };
+            inl_ns += rows_in * per_probe_ns + rows * EMIT_NS;
+        }
         polars_ns += POLARS_PATTERN_NS
             + POLARS_ROW_NS * (pats[i].view.rows as f64).min(rows_in.max(rows));
         if work > max_work || rows > max_rows as f64 {

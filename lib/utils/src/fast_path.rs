@@ -101,6 +101,8 @@ fast_paths! {
     InlDeclinedStorage => "inl.declined_storage",
     InlDeclinedEstimate => "inl.declined_estimate",
     InlAborted => "inl.aborted",
+    // A table without an object sort scanned once for the bound objects of all rows.
+    InlOneScan => "inl.one_scan",
 }
 
 /// Counts a hit of `path`, when counting is on.
