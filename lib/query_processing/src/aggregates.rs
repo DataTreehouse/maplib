@@ -38,7 +38,17 @@ pub fn count_with_expression(
         Some(state) => expr_is_null_workaround(c.clone(), state).not(),
         None => c.clone().is_not_null(),
     };
-    let out_expr = if distinct {
+    // A column of one type that is not a struct is unbound where it is null. Its distinct values
+    // are then counted without filtering each group first: nulls count as one distinct value,
+    // which is taken off again for the groups that have one.
+    let plain = solution_mappings
+        .rdf_node_types
+        .get(column_context.as_str())
+        .is_some_and(|state| !state.is_multi() && !state.is_lang_string());
+    let out_expr = if distinct && plain {
+        c.clone().n_unique().cast(DataType::Int64)
+            - c.null_count().gt(lit(0)).cast(DataType::Int64)
+    } else if distinct {
         c.filter(is_bound).n_unique()
     } else {
         is_bound.sum()
