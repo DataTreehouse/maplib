@@ -823,6 +823,9 @@ m = Model.deserialize("gs://my-bucket/models/model", storage="disk",
                       storage_folder="/mnt/nvme/maplib", cache_size=200 * 2**30)    # EE
 ```
 
+With `raw_db=True`, the full text search index of the model and its options are serialized too,
+and the deserialized model is searched without `create_index`. Other serializations have no index.
+
 Serializing a folder to object storage writes a new generation folder and then publishes it
 atomically, so readers see either the old or the new model. With `storage="disk"`, the triple
 tables of such a folder are downloaded when they are first read, and `cache_size` bounds how much
