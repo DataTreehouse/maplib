@@ -66,10 +66,17 @@ impl Triplestore {
         // intermediate node, also when a step is an arbitrary length path, whose own solutions
         // are distinct pairs. Steps that need the closure are evaluated as paths of their own.
         let normalised = push_reverse_down(ppe, false);
-        if need_sparse_matrix(&normalised)
+        let sequence_join = need_sparse_matrix(&normalised)
             && matches!(normalised, PropertyPathExpression::Sequence(..))
-            && !is_repetition(&normalised)
-        {
+            && !is_repetition(&normalised);
+        // Right under DISTINCT (and its projection) only the distinct ends count, which the
+        // path evaluation below gives without a row per intermediate node.
+        let distinct_ends = sequence_join
+            && solution_mappings.is_none()
+            && (context.path.ends_with(&[PathEntry::DistinctInner, PathEntry::ProjectInner])
+                || context.path.ends_with(&[PathEntry::DistinctInner]));
+        fast_path::hit_when(distinct_ends, FastPath::PathSequenceDistinctEnds);
+        if sequence_join && !distinct_ends {
             let mut intermediaries = vec![];
             let gp = sequence_steps(&normalised, subject, object, &mut intermediaries);
             let mut sms = self.lazy_graph_pattern(

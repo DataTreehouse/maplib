@@ -27,6 +27,9 @@ fast_paths! {
     PathKeyedBound => "path.keyed_bound",
     PathKeyedUnbound => "path.keyed_unbound",
     PathEveryNodeStep => "path.every_node_step",
+    // A sequence path with an arbitrary length step right under DISTINCT: its distinct ends,
+    // not the join of its steps.
+    PathSequenceDistinctEnds => "path.sequence_distinct_ends",
     // The nodes of the graph for a zero-length path with both ends unbound, read from the
     // stored columns of the tables.
     PathNodesFromStoredColumns => "path.nodes_from_stored_columns",
