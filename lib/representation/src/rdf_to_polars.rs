@@ -1,3 +1,4 @@
+use utils::polars::CollectAuto;
 use crate::errors::RepresentationError;
 use crate::{BaseRDFNodeType, SeriesBuilder, LANG_STRING_LANG_FIELD, LANG_STRING_VALUE_FIELD};
 use oxrdf::vocab::rdf;
@@ -115,7 +116,7 @@ pub fn normalize_datetime_columns(df: DataFrame) -> DataFrame {
     if exprs.is_empty() {
         df
     } else {
-        df.lazy().with_columns(exprs).collect().unwrap()
+        df.lazy().with_columns(exprs).collect_auto().unwrap()
     }
 }
 

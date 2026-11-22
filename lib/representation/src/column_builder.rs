@@ -1,3 +1,4 @@
+use utils::polars::CollectAuto;
 use crate::errors::RepresentationError;
 use crate::{
     BaseRDFNodeType, BaseRDFNodeTypeRef, RDFNodeState, SeriesBuilder, LANG_STRING_LANG_FIELD,
@@ -142,7 +143,7 @@ impl SolutionMappingsColumnBuilder {
                 .lazy()
                 .with_column(as_struct(struct_exprs).alias(name))
                 .select([col(name)])
-                .collect()
+                .collect_auto()
                 .unwrap();
             let c = df.drop_in_place(name).unwrap();
             (c, RDFNodeState::from_map(states))

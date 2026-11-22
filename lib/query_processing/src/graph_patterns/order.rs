@@ -1,3 +1,4 @@
+use utils::polars::CollectAuto;
 use crate::errors::QueryProcessingError;
 use polars::datatypes::{DataType, Field};
 use polars::error::PolarsResult;
@@ -113,7 +114,7 @@ pub fn keyset_order_by(
                 .clone()
                 .lazy()
                 .select(aliased)
-                .collect()
+                .collect_auto()
                 .map_err(|e| QueryProcessingError::BadArgument(e.to_string()))?;
             let mut keys = vec![];
             for k in &key_names {

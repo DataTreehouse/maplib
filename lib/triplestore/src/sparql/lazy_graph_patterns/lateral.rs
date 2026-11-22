@@ -18,6 +18,7 @@
 //! environment variable `MAPLIB_LATERAL_PER_ROW` evaluates the right side separately for every
 //! seed row instead, which is used to compare the two strategies.
 
+use utils::polars::CollectAuto;
 use super::Triplestore;
 use crate::sparql::errors::SparqlError;
 use crate::sparql::QuerySettings;
@@ -375,7 +376,7 @@ fn make_seed(left: &EagerSolutionMappings, seed_columns: &[String], key: &str) -
         left.mappings.height(),
     ))
     .unwrap();
-    let mut df = distinct.mappings.collect().unwrap();
+    let mut df = distinct.mappings.collect_auto().unwrap();
     let height = df.height();
     let key_column = Series::new(key.into(), (0..height as i64).collect::<Vec<_>>())
         .into_column();
@@ -435,7 +436,7 @@ fn split_seed_by_unbound(
             }
         }
         parts.push((
-            EagerSolutionMappings::new(lf.collect().unwrap(), rdf_node_types),
+            EagerSolutionMappings::new(lf.collect_auto().unwrap(), rdf_node_types),
             unbound,
         ));
     }

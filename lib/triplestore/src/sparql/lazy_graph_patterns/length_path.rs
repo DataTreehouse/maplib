@@ -22,6 +22,7 @@
 //! Evaluation works on the integer keys of the nodes of the step edges (as the property path
 //! evaluation in [super::path] does): a breadth-first search from each start node, level by
 //! level, deduplicated per (start, node, depth), with the start nodes processed in parallel.
+use utils::polars::CollectAuto;
 use super::path::{
     bound_start_keys, path_leaves, term_variable_name, PathLeaf, U32DataFrameCreator, VALUE_COLUMN,
 };
@@ -751,7 +752,7 @@ impl Triplestore {
             };
             if value_state.is_multi() {
                 out_df = force_convert_multicol_to_single_col(out_df.lazy(), c, &base)
-                    .collect()
+                    .collect_auto()
                     .unwrap();
                 dtypes.insert(c.clone(), base.into_default_stored_rdf_node_state());
             }
@@ -765,7 +766,7 @@ impl Triplestore {
                     TermPattern::Literal(l) => literal_enc(l, &cats)?.0,
                     _ => unreachable!("Should never happen"),
                 };
-                out_df = out_df.lazy().filter(col(c).eq(e)).collect().unwrap();
+                out_df = out_df.lazy().filter(col(c).eq(e)).collect_auto().unwrap();
             }
             let height = out_df.height();
             for (_, c) in &constants {

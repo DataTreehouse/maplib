@@ -27,6 +27,7 @@
 
 pub mod algo;
 
+use utils::polars::CollectAuto;
 use super::magic_paths::{
     boolean_option, has_maplib_predicate, iri_option, literal_option, maplib_local_name,
     ARTICULATION_POINT, BRIDGE, COMPONENT,
@@ -644,7 +645,7 @@ impl Triplestore {
         let indexed = mappings
             .with_row_index(EDGE_ROW, None)
             .with_column(col(EDGE_ROW).cast(DataType::UInt32))
-            .collect()
+            .collect_auto()
             .map_err(|e| err(format!("collecting the edges of a graph algorithm: {e}")))?
             .lazy();
         let edges = indexed.clone().select([col(a), col(b), col(EDGE_ROW)]);
@@ -670,7 +671,7 @@ impl Triplestore {
         let ends = ends
             .mappings
             .filter(expr_is_null_workaround(col(VALUE_VAR), &value_state).not())
-            .collect()
+            .collect_auto()
             .map_err(|e| err(format!("collecting the edges of a graph algorithm: {e}")))?;
         let lookup = ends
             .clone()
@@ -682,7 +683,7 @@ impl Triplestore {
                 col(VALUE_VAR).alias(VALUE_COLUMN),
                 col(LOOKUP_COLUMN).cast(DataType::UInt32),
             ])
-            .collect()
+            .collect_auto()
             .map_err(|e| err(format!("collecting the nodes of a graph algorithm: {e}")))?;
         let keyed = ends
             .lazy()
@@ -778,7 +779,7 @@ impl Triplestore {
         let var_state = joined.rdf_node_types.get(var).unwrap().clone();
         let df = joined
             .mappings
-            .collect()
+            .collect_auto()
             .map_err(|e| err(format!("collecting the nodes of a graph algorithm: {e}")))?;
         let key = df.column(&k).unwrap().u32().unwrap();
         let mut keys: Vec<u32> = key.iter().flatten().collect();

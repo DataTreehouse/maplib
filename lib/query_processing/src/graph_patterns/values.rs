@@ -10,6 +10,7 @@ use representation::{
 };
 use spargebra::term::GroundTerm;
 use std::collections::HashMap;
+use utils::polars::CollectAuto;
 
 pub fn values_pattern(
     variables: &[Variable],
@@ -134,7 +135,7 @@ pub fn values_pattern_terms(
                 .with_column(as_struct(struct_exprs).alias("struct"))
                 .select([col("struct")])
                 .rename(["struct"], [variables.get(i).unwrap().as_str()], true)
-                .collect()
+                .collect_auto()
                 .unwrap();
             let column = df
                 .drop_in_place(variables.get(i).unwrap().as_str())
@@ -158,12 +159,8 @@ pub fn values_pattern_terms(
         all_columns.push(column);
         all_datatypes.insert(variables.get(i).unwrap().as_str().to_string(), dt);
     }
-    let varexpr: Vec<_> = variables.iter().map(|x| col(x.as_str())).collect();
-    let df = DataFrame::new(height, all_columns)
-        .unwrap()
-        .lazy()
-        .select(varexpr)
-        .collect()
-        .unwrap();
+    // In the order of the variables (the columns come out of a hash map), without a plan.
+    all_columns.sort_by_key(|c| variables.iter().position(|v| v.as_str() == c.name().as_str()));
+    let df = DataFrame::new(height, all_columns).unwrap();
     Ok(EagerSolutionMappings::new(df, all_datatypes))
 }

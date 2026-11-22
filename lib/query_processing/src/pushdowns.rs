@@ -5,6 +5,7 @@ use crate::type_constraints::{
 };
 use oxrdf::vocab::rdfs;
 use oxrdf::{Literal, NamedNodeRef, Term, Variable};
+use polars::prelude::Column;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use representation::cats::LockedCats;
 use representation::solution_mapping::SolutionMappings;
@@ -148,21 +149,24 @@ impl Pushdowns {
         };
         if !columns.is_empty() {
             fast_path::hit(FastPath::BgpValuesPushed);
-            let pushdowns: HashMap<_, _> = columns
-                .into_par_iter()
-                .map(|x| {
-                    let name = x.name().as_str();
-                    // Dictionary codes are pushed down as they are; only the values of other
-                    // types are converted to terms.
-                    let values = PushdownValues::from_column(
-                        x,
-                        eager_sm.rdf_node_types.get(name).unwrap(),
-                        &global_cats,
-                        height > SMALL_HEIGHT,
-                    );
-                    (name.to_string(), values)
-                })
-                .collect();
+            let values_of = |x: &Column| {
+                let name = x.name().as_str();
+                // Dictionary codes are pushed down as they are; only the values of other
+                // types are converted to terms.
+                let values = PushdownValues::from_column(
+                    x,
+                    eager_sm.rdf_node_types.get(name).unwrap(),
+                    &global_cats,
+                    height > SMALL_HEIGHT,
+                );
+                (name.to_string(), values)
+            };
+            // Few rows are converted sooner than the pool's threads wake up for them.
+            let pushdowns: HashMap<_, _> = if height <= SMALL_HEIGHT {
+                columns.into_iter().map(values_of).collect()
+            } else {
+                columns.into_par_iter().map(values_of).collect()
+            };
             self.variables_values = conjunction(&mut self.variables_values, pushdowns);
         }
         eager_sm.as_lazy()

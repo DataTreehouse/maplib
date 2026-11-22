@@ -1,3 +1,4 @@
+use utils::polars::CollectAuto;
 use super::{CatEncs, CatType, Cats, EncodedTriples};
 use crate::cats::maps::CatMaps;
 use crate::cats::LockedCats;
@@ -71,6 +72,10 @@ impl Cats {
                     to_encode.push((c.clone(), t.clone(), ser));
                 }
             }
+        }
+        if to_encode.is_empty() {
+            // Nothing is stored as dictionary codes, e.g. numbers: the frame stays as it is.
+            return EagerSolutionMappings::new(mappings, rdf_node_types);
         }
         let encoded: Vec<_> = to_encode
             .into_iter()
@@ -163,7 +168,7 @@ impl Cats {
                     .alias(original_name.as_str()),
                 )
                 .select(vec![col(original_name.as_str())])
-                .collect()
+                .collect_auto()
                 .unwrap();
             df.column(original_name.as_str())
                 .unwrap()

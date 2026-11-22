@@ -4,6 +4,7 @@
 //! its own buffer. The general writer (`QueryResultKind::json`) made a term per cell and wrote
 //! them one by one, which took about 95% of the time of a query with a large result.
 
+use utils::polars::CollectAuto;
 use super::convert_datelike_to_string;
 use super::serializers::{serializer_for, write_escaped, Serializer, Style};
 use crate::errors::TriplestoreError;
@@ -233,7 +234,7 @@ fn decode_lazy(
         .map_err(TriplestoreError::LazyLoadError)?
         .lazy()
         .with_columns(exprs)
-        .collect()
+        .collect_auto()
         .map_err(TriplestoreError::LazyLoadError)?;
     let mut out = vec![];
     for (variable, rdf_type, part_name) in meta {

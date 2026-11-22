@@ -1,3 +1,4 @@
+use utils::polars::CollectAuto;
 use super::Triplestore;
 use crate::sparql::errors::SparqlError;
 use crate::sparql::QuerySettings;
@@ -331,7 +332,7 @@ impl Triplestore {
             out_df = out_df
                 .lazy()
                 .filter(col(SUBJECT_COL_NAME).eq(col(OBJECT_COL_NAME)))
-                .collect()
+                .collect_auto()
                 .unwrap();
         }
         let mut dtypes = HashMap::new();
@@ -364,7 +365,7 @@ impl Triplestore {
                 let Some(wanted) = wanted else { continue };
                 if value_state.map.contains_key(&wanted) {
                     out_df = force_convert_multicol_to_single_col(out_df.lazy(), column, &wanted)
-                        .collect()
+                        .collect_auto()
                         .unwrap();
                     dtypes.insert(
                         column.to_string(),
@@ -397,7 +398,7 @@ impl Triplestore {
                 out_df = out_df
                     .lazy()
                     .filter(e.unwrap_or(lit(false)))
-                    .collect()
+                    .collect_auto()
                     .unwrap();
                 out_df = out_df.drop(SUBJECT_COL_NAME).unwrap();
             }
@@ -416,7 +417,7 @@ impl Triplestore {
                 } else {
                     lit(false)
                 };
-                out_df = out_df.lazy().filter(e).collect().unwrap();
+                out_df = out_df.lazy().filter(e).collect_auto().unwrap();
                 out_df = out_df.drop(SUBJECT_COL_NAME).unwrap();
             }
             TermPattern::Variable(v) => {
@@ -440,7 +441,7 @@ impl Triplestore {
                 out_df = out_df
                     .lazy()
                     .filter(e.unwrap_or(lit(false)))
-                    .collect()
+                    .collect_auto()
                     .unwrap();
                 constant_match_height = out_df.height();
                 out_df = out_df.drop(OBJECT_COL_NAME).unwrap();
@@ -464,7 +465,7 @@ impl Triplestore {
                 } else {
                     lit(false)
                 };
-                out_df = out_df.lazy().filter(e).collect().unwrap();
+                out_df = out_df.lazy().filter(e).collect_auto().unwrap();
                 constant_match_height = out_df.height();
                 out_df = out_df.drop(OBJECT_COL_NAME).unwrap();
             }
@@ -659,7 +660,7 @@ impl Triplestore {
                 HashMap::from([(b.to_string(), state)]),
                 sm.height_estimate,
             ))?;
-            let df = candidates.mappings.collect().unwrap();
+            let df = candidates.mappings.collect_auto().unwrap();
             let height = df.height();
             let candidates = SolutionMappings::new(df.lazy(), candidates.rdf_node_types, height);
             // Small sets of values restrict the scan for nodes below.
@@ -876,7 +877,7 @@ fn distinct_stored_values(
         .unwrap()
         .lazy()
         .unique(None, UniqueKeepStrategy::Any)
-        .collect()
+        .collect_auto()
         .map_err(crate::errors::TriplestoreError::LazyLoadError)?;
     Ok(df.column(name).unwrap().clone())
 }
@@ -1167,7 +1168,7 @@ impl U32DataFrameCreator {
 
         let subject_row_index = uuid::Uuid::new_v4().to_string();
         let object_row_index = uuid::Uuid::new_v4().to_string();
-        let mut df = mappings.collect().unwrap();
+        let mut df = mappings.collect_auto().unwrap();
         let df_height = df.height();
         mappings = df.lazy();
         mappings = mappings
@@ -1175,7 +1176,7 @@ impl U32DataFrameCreator {
             .with_column(
                 (col(&subject_row_index) + lit(df_height as u32)).alias(&object_row_index),
             );
-        df = mappings.collect().unwrap();
+        df = mappings.collect_auto().unwrap();
 
         let lf_subj = df.clone().lazy().select([
             col(SUBJECT_COL_NAME).alias(VALUE_COLUMN),
@@ -1229,7 +1230,7 @@ impl U32DataFrameCreator {
 
         // One row per distinct value, so the key of a value is its row number.
         mappings = mappings.with_row_index(LOOKUP_COLUMN, None);
-        let grouped = mappings.collect().unwrap();
+        let grouped = mappings.collect_auto().unwrap();
 
         // Each exploded row is one row of the union: exactly one of the two row indices is set,
         // and together they cover 0..2 * df_height. Scatter the keys into a dense array, so that
@@ -1333,7 +1334,7 @@ impl U32DataFrameCreator {
                     &None,
                     &self.dataset,
                 )?;
-                let df = mappings.collect().unwrap();
+                let df = mappings.collect_auto().unwrap();
                 self.named_nodes.insert(
                     leaf,
                     (
@@ -1399,7 +1400,7 @@ impl U32DataFrameCreator {
                     &None,
                     &self.dataset,
                 )?;
-                let df = mappings.collect().unwrap();
+                let df = mappings.collect_auto().unwrap();
                 self.named_nodes.insert(
                     PathLeaf::negated(nns),
                     (
@@ -1654,7 +1655,7 @@ fn lookup_keys_of_iris(
             value.alias(VALUE_COLUMN),
             col(LOOKUP_COLUMN).cast(DataType::UInt32),
         ])
-        .collect()
+        .collect_auto()
         .unwrap();
     let wanted: HashSet<u32> = codes.into_iter().collect();
     let values = df.column(VALUE_COLUMN).unwrap().u32().unwrap();

@@ -162,6 +162,10 @@ pub fn compress_actual_multitypes(
             updated_types.insert(c, t);
         }
     }
+    if to_single.is_empty() && col_exprs.is_empty() {
+        // No column of several types lost a type: the frame stays as it is.
+        return (df, updated_types);
+    }
     let height = df.height();
     let mut lf = df.lazy();
     for (c, (t, s)) in to_single {

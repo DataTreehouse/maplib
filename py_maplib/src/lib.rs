@@ -13,6 +13,7 @@ mod py_stream;
 mod py_template_generator;
 mod shacl;
 
+use utils::polars::CollectAuto;
 use crate::error::*;
 use crate::py_indexing_options::PyIndexingOptions;
 use crate::py_model::PyModel;
@@ -526,7 +527,7 @@ fn query_to_result(
                                     lit(rdf_named_node_to_polars_literal_value(g))
                                         .alias(GRAPH_COL_NAME),
                                 )
-                                .collect()
+                                .collect_auto()
                                 .map_err(|e| PyMaplibError::RuntimeError(e.to_string()))?;
                             rdf_node_types.insert(
                                 GRAPH_COL_NAME.to_string(),

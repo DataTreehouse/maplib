@@ -1,3 +1,4 @@
+use utils::polars::CollectAuto;
 use crate::cats::{decode_column, LockedCats};
 use crate::errors::RepresentationError;
 use crate::format_time_zone_offset;
@@ -273,7 +274,7 @@ pub fn basic_rdf_node_type_column_to_term_vec(
                     df = df
                         .lazy()
                         .with_column(literal_expr_to_string(col("c"), base_type))
-                        .collect()
+                        .collect_auto()
                         .unwrap();
                     use_column = df.drop_in_place("c").unwrap();
                     use_column

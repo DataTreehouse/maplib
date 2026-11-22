@@ -26,6 +26,7 @@
 
 pub mod algo;
 
+use utils::polars::CollectAuto;
 use super::magic_paths::{
     boolean_option, has_maplib_predicate, iri_option, literal_option, maplib_local_name,
     non_negative_integer_option, number_option, SHORTEST_PATH,
@@ -650,7 +651,7 @@ impl Triplestore {
         let lookup = lookup
             .lazy()
             .with_column(col(LOOKUP_COLUMN).cast(DataType::UInt32))
-            .collect()
+            .collect_auto()
             .unwrap();
         Ok(BuiltGraph {
             graph,
@@ -701,7 +702,7 @@ impl Triplestore {
             );
             sm = join(sm, lookup, JoinType::Inner, self.global_cats.clone(), None)?;
         }
-        Ok(sm.mappings.collect().unwrap())
+        Ok(sm.mappings.collect_auto().unwrap())
     }
 
     pub(crate) fn key_vec(
@@ -770,7 +771,7 @@ impl Triplestore {
             built.lookup.height(),
         );
         let joined = join(sm, lookup, JoinType::Inner, self.global_cats.clone(), None)?;
-        let df = joined.mappings.collect().unwrap();
+        let df = joined.mappings.collect_auto().unwrap();
         let objects = df.column(OBJECT_COL_NAME).unwrap().as_materialized_series();
         let values = numeric_values(objects, &object_state)?;
         let keys = df.column(&k).unwrap().u32().unwrap();

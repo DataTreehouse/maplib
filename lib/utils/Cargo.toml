@@ -13,11 +13,10 @@ thiserror.workspace = true
 polars-config.workspace = true
 polars-ooc.workspace = true
 polars-async.workspace = true
+rayon.workspace = true
 
 pyo3 = { workspace = true, optional = true }
 
 [target.'cfg(all(unix, not(target_os = "emscripten")))'.dependencies]
 tikv-jemalloc-sys = "0.7.1"
 
-[dev-dependencies]
-rayon.workspace = true

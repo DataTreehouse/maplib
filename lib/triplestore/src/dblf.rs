@@ -1,3 +1,4 @@
+use utils::polars::CollectAuto;
 use super::Triplestore;
 use crate::errors::TriplestoreError;
 use crate::sparql::QuerySettings;
@@ -490,7 +491,7 @@ impl Triplestore {
                 // A frame without columns must have its height set explicitly.
                 let height = mappings
                     .limit(1)
-                    .collect()
+                    .collect_auto()
                     .map_err(|x| TriplestoreError::SparqlQueryError(x.to_string()))?
                     .height();
                 mappings = DataFrame::empty_with_height(height).lazy();

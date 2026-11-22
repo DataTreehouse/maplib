@@ -1,3 +1,4 @@
+use utils::polars::CollectAuto;
 use super::Triplestore;
 use crate::sparql::errors::SparqlError;
 use tracing::{instrument, trace};
@@ -236,7 +237,7 @@ impl Triplestore {
         }
         let df = aligned
             .mappings
-            .collect()
+            .collect_auto()
             .map_err(|e| SparqlError::QueryExecutionError(e.to_string()))?;
         Ok(Some(SolutionMappings::new(df.lazy(), aligned.rdf_node_types, 1)))
     }

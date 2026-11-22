@@ -1,3 +1,4 @@
+use utils::polars::CollectAuto;
 use crate::errors::QueryProcessingError;
 use oxrdf::vocab::xsd;
 use polars::prelude::{as_struct, col, lit, Expr, IntoColumn, LiteralValue};
@@ -113,7 +114,7 @@ pub fn str_dt(
                 .mappings
                 .clone()
                 .select([decoded_col.clone().alias("lexical")])
-                .collect()
+                .collect_auto()
                 .map_err(|e| QueryProcessingError::BadArgument(e.to_string()))?;
             let lexicals = df
                 .column("lexical")

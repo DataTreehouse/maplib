@@ -1,3 +1,4 @@
+use utils::polars::CollectAuto;
 use super::{CatEncs, CatTriples, CatType, Cats};
 use crate::cats::LockedCats;
 use crate::solution_mapping::{BaseCatState, EagerSolutionMappings};
@@ -125,7 +126,7 @@ impl CatReEnc {
                     .alias(c.name().as_str()),
                 )
                 .select([col(c.name().as_str())])
-                .collect()?;
+                .collect_auto()?;
             Ok(df.drop_in_place(c.name().as_str())?)
         } else {
             self.re_encode_single_column(c, forget_others)
@@ -375,5 +376,5 @@ pub fn reencode_solution_mappings(
         }
     }
 
-    EagerSolutionMappings::new(mappings.collect().unwrap(), rdf_node_types)
+    EagerSolutionMappings::new(mappings.collect_auto().unwrap(), rdf_node_types)
 }

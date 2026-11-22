@@ -1,3 +1,4 @@
+use utils::polars::CollectAuto;
 use crate::cats::{maybe_decode_expr, Cats, LockedCats};
 use crate::dataset::NamedGraph;
 use crate::debug::DebugOutputs;
@@ -233,7 +234,7 @@ fn partition_by_graph_variable(
         .lazy()
         .with_column(iri_col.alias(GRAPH_COL))
         .filter(col(GRAPH_COL).is_not_null())
-        .collect()
+        .collect_auto()
         .unwrap();
     if with_graph.height() == 0 {
         return vec![];
@@ -261,7 +262,7 @@ fn partition_by_graph_variable(
                 .cast(DataType::String)
                 .alias(GRAPH_COL),
         ])
-        .collect()
+        .collect_auto()
         .unwrap();
     let names = decoded
         .column(GRAPH_COL)

@@ -1,3 +1,4 @@
+use utils::polars::CollectAuto;
 use crate::sparql::errors::SparqlError;
 use crate::sparql::QuerySettings;
 use crate::Triplestore;
@@ -28,7 +29,7 @@ pub fn query_select(
         if deduplicate {
             let mut lf = mappings.lazy();
             lf = unique_workaround(lf, &rdf_node_types, None, false, UniqueKeepStrategy::Any);
-            mappings = lf.collect().unwrap();
+            mappings = lf.collect_auto().unwrap();
         }
         EagerSolutionMappings::new(mappings, rdf_node_types)
     } else {

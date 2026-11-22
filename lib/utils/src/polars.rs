@@ -99,9 +99,53 @@ pub fn collect_sized(lf: LazyFrame, height: usize) -> Result<DataFrame, PolarsEr
         _ if height <= SMALL_COLLECT_HEIGHT => Engine::InMemory,
         _ => Engine::Auto,
     };
-    keep_join_order(lf)
-        .collect_with_engine(engine)
-        .map(|r| r.unwrap_single())
+    let lf = keep_join_order(lf);
+    // The steps of a small query (e.g. the solutions so far, collected to push their values
+    // into the next pattern) are tiny plans: on Polars' pool, each of their joins waits for
+    // threads to wake up, which takes longer than the join.
+    if engine == Engine::InMemory && !on_pool_thread() && is_tiny_plan(&lf.logical_plan) {
+        crate::fast_path::hit(FastPath::CollectTinyStep);
+        return collect_tiny_plan(lf);
+    }
+    lf.collect_with_engine(engine).map(|r| r.unwrap_single())
+}
+
+/// Collects a lazy frame as [LazyFrame::collect] does, except that a tiny plan (see
+/// [is_tiny_plan]) is collected on the helper thread of [collect_tiny].
+///
+/// Since Polars 0.55, [LazyFrame::collect] runs the streaming engine, whose fixed cost per
+/// collect (starting its tasks, handing morsels between threads and waiting for them) is tens of
+/// microseconds: more than the work of the plans that put a few rows in order, format them or
+/// join them, of which a small query has several. `MAPLIB_POLARS_ENGINE=streaming` keeps the
+/// streaming engine.
+pub fn collect_auto(lf: LazyFrame) -> PolarsResult<DataFrame> {
+    if streaming_forced() || on_pool_thread() || !is_tiny_plan(&lf.logical_plan) {
+        return lf.collect();
+    }
+    crate::fast_path::hit(FastPath::CollectTinyStep);
+    collect_tiny_plan(lf)
+}
+
+/// [collect_auto] as a method of a lazy frame.
+pub trait CollectAuto {
+    fn collect_auto(self) -> PolarsResult<DataFrame>;
+}
+
+impl CollectAuto for LazyFrame {
+    fn collect_auto(self) -> PolarsResult<DataFrame> {
+        collect_auto(self)
+    }
+}
+
+/// Whether this thread is a worker of a rayon pool (Polars' or the global one). Such a thread
+/// runs parallel steps without waiting for other threads to wake up, and there may be many of
+/// them, so they do not get a helper thread each.
+fn on_pool_thread() -> bool {
+    rayon::current_thread_index().is_some()
+}
+
+fn streaming_forced() -> bool {
+    std::env::var("MAPLIB_POLARS_ENGINE").as_deref() == Ok("streaming")
 }
 
 /// Collects a sort followed by a slice (ORDER BY with LIMIT) with the in-memory engine, many
@@ -361,6 +405,12 @@ fn collect_tiny(lf: LazyFrame) -> PolarsResult<DataFrame> {
     }
 }
 
+/// [collect_tiny] without the optimizations that cost a tiny plan more than they save.
+fn collect_tiny_plan(lf: LazyFrame) -> PolarsResult<DataFrame> {
+    let flags = lf.get_current_optimizations();
+    collect_tiny(lf.with_optimizations(flags & !TINY_PLAN_SKIPPED_OPTIMIZATIONS))
+}
+
 fn pl_interruptable_collect_in_memory(
     lf: LazyFrame,
 ) -> Result<DataFrame, InterruptableCollectError> {
@@ -369,9 +419,7 @@ fn pl_interruptable_collect_in_memory(
     if tiny {
         // It can not be interrupted, but stops before it starts if the query was stopped, and
         // a tiny plan uses next to no memory.
-        let flags = lf.get_current_optimizations();
-        let lf = lf.with_optimizations(flags & !TINY_PLAN_SKIPPED_OPTIMIZATIONS);
-        return Ok(collect_tiny(lf)?);
+        return Ok(collect_tiny_plan(lf)?);
     }
     let future = lf.collect_concurrently()?;
     let token = cancel::current();

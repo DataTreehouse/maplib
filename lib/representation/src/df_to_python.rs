@@ -13,7 +13,9 @@ use crate::formatting::{format_columns, format_native_columns};
 use crate::multitype::compress_actual_multitypes;
 use crate::python::PySolutionMappings;
 use crate::query_context::Context;
-use crate::RDFNodeState;
+use crate::solution_mapping::BaseCatState;
+use crate::{BaseRDFNodeType, RDFNodeState};
+use utils::polars::collect_auto;
 use polars::datatypes::CompatLevel;
 use polars::frame::DataFrame;
 use polars::prelude::{col, ArrayRef, ArrowField, IntoLazy, PlSmallStr};
@@ -303,6 +305,14 @@ pub fn fix_cats_and_multicolumns(
         .collect();
     //Important that column compression happen before decisions are made based on column type.
     (df, dts) = compress_actual_multitypes(df, dts);
+    // Columns of plain values (numbers, booleans, dates, undecoded strings) are returned as they
+    // are: a plan that only names them again costs more than a small query.
+    if dts
+        .values()
+        .all(|t| stays_as_it_is(t, native_dataframe))
+    {
+        return (df, dts);
+    }
     let height = df.height();
     let mut lf = df.lazy();
     if !native_dataframe {
@@ -321,7 +331,27 @@ pub fn fix_cats_and_multicolumns(
             Err(e) => panic!("{e}"),
         }
     } else {
-        lf.collect().unwrap()
+        collect_auto(lf).unwrap()
     };
     (df, dts)
+}
+
+/// Whether [format_columns] (or [format_native_columns] for a native data frame) leaves a column
+/// of this type as it is: one type that is stored as plain values, which is not decoded, split
+/// or wrapped. IRIs and blank nodes are wrapped unless the data frame is native.
+fn stays_as_it_is(t: &RDFNodeState, native_dataframe: bool) -> bool {
+    if t.is_multi() {
+        return false;
+    }
+    let (Some(base_type), Some(base_state)) = (t.get_base_type(), t.get_base_state()) else {
+        return false;
+    };
+    if matches!(base_state, BaseCatState::CategoricalNative(..)) {
+        return false;
+    }
+    match base_type {
+        BaseRDFNodeType::Literal(..) => !base_type.is_lang_string(),
+        BaseRDFNodeType::IRI | BaseRDFNodeType::BlankNode => native_dataframe,
+        BaseRDFNodeType::None => false,
+    }
 }

@@ -1,3 +1,4 @@
+use utils::polars::CollectAuto;
 use super::Triplestore;
 use crate::sparql::errors::SparqlError;
 use representation::query_context::Context;
@@ -111,7 +112,7 @@ impl Triplestore {
                 {
                     if let Some(dt) = rdf_node_types.get(v.as_str()) {
                         if dt.is_iri() {
-                            let mappings_df = mappings.collect().unwrap();
+                            let mappings_df = mappings.collect_auto().unwrap();
                             //TODO! Fix
                             let mut predicates_series = mappings_df
                                 .column(v.as_str())

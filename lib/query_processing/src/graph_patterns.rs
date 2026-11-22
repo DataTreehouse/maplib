@@ -11,6 +11,7 @@ pub use order::*;
 pub use union::*;
 pub use values::*;
 
+use utils::polars::CollectAuto;
 use crate::errors::QueryProcessingError;
 use crate::expressions::comparisons::typed_equals_expr;
 use crate::type_constraints::{
@@ -205,7 +206,7 @@ pub fn project(
         let height = solution_mappings
             .mappings
             .select([len().alias("len")])
-            .collect()
+            .collect_auto()
             .unwrap()
             .column("len")
             .unwrap()

@@ -78,6 +78,9 @@ fast_paths! {
     JsonChunks => "sparql_json.chunks",
     // Plans of at most 16,384 rows per step collected on a helper thread, else by Polars' pool.
     CollectTiny => "collect.tiny",
+    // A step of a query or of formatting its result (not the query's own collect) that is such a
+    // tiny plan, collected on that helper thread instead of by the streaming engine or the pool.
+    CollectTinyStep => "collect.tiny_step",
     CollectConcurrent => "collect.concurrent",
     // Basic graph patterns on codes.
     BgpSmallTableInPlan => "bgp.small_table_in_plan",
