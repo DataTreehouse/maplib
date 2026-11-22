@@ -819,7 +819,7 @@ class Model:
 
         :param path: The path of the file (or with single_file=False, the folder) to write. Any file name or
                      extension can be used, .maplib is the convention.
-        :param raw_db: Write the dictionaries as DuckDB databases instead of parquet files (maplib Enterprise Edition).
+        :param raw_db: Write the dictionaries as DuckDB databases instead of parquet files (maplib Enterprise Edition). The full text search index, if there is one, is written into these databases, and the deserialized model is searched without creating the index again.
                        The files are larger and slower to write, but deserializing with hybrid or disk storage uses
                        them in place instead of building the databases, which is much faster.
         :param single_file: Write a single file. With False, a folder of parquet files (and DuckDB databases)

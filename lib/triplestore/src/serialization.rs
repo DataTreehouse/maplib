@@ -16,8 +16,11 @@ use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use representation::bundle::{
     BundleWriter, RemoteFolderWriter, SerializationSource, SerializationTarget,
 };
-use representation::cats::serialization::{CatSerializationError, CATS_FOLDER};
-use representation::cats::{Cats, LockedCats};
+use fts::{FtsIndex, FtsOptions, FtsSerializedState};
+use representation::cats::serialization::{
+    CatMapsOnDisk, CatSerializationError, DeserializeDbHook, SerializeDbHook, CATS_FOLDER,
+};
+use representation::cats::{CatType, Cats, LockedCats};
 use representation::dataset::NamedGraph;
 use representation::constants::normalize_legacy_chrontext_named_node;
 use representation::BaseRDFNodeType;
@@ -75,6 +78,23 @@ struct TriplestoreMetadata {
     /// downloaded to be opened. Missing in serializations of earlier versions.
     #[serde(default)]
     heights: HashMap<String, usize>,
+    /// The full text search indexes, when they are serialized (with `raw_db`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    fts: Option<FtsMetadata>,
+}
+
+/// The full text search indexes of a serialization with `raw_db`. Their tables are in the raw
+/// databases of the cat maps that they refer to, and deserializing uses them there (or reads
+/// them into memory) instead of indexing the strings again. Other serializations have no full
+/// text search indexes, and one is made with `create_index` once they are deserialized.
+#[derive(Serialize, Deserialize)]
+struct FtsMetadata {
+    predicates: Option<Vec<NamedNode>>,
+    local_names: bool,
+    iris: bool,
+    /// The id of the index of each graph, and its predicates in the order of the ids that its
+    /// tables refer to them by.
+    indexes: Vec<(NamedGraph, String, Vec<NamedNode>)>,
 }
 
 impl Triplestore {
@@ -231,10 +251,38 @@ impl Triplestore {
             }
         }
 
+        // Compaction has rebuilt the full text search indexes, so they have exactly the triples
+        // that are serialized, with the cats that are serialized.
+        let fts_indexes: Vec<(&NamedGraph, &FtsIndex)> = if raw_db {
+            self.fts_index.iter().collect()
+        } else {
+            vec![]
+        };
+        let fts = (!fts_indexes.is_empty()).then(|| FtsMetadata {
+            predicates: self.indexing.fts_predicates.clone(),
+            local_names: self.indexing.fts_local_names,
+            iris: self.indexing.fts_iris,
+            indexes: fts_indexes
+                .iter()
+                .map(|(graph, index)| {
+                    let state = index.serialized_state();
+                    ((*graph).clone(), state.id, state.predicates)
+                })
+                .collect(),
+        });
+        let fts_hook = |t: &CatType, cats: &Cats, db: &mut CatMapsOnDisk| -> Result<(), String> {
+            for (_, index) in &fts_indexes {
+                index.serialize_into(t, cats, db).map_err(|e| e.to_string())?;
+            }
+            Ok(())
+        };
+        let fts_hook: SerializeDbHook = &fts_hook;
+
         let triplestore_metadata = TriplestoreMetadata {
             triples_uuid_map,
             indexing: self.indexing.clone(),
             heights,
+            fts,
         };
 
         let res: Result<(), TripleSerializationError> = to_serialize
@@ -257,7 +305,11 @@ impl Triplestore {
         self.global_cats
             .read()
             .expect("Should always be readable")
-            .serialize_cats(target, raw_db)?;
+            .serialize_cats(
+                target,
+                raw_db,
+                triplestore_metadata.fts.is_some().then_some(fts_hook),
+            )?;
 
         // The metadata is written last, so that a folder with metadata has all its files.
         let triplestore_metadata_string = serde_json::to_string_pretty(&triplestore_metadata)?;
@@ -341,6 +393,36 @@ impl Triplestore {
         let triplestore_metadata: TriplestoreMetadata = serde_json::from_slice(&metadata_bytes)?;
         let heights = &triplestore_metadata.heights;
 
+        // Serialized full text search indexes are loaded from the raw databases of the cat maps
+        // as these are deserialized.
+        let mut fts_indexes = vec![];
+        if let Some(fts) = &triplestore_metadata.fts {
+            let options = FtsOptions {
+                predicates: fts.predicates.clone(),
+                local_names: fts.local_names,
+                iris: fts.iris,
+            };
+            for (graph, id, predicates) in &fts.indexes {
+                let state = FtsSerializedState {
+                    id: id.clone(),
+                    predicates: predicates.clone(),
+                };
+                let index = FtsIndex::from_serialized(options.clone(), state)
+                    .map_err(TriplestoreError::FtsError)?;
+                fts_indexes.push((graph.clone(), index));
+            }
+        }
+        let fts_hook = |t: &CatType, db: &CatMapsOnDisk, in_place: bool| -> Result<(), String> {
+            for (_, index) in &fts_indexes {
+                index
+                    .load_serialized(t, db, in_place)
+                    .map_err(|e| e.to_string())?;
+            }
+            Ok(())
+        };
+        let fts_hook: DeserializeDbHook = &fts_hook;
+        let fts_hook = (!fts_indexes.is_empty()).then_some(fts_hook);
+
         // The cats do not depend on the triples, so they are deserialized at the same time. With
         // hybrid and disk storage, building the on-disk cat maps (and their indices) is usually
         // the slower of the two.
@@ -404,7 +486,7 @@ impl Triplestore {
             },
             || {
                 let start_deserialize_cats = Instant::now();
-                let cats = Cats::deserialize_cats(&source, storage_folder);
+                let cats = Cats::deserialize_cats(&source, storage_folder, fts_hook);
                 debug!(
                     "Deserialized cats in {} seconds",
                     start_deserialize_cats.elapsed().as_secs_f32()
@@ -446,9 +528,18 @@ impl Triplestore {
         }
 
         cats.encode_iris(renamed_predicates);
-        let fts_index = maybe_create_fts_index_map(&triplestore_metadata.indexing)?;
-        let geo_index =
-            maybe_create_geo_index(&triplestore_metadata.indexing, storage_pathbuf.as_deref())?;
+        let mut indexing = triplestore_metadata.indexing;
+        let fts_index = if let Some(fts) = triplestore_metadata.fts {
+            // The options of full text search are otherwise not serialized.
+            indexing.fts = true;
+            indexing.fts_predicates = fts.predicates;
+            indexing.fts_local_names = fts.local_names;
+            indexing.fts_iris = fts.iris;
+            fts_indexes.into_iter().collect()
+        } else {
+            maybe_create_fts_index_map(&indexing)?
+        };
+        let geo_index = maybe_create_geo_index(&indexing, storage_pathbuf.as_deref())?;
         let query_cache = QueryCache::new();
         let mut triplestore = Triplestore {
             graph_triples_map: GraphTriplesMap::new(graph_triples_map, query_cache.clone()),
@@ -457,7 +548,7 @@ impl Triplestore {
             storage_mode: storage.mode,
             triples_folder,
             parser_call: 0,
-            indexing: triplestore_metadata.indexing,
+            indexing,
             fts_index,
             geo_index,
             vector_index: HashMap::new(),

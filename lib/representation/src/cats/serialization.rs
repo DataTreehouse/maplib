@@ -3,7 +3,7 @@ use crate::bundle::{SerializationSource, SerializationTarget};
 use crate::cats::maps::CatMaps;
 use arrow::array::{AsArray, RecordBatch, StringArray, UInt32Array};
 use arrow::datatypes::{DataType, Field, Schema};
-use disk::CatMapsOnDisk;
+pub use disk::CatMapsOnDisk;
 use crate::vectors::is_vector_literal_type;
 use in_memory::vectors::stored_to_lexical;
 use in_memory::CatMapsInMemory;
@@ -31,7 +31,21 @@ pub enum CatSerializationError {
     PolarsError(#[from] PolarsError),
     #[error("Malformed cat map file {0}: {1}")]
     MalformedCatMapFile(String, String),
+    #[error("Error with the index tables of a raw cat map database: {0}")]
+    DbHookError(String),
 }
+
+/// Called with each raw database a cat map is serialized to, when the map is written and before
+/// the database is added to the serialization, to write the tables of indexes that refer to the
+/// cats (the full text search index) into it.
+pub type SerializeDbHook<'a> =
+    &'a (dyn Fn(&CatType, &Cats, &mut CatMapsOnDisk) -> Result<(), String> + Sync);
+
+/// Called with each raw database a cat map is deserialized from, to load the tables written by
+/// a [`SerializeDbHook`]. The flag is true if the database is the one that the deserialized cat
+/// map uses, and false if the cat map is read from it into memory.
+pub type DeserializeDbHook<'a> =
+    &'a (dyn Fn(&CatType, &CatMapsOnDisk, bool) -> Result<(), String> + Sync);
 
 const CATS_METADATA_FILE: &str = "metadata.json";
 pub const CATS_FOLDER: &str = "cats";
@@ -86,7 +100,12 @@ impl Cats {
     pub fn deserialize_cats(
         source: &SerializationSource,
         storage_folder: Option<&Path>,
+        db_hook: Option<DeserializeDbHook>,
     ) -> Result<Self, CatSerializationError> {
+        let hook = |t: &CatType, db: &CatMapsOnDisk, in_place: bool| match db_hook {
+            Some(hook) => hook(t, db, in_place).map_err(CatSerializationError::DbHookError),
+            None => Ok(()),
+        };
         let metadata_file = source.file(&format!("{CATS_FOLDER}/{CATS_METADATA_FILE}"));
         let cats_metadata: CatsMetadata = serde_json::from_slice(&metadata_file.read()?)?;
 
@@ -115,13 +134,16 @@ impl Cats {
                             let src_path = create_path(&create_path(path, CATS_FOLDER), id);
                             if let Some(storage_folder) = storage_folder {
                                 let dest_path = create_path(storage_folder, id);
-                                CatMaps::on_disk(CatMapsOnDisk::new(
+                                let cmod = CatMapsOnDisk::new(
                                     &src_path,
                                     t.name.clone(),
                                     Some(&dest_path),
-                                ))
+                                );
+                                hook(&t.cat_type, &cmod, true)?;
+                                CatMaps::on_disk(cmod)
                             } else {
                                 let cmod = CatMapsOnDisk::new(&src_path, t.name.clone(), None);
+                                hook(&t.cat_type, &cmod, false)?;
                                 CatMaps::in_memory(cmod.to_memory(is_iri))
                             }
                         }
@@ -133,19 +155,18 @@ impl Cats {
                             if let Some(storage_folder) = storage_folder {
                                 let dest_path = create_path(storage_folder, id);
                                 extract_cat_db(source, id, &dest_path)?;
-                                CatMaps::on_disk(CatMapsOnDisk::new(
-                                    &dest_path,
-                                    t.name.clone(),
-                                    None,
-                                ))
+                                let cmod = CatMapsOnDisk::new(&dest_path, t.name.clone(), None);
+                                hook(&t.cat_type, &cmod, true)?;
+                                CatMaps::on_disk(cmod)
                             } else {
                                 let tmp_dir = std::env::temp_dir()
                                     .join(format!("maplib-cats-{}", Uuid::new_v4()));
                                 create_dir_all(&tmp_dir)?;
                                 let tmp_path = create_path(&tmp_dir, id);
-                                let res = extract_cat_db(source, id, &tmp_path).map(|_| {
+                                let res = extract_cat_db(source, id, &tmp_path).and_then(|_| {
                                     let cmod = CatMapsOnDisk::new(&tmp_path, t.name.clone(), None);
-                                    cmod.to_memory(is_iri)
+                                    hook(&t.cat_type, &cmod, false)?;
+                                    Ok(cmod.to_memory(is_iri))
                                 });
                                 let _ = std::fs::remove_dir_all(&tmp_dir);
                                 CatMaps::in_memory(res?)
@@ -163,11 +184,12 @@ impl Cats {
     /// Serializes the cat maps as parquet files, or with `raw_db` as DuckDB databases (the format
     /// of earlier versions, requires maplib Enterprise Edition). Deserializing raw DuckDB cat maps
     /// into hybrid or disk storage uses the databases in place, which is much faster than building
-    /// them from parquet files.
+    /// them from parquet files. `db_hook` is called with each of the databases.
     pub fn serialize_cats(
         &self,
         target: &SerializationTarget,
         raw_db: bool,
+        db_hook: Option<SerializeDbHook>,
     ) -> Result<(), CatSerializationError> {
         let map: Result<HashMap<String, CatMapOnDiskMetadata>, CatSerializationError> = self
             .cat_map
@@ -186,9 +208,13 @@ impl Cats {
                 let name = if raw_db {
                     let rel = format!("{CATS_FOLDER}/{path_uuid}");
                     let db_path = target.db_path(&rel)?;
-                    let name = CatMapsOnDisk::from_in_memory(&db_path, rb)
-                        .get_name()
-                        .to_string();
+                    let mut db = CatMapsOnDisk::from_in_memory(&db_path, rb);
+                    if let Some(hook) = db_hook {
+                        hook(t, self, &mut db).map_err(CatSerializationError::DbHookError)?;
+                    }
+                    let name = db.get_name().to_string();
+                    // Closes the database before its file is added to the serialization.
+                    drop(db);
                     target.finish_db(&rel, &db_path)?;
                     name
                 } else {
