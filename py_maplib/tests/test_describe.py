@@ -147,8 +147,8 @@ def test_classes_namespaces_vocabulary(full):
     ns = {(r["graph"], r["namespace"], r["role"]): (r["prefix"], r["terms"]) for r in full.namespaces.to_dicts()}
     assert ns[(None, FOAF, "predicate")] == ("foaf", 3)
     assert ns[(None, FOAF, "class")] == ("foaf", 2)
-    assert ns[(None, EX, "subject")] == (None, 3)
-    assert ns[(G2, EXB, "object")] == (None, 1)
+    assert ns[(None, EX, "subject")] == ("a", 3)
+    assert ns[(G2, EXB, "object")] == ("b", 1)
     default = {(r["graph"], r["namespace"], r["role"]) for r in model().describe().namespaces.to_dicts()}
     assert (None, EX, "subject") not in default
 
@@ -171,8 +171,12 @@ def test_class_predicates_and_links(full):
         (FOAF + "Person", FOAF + "knows", FOAF + "Person", 1),
     ]
     text = full.show_class("foaf:Person")
-    assert "2 instances" in text and "50.0%  [0..1]" in text and "-[foaf:knows]-> foaf:Person" in text
+    assert "foaf:Person in default graph: 2 instances" in text
+    born_line = next(l for l in text.splitlines() if l.strip().startswith("a:born"))
+    assert born_line.split() == ["a:born", "50.0%", "0..1"]
+    assert ["foaf:Person", "foaf:knows", "foaf:Person", "1"] in [l.split() for l in text.splitlines()]
     assert full.show_class(f"<{FOAF}Nothing>").startswith("no instances")
+    assert "| a:born | 50.0% | 0..1 |" in full.show_class(f"<{FOAF}Person>", format="markdown")
 
 
 def test_literals_examples(full):
@@ -182,7 +186,7 @@ def test_literals_examples(full):
     assert (name["min_length"], name["max_length"], name["min"]) == (1, 3, None)
     assert row(full.languages, graph=None, predicate=FOAF + "name")["language"] == "en"
     assert row(full.predicates, graph=None, predicate=EX + "born")["example"] == "2020-01-01"
-    assert "language en: 1" in full.show_predicate("foaf:name")
+    assert "en (1)" in full.show_predicate("foaf:name")
 
 
 def test_dangling_and_overlap(full):
@@ -204,7 +208,7 @@ def test_text_is_bounded():
     d = m.describe(sections="all")
     text = str(d)
     # Graphs with the same predicates are detailed once.
-    assert text.count("\n<urn:g:same") == 0 and "same predicates in 30 more graphs" in text
+    assert text.count("\n<urn:g:same") == 0 and "Same predicates in 30 more graphs" in text
     assert "... 18 more graphs with" in text
     assert "... 26 more predicates with 26 triples" in text
     assert "more classes with" in text
@@ -213,7 +217,18 @@ def test_text_is_bounded():
     short = d.to_text(max_chars=1500)
     assert len(short) <= 1500 + len("\n... cut at max_chars")
     one = d.to_text(graphs=["urn:g:same7"], sections=["predicates"])
-    assert "\n<urn:g:same7>" in one and "namespaces (" not in one
+    assert "\n<urn:g:same7>\n===" in one and "Namespaces (" not in one and "Predicates (2)" in one
+    md = d.to_markdown(max_graphs=1, max_rows=3)
+    assert md.startswith("# 33 graphs, 162 triples\n\n| graph | triples |")
+    assert "\n## <urn:g:wide>\n" in md and "\n### Predicates (41)\n\n| predicate | " in md
+    assert "|---|---:|" in md and len(md) < len(d.to_markdown())
+    assert d._repr_markdown_() == d.to_markdown(max_chars=20_000)
+    # Every row of a table of the text has the columns of its header at the same place.
+    lines = text.splitlines()
+    rule = next(i for i, l in enumerate(lines) if l.strip().startswith("---"))
+    assert len(lines[rule]) == len(lines[rule - 1]) >= len(lines[rule + 1])
+    with pytest.raises(ValueError):
+        d.to_text(format="html")
     limited = d.to_dict(max_rows=2, max_graphs=3)
     json.dumps(limited)
     assert limited["graphs_total"] == 33 and len(limited["graphs"]) == 3
@@ -230,4 +245,5 @@ def test_diff():
         (RDF + "type", 5, 6, 1),
     ] or sorted(diff.predicates["change"].to_list()) == [1, 1]
     assert diff.classes.select("class", "change").rows() == [(FOAF + "Person", 1)]
-    assert "5 -> 6 (+1)" in repr(diff)
+    assert ["default", "graph", "foaf:Person", "2", "3", "+1"] in [l.split() for l in repr(diff).splitlines()]
+    assert "| default graph | foaf:Person | 2 | 3 | +1 |" in diff.to_text(format="markdown")

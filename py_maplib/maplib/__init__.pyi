@@ -2670,32 +2670,44 @@ class Model:
         - "iri_namespaces": the namespaces of the IRIs that are subjects and objects.
 
         The size of the result follows the schema (graphs, predicates, classes), not the number of
-        triples. Printing it gives a text of bounded length: an overview of the graphs, then the
-        largest graphs in detail with the largest rows of each section, and counts of what was
-        left out; graphs with the same predicates are detailed once. See ModelDescription.to_text
-        for the limits, and show_class and show_predicate to look closer.
+        triples. Printing it gives a report of bounded length as aligned tables: the graphs, then
+        the largest graphs in detail with the largest rows of each section, and counts of what was
+        left out; graphs with the same predicates are detailed once. to_markdown gives the report
+        as Markdown, which notebooks show. IRIs are written with well-known prefixes, and with
+        prefixes made from the other namespaces of predicates and classes, which the Namespaces
+        table lists. See ModelDescription.to_text for the limits, and show_class and
+        show_predicate to look closer.
 
         Usage:
 
         >>> d = m.describe()
         >>> print(d)
-        2 graphs, 14 triples
-          default graph: 11 triples, 5 predicates, 1 classes
-          <urn:g:two>: 3 triples, 2 predicates, 0 classes
+        2 graphs, 15 triples
+        <BLANKLINE>
+            graph              triples  predicates  classes
+            -----------------  -------  ----------  -------
+            default graph           14           4        2
+            <urn:graph:sites>        1           1        1
         <BLANKLINE>
         default graph
-          namespaces (3):
-            foaf:      http://xmlns.com/foaf/0.1/  (3 predicate, 1 class)
-          classes (1):
-            foaf:Person                                         2
-          predicates (5):
-                                                      triples     subjects      objects  object types
-            foaf:name                                       4           ~4           ~4  xsd:string (3), rdf:langString (1)
-            foaf:age                                        2           ~2           ~2  xsd:decimal (1), xsd:integer (1)
+        =============
+        <BLANKLINE>
+          Classes (2)
+            class    instances
+            -------  ---------
+            ns:Pump          3
+            ns:Site          1
+        <BLANKLINE>
+          Predicates (4)
+            predicate   triples  subjects  objects  object types                        notes
+            ----------  -------  --------  -------  ----------------------------------  ----------
+            rdfs:label        5        ~4       ~5  xsd:string (3), rdf:langString (2)
+            rdf:type          4         4        2  IRI                                 functional
         >>> d.predicates
         >>> d = m.describe(sections=["class_predicates", "links"], exact=True)
-        >>> print(d.show_class("foaf:Person"))
+        >>> print(d.show_class("ns:Pump"))
         >>> print(m.describe(sections="all").to_text(max_graphs=1, max_rows=5))
+        >>> print(d.to_markdown())
         >>> after.diff(before)
 
         :param graphs: The graphs to describe, None in the list is the default graph. All non-empty

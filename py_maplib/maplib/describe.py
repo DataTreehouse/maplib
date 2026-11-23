@@ -7,6 +7,7 @@ The tables of a ModelDescription hold everything that was computed. Their size i
 schema (graphs, predicates and classes), never by the number of triples. The text and dict forms
 are bounded further: see ModelDescription.to_text.
 """
+import re
 from typing import Dict, List, Optional, Sequence, Union
 
 import polars as pl
@@ -76,6 +77,27 @@ def namespace_of(iri: str) -> str:
     return iri
 
 
+# A local name that can follow a prefix in the report.
+_LOCAL = re.compile(r"^[A-Za-z0-9_.\-]*$")
+_NOT_A_PREFIX = {"http", "https", "www", "org", "com", "net", "urn"}
+
+
+def _made_prefix(namespace: str, taken: set) -> str:
+    """A prefix for a namespace without a well-known one: its last part that reads as a name
+    (http://example.net/plant/v2# gives plant), else ns; numbered when taken."""
+    base = "ns"
+    for part in reversed([p for p in re.split(r"[/#:]", namespace) if p]):
+        name = re.sub(r"[^a-z0-9]", "", part.lower())
+        if re.match(r"^[a-z][a-z0-9]{0,11}$", name) and name not in _NOT_A_PREFIX and not re.match(r"^v\d+$", name):
+            base = name
+            break
+    prefix, n = base, 1
+    while prefix in taken:
+        n += 1
+        prefix = f"{base}{n}"
+    return prefix
+
+
 def _cap(n: Optional[int]) -> int:
     return n if n is not None else 1 << 40
 
@@ -84,35 +106,109 @@ def _graph_name(g: Optional[str]) -> str:
     return "default graph" if g is None else f"<{g}>"
 
 
-def _more(shown: int, total: int, what: str) -> List[str]:
-    return [f"    ... {total - shown} more {what}"] if total > shown else []
+class _Doc:
+    """The parts of a report: headings, tables and notes, rendered as aligned text or Markdown."""
+
+    MAX_CELL = 64
+
+    def __init__(self):
+        self.items = []
+
+    def heading(self, level: int, text: str):
+        self.items.append(("h", level, text))
+
+    def table(self, columns: Sequence[str], rows: List[list]):
+        """columns: the headers, with a leading '>' for a right-aligned column. Cells are strings,
+        ints (shown with thousands separators) or None (empty)."""
+        aligns = [c.startswith(">") for c in columns]
+        headers = [c.lstrip(">") for c in columns]
+        cells = [
+            ["" if v is None else format(v, ",") if isinstance(v, int) else str(v) for v in r]
+            for r in rows
+        ]
+        self.items.append(("t", headers, aligns, cells))
+
+    def note(self, text: str):
+        self.items.append(("n", text))
+
+    def render(self, fmt: str) -> str:
+        if fmt not in ("text", "markdown"):
+            raise ValueError(f"format must be 'text' or 'markdown', not {fmt!r}")
+        out = []
+        for item in self.items:
+            if item[0] == "h":
+                _, level, text = item
+                if fmt == "markdown":
+                    out += ["#" * level + " " + text, ""]
+                elif level == 1:
+                    out += [text, ""]
+                elif level == 2:
+                    out += ["", text, "=" * len(text)]
+                else:
+                    out += ["", "  " + text]
+            elif item[0] == "n":
+                out += ([item[1], ""] if fmt == "markdown" else ["    " + item[1]])
+            else:
+                _, headers, aligns, cells = item
+                if fmt == "markdown":
+                    esc = lambda s: s.replace("|", "\\|")
+                    out.append("| " + " | ".join(headers) + " |")
+                    out.append("|" + "|".join("---:" if a else "---" for a in aligns) + "|")
+                    out += ["| " + " | ".join(esc(c) for c in r) + " |" for r in cells]
+                    out.append("")
+                else:
+                    cells = [
+                        [c if len(c) <= self.MAX_CELL else c[: self.MAX_CELL - 1] + "…" for c in r]
+                        for r in cells
+                    ]
+                    widths = [max([len(h)] + [len(r[i]) for r in cells]) for i, h in enumerate(headers)]
+                    line = lambda r: "    " + "  ".join(
+                        c.rjust(w) if a else c.ljust(w) for c, w, a in zip(r, widths, aligns)
+                    ).rstrip()
+                    out.append(line(headers))
+                    out.append(line(["-" * w for w in widths]))
+                    out += [line(r) for r in cells]
+        return "\n".join(out).strip("\n") + "\n"
 
 
 class DescriptionDiff:
     """What changed between two descriptions, from ModelDescription.diff: the predicates and classes
-    whose number of triples or instances differ, with before, after and change."""
+    whose number of triples or instances differ, as DataFrames with before, after and change.
+    Printing it gives tables; to_text(format="markdown") gives them as Markdown."""
 
-    def __init__(self, predicates: pl.DataFrame, classes: pl.DataFrame):
+    def __init__(self, predicates: pl.DataFrame, classes: pl.DataFrame, short=None):
         self.predicates = predicates
         self.classes = classes
+        self._short = short or (lambda iri: f"<{iri}>")
+
+    def to_text(self, format: str = "text", max_rows: Optional[int] = 30) -> str:
+        doc = _Doc()
+        for name, df, key in (("predicates", self.predicates, "predicate"), ("classes", self.classes, "class")):
+            doc.heading(2, f"{df.height} {name} changed")
+            if df.height:
+                doc.table(
+                    ["graph", key, ">before", ">after", ">change"],
+                    [
+                        [_graph_name(r["graph"]), self._short(r[key]), r["before"], r["after"], f"{r['change']:+,}"]
+                        for r in df.head(_cap(max_rows)).iter_rows(named=True)
+                    ],
+                )
+                if df.height > _cap(max_rows):
+                    doc.note(f"... {df.height - max_rows} more")
+        return doc.render(format)
 
     def __repr__(self) -> str:
-        out = []
-        for name, df, key in (("predicates", self.predicates, "predicate"), ("classes", self.classes, "class")):
-            out.append(f"{name}: {df.height} changed")
-            for r in df.head(30).iter_rows(named=True):
-                out.append(
-                    f"  {_graph_name(r['graph'])} <{r[key]}>: {r['before']:,} -> {r['after']:,} ({r['change']:+,})"
-                )
-            if df.height > 30:
-                out.append(f"  ... {df.height - 30} more")
-        return "\n".join(out)
+        return self.to_text()
+
+    def _repr_markdown_(self) -> str:
+        return self.to_text(format="markdown")
 
 
 class ModelDescription:
-    """The result of Model.describe. Printing it gives a text summary of bounded length (see
-    to_text); the tables are polars DataFrames with everything that was computed. The table of a
-    section that was not asked for is empty.
+    """The result of Model.describe. Printing it gives a report of bounded length as aligned
+    tables (see to_text); to_markdown gives the same report as Markdown, which notebooks show.
+    The tables are polars DataFrames with everything that was computed. The table of a section
+    that was not asked for is empty.
 
     sections: the sections that were computed.
     graphs: one row per graph: graph, triples, predicates, classes, namespaces, and with the
@@ -125,8 +221,10 @@ class ModelDescription:
         common_objects and common_object_counts (the most common objects, as N-Triples terms),
         example (examples section), declared and label (vocabulary section).
     classes: graph, class, instances, and with the vocabulary section declared and label.
-    namespaces: graph, namespace, prefix, role (predicate, class, and with the iri_namespaces
-        section subject and object) and terms (the distinct IRIs of that role in the namespace).
+    namespaces: graph, namespace, prefix (the prefix the report uses: a well-known prefix, or one
+        made from the namespace for the namespaces of predicates and classes), role (predicate,
+        class, and with the iri_namespaces section subject and object) and terms (the distinct
+        IRIs of that role in the namespace).
     class_predicates: for each class, the predicates its instances have: graph, class, predicate,
         instances, subjects (instances with the predicate), coverage (subjects / instances),
         triples, min_per_subject and max_per_subject (among the instances that have it).
@@ -166,12 +264,12 @@ class ModelDescription:
         if iri in ("IRI", "Blank"):
             return iri
         for ns, p in self._by_namespace:
-            if iri.startswith(ns):
+            if iri.startswith(ns) and _LOCAL.match(iri[len(ns):]):
                 return f"{p}:{iri[len(ns):]}"
         return f"<{iri}>"
 
     def _expand(self, name: str) -> str:
-        """An IRI from an IRI, <IRI> or prefix:local with a well-known prefix."""
+        """An IRI from an IRI, <IRI> or prefix:local with a prefix of the report."""
         if name.startswith("<") and name.endswith(">"):
             return name[1:-1]
         prefix, sep, local = name.partition(":")
@@ -231,10 +329,18 @@ class ModelDescription:
         return DescriptionDiff(
             changed(other.predicates, self.predicates, "predicate", "triples"),
             changed(other.classes, self.classes, "class", "instances"),
+            self._short,
         )
 
     def __repr__(self) -> str:
         return self.to_text(max_chars=20_000)
+
+    def _repr_markdown_(self) -> str:
+        return self.to_markdown(max_chars=20_000)
+
+    def to_markdown(self, **kwargs) -> str:
+        """The report as Markdown, with a table per section: to_text(format="markdown", ...)."""
+        return self.to_text(format="markdown", **kwargs)
 
     def to_text(
             self,
@@ -243,24 +349,27 @@ class ModelDescription:
             max_graphs: Optional[int] = 5,
             max_rows: Optional[int] = 15,
             max_chars: Optional[int] = None,
+            format: str = "text",
     ) -> str:
-        """The text summary. Its length does not grow with the model: an overview line per graph
-        (the largest max_rows of them), then the details of the largest max_graphs graphs with at
-        most max_rows rows per section, the largest first. Graphs with the same predicates as a
-        graph already detailed are only named. What is left out is counted in "... n more" lines.
-        Printing the description is to_text(max_chars=20_000).
+        """The report: a table of the graphs, then for each of the largest graphs a table per
+        section. Its length does not grow with the model: the overview has the largest max_rows
+        graphs, max_graphs graphs are detailed, and each table has at most max_rows rows, the
+        largest first. Graphs with the same predicates as a graph already detailed are only
+        named. What is left out is counted in "... n more" lines. Printing the description is
+        to_text(max_chars=20_000).
 
         To see more, raise the limits (None for no limit), ask for one graph or section, read
-        the tables, or use show_class and show_predicate.
+        the DataFrames, or use show_class and show_predicate.
 
         :param graphs: Detail these graphs (None in the list is the default graph) instead of the
             largest.
         :param sections: Only these sections of the details.
         :param max_graphs: The number of graphs to detail.
-        :param max_rows: The number of rows per section, and of graphs in the overview.
-        :param max_chars: Halve max_rows, then max_graphs, until the text is at most this long.
+        :param max_rows: The number of rows per table.
+        :param max_chars: Halve max_rows, then max_graphs, until the report is at most this long.
+        :param format: "text" for aligned columns, "markdown" for Markdown headings and tables.
         """
-        text = self._text(graphs, sections, max_graphs, max_rows)
+        text = self._doc(graphs, sections, max_graphs, max_rows).render(format)
         if max_chars is None:
             return text
         rows = max_rows if max_rows is not None else 1 << 20
@@ -270,32 +379,32 @@ class ModelDescription:
                 rows = max(3, rows // 2)
             else:
                 n_graphs = max(1, n_graphs // 2)
-            text = self._text(graphs, sections, n_graphs, rows)
+            text = self._doc(graphs, sections, n_graphs, rows).render(format)
         if len(text) > max_chars:
             text = text[:max_chars] + "\n... cut at max_chars"
         return text
 
-    def _text(self, graphs, sections, max_graphs, max_rows) -> str:
+    def _doc(self, graphs, sections, max_graphs, max_rows) -> _Doc:
         show = set(sections) if sections is not None else set(self.sections)
-        out = []
+        cap = _cap(max_rows)
+        doc = _Doc()
         all_graphs = self.graphs["graph"].to_list()
         total = int(self.graphs["triples"].sum() or 0)
-        out.append(f"{len(all_graphs)} graphs, {total:,} triples")
-        for g in self.graphs.head(_cap(max_rows)).iter_rows(named=True):
-            line = (
-                f"  {_graph_name(g['graph'])}: {g['triples']:,} triples, {g['predicates']} predicates, "
-                f"{g['classes']} classes"
+        doc.heading(1, f"{len(all_graphs)} graphs, {total:,} triples")
+        with_subjects = self.graphs["subjects"].null_count() < self.graphs.height
+        if all_graphs:
+            doc.table(
+                ["graph", ">triples", ">predicates", ">classes"]
+                + ([">subjects", ">untyped", ">blank"] if with_subjects else []),
+                [
+                    [_graph_name(g["graph"]), g["triples"], g["predicates"], g["classes"]]
+                    + ([g["subjects"], g["untyped_subjects"], g["blank_subjects"]] if with_subjects else [])
+                    for g in self.graphs.head(cap).iter_rows(named=True)
+                ],
             )
-            if g["subjects"] is not None:
-                line += (
-                    f", {g['subjects']:,} subjects ({g['untyped_subjects']:,} untyped, "
-                    f"{g['blank_subjects']:,} blank)"
-                )
-            out.append(line)
-        if max_rows is not None and len(all_graphs) > max_rows:
-            rest = int(self.graphs["triples"][max_rows:].sum())
-            out.append(f"  ... {len(all_graphs) - max_rows} more graphs with {rest:,} triples")
-        out.append("")
+        if len(all_graphs) > cap:
+            rest = int(self.graphs["triples"][cap:].sum())
+            doc.note(f"... {len(all_graphs) - cap} more graphs with {rest:,} triples")
 
         signatures = self._signatures()
         detailed: Dict[frozenset, Optional[str]] = {}
@@ -305,228 +414,270 @@ class ModelDescription:
         else:
             chosen = []
             for g in all_graphs:
-                first = detailed.get(signatures[g])
-                if first is not None or (signatures[g] in detailed):
-                    same.setdefault(first, []).append(g)
+                if signatures[g] in detailed:
+                    same.setdefault(detailed[signatures[g]], []).append(g)
                 elif max_graphs is None or len(chosen) < max_graphs:
                     detailed[signatures[g]] = g
                     chosen.append(g)
         for g in chosen:
-            out.extend(self._graph_text(g, show, max_rows))
+            doc.heading(2, _graph_name(g))
             twins = same.get(g, [])
             if twins:
                 names = ", ".join(_graph_name(t) for t in twins[:5])
                 more = f" and {len(twins) - 5} more" if len(twins) > 5 else ""
-                out.append(f"  same predicates in {len(twins)} more graphs: {names}{more}")
-            out.append("")
+                doc.note(f"Same predicates in {len(twins)} more graphs: {names}{more}")
+            self._graph_doc(doc, g, show, cap)
         if graphs is None:
             skipped = len(all_graphs) - len(chosen) - sum(len(v) for v in same.values())
             if skipped > 0:
-                out.append(f"... {skipped} more graphs not detailed (to_text(graphs=[...]) or max_graphs)")
-                out.append("")
+                doc.heading(2, f"{skipped} more graphs not detailed")
+                doc.note("Detail them with to_text(graphs=[...]) or a higher max_graphs.")
 
         if "overlap" in show and self.overlap.height:
-            out.append("overlap between graphs:")
             ov = self.overlap.filter(
                 (pl.col("shared_subjects") > 0) | (pl.col("a_refers_to_b") > 0) | (pl.col("b_refers_to_a") > 0)
             )
-            for r in ov.head(_cap(max_rows)).iter_rows(named=True):
-                out.append(
-                    f"  {_graph_name(r['graph_a'])} / {_graph_name(r['graph_b'])}: "
-                    f"{r['shared_subjects']:,} shared subjects, {r['a_refers_to_b']:,} references a to b, "
-                    f"{r['b_refers_to_a']:,} b to a, {r['shared_predicates']} shared predicates, "
-                    f"{r['shared_classes']} shared classes"
+            doc.heading(2, f"Overlap between graphs ({ov.height} of {self.overlap.height} pairs compared)")
+            if ov.height:
+                doc.table(
+                    ["graph a", "graph b", ">shared subjects", ">a refers to b", ">b refers to a",
+                     ">shared predicates", ">shared classes"],
+                    [
+                        [_graph_name(r["graph_a"]), _graph_name(r["graph_b"]), r["shared_subjects"],
+                         r["a_refers_to_b"], r["b_refers_to_a"], r["shared_predicates"], r["shared_classes"]]
+                        for r in ov.head(cap).iter_rows(named=True)
+                    ],
                 )
-            if not ov.height:
-                out.append(f"  none among the {self.overlap.height} pairs compared")
-            elif max_rows is not None:
-                out.extend(_more(max_rows, ov.height, "pairs"))
-            out.append("")
-        return "\n".join(out)
+                if ov.height > cap:
+                    doc.note(f"... {ov.height - cap} more pairs")
+        return doc
 
-    def _labelled(self, iri: str, label: Optional[str]) -> str:
-        return self._short(iri) + (f' "{label}"' if label else "")
+    @staticmethod
+    def _has(df: pl.DataFrame, col: str) -> bool:
+        return col in df.columns and df[col].null_count() < df.height
 
-    def _predicate_line(self, r: dict) -> str:
-        approx = "" if r["exact"] else "~"
-        many = len(r["object_types"]) > 1
-        types = ", ".join(
-            self._short(t) + (f" ({n:,})" if many else "")
-            for t, n in zip(r["object_types"], r["object_type_triples"])
+    def _predicate_table(self, doc: _Doc, pr: pl.DataFrame):
+        label, example = self._has(pr, "label"), self._has(pr, "example")
+        declared = self._has(pr, "declared")
+        rows = []
+        for r in pr.iter_rows(named=True):
+            approx = "" if r["exact"] else "~"
+            many = len(r["object_types"]) > 1
+            types = ", ".join(
+                self._short(t) + (f" ({n:,})" if many else "")
+                for t, n in zip(r["object_types"], r["object_type_triples"])
+            )
+            notes = [
+                n for n, on in (
+                    ("functional", r["functional"]), ("key", r["functional"] and r["inverse_functional"]),
+                    ("undeclared", declared and r["declared"] is False),
+                ) if on
+            ]
+            rows.append(
+                [self._short(r["predicate"])]
+                + ([r["label"]] if label else [])
+                + [r["triples"], approx + format(r["distinct_subjects"], ","),
+                   approx + format(r["distinct_objects"], ","), types, ", ".join(notes)]
+                + ([r["example"]] if example else [])
+            )
+        doc.table(
+            ["predicate"] + (["label"] if label else [])
+            + [">triples", ">subjects", ">objects", "object types", "notes"]
+            + (["example"] if example else []),
+            rows,
         )
-        notes = []
-        if r["functional"]:
-            notes.append("functional")
-        if r["inverse_functional"]:
-            notes.append("key")
-        if r.get("declared") is False:
-            notes.append("undeclared")
-        if r.get("example") is not None:
-            notes.append(f"e.g. {r['example'][:40]}")
-        return (
-            f"    {self._labelled(r['predicate'], r.get('label')):<36} {r['triples']:>12,} "
-            f"{approx + format(r['distinct_subjects'], ','):>12} "
-            f"{approx + format(r['distinct_objects'], ','):>12}  {types}"
-            + (f"  [{'; '.join(notes)}]" if notes else "")
-        )
 
-    def _graph_text(self, g: Optional[str], show: set, max_rows: Optional[int]) -> List[str]:
-        out = [f"{_graph_name(g)}"]
-        cap = max_rows if max_rows is not None else 1 << 40
+    @staticmethod
+    def _literal_rows(short, lit: pl.DataFrame, languages: pl.DataFrame) -> List[list]:
+        langs = {
+            p: ", ".join(f"{l} ({n:,})" for l, n in zip(ls, ns))
+            for p, ls, ns in languages.group_by("predicate", maintain_order=True)
+            .agg("language", "triples")
+            .iter_rows()
+        }
+        return [
+            [
+                short(r["predicate"]), short(r["datatype"]), r["min"], r["max"],
+                None if r["min_length"] is None else f"{r['min_length']}..{r['max_length']}",
+                langs.get(r["predicate"]) if r["datatype"] == RDF + "langString" else None,
+            ]
+            for r in lit.iter_rows(named=True)
+        ]
 
+    def _class_rows(self, cp: pl.DataFrame, classes: List[str], cap: int) -> List[list]:
+        rows = []
+        for c in classes:
+            one = cp.filter(pl.col("class") == c)
+            for i, r in enumerate(one.head(cap).iter_rows(named=True)):
+                low = r["min_per_subject"] if r["subjects"] == r["instances"] else 0
+                rows.append([
+                    self._short(c) if i == 0 else "", r["instances"] if i == 0 else None,
+                    self._short(r["predicate"]), f"{100 * r['coverage']:.1f}%", f"{low}..{r['max_per_subject']}",
+                ])
+            if one.height > cap:
+                rows.append(["", None, f"... {one.height - cap} more", "", ""])
+        return rows
+
+    _CLASS_COLUMNS = ["class", ">instances", "predicate", ">instances with it", ">per instance"]
+
+    def _graph_doc(self, doc: _Doc, g: Optional[str], show: set, cap: int):
         ns = self._of(self.namespaces, g)
         if "namespaces" in show and ns.height:
-            roles = ns.group_by("namespace", "prefix", maintain_order=True).agg(
-                pl.format("{} {}", "terms", "role").alias("r")
+            roles = [r for r in ("predicate", "class", "subject", "object") if r in ns["role"].to_list()]
+            wide = ns.pivot("role", index=["namespace", "prefix"], values="terms", maintain_order=True)
+            doc.heading(3, f"Namespaces ({wide.height})")
+            doc.table(
+                ["prefix", "namespace"] + [">" + {"class": "classes"}.get(r, r + "s") for r in roles],
+                [[r["prefix"], r["namespace"]] + [r[x] for x in roles] for r in wide.head(cap).iter_rows(named=True)],
             )
-            out.append(f"  namespaces ({roles.height}):")
-            for r in roles.head(_cap(max_rows)).iter_rows(named=True):
-                prefix = f"{r['prefix']}:" if r["prefix"] is not None else ""
-                out.append(f"    {prefix:<10} {r['namespace']}  ({', '.join(r['r'])})")
-            out.extend(_more(cap, roles.height, "namespaces"))
+            if wide.height > cap:
+                doc.note(f"... {wide.height - cap} more namespaces")
 
         cl = self._of(self.classes, g)
         if "classes" in show and cl.height:
-            out.append(f"  classes ({cl.height}):")
-            for r in cl.head(_cap(max_rows)).iter_rows(named=True):
-                flag = "  [undeclared]" if r.get("declared") is False else ""
-                out.append(f"    {self._labelled(r['class'], r.get('label')):<40} {r['instances']:>12,}{flag}")
+            label, declared = self._has(cl, "label"), self._has(cl, "declared")
+            doc.heading(3, f"Classes ({cl.height})")
+            doc.table(
+                ["class"] + (["label"] if label else []) + [">instances"] + (["notes"] if declared else []),
+                [
+                    [self._short(r["class"])] + ([r["label"]] if label else []) + [r["instances"]]
+                    + (["undeclared" if r["declared"] is False else ""] if declared else [])
+                    for r in cl.head(cap).iter_rows(named=True)
+                ],
+            )
             if cl.height > cap:
-                rest = int(cl["instances"][cap:].sum())
-                out.append(f"    ... {cl.height - cap} more classes with {rest:,} instances")
+                doc.note(f"... {cl.height - cap} more classes with {int(cl['instances'][cap:].sum()):,} instances")
 
         pr = self._of(self.predicates, g)
         if "predicates" in show and pr.height:
-            out.append(f"  predicates ({pr.height}):")
-            out.append(f"    {'':<36} {'triples':>12} {'subjects':>12} {'objects':>12}  object types")
-            for r in pr.head(_cap(max_rows)).iter_rows(named=True):
-                out.append(self._predicate_line(r))
+            doc.heading(3, f"Predicates ({pr.height})")
+            self._predicate_table(doc, pr.head(cap))
             if pr.height > cap:
                 rest = int(pr["triples"][cap:].sum())
                 share = 100 * rest / max(int(pr["triples"].sum()), 1)
-                out.append(f"    ... {pr.height - cap} more predicates with {rest:,} triples ({share:.1f}%)")
+                doc.note(f"... {pr.height - cap} more predicates with {rest:,} triples ({share:.1f}%)")
 
         lit = self._of(self.literals, g)
         if "literals" in show and lit.height:
-            out.append(f"  literals ({lit.height}):")
-            langs = {
-                p: ", ".join(f"{l} ({n:,})" for l, n in zip(ls, ns_))
-                for p, ls, ns_ in self._of(self.languages, g)
-                .group_by("predicate", maintain_order=True)
-                .agg("language", "triples")
-                .iter_rows()
-            }
-            for r in lit.head(_cap(max_rows)).iter_rows(named=True):
-                if r["min_length"] is not None:
-                    rng = f"length {r['min_length']}..{r['max_length']}"
-                    if r["datatype"] == RDF + "langString" and r["predicate"] in langs:
-                        rng += f", languages {langs[r['predicate']]}"
-                else:
-                    rng = f"{r['min']} .. {r['max']}"
-                out.append(f"    {self._short(r['predicate']):<36} {self._short(r['datatype']):<18} {rng}")
-            out.extend(_more(cap, lit.height, "literal ranges"))
+            doc.heading(3, f"Literals ({lit.height})")
+            doc.table(
+                ["predicate", "datatype", "min", "max", "length", "languages"],
+                self._literal_rows(self._short, lit.head(cap), self._of(self.languages, g)),
+            )
+            if lit.height > cap:
+                doc.note(f"... {lit.height - cap} more")
 
         cp = self._of(self.class_predicates, g)
         if "class_predicates" in show and cp.height:
-            n_classes = cp["class"].n_unique()
+            classes = cp["class"].unique(maintain_order=True).to_list()
             class_cap = max(3, cap // 3)
-            out.append(f"  class profiles ({n_classes}; coverage of instances, objects per instance):")
-            for c in cp["class"].unique(maintain_order=True).head(class_cap).to_list():
-                out.extend("  " + line for line in self._class_lines(g, c, max_rows))
-            out.extend(_more(class_cap, n_classes, "classes (show_class)"))
+            doc.heading(3, f"Class profiles ({len(classes)})")
+            doc.table(self._CLASS_COLUMNS, self._class_rows(cp, classes[:class_cap], cap))
+            if len(classes) > class_cap:
+                doc.note(f"... {len(classes) - class_cap} more classes (show_class)")
 
         li = self._of(self.links, g)
         if "links" in show and li.height:
-            out.append(f"  links between classes ({li.height}):")
-            for r in li.head(_cap(max_rows)).iter_rows(named=True):
-                out.append(
-                    f"    {self._short(r['subject_class'])} -[{self._short(r['predicate'])}]-> "
-                    f"{self._short(r['object_class'])}  {r['triples']:,}"
-                )
-            out.extend(_more(cap, li.height, "links"))
+            doc.heading(3, f"Links between classes ({li.height})")
+            doc.table(
+                ["subject class", "predicate", "object class", ">triples"],
+                [
+                    [self._short(r["subject_class"]), self._short(r["predicate"]),
+                     self._short(r["object_class"]), r["triples"]]
+                    for r in li.head(cap).iter_rows(named=True)
+                ],
+            )
+            if li.height > cap:
+                doc.note(f"... {li.height - cap} more links")
 
         da = self._of(self.dangling, g)
         if "dangling" in show and da.height:
-            out.append(f"  IRI objects that are not subjects in this graph ({da.height} predicates):")
-            for r in da.head(_cap(max_rows)).iter_rows(named=True):
-                out.append(
-                    f"    {self._short(r['predicate']):<36} {r['objects']:>12,} objects, "
-                    f"{r['in_other_graphs']:,} of them subjects in other graphs"
-                )
-            out.extend(_more(cap, da.height, "predicates"))
-        return out
-
-    def _class_lines(self, g: Optional[str], cls: str, max_rows: Optional[int]) -> List[str]:
-        cp = self._of(self.class_predicates, g).filter(pl.col("class") == cls)
-        if not cp.height:
-            return []
-        out = [f"  {self._short(cls)} ({cp['instances'][0]:,} instances)"]
-        for r in cp.head(_cap(max_rows)).iter_rows(named=True):
-            low = r["min_per_subject"] if r["subjects"] == r["instances"] else 0
-            out.append(
-                f"    {self._short(r['predicate']):<36} {100 * r['coverage']:>5.1f}%  "
-                f"[{low}..{r['max_per_subject']}]"
+            doc.heading(3, f"References out of the graph ({da.height})")
+            doc.table(
+                ["predicate", ">objects that are not subjects here", ">of them subjects in other graphs"],
+                [[self._short(r["predicate"]), r["objects"], r["in_other_graphs"]]
+                 for r in da.head(cap).iter_rows(named=True)],
             )
-        if max_rows is not None:
-            out.extend("  " + line.strip() for line in _more(max_rows, cp.height, "predicates"))
-        return out
+            if da.height > cap:
+                doc.note(f"... {da.height - cap} more predicates")
 
-    def show_class(self, cls: str, graph: Union[str, None, List[Optional[str]]] = "*") -> str:
-        """The whole profile of one class: its instances, its predicates with coverage and
-        cardinality, and its links to and from other classes. Needs the class_predicates section
-        for the predicates and the links section for the links.
+    def show_class(
+            self, cls: str, graph: Union[str, None, List[Optional[str]]] = "*", format: str = "text"
+    ) -> str:
+        """The whole profile of one class: its instances, its predicates with the share of
+        instances that have them and the objects per instance, and its links to and from other
+        classes. Needs the class_predicates section for the predicates and the links section for
+        the links.
 
-        :param cls: The class as an IRI or prefix:local with a well-known prefix.
+        :param cls: The class as an IRI, <IRI> or prefix:local with a prefix of the report.
         :param graph: A graph (None for the default graph); every graph with the class by default.
+        :param format: "text" or "markdown".
         """
         iri = self._expand(cls)
         graphs = self.classes.filter(pl.col("class") == iri)["graph"].to_list()
         if graph != "*":
             graphs = [g for g in graphs if g in (graph if isinstance(graph, list) else [graph])]
-        out = []
+        doc = _Doc()
         for g in graphs:
             n = self._of(self.classes, g).filter(pl.col("class") == iri)["instances"][0]
-            out.append(f"{self._short(iri)} in {_graph_name(g)}: {n:,} instances")
-            out.extend(self._class_lines(g, iri, None)[1:])
-            li = self._of(self.links, g)
-            for r in li.filter(pl.col("subject_class") == iri).iter_rows(named=True):
-                out.append(f"  -[{self._short(r['predicate'])}]-> {self._short(r['object_class'])}  {r['triples']:,}")
-            for r in li.filter(pl.col("object_class") == iri).iter_rows(named=True):
-                out.append(f"  <-[{self._short(r['predicate'])}]- {self._short(r['subject_class'])}  {r['triples']:,}")
-        return "\n".join(out) if out else f"no instances of {self._short(iri)}"
+            doc.heading(2, f"{self._short(iri)} in {_graph_name(g)}: {n:,} instances")
+            cp = self._of(self.class_predicates, g).filter(pl.col("class") == iri)
+            if cp.height:
+                doc.table(self._CLASS_COLUMNS[2:], [r[2:] for r in self._class_rows(cp, [iri], _cap(None))])
+            li = self._of(self.links, g).filter((pl.col("subject_class") == iri) | (pl.col("object_class") == iri))
+            if li.height:
+                doc.heading(3, "Links")
+                doc.table(
+                    ["subject class", "predicate", "object class", ">triples"],
+                    [
+                        [self._short(r["subject_class"]), self._short(r["predicate"]),
+                         self._short(r["object_class"]), r["triples"]]
+                        for r in li.iter_rows(named=True)
+                    ],
+                )
+        return doc.render(format) if graphs else f"no instances of {self._short(iri)}\n"
 
-    def show_predicate(self, predicate: str) -> str:
+    def show_predicate(self, predicate: str, format: str = "text") -> str:
         """Everything about one predicate in every graph that has it: counts, object types, the
         most common objects, literal ranges and languages, and the classes that use it.
 
-        :param predicate: The predicate as an IRI or prefix:local with a well-known prefix.
+        :param predicate: The predicate as an IRI, <IRI> or prefix:local with a prefix of the report.
+        :param format: "text" or "markdown".
         """
         iri = self._expand(predicate)
-        out = []
-        for r in self.predicates.filter(pl.col("predicate") == iri).iter_rows(named=True):
+        doc = _Doc()
+        found = self.predicates.filter(pl.col("predicate") == iri)
+        for r in found.iter_rows(named=True):
             g = r["graph"]
-            out.append(f"{self._short(iri)} in {_graph_name(g)}")
-            out.append(self._predicate_line(r))
-            out.append(
-                f"    at most {r['max_triples_per_subject']:,} per subject, "
-                f"{r['max_triples_per_object']:,} per object"
+            doc.heading(2, f"{self._short(iri)} in {_graph_name(g)}")
+            self._predicate_table(doc, self._of(found, g))
+            doc.note(
+                f"At most {r['max_triples_per_subject']:,} per subject and "
+                f"{r['max_triples_per_object']:,} per object."
             )
-            for o, n in zip(r["common_objects"], r["common_object_counts"]):
-                out.append(f"    common object {o}  {n:,}")
-            for l in self._of(self.literals, g).filter(pl.col("predicate") == iri).iter_rows(named=True):
-                rng = (
-                    f"length {l['min_length']}..{l['max_length']}"
-                    if l["min_length"] is not None
-                    else f"{l['min']} .. {l['max']}"
+            if r["common_objects"]:
+                doc.heading(3, "Most common objects")
+                doc.table(["object", ">triples"], [[o, n] for o, n in zip(r["common_objects"], r["common_object_counts"])])
+            lit = self._of(self.literals, g).filter(pl.col("predicate") == iri)
+            if lit.height:
+                doc.heading(3, "Literals")
+                langs = self._of(self.languages, g).filter(pl.col("predicate") == iri)
+                doc.table(
+                    ["datatype", "min", "max", "length", "languages"],
+                    [row[1:] for row in self._literal_rows(self._short, lit, langs)],
                 )
-                out.append(f"    {self._short(l['datatype'])}: {rng}")
-            for l in self._of(self.languages, g).filter(pl.col("predicate") == iri).iter_rows(named=True):
-                out.append(f"    language {l['language']}: {l['triples']:,}")
-            for c in self._of(self.class_predicates, g).filter(pl.col("predicate") == iri).iter_rows(named=True):
-                out.append(
-                    f"    on {self._short(c['class'])}: {100 * c['coverage']:.1f}% of {c['instances']:,} instances"
+            cp = self._of(self.class_predicates, g).filter(pl.col("predicate") == iri)
+            if cp.height:
+                doc.heading(3, "Classes with it")
+                doc.table(
+                    ["class", ">instances", ">instances with it", ">per instance"],
+                    [
+                        [self._short(c["class"]), c["instances"], f"{100 * c['coverage']:.1f}%",
+                         f"{c['min_per_subject'] if c['subjects'] == c['instances'] else 0}..{c['max_per_subject']}"]
+                        for c in cp.iter_rows(named=True)
+                    ],
                 )
-        return "\n".join(out) if out else f"no triples with {self._short(iri)}"
+        return doc.render(format) if found.height else f"no triples with {self._short(iri)}\n"
 
 
 def _iri_cols(df: pl.DataFrame, *cols: str) -> pl.DataFrame:
@@ -919,6 +1070,12 @@ def describe(
                 )
     prefixes = dict(well_known_prefixes())
     by_ns = {ns: p for p, ns in prefixes.items()}
+    # The namespaces of predicates and classes without a well-known prefix get one for the report.
+    for f in ns_frames[:2]:
+        for ns in sorted(set(f["namespace"].to_list())):
+            if ns not in by_ns:
+                by_ns[ns] = _made_prefix(ns, set(prefixes))
+                prefixes[by_ns[ns]] = ns
     ns_frames = [
         f.with_columns(
             pl.col("namespace").cast(_S).map_elements(by_ns.get, return_dtype=_S).alias("prefix")

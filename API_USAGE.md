@@ -2690,6 +2690,229 @@ print(maplib.__version__)
 
 `get_predicate_iris` and `get_predicate` take `graph=` and `include_graphs=`.
 
+### Describing a model: describe
+
+`describe` summarises what is in each graph of a model: its predicates with the types of their
+objects and the number of distinct subjects and objects, its classes with their number of
+instances, and the namespaces of its predicates and classes. Printing the result gives a report
+of tables; the same content is in DataFrames.
+
+```python
+m = Model()
+m.reads(f"""
+@prefix ex: <{EX}> . @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+ex:p1 a ex:Pump ; rdfs:label "Feed pump"@en, "Matepumpe"@nb ; ex:powerKW 7.5 ; ex:site ex:n1 .
+ex:p2 a ex:Pump ; rdfs:label "Booster" ; ex:powerKW 11 ; ex:site ex:n1 .
+ex:p3 a ex:Pump ; rdfs:label "Spare" ; ex:site ex:s2 .
+ex:n1 a ex:Site ; rdfs:label "North" .
+""", format="turtle")
+m.reads(f"<{EX}s2> a <{EX}Site> .", format="turtle", graph="urn:graph:sites")
+
+d = m.describe()
+print(d)
+# 2 graphs, 15 triples
+#
+#     graph              triples  predicates  classes
+#     -----------------  -------  ----------  -------
+#     default graph           14           4        2
+#     <urn:graph:sites>        1           1        1
+#
+# default graph
+# =============
+#
+#   Namespaces (3)
+#     prefix  namespace                                    predicates  classes
+#     ------  -------------------------------------------  ----------  -------
+#     ns      http://example.net/ns#                                2        2
+#     rdf     http://www.w3.org/1999/02/22-rdf-syntax-ns#           1
+#     rdfs    http://www.w3.org/2000/01/rdf-schema#                 1
+#
+#   Classes (2)
+#     class    instances
+#     -------  ---------
+#     ns:Pump          3
+#     ns:Site          1
+#
+#   Predicates (4)
+#     predicate   triples  subjects  objects  object types                        notes
+#     ----------  -------  --------  -------  ----------------------------------  ----------
+#     rdfs:label        5        ~4       ~5  xsd:string (3), rdf:langString (2)
+#     rdf:type          4         4        2  IRI                                 functional
+#     ns:site           3         3        2  IRI                                 functional
+#     ns:powerKW        2        ~2       ~2  xsd:decimal (1), xsd:integer (1)
+#
+# <urn:graph:sites>
+# =================
+# ...
+
+d.graphs          # graph, triples, predicates, classes, namespaces, ...
+d.predicates      # graph, predicate, triples, distinct_subjects, distinct_objects, exact, object_types, ...
+d.classes         # graph, class, instances
+d.namespaces      # graph, namespace, prefix, role, terms
+```
+
+In the DataFrames the default graph is `None` and IRIs are written in full. The report writes
+them with prefixes: maplib's well-known ones (`well_known_prefixes()`), and for the other
+namespaces of predicates and classes a prefix made from the namespace (`ns` above), which the
+Namespaces table lists. In the notes, `functional` is a predicate with at most one object per
+subject, and `key` one that also has at most one subject per object.
+
+This default summary is made from the statistics the model keeps (see `analyze`) and one count per
+class, so it is quick on large models. A predicate whose objects have several types, or whose
+subjects are both IRIs and blank nodes, is stored as several tables, and its distinct counts are
+then the sum over its tables: an upper bound, marked with `~` in the report and `exact = False` in
+the DataFrame. `exact=True` counts them, with one query per graph.
+`graphs=[None, "urn:graph:sites"]` describes only those graphs.
+
+`sections` adds parts that read the triples of the described graphs, so ask for the ones you need,
+or for `"all"`:
+
+| Section | Content | DataFrame |
+|---|---|---|
+| `"subjects"` | distinct subjects per graph, those without a type, blank nodes | `graphs` |
+| `"class_predicates"` | for each class, the predicates of its instances: the share of instances that have it, the fewest and most objects per instance | `class_predicates` |
+| `"links"` | which classes are linked by which predicates | `links` |
+| `"literals"` | least and greatest value per predicate and datatype, the lengths of strings, the languages of language-tagged strings | `literals`, `languages` |
+| `"examples"` | an example object per predicate | `predicates.example` |
+| `"dangling"` | per predicate, the IRI objects that are not a subject in the graph, and how many of them are subjects in another graph | `dangling` |
+| `"overlap"` | for pairs of the six largest graphs: shared subjects, predicates and classes, and the IRI objects of one that are subjects in the other | `overlap` |
+| `"vocabulary"` | whether each predicate and class is declared in some graph of the model (`owl:Class`, `rdfs:Class`, `rdf:Property`, `owl:ObjectProperty`, ...), and its `rdfs:label` | `predicates.declared`, `.label`, `classes.declared`, `.label` |
+| `"iri_namespaces"` | the namespaces of the IRIs that are subjects and objects | `namespaces` |
+
+```python
+d = m.describe(sections=["subjects", "class_predicates", "links", "literals", "dangling"], exact=True)
+
+print(d.show_class("ns:Pump"))
+# ns:Pump in default graph: 3 instances
+# =====================================
+#     predicate   instances with it  per instance
+#     ----------  -----------------  ------------
+#     ns:site                100.0%          1..1
+#     rdfs:label             100.0%          1..2
+#     ns:powerKW              66.7%          0..1
+#
+#   Links
+#     subject class  predicate  object class  triples
+#     -------------  ---------  ------------  -------
+#     ns:Pump        ns:site    ns:Site             2
+
+print(d.show_predicate("rdfs:label"))
+# rdfs:label in default graph
+# ===========================
+#     predicate   triples  subjects  objects  object types                        notes
+#     ----------  -------  --------  -------  ----------------------------------  -----
+#     rdfs:label        5         4        5  xsd:string (3), rdf:langString (2)
+#     At most 2 per subject and 1 per object.
+#
+#   Literals
+#     datatype        min  max  length  languages
+#     --------------  ---  ---  ------  --------------
+#     rdf:langString            9..9    nb (1), en (1)
+#     xsd:string                5..7
+#
+#   Classes with it
+#     class    instances  instances with it  per instance
+#     -------  ---------  -----------------  ------------
+#     ns:Pump          3             100.0%          1..2
+#     ns:Site          1             100.0%          1..1
+
+print(d.to_text(graphs=[None], sections=["literals", "dangling"]))
+# 2 graphs, 15 triples
+#
+#     graph              triples  predicates  classes  subjects  untyped  blank
+#     -----------------  -------  ----------  -------  --------  -------  -----
+#     default graph           14           4        2         4        0      0
+#     <urn:graph:sites>        1           1        1         1        0      0
+#
+# default graph
+# =============
+#
+#   Literals (4)
+#     predicate   datatype        min  max  length  languages
+#     ----------  --------------  ---  ---  ------  --------------
+#     ns:powerKW  xsd:decimal     7.5  7.5
+#     ns:powerKW  xsd:integer     11   11
+#     rdfs:label  rdf:langString            9..9    nb (1), en (1)
+#     rdfs:label  xsd:string                5..7
+#
+#   References out of the graph (1)
+#     predicate  objects that are not subjects here  of them subjects in other graphs
+#     ---------  ----------------------------------  --------------------------------
+#     ns:site                                     1                                 1
+```
+
+In a class profile, `66.7%` and `0..1` say that two of the three pumps have a `powerKW`, and those
+that do have one. `ex:s2` is the site of a pump in the default graph but only described in
+`urn:graph:sites`, which the last table shows.
+
+`to_markdown` (or `to_text(format="markdown")`) gives the same report as Markdown headings and
+tables, for a notebook, a document or a language model. In Jupyter a description is shown that
+way. `show_class` and `show_predicate` take `format="markdown"` too.
+
+```python
+print(d.to_markdown(graphs=[None], sections=["classes", "links"]))
+# # 2 graphs, 15 triples
+#
+# | graph | triples | predicates | classes | subjects | untyped | blank |
+# |---|---:|---:|---:|---:|---:|---:|
+# | default graph | 14 | 4 | 2 | 4 | 0 | 0 |
+# | <urn:graph:sites> | 1 | 1 | 1 | 1 | 0 | 0 |
+#
+# ## default graph
+#
+# ### Classes (2)
+#
+# | class | instances |
+# |---|---:|
+# | ns:Pump | 3 |
+# | ns:Site | 1 |
+#
+# ### Links between classes (1)
+#
+# | subject class | predicate | object class | triples |
+# |---|---|---|---:|
+# | ns:Pump | ns:site | ns:Site | 2 |
+```
+
+The report does not grow with the model. Its first table has the 15 largest graphs, then the 5
+largest graphs are detailed with the 15 largest rows of each table, and lines such as
+`... 26 more predicates with 1,204 triples (0.3%)` count what is left out. Graphs with the
+same predicates as a graph already detailed are only named (`Same predicates in 30 more graphs:
+...`). `print(d)` gives at most 20,000 characters. To see more or less:
+
+```python
+d.to_text(max_graphs=1, max_rows=5)             # None for no limit
+d.to_text(max_chars=4000)                       # halves max_rows, then max_graphs, until it fits
+d.to_text(graphs=["urn:graph:sites"])           # these graphs instead of the largest
+d.to_text(sections=["classes", "predicates"])   # only these sections
+d.to_dict(max_rows=20, max_graphs=3)            # plain dicts and lists, e.g. for json.dumps
+```
+
+`show_class` and `show_predicate` take an IRI, `<IRI>` or a name with a prefix of the report. The
+DataFrames always hold everything that was computed; their size follows the number of graphs,
+predicates and classes, not the number of triples.
+
+`diff` compares two descriptions, e.g. before and after a mapping, an update or an inference run:
+
+```python
+before = m.describe()
+m.update(f"INSERT DATA {{ <{EX}p4> a <{EX}Pump> }}")
+print(m.describe().diff(before))
+# 1 predicates changed
+# ====================
+#     graph          predicate  before  after  change
+#     -------------  ---------  ------  -----  ------
+#     default graph  rdf:type        4      5      +1
+#
+# 1 classes changed
+# =================
+#     graph          class    before  after  change
+#     -------------  -------  ------  -----  ------
+#     default graph  ns:Pump       3      4      +1
+```
+
+Its `predicates` and `classes` are DataFrames with `before`, `after` and `change`.
+
 ### Threads
 
 A `Model` can be shared between threads. Reads (`query`, `query_external`, `write`, `writes`,
