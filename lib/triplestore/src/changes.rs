@@ -1,6 +1,7 @@
 //! What an update actually changed: the triples really inserted (not already present) and really
 //! deleted (present before the deletion), per graph.
 
+use utils::polars::CollectAuto;
 use crate::errors::TriplestoreError;
 use crate::storage::Triples;
 use crate::NewTriples;
@@ -125,7 +126,7 @@ pub(crate) fn table_as_new_triples(
         Some(
             concat_lfs(lfs)
                 .select([col(SUBJECT_COL_NAME), col(OBJECT_COL_NAME)])
-                .collect()
+                .collect_auto()
                 .unwrap(),
         )
     };

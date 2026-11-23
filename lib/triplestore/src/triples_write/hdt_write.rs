@@ -8,6 +8,7 @@
 //! As in hdt-java and hdt-cpp, a literal is stored with its value as it is, not N-Triples escaped:
 //! `"value"`, `"value"@lang` or `"value"^^<datatype>`.
 
+use utils::polars::CollectAuto;
 use crate::errors::TriplestoreError;
 use crate::Triplestore;
 use hdt::containers::rdf::{Id, Literal as HdtLiteral, Term as HdtTerm, Triple as HdtTriple};
@@ -83,7 +84,7 @@ pub(super) fn write_hdt<W: Write>(
                 for (lf, _) in tt.get_lazy_frames(&None, &None)? {
                     let df = lf
                         .select([col(SUBJECT_COL_NAME), col(OBJECT_COL_NAME)])
-                        .collect()
+                        .collect_auto()
                         .map_err(polars_error)?;
                     tables.push((p, subject_type.clone(), object_type.clone(), df));
                 }
@@ -357,7 +358,7 @@ fn typed_objects(
         )
         .map_err(polars_error)?
         .select([col(SUBJECT_COL_NAME), col(ROW_INDEX_COL)])
-        .collect()
+        .collect_auto()
         .map_err(polars_error)?;
     if joined.height() == height {
         return Ok(TypedObjects {

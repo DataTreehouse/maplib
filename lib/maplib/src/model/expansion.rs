@@ -1,6 +1,7 @@
 mod functions;
 pub mod validation;
 
+use utils::polars::CollectAuto;
 use super::{MapOptions, Model, OTTRTripleInstance, StaticColumn};
 use crate::errors::MaplibError;
 use crate::model::constant_terms::{constant_blank_node_to_series, constant_to_expr};
@@ -409,7 +410,7 @@ fn fill_nulls_with_defaults(
 ) -> Result<LazyFrame, MappingError> {
     if default.has_blank_node() {
         let df = lf
-            .collect()
+            .collect_auto()
             .map_err(|e| MappingError::LiteralParseError(e.to_string()))?;
         let has_nulls = df
             .column(c)
@@ -624,7 +625,7 @@ fn create_list_triples(
                 .unwrap()
                 .alias(REST_COL),
         )
-        .collect()
+        .collect_auto()
         .unwrap();
     *df = my_df
         .lazy()
@@ -635,7 +636,7 @@ fn create_list_triples(
                 + lit("_0"))
             .alias(c),
         )
-        .collect()
+        .collect_auto()
         .unwrap();
 
     let mut first_df = list_df.select([FIRST_COL, c]).unwrap();
@@ -651,7 +652,7 @@ fn create_list_triples(
             col(FIRST_COL).alias(SUBJECT_COL_NAME),
             col(REST_COL).alias(OBJECT_COL_NAME),
         ])
-        .collect()
+        .collect_auto()
         .unwrap();
 
     let rest_nil_df = rest_df
@@ -664,10 +665,10 @@ fn create_list_triples(
             ))
             .alias(OBJECT_COL_NAME),
         )
-        .collect()
+        .collect_auto()
         .unwrap();
 
-    let rest_df = rest_df.lazy().drop_nulls(None).collect().unwrap();
+    let rest_df = rest_df.lazy().drop_nulls(None).collect_auto().unwrap();
 
     let results = vec![
         CreateTriplesResult {

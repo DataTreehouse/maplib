@@ -16,6 +16,7 @@
 //! to strings before sending, since the dictionaries are not sent, and the columns otherwise
 //! keep maplib's layout (multi-type columns are structs with a field per type).
 
+use utils::polars::CollectAuto;
 use crate::cats::LockedCats;
 use crate::cats::{maybe_decode_complex_expr, maybe_decode_expr};
 use crate::result::QueryResultKind;
@@ -242,7 +243,7 @@ fn encode_mappings(
         .collect();
     sm.mappings = decode_cats(sm.mappings.lazy(), &mut sm.rdf_node_types, cats)
         .select(order.iter().map(|c| col(c.as_str())).collect::<Vec<_>>())
-        .collect()
+        .collect_auto()
         .map_err(err)?;
     let (schema, batches) = df_to_batches(sm.mappings, batch_rows)?;
     let mut fields = vec![];

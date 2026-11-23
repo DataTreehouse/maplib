@@ -1,3 +1,4 @@
+use utils::polars::CollectAuto;
 use super::Triplestore;
 use crate::errors::TriplestoreError;
 use crate::sparql::QuerySettings;
@@ -458,7 +459,7 @@ impl Triplestore {
                     if let Some(lfs) = t.get_lazy_frame_slices()? {
                         for lf in lfs {
                             let exprs: Vec<_> = cols.iter().map(|c| col(*c)).collect();
-                            let df = lf.select(exprs).collect().unwrap();
+                            let df = lf.select(exprs).collect_auto().unwrap();
                             for c in &cols {
                                 for u in df.column(c).unwrap().u32().unwrap().iter().flatten() {
                                     match seen.get(&u) {
@@ -701,7 +702,7 @@ impl Triplestore {
 
                 if let Some(lfs) = t.get_lazy_frame_slices()? {
                     for lf in lfs {
-                        let df = lf.collect().unwrap();
+                        let df = lf.collect_auto().unwrap();
                         update_blocks_map(
                             &mut in_degree_one_blocks_map,
                             &df,
@@ -974,7 +975,7 @@ impl Triplestore {
                 if s.is_blank_node() {
                     let lfs = v.get_lazy_frame_slices()?;
                     if let Some(lfs) = lfs {
-                        let df = concat_lfs_subject_object(lfs).collect().unwrap();
+                        let df = concat_lfs_subject_object(lfs).collect_auto().unwrap();
                         let subject_u32s = df.column(SUBJECT_COL_NAME).unwrap().u32().unwrap();
                         for s in subject_u32s.iter().flatten() {
                             *first_counts.entry(s).or_default() += 1;
@@ -1090,7 +1091,7 @@ impl Triplestore {
                     }
                     let lf = v.get_lazy_frame_slices()?;
                     if let Some(lfs) = lf {
-                        let df = concat_lfs_subject_object(lfs).collect().unwrap();
+                        let df = concat_lfs_subject_object(lfs).collect_auto().unwrap();
                         let subject_u32s = df.column(SUBJECT_COL_NAME).unwrap().u32().unwrap();
                         for s in subject_u32s.iter().flatten() {
                             *rest_counts.entry(s).or_default() += 1;
@@ -1195,7 +1196,7 @@ impl Triplestore {
             let mut out = vec![];
             if let Some(lfs) = t.get_lazy_frame_slices()? {
                 for lf in lfs {
-                    let df = lf.select([col(SUBJECT_COL_NAME)]).collect().unwrap();
+                    let df = lf.select([col(SUBJECT_COL_NAME)]).collect_auto().unwrap();
                     out.extend(
                         df.column(SUBJECT_COL_NAME)
                             .unwrap()
@@ -1253,7 +1254,7 @@ impl Triplestore {
                         for lf in lfs {
                             let df = lf
                                 .select([col(SUBJECT_COL_NAME), col(OBJECT_COL_NAME)])
-                                .collect()
+                                .collect_auto()
                                 .unwrap();
                             let objects_u32_iter =
                                 df.column(OBJECT_COL_NAME).unwrap().u32().unwrap();
@@ -1287,7 +1288,7 @@ impl Triplestore {
                 if subject_type.is_blank_node() {
                     if let Some(lfs) = v.get_lazy_frame_slices()? {
                         for lf in lfs {
-                            let df = lf.select([col(SUBJECT_COL_NAME)]).collect().unwrap();
+                            let df = lf.select([col(SUBJECT_COL_NAME)]).collect_auto().unwrap();
                             let subjects_u32_iter =
                                 df.column(SUBJECT_COL_NAME).unwrap().u32().unwrap();
                             for u in subjects_u32_iter.iter() {

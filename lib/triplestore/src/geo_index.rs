@@ -1,3 +1,4 @@
+use utils::polars::CollectAuto;
 use crate::errors::TriplestoreError;
 use crate::{NewTriples, Triplestore};
 use geo::is_geo_literal_type;
@@ -24,7 +25,7 @@ impl Triplestore {
                 for (lf, _) in ts.get_lazy_frames(&None, &None)? {
                     index
                         .add_geometries(
-                            &lf.collect().unwrap(),
+                            &lf.collect_auto().unwrap(),
                             object_type,
                             &object_type.default_stored_cat_state(),
                             self.global_cats.clone(),

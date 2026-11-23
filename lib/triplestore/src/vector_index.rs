@@ -1,3 +1,4 @@
+use utils::polars::CollectAuto;
 use crate::errors::TriplestoreError;
 use crate::{NewTriples, Triplestore};
 use representation::dataset::NamedGraph;
@@ -26,7 +27,7 @@ impl Triplestore {
                     for (lf, _) in ts.get_lazy_frames(&None, &None)? {
                         index
                             .add_vectors(
-                                &lf.collect().unwrap(),
+                                &lf.collect_auto().unwrap(),
                                 predicate,
                                 subject_type,
                                 object_type,

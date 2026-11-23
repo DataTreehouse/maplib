@@ -1,3 +1,4 @@
+use utils::polars::CollectAuto;
 use crate::error::PyMaplibError;
 use maplib::errors::MaplibError;
 use pyo3::{pyclass, pymethods, Py, PyAny, PyResult, Python};
@@ -17,7 +18,7 @@ fn format_message_column(df: DataFrame) -> DataFrame {
     if df.column(MESSAGE_COL).is_ok() {
         df.lazy()
             .with_column(format_shacl_message_list(col(MESSAGE_COL)).alias(MESSAGE_COL))
-            .collect()
+            .collect_auto()
             .unwrap()
     } else {
         df

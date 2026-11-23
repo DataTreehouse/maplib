@@ -4,6 +4,7 @@ pub(crate) mod inl;
 pub mod remote_segments;
 pub mod so_index;
 
+use utils::polars::CollectAuto;
 use crate::errors::TriplestoreError;
 use crate::statistics::sketch::SegmentSketch;
 use crate::storage::so_index::SubjectObjectIndex;
@@ -538,7 +539,7 @@ impl Triples {
 
             for mut lf in lfs {
                 lf = lf.select(select_cols.as_slice());
-                let df = lf.collect().map_err(TriplestoreError::LazyLoadError)?;
+                let df = lf.collect_auto().map_err(TriplestoreError::LazyLoadError)?;
 
                 if self.subject_type.stored_cat() {
                     if !type_u32s.contains_key(&self.subject_type) {
@@ -591,7 +592,7 @@ impl Triples {
         }
         if let Some(lfs) = self.get_lazy_frame_slices()? {
             for lf in lfs {
-                let df = lf.collect().map_err(TriplestoreError::LazyLoadError)?;
+                let df = lf.collect_auto().map_err(TriplestoreError::LazyLoadError)?;
                 if s_cat {
                     extend_codes(
                         type_codes.entry(self.subject_type.clone()).or_default(),
@@ -2328,7 +2329,7 @@ fn compact_segments(
                 limit: None,
             },
         )
-        .collect()
+        .collect_auto()
         .map_err(TriplestoreError::LazyLoadError)?;
     // The object sort is created from the rank columns.
     if object_indexing_enabled {

@@ -512,7 +512,7 @@ fn query_to_result(
                                     col(PREDICATE_COL_NAME),
                                     col(OBJECT_COL_NAME),
                                 ])
-                                .collect()
+                                .collect_auto()
                                 .map_err(|e| PyMaplibError::RuntimeError(e.to_string()))?;
                             rdf_node_types.insert(
                                 PREDICATE_COL_NAME.to_string(),

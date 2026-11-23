@@ -7,6 +7,7 @@
 //! expansion, as Model.map_triples does, so no rows are handled one by one in Python and the
 //! triples of a predicate are added together.
 
+use representation::CollectAuto;
 use crate::errors::R2RMLError;
 use crate::mapping::{
     LogicalTable, ObjectMap, R2RMLMapping, RefObjectMap, TemplatePart, TermMap, TermType,
@@ -362,7 +363,7 @@ fn evaluate(
                 let out = tmp
                     .lazy()
                     .select([concat_str(exprs, "", false).alias("t")])
-                    .collect()?;
+                    .collect_auto()?;
                 out.column("t")?.str()?.clone()
             }
         }
@@ -413,7 +414,7 @@ fn evaluate(
                         lit(l.clone()).alias(LANG_STRING_LANG_FIELD),
                     ])
                     .alias("t")])
-                    .collect()?;
+                    .collect_auto()?;
                 let s = out.column("t")?.as_materialized_series().clone();
                 return Ok(Evaluated::Columns(vec![(
                     mask,
@@ -745,7 +746,7 @@ fn emit(
                 df.lazy()
                     .filter(filter)
                     .drop(polars::prelude::by_name(["_mask"], false, false))
-                    .collect()?
+                    .collect_auto()?
             } else {
                 df
             };
@@ -799,7 +800,7 @@ fn constant_terms(t: &Term, height: usize) -> Result<Terms, R2RMLError> {
                         lit(lang.to_string()).alias(LANG_STRING_LANG_FIELD),
                     ])
                     .alias("t")])
-                    .collect()?;
+                    .collect_auto()?;
                 let s = out.column("t")?.as_materialized_series().new_from_index(0, height);
                 Ok(Terms {
                     series: s,
@@ -896,7 +897,7 @@ fn join_tables(
     Ok(left
         .lazy()
         .join(right.lazy(), left_on, right_on, JoinArgs::new(JoinType::Inner))?
-        .collect()?)
+        .collect_auto()?)
 }
 
 /// Evaluates the parent subject map on the joined table, where the parent columns are prefixed.

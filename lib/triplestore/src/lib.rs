@@ -24,6 +24,7 @@ pub mod storage;
 pub mod triples_read;
 pub mod triples_write;
 
+use utils::polars::CollectAuto;
 use crate::errors::TriplestoreError;
 use crate::graph_map::GraphTriplesMap;
 use crate::query_cache::{QueryCache, Touched};
@@ -204,7 +205,7 @@ impl Triplestore {
                                 continue;
                             }
                             for (lf, _) in triples.get_lazy_frames(&None, &None)? {
-                                let df = lf.collect().unwrap();
+                                let df = lf.collect_auto().unwrap();
                                 if st == &t {
                                     mark(df.column(SUBJECT_COL_NAME).unwrap());
                                 }
@@ -412,7 +413,7 @@ impl Triplestore {
                         let uset = us.get_mut(st).unwrap();
                         let lfs = triples.get_lazy_frames(&None, &None)?;
                         for (lf, _) in lfs {
-                            let subjects_df = lf.select([col(SUBJECT_COL_NAME)]).collect().unwrap();
+                            let subjects_df = lf.select([col(SUBJECT_COL_NAME)]).collect_auto().unwrap();
                             let subjects_ser = subjects_df.column(SUBJECT_COL_NAME).unwrap();
                             for u in subjects_ser.u32().unwrap().iter() {
                                 uset.insert(u.unwrap());
@@ -426,7 +427,7 @@ impl Triplestore {
                         let uset = us.get_mut(ot).unwrap();
                         let lfs = triples.get_lazy_frames(&None, &None)?;
                         for (lf, _) in lfs {
-                            let objects_df = lf.select([col(OBJECT_COL_NAME)]).collect().unwrap();
+                            let objects_df = lf.select([col(OBJECT_COL_NAME)]).collect_auto().unwrap();
                             let objects_ser = objects_df.column(OBJECT_COL_NAME).unwrap();
                             if ot.is_lang_string() {
                                 let langs_ser = objects_ser
@@ -938,7 +939,7 @@ impl Triplestore {
                                     .get_mut(graph)
                                     .unwrap()
                                     .add_literal_string(
-                                        &lf.collect().unwrap(),
+                                        &lf.collect_auto().unwrap(),
                                         predicate,
                                         subject_type,
                                         &subject_type.default_stored_cat_state(),
@@ -1476,7 +1477,7 @@ fn create_rank_expr(
                             .alias(x.name().as_str()),
                         )
                         .select([col(x.name().as_str())])
-                        .collect()
+                        .collect_auto()
                         .unwrap();
                     let c = df.drop_in_place(x.name().as_str())?;
                     Ok(c)

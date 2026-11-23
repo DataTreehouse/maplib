@@ -94,7 +94,7 @@ impl QueryResultKind {
                                 col(PREDICATE_COL_NAME),
                                 col(OBJECT_COL_NAME),
                             ])
-                            .collect()
+                            .collect_auto()
                             .unwrap();
                         sm.rdf_node_types.insert(
                             PREDICATE_COL_NAME.to_string(),

@@ -1,6 +1,7 @@
 pub mod federation;
 pub mod maplib_endpoint;
 
+use representation::CollectAuto;
 use polars::frame::DataFrame;
 use polars::prelude::{col, Column, IntoLazy};
 use query_processing::bindings::maybe_replace_bindings;
@@ -234,7 +235,7 @@ impl SparqlEndpoint {
                     let mut sm = EagerSolutionMappings::from_query_solutions(solutions.as_slice())
                         .map_err(SparqlEndpointQueryError::InvalidResults)?;
                     let cols: Vec<_> = vars.iter().map(|x| col(x.as_str())).collect();
-                    sm.mappings = sm.mappings.lazy().select(cols).collect().unwrap();
+                    sm.mappings = sm.mappings.lazy().select(cols).collect_auto().unwrap();
                     sm
                 } else {
                     let mut columns = Vec::with_capacity(vars.len());

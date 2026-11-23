@@ -1,3 +1,4 @@
+use utils::polars::CollectAuto;
 use crate::errors::TriplestoreError;
 use crate::{TriplesToAdd, Triplestore};
 use oxrdf::vocab::{rdf, xsd};
@@ -62,7 +63,7 @@ impl Triplestore {
                         col(id_col.clone()).alias(SUBJECT_COL_NAME),
                         col(c).alias(OBJECT_COL_NAME),
                     ])
-                    .collect()
+                    .collect_auto()
                     .unwrap(),
                 subject_type: subj_type,
                 object_type: base_obj_type.clone(),
@@ -86,7 +87,7 @@ impl Triplestore {
                     lit(root_node_uuri.as_str()).alias(SUBJECT_COL_NAME),
                     col(id_col.clone()).alias(OBJECT_COL_NAME),
                 ])
-                .collect()
+                .collect_auto()
                 .unwrap(),
             subject_type: BaseRDFNodeType::IRI,
             object_type: BaseRDFNodeType::IRI,
@@ -103,7 +104,7 @@ impl Triplestore {
                 .lazy()
                 .select([col(id_col).alias(SUBJECT_COL_NAME)])
                 .with_row_index(OBJECT_COL_NAME.to_string(), None)
-                .collect()
+                .collect_auto()
                 .unwrap(),
             subject_type: BaseRDFNodeType::IRI,
             object_type: num_dt.clone(),

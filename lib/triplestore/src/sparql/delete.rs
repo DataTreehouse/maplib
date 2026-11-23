@@ -1,3 +1,4 @@
+use utils::polars::CollectAuto;
 use crate::errors::TriplestoreError;
 use crate::sparql::errors::SparqlError;
 use crate::changes::Deleted;
@@ -139,7 +140,7 @@ fn partition_by_global_predicate_col(
                 PREDICATE_COL_NAME,
                 &BaseRDFNodeType::IRI,
             )
-            .collect()
+            .collect_auto()
             .unwrap();
             sm.rdf_node_types.insert(
                 PREDICATE_COL_NAME.to_string(),

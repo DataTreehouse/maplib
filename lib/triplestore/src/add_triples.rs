@@ -1,3 +1,4 @@
+use utils::polars::CollectAuto;
 use super::{
     add_rank_sort_triples, can_encode_globally, prepare_add_triples_global,
     prepare_add_triples_par, NewTriples, TriplesToAdd, Triplestore,
@@ -295,7 +296,7 @@ fn normalize_datetime_objects(mut t: TriplesToAdd) -> TriplesToAdd {
                 .df
                 .lazy()
                 .with_column(col(OBJECT_COL_NAME).cast(dt))
-                .collect()
+                .collect_auto()
                 .unwrap();
         }
     }

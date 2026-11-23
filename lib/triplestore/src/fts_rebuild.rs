@@ -1,3 +1,4 @@
+use utils::polars::CollectAuto;
 use crate::errors::TriplestoreError;
 use crate::Triplestore;
 
@@ -25,7 +26,7 @@ impl Triplestore {
                         for (lf, _) in ts.get_lazy_frames(&None, &None)? {
                             index
                                 .add_literal_string(
-                                    &lf.collect().unwrap(),
+                                    &lf.collect_auto().unwrap(),
                                     predicate,
                                     subject_type,
                                     &subject_type.default_stored_cat_state(),

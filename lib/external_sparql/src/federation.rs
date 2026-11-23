@@ -12,6 +12,7 @@
 //! The requests run on their own thread with their own Tokio runtime, so that they can be made
 //! from synchronous code that runs within another runtime (e.g. the server or chrontext).
 
+use representation::CollectAuto;
 use crate::maplib_endpoint::arrow_query_url;
 use futures::{StreamExt, TryStreamExt};
 use polars::frame::DataFrame;
@@ -707,7 +708,7 @@ pub fn project_variables(
     let df = df
         .lazy()
         .select(variables.iter().map(|v| col(v.as_str())).collect::<Vec<_>>())
-        .collect()
+        .collect_auto()
         .unwrap();
     EagerSolutionMappings::new(df, states)
 }

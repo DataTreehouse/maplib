@@ -1,3 +1,4 @@
+use utils::polars::CollectAuto;
 use super::{MapOptions, Model};
 use crate::errors::MaplibError;
 use oxrdf::vocab::{rdf, xsd};
@@ -412,7 +413,7 @@ fn create_results_input(
         ))),
     );
 
-    (mappings.collect().unwrap(), column_types)
+    (mappings.collect_auto().unwrap(), column_types)
 }
 
 fn create_targets_input(
@@ -462,7 +463,7 @@ fn create_targets_input(
             .alias("shape"),
         )
         .select([col("report"), col("shape"), col("target_count")])
-        .collect()
+        .collect_auto()
         .unwrap();
 
     let mut target_count_iri_builder = SeriesBuilder::new(&BaseRDFNodeType::IRI);

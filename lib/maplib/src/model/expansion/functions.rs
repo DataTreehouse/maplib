@@ -6,6 +6,7 @@
 //! instance, by translating it to a SPARQL expression and evaluating that expression with the
 //! triplestore's vectorized expression evaluator over the argument columns.
 
+use utils::polars::CollectAuto;
 use super::super::StaticColumn;
 use crate::model::constant_terms::constant_to_expr;
 use crate::model::errors::MappingError;
@@ -166,7 +167,7 @@ pub(crate) fn evaluate_function_call(
     }
     let mut df = mappings
         .select([result_expr.alias(target_name)])
-        .collect()
+        .collect_auto()
         .map_err(|e| {
             MappingError::FunctionEvaluationError(function_call.to_string(), e.to_string())
         })?;

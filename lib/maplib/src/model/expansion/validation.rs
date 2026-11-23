@@ -1,3 +1,4 @@
+use utils::polars::CollectAuto;
 use crate::model::errors::MappingError;
 use oxiri::Iri;
 use oxrdf::vocab::{rdfs, xsd};
@@ -54,7 +55,7 @@ pub fn validate(
                         df = df
                             .lazy()
                             .with_column(expr)
-                            .collect()
+                            .collect_auto()
                             .map_err(|e| column_conversion_error(name, e))?;
                     }
                     // xsd:duration values are stored by their lexical form
@@ -64,7 +65,7 @@ pub fn validate(
                         df = df
                             .lazy()
                             .with_column(col(name).dt().to_string("iso"))
-                            .collect()
+                            .collect_auto()
                             .map_err(|e| column_conversion_error(name, e))?;
                     }
                     map.insert(name.to_string(), t);
@@ -496,7 +497,7 @@ fn autoconvert_datatypes(
                 df = df
                     .lazy()
                     .with_column(col(p.variable.as_str()).cast(dt))
-                    .collect()
+                    .collect_auto()
                     .unwrap();
                 if let Some(mapping_column_types) = mapping_column_types {
                     mapping_column_types.remove(p.variable.as_str());
