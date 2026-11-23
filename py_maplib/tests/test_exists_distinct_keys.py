@@ -86,6 +86,14 @@ CHILD = textwrap.dedent(
       FILTER NOT EXISTS {{ ?product ex:feature ?feature }}
     }} GROUP BY ?feature'''
     m.query("SELECT (COUNT(*) AS ?c) WHERE {{ ?s ?p ?o }}", cache=False)
+    # Start the streaming engine before the memory of the model is read: the measured query is
+    # collected by it, and its threads and their allocator arenas are a cost of the process,
+    # not of the query. Mapping the triples started it until small plans were collected on one
+    # thread (2026-11-23), after which the first streaming collect was the measured query.
+    import os
+    os.environ["MAPLIB_POLARS_ENGINE"] = "streaming"
+    m.query("SELECT (COUNT(*) AS ?c) WHERE {{ ?s ?p ?o }}", cache=False)
+    del os.environ["MAPLIB_POLARS_ENGINE"]
     print("ready", flush=True)
     sys.stdin.readline()
     df = m.query(q, cache=False)
@@ -204,7 +212,9 @@ def test_bsbm_bi4_not_exists_answers_and_memory():
     for f, (n, s) in expected.items():
         assert rows[f][0] == n, f
         assert rows[f][1] == pytest.approx(s), f
-    assert peak - base < QUERY_PEAK_LIMIT_MB, f"query peaked at +{peak - base:.0f} MB"
+    assert peak - base < QUERY_PEAK_LIMIT_MB, (
+        f"query peaked at +{peak - base:.0f} MB (from {base:.0f} to {peak:.0f} MB)"
+    )
 
 
 DATA = f"""
