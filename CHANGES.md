@@ -1,9 +1,15 @@
 # Change log
 
-## v0.27.0
+## Unreleased
 ### Features
 - RML: `Model.map_rml(mapping=None, sources=None, mapping_graph=None, database=None, tables=None, base_iri=None, graph=None, ignore_data_errors=False)` maps CSV, JSON and XML sources with an RML mapping, in the vocabulary of the W3C community group (`http://w3id.org/rml/`) or the first RML vocabulary (`http://semweb.mmlab.be/ns/rml#` with `rr:` term maps), also mixed. A logical source takes the place of the logical table of R2RML and references that of columns; the rest is the R2RML engine of `map_r2rml`, and a mapping can join logical sources with logical tables of a database. A JSON or XML source is mapped to a temporary graph with the Façade-X mapping of `map_json` and `map_xml`, and the iterator and the references are translated to one SPARQL query over it, so no JSONPath or XPath library is used. Supported are the paths that translate: `$`, `.key`, `['key']` and `[*]` in JSONPath, and element names, `*`, `.`, `..`, `@attribute` and `text()` with `/`, `//` and the predicates `[@a='v']`, `[e='v']`, `[.='v']`, `[@a]` and `[e]` in XPath. Array indexes, filters, recursive descent, positions, XPath functions and axes, and XML namespaces raise an error that names them; RML functions (FnO), RML-star, logical targets and remote sources are not supported. A reference with several values for a record gives a term per value, and JSON numbers and booleans give typed literals. The API usage guide lists the gaps. In Rust this is `Model::map_rml` and `maplib::rml`, and `r2rml::mapping::LogicalTable` has the new variant `Source`
 - R2RML: `Model.map_r2rml(mapping_graph="urn:graph:r2rml", database=db)` reads the mapping from the triples of a graph of the model instead of from a Turtle file or string, so that a mapping can be read with `m.read`, queried, updated and validated like other triples, and is kept by `serialize`. `mapping` and `mapping_graph` can not be given together, and a graph without triples maps raises an error. Relative IRIs of such a mapping were resolved when it was read, so `base_iri` then only applies to the relative IRIs generated from the data. The API usage guide has a new section on R2RML. In Rust this is `Model::r2rml_mapping_from_graph`
+
+### Bug fixes
+- R2RML: a `DECIMAL` or `NUMERIC` column with a scale that is mapped without `rr:datatype` gives `xsd:decimal` literals, as the natural mapping of R2RML specifies, instead of plain strings. This is also the type of a literal such as `7.5` in DuckDB
+
+## v0.27.0
+### Features
 - maplib Enterprise Edition: `m.serialize(path, raw_db=True)` keeps the full text search index of the model, with its options (`fts_predicates`, `fts_local_names`, `fts_iris`), and `Model.deserialize` gives a model that is searched right away, in memory, hybrid and disk storage. Before, the index was left out and `create_index(IndexingOptions(fts=True))` had to index every string again after deserializing. For a model with 4M indexed strings, the first search is answered 0.7 s after deserializing into disk storage instead of 5.0 s, and 1.4 s instead of 2.9 s in memory storage; serializing it takes 6.7 s instead of 4.1 s and the serialization is 436 MB instead of 255 MB. A serialization without `raw_db` has no index, as before
 
 ### Performance
@@ -15,9 +21,6 @@
 - `COUNT(DISTINCT ?x)` over a variable of one datatype counts the distinct values of each group without filtering its unbound values first, e.g. the orders per country of customers with an `OPTIONAL` order
 - A sequence path with an arbitrary length step right under `DISTINCT`, e.g. `SELECT DISTINCT ?s ?o WHERE { ?s :includes/:rest+ ?o }`, is evaluated for its distinct ends, without a solution per intermediate node that `DISTINCT` then removes
 - The small steps outside of queries no longer run Polars' streaming engine either: `map_df`, the term maps of an R2RML mapping, the Turtle and HDT writers (a step per predicate and pair of types), rebuilding the full text, geo and vector indexes, the lists and casts of a mapped frame and the triples of a `CONSTRUCT` result. Mappings of small tables and writes of small graphs with many predicates are faster
-
-### Bug fixes
-- R2RML: a `DECIMAL` or `NUMERIC` column with a scale that is mapped without `rr:datatype` gives `xsd:decimal` literals, as the natural mapping of R2RML specifies, instead of plain strings. This is also the type of a literal such as `7.5` in DuckDB
 
 ## v0.26.2
 ### Performance
