@@ -655,6 +655,143 @@ Things to know:
 - `m.map_fabric(...)` **EE** generates an R2RML mapping from a Microsoft Fabric ontology, runs it
   with `map_r2rml` and returns it.
 
+### CSV, JSON and XML with RML: map_rml
+
+`map_rml(mapping=None, sources=None, mapping_graph=None, database=None, tables=None, base_iri=None,
+graph=None, ignore_data_errors=False)` maps CSV, JSON and XML sources with an
+[RML](https://rml.io/specs/rml/) mapping. RML is R2RML with two changes: a *logical source*
+(`rml:logicalSource`) with a reference formulation and an iterator takes the place of the logical
+table, and *references* (`rml:reference`, and `{reference}` in templates) take the place of
+columns. Term maps, classes, graphs, joins, base IRIs and data errors work as in
+[`map_r2rml`](#relational-databases-map_r2rml).
+
+```python
+plant = """{
+  "pumps": [
+    {"id": 1, "name": "Feed pump", "kw": 7.5, "site": {"code": "N1"}, "tags": ["feed", "main"]},
+    {"id": 2, "name": "Booster", "kw": 11, "site": {"code": "N1"}, "tags": []}
+  ],
+  "sites": [{"code": "N1", "label": "North"}]
+}"""
+
+mapping = """
+@prefix rr: <http://www.w3.org/ns/r2rml#> .
+@prefix rml: <http://semweb.mmlab.be/ns/rml#> .
+@prefix ql: <http://semweb.mmlab.be/ns/ql#> .
+@prefix ex: <http://example.net/ns#> .
+
+<#Pump> rml:logicalSource [ rml:source "plant.json" ;
+        rml:referenceFormulation ql:JSONPath ; rml:iterator "$.pumps[*]" ] ;
+    rr:subjectMap [ rr:template "http://example.net/pump/{id}" ; rr:class ex:Pump ] ;
+    rr:predicateObjectMap [ rr:predicate ex:name ; rr:objectMap [ rml:reference "name" ] ] ;
+    rr:predicateObjectMap [ rr:predicate ex:powerKW ; rr:objectMap [ rml:reference "kw" ] ] ;
+    rr:predicateObjectMap [ rr:predicate ex:tag ; rr:objectMap [ rml:reference "tags[*]" ] ] ;
+    rr:predicateObjectMap [ rr:predicate ex:site ;
+        rr:objectMap [ rr:parentTriplesMap <#Site> ;
+            rr:joinCondition [ rr:child "site.code" ; rr:parent "code" ] ] ] .
+
+<#Site> rml:logicalSource [ rml:source "plant.json" ;
+        rml:referenceFormulation ql:JSONPath ; rml:iterator "$.sites[*]" ] ;
+    rr:subjectMap [ rr:template "http://example.net/site/{code}" ] ;
+    rr:predicateObjectMap [ rr:predicate ex:label ; rr:objectMap [ rml:reference "label" ] ] .
+"""
+
+m = Model()
+m.map_rml(mapping, sources={"plant.json": plant})
+print(m.writes(format="turtle"))
+# <http://example.net/pump/1> a <http://example.net/ns#Pump> ;
+#     <http://example.net/ns#name> "Feed pump" ;
+#     <http://example.net/ns#powerKW> "7.5"^^xsd:double ;
+#     <http://example.net/ns#site> <http://example.net/site/N1> ;
+#     <http://example.net/ns#tag> "feed", "main" .
+# <http://example.net/pump/2> a <http://example.net/ns#Pump> ;
+#     <http://example.net/ns#name> "Booster" ;
+#     <http://example.net/ns#powerKW> "11.0"^^xsd:double ;
+#     <http://example.net/ns#site> <http://example.net/site/N1> .
+# <http://example.net/site/N1> <http://example.net/ns#label> "North" .
+```
+
+The iterator selects the records, and each reference is evaluated on a record. A reference with
+several values, such as `tags[*]`, gives a triple per value, and a missing key, a `null` or an
+empty array gives none.
+
+**Sources.** `sources` holds the sources by their `rml:source` in the mapping: a path, the document
+as a string or bytes, or for CSV also a Polars `DataFrame`. A source that is not in `sources` is
+read from the file that its `rml:source` names, relative to the working directory or to the folder
+of the mapping file. Nothing is fetched over the network. A mapping may also have logical tables of
+R2RML next to its logical sources, which are queried in `database` or given in `tables`, so one
+mapping can join a database table with a file. `mapping_graph` reads the mapping from a graph of
+the model, as for `map_r2rml`.
+
+```python
+m.map_rml("mapping.ttl")                                    # the files named in the mapping
+m.map_rml(mapping, sources={"plant.json": "/data/plant-2026.json"})
+m.map_rml(mapping, sources={"sites.csv": sites_df}, database=con)
+```
+
+**XML** sources have the reference formulation `ql:XPath`:
+
+```python
+mapping = """
+@prefix rr: <http://www.w3.org/ns/r2rml#> .
+@prefix rml: <http://semweb.mmlab.be/ns/rml#> .
+@prefix ql: <http://semweb.mmlab.be/ns/ql#> .
+@prefix ex: <http://example.net/ns#> .
+
+<#Pump> rml:logicalSource [ rml:source "plant.xml" ;
+        rml:referenceFormulation ql:XPath ; rml:iterator "/plant/pump[@kind='feed']" ] ;
+    rr:subjectMap [ rr:template "http://example.net/pump/{@id}" ] ;
+    rr:predicateObjectMap [ rr:predicate ex:name ; rr:objectMap [ rml:reference "name" ] ] ;
+    rr:predicateObjectMap [ rr:predicate ex:plant ; rr:objectMap [ rml:reference "../@name" ] ] .
+"""
+m.map_rml(mapping, sources={"plant.xml": """<plant name="North">
+  <pump id="1" kind="feed"><name>Feed pump</name></pump>
+  <pump id="2" kind="booster"><name>Booster</name></pump>
+</plant>"""})
+# <http://example.net/pump/1> <http://example.net/ns#name> "Feed pump" ;
+#     <http://example.net/ns#plant> "North" .
+```
+
+**CSV** sources have the reference formulation `ql:CSV` and no iterator: the records are the rows
+and the references are the column names.
+
+**Types.** JSON numbers and booleans give `xsd:integer`, `xsd:double` and `xsd:boolean` literals
+when all the values of a reference have that type. The values of CSV and XML sources are strings.
+Give the term map an `rr:datatype` for another type.
+
+**Vocabularies.** Both RML vocabularies are read, also mixed in one mapping: the first one shown
+above (`rml:` is `http://semweb.mmlab.be/ns/rml#`, with `rr:` term maps and the `ql:` reference
+formulations), and that of the W3C community group, where every term is in `http://w3id.org/rml/`
+(`rml:subjectMap`, `rml:template`, `rml:JSONPath`, ...).
+
+**How it works.** A JSON or XML source is first mapped to a temporary graph, outside the model,
+with the [Façade-X mapping](#façade-x-map_df-map_json-and-map_xml) of `map_json` and `map_xml`. The
+iterator and the references are translated to one SPARQL query over that graph, which gives a table
+with a row per record and a column per reference, and that table is mapped as the result of a
+logical table is. So the paths are evaluated by the SPARQL engine, not by a JSONPath or XPath
+library, and the supported paths are those that translate:
+
+| | Supported | Not supported: raises an error that names it |
+|---|---|---|
+| JSONPath | `$`, `.key`, `['key']`, `[*]`; a reference may leave out `$.`, and a reference without `.` and `[` is one key, also with spaces | array indexes and slices (`[0]`, `[1:3]`), filters (`[?(...)]`), recursive descent (`..`), wildcards over keys (`.*`) |
+| XPath | element names, `*`, `.`, `..`, `@attribute`, `text()`, separated by `/` and `//`; the predicates `[@a='v']`, `[e='v']`, `[.='v']`, `[@a]`, `[e]` | positions (`[1]`, `last()`), functions, axes (`following-sibling::`), unions, comparisons other than `=`, namespaces (prefixed names) |
+
+Other gaps to know:
+
+- **Array order and duplicates.** The Façade-X graph of a JSON document does not keep the order of
+  array items, which is why indexes are not supported, and equal values in one array are one value.
+- **XML documents with namespaces.** Names in a path match elements and attributes without a
+  namespace. A document with `xmlns` declarations is mapped by `map_xml`, but its names can not be
+  selected here yet.
+- **Mixed content.** The value of an element is its own text, not the concatenated text of its
+  descendants as in XPath.
+- **Memory.** The whole document is mapped to triples before anything is selected, and a triples
+  map with several references that each have several values per record gets a row per combination
+  of them before the duplicates are removed. Split such a map in two if that gets large.
+- **Not part of this:** RML functions (FnO), RML-star, logical targets, remote sources, and sources
+  described as databases or CSVW tables in the mapping.
+- **Test coverage.** The tests are maplib's own. The RML community test cases are not included yet.
+
 ### Templates from an ontology: generate_templates
 
 `maplib.generate_templates(m, graph=None, prefixes=None)` makes one template per class of an

@@ -12,7 +12,7 @@ mod graph_map;
 mod vector_index;
 mod map_df;
 mod map_json;
-pub use map_json::DocumentFormat;
+pub use map_json::{json_key_local_name, DocumentFormat};
 mod map_xml;
 pub mod query_cache;
 pub mod query_solutions;

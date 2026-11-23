@@ -1,12 +1,32 @@
 //! Parsing R2RML mapping documents (<https://www.w3.org/TR/r2rml/>) into triples maps.
+//!
+//! RML mappings are read into the same triples maps: a logical source (rml:logicalSource) takes
+//! the place of the logical table, and a reference (rml:reference) that of a column. The terms of
+//! R2RML are accepted in the R2RML namespace, in the RML namespace of the W3C community group
+//! (<http://w3id.org/rml/>) and in the earlier RML namespace
+//! (<http://semweb.mmlab.be/ns/rml#>), also mixed.
 
 use crate::errors::{mapping_err, R2RMLError};
 use oxrdf::vocab::rdf;
-use oxrdf::{Graph, NamedNode, NamedNodeRef, NamedOrBlankNode, Term, TermRef};
+use oxrdf::{Graph, NamedNode, NamedOrBlankNode, Term, TermRef};
 use oxttl::TurtleParser;
 use std::collections::{BTreeMap, BTreeSet};
 
 pub const RR: &str = "http://www.w3.org/ns/r2rml#";
+/// The RML namespace of the W3C Knowledge Graph Construction community group.
+pub const RML: &str = "http://w3id.org/rml/";
+/// The RML namespace of the first RML specification, used together with rr: terms.
+pub const RML_OLD: &str = "http://semweb.mmlab.be/ns/rml#";
+/// The namespace of the reference formulations of the first RML specification.
+pub const QL: &str = "http://semweb.mmlab.be/ns/ql#";
+
+/// The namespaces a term of R2RML or RML may be in.
+const TERM_NAMESPACES: [&str; 3] = [RR, RML, RML_OLD];
+
+/// The local name of an IRI in one of the given namespaces.
+fn local_name<'a>(iri: &'a str, namespaces: &[&str]) -> Option<&'a str> {
+    namespaces.iter().find_map(|ns| iri.strip_prefix(ns))
+}
 
 fn rr(local: &str) -> NamedNode {
     NamedNode::new_unchecked(format!("{RR}{local}"))
@@ -35,15 +55,54 @@ pub enum LogicalTable {
     Table(String),
     /// rr:sqlQuery
     Query(String),
+    /// rml:logicalSource: a CSV, JSON or XML source.
+    Source(LogicalSource),
+}
+
+/// How the references of a logical source are written, rml:referenceFormulation.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub enum ReferenceFormulation {
+    /// References are column names.
+    CSV,
+    /// The iterator and the references are JSONPath expressions.
+    JSONPath,
+    /// The iterator and the references are XPath expressions.
+    XPath,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct LogicalSource {
+    /// rml:source, the name of the source: a path, or the key of a source given by the caller.
+    pub source: String,
+    pub formulation: ReferenceFormulation,
+    /// rml:iterator, which selects the records of the source. Without one, the records are the
+    /// rows of a CSV source, the root of a JSON source and the root element of an XML source.
+    pub iterator: Option<String>,
 }
 
 impl LogicalTable {
-    /// The effective SQL query of the logical table.
+    /// The effective SQL query of the logical table. For a logical source, which has none, a
+    /// key that identifies the source, its reference formulation and its iterator.
     pub fn sql(&self) -> String {
         match self {
             LogicalTable::Table(t) => format!("SELECT * FROM {t}"),
             LogicalTable::Query(q) => q.trim().trim_end_matches(';').trim().to_string(),
+            LogicalTable::Source(s) => format!(
+                "rml:logicalSource {:?} {:?} {:?}",
+                s.source,
+                s.formulation,
+                s.iterator.as_deref().unwrap_or("")
+            ),
         }
+    }
+
+    /// The key of the rows of the logical table in the tables given to `execute`.
+    pub fn key(&self) -> String {
+        self.sql()
+    }
+
+    pub fn is_sql(&self) -> bool {
+        !matches!(self, LogicalTable::Source(_))
     }
 }
 
@@ -98,7 +157,8 @@ pub struct TermMap {
 
 impl TermMap {
     pub fn is_default_graph(&self) -> bool {
-        matches!(&self.value, TermValue::Constant(Term::NamedNode(nn)) if nn.as_str() == format!("{RR}defaultGraph"))
+        matches!(&self.value, TermValue::Constant(Term::NamedNode(nn))
+            if local_name(nn.as_str(), &TERM_NAMESPACES) == Some("defaultGraph"))
     }
 
     /// The columns the term map references.
@@ -156,13 +216,28 @@ fn as_node(t: TermRef) -> Option<NamedOrBlankNode> {
 }
 
 impl<'a> Parser<'a> {
+    /// The objects of a property, which is given in the R2RML namespace and is also looked up
+    /// in the RML namespaces.
     fn objects(&self, s: &NamedOrBlankNode, p: &NamedNode) -> Vec<Term> {
-        let mut v: Vec<Term> = self
-            .g
-            .objects_for_subject_predicate(s, p)
-            .map(|t| t.into_owned())
-            .collect();
+        let mut v: Vec<Term> = match p.as_str().strip_prefix(RR) {
+            Some(local) => TERM_NAMESPACES
+                .iter()
+                .flat_map(|ns| {
+                    let p = NamedNode::new_unchecked(format!("{ns}{local}"));
+                    self.g
+                        .objects_for_subject_predicate(s, &p)
+                        .map(|t| t.into_owned())
+                        .collect::<Vec<Term>>()
+                })
+                .collect(),
+            None => self
+                .g
+                .objects_for_subject_predicate(s, p)
+                .map(|t| t.into_owned())
+                .collect(),
+        };
         v.sort_by_key(|t| t.to_string());
+        v.dedup();
         v
     }
 
@@ -202,11 +277,30 @@ impl<'a> Parser<'a> {
 
     fn logical_table(&self, tm: &NamedOrBlankNode) -> Result<LogicalTable, R2RMLError> {
         let lts = self.nodes(tm, &rr("logicalTable"))?;
-        let lt = match lts.as_slice() {
-            [lt] => lt.clone(),
-            [] => return mapping_err(format!("the triples map {} has no rr:logicalTable", node_name(tm))),
-            _ => return mapping_err(format!("the triples map {} has more than one rr:logicalTable", node_name(tm))),
+        let sources = self.nodes(tm, &rr("logicalSource"))?;
+        let lt = match (lts.as_slice(), sources.as_slice()) {
+            ([lt], []) => lt.clone(),
+            ([], [source]) => return self.logical_source(tm, source),
+            ([], []) => {
+                return mapping_err(format!(
+                    "the triples map {} has no rr:logicalTable or rml:logicalSource",
+                    node_name(tm)
+                ))
+            }
+            _ => {
+                return mapping_err(format!(
+                    "the triples map {} has more than one rr:logicalTable or rml:logicalSource",
+                    node_name(tm)
+                ))
+            }
         };
+        if self.string(&lt, &rr("tableName"))?.is_none()
+            && self.string(&lt, &rr("sqlQuery"))?.is_none()
+            && !self.objects(&lt, &rr("source")).is_empty()
+        {
+            // A logical source given with rr:logicalTable.
+            return self.logical_source(tm, &lt);
+        }
         let table = self.string(&lt, &rr("tableName"))?;
         let query = self.string(&lt, &rr("sqlQuery"))?;
         match (table, query) {
@@ -221,6 +315,72 @@ impl<'a> Parser<'a> {
                 node_name(tm)
             )),
         }
+    }
+
+    fn logical_source(
+        &self,
+        tm: &NamedOrBlankNode,
+        ls: &NamedOrBlankNode,
+    ) -> Result<LogicalTable, R2RMLError> {
+        let name = node_name(tm);
+        let sources = self.objects(ls, &rr("source"));
+        let source = match sources.as_slice() {
+            [Term::Literal(l)] => l.value().to_string(),
+            [t] => {
+                // A source description: only a path is read from it.
+                let path = match as_node(t.as_ref()) {
+                    Some(n) => self.string(&n, &rr("path"))?,
+                    None => None,
+                };
+                match (path, t) {
+                    (Some(p), _) => p,
+                    (None, Term::NamedNode(nn)) => nn.as_str().to_string(),
+                    (None, _) => {
+                        return mapping_err(format!(
+                            "the rml:source of the logical source of {name} must be a string, an IRI or have an rml:path"
+                        ))
+                    }
+                }
+            }
+            [] => return mapping_err(format!("the logical source of {name} has no rml:source")),
+            _ => return mapping_err(format!("the logical source of {name} has more than one rml:source")),
+        };
+        let iterator = self.string(ls, &rr("iterator"))?;
+        let formulations = self.objects(ls, &rr("referenceFormulation"));
+        let formulation = match formulations.as_slice() {
+            [] => {
+                // By the extension of the source, and CSV otherwise.
+                let lower = source.to_lowercase();
+                if lower.ends_with(".json") {
+                    ReferenceFormulation::JSONPath
+                } else if lower.ends_with(".xml") {
+                    ReferenceFormulation::XPath
+                } else {
+                    ReferenceFormulation::CSV
+                }
+            }
+            [Term::NamedNode(nn)] => match local_name(nn.as_str(), &[QL, RML, RML_OLD]) {
+                Some("CSV") => ReferenceFormulation::CSV,
+                Some("JSONPath") => ReferenceFormulation::JSONPath,
+                Some("XPath") => ReferenceFormulation::XPath,
+                _ => {
+                    return mapping_err(format!(
+                        "the rml:referenceFormulation {nn} of {name} is not supported: use CSV, JSONPath or XPath"
+                    ))
+                }
+            },
+            [t] => {
+                return mapping_err(format!(
+                    "the rml:referenceFormulation {t} of {name} must be one of the IRIs for CSV, JSONPath and XPath"
+                ))
+            }
+            _ => return mapping_err(format!("the logical source of {name} has more than one rml:referenceFormulation")),
+        };
+        Ok(LogicalTable::Source(LogicalSource {
+            source,
+            formulation,
+            iterator,
+        }))
     }
 
     /// The term maps given by `map_property` (e.g. rr:subjectMap) and the constant shortcut
@@ -245,11 +405,17 @@ impl<'a> Parser<'a> {
     fn term_map(&self, n: &NamedOrBlankNode, position: Position) -> Result<TermMap, R2RMLError> {
         let constants = self.objects(n, &rr("constant"));
         let column = self.string(n, &rr("column"))?;
+        // A reference of RML is evaluated as a column of the records of the logical source.
+        let reference = self.string(n, &rr("reference"))?;
         let template = self.string(n, &rr("template"))?;
-        let count = constants.len() + column.is_some() as usize + template.is_some() as usize;
+        let count = constants.len()
+            + column.is_some() as usize
+            + reference.is_some() as usize
+            + template.is_some() as usize;
+        let column = column.or(reference);
         if count != 1 {
             return mapping_err(format!(
-                "the {} {} must have exactly one of rr:constant, rr:column and rr:template",
+                "the {} {} must have exactly one of rr:constant, rr:column, rml:reference and rr:template",
                 position.name(),
                 node_name(n)
             ));
@@ -347,7 +513,7 @@ impl<'a> Parser<'a> {
 }
 
 fn parse_term_type(tt: &NamedNode) -> Result<TermType, R2RMLError> {
-    match tt.as_str().strip_prefix(RR) {
+    match local_name(tt.as_str(), &TERM_NAMESPACES) {
         Some("IRI") => Ok(TermType::IRI),
         Some("BlankNode") => Ok(TermType::BlankNode),
         Some("Literal") => Ok(TermType::Literal),
@@ -487,14 +653,18 @@ pub fn mapping_from_graph(g: &Graph) -> Result<R2RMLMapping, R2RMLError> {
     let p = Parser { g };
     // Triples maps: typed as rr:TriplesMap, or with a logical table.
     let mut nodes: BTreeMap<String, NamedOrBlankNode> = BTreeMap::new();
-    let tm_type = rr("TriplesMap");
-    for s in g.subjects_for_predicate_object(rdf::TYPE, &tm_type) {
-        let s = s.into_owned();
-        nodes.insert(node_name(&s), s);
+    for ns in TERM_NAMESPACES {
+        let tm_type = NamedNode::new_unchecked(format!("{ns}TriplesMap"));
+        for s in g.subjects_for_predicate_object(rdf::TYPE, &tm_type) {
+            let s = s.into_owned();
+            nodes.insert(node_name(&s), s);
+        }
     }
-    let lt = rr("logicalTable");
     for t in g.iter() {
-        if t.predicate == NamedNodeRef::from(&lt) {
+        if matches!(
+            local_name(t.predicate.as_str(), &TERM_NAMESPACES),
+            Some("logicalTable" | "logicalSource")
+        ) {
             let s = t.subject.into_owned();
             nodes.insert(node_name(&s), s);
         }
@@ -590,8 +760,56 @@ impl R2RMLMapping {
         let set: BTreeSet<String> = self
             .triples_maps
             .iter()
+            .filter(|t| t.logical_table.is_sql())
             .map(|t| t.logical_table.sql())
             .collect();
         set.into_iter().collect()
+    }
+
+    /// The distinct logical sources of the mapping, each with the references that are evaluated
+    /// on its records: those of the term maps of its triples maps, and of the join conditions
+    /// that it is the child or the parent of. In a stable order.
+    pub fn logical_sources(&self) -> Vec<(LogicalSource, Vec<String>)> {
+        fn references(t: &TermMap) -> Vec<String> {
+            t.columns().into_iter().map(|c| c.to_string()).collect()
+        }
+        let mut out: BTreeMap<LogicalSource, BTreeSet<String>> = BTreeMap::new();
+        for tm in &self.triples_maps {
+            if let LogicalTable::Source(source) = &tm.logical_table {
+                let found = out.entry(source.clone()).or_default();
+                found.extend(references(&tm.subject_map));
+                for g in &tm.subject_graphs {
+                    found.extend(references(g));
+                }
+                for pom in &tm.predicate_object_maps {
+                    for t in pom.predicates.iter().chain(pom.graphs.iter()) {
+                        found.extend(references(t));
+                    }
+                    for om in &pom.objects {
+                        match om {
+                            ObjectMap::Term(t) => found.extend(references(t)),
+                            ObjectMap::Ref(r) => {
+                                found.extend(r.join_conditions.iter().map(|(c, _)| c.clone()))
+                            }
+                        }
+                    }
+                }
+            }
+            // The parent sides of the join conditions.
+            for pom in &tm.predicate_object_maps {
+                for om in &pom.objects {
+                    if let ObjectMap::Ref(r) = om {
+                        if let LogicalTable::Source(source) = &self.triples_maps[r.parent].logical_table {
+                            out.entry(source.clone())
+                                .or_default()
+                                .extend(r.join_conditions.iter().map(|(_, p)| p.clone()));
+                        }
+                    }
+                }
+            }
+        }
+        out.into_iter()
+            .map(|(s, r)| (s, r.into_iter().collect()))
+            .collect()
     }
 }

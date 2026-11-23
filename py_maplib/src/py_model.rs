@@ -127,6 +127,258 @@ fn result_bytes(kind: &QueryResultKind) -> usize {
     }
 }
 
+impl PyModel {
+    /// Maps with an R2RML or RML mapping, see map_r2rml and map_rml. The mapping is a path to a
+    /// Turtle file or the Turtle itself, or it is read from a graph of the model. With
+    /// `rml_sources`, the mapping may have RML logical sources, which are taken from `sources`
+    /// or read from the files they name.
+    #[allow(clippy::too_many_arguments)]
+    fn map_with_mapping(
+        &self,
+        py: Python<'_>,
+        mapping: Option<&Bound<'_, PyAny>>,
+        mapping_graph: Option<String>,
+        database: Option<&Bound<'_, PyAny>>,
+        tables: Option<HashMap<String, Bound<'_, PyAny>>>,
+        sources: Option<HashMap<String, Bound<'_, PyAny>>>,
+        rml_sources: bool,
+        base_iri: Option<String>,
+        graph: Option<String>,
+        ignore_data_errors: Option<bool>,
+    ) -> PyResult<()> {
+        use r2rml::mapping::{LogicalTable, ReferenceFormulation};
+        let argument_error =
+            |s: String| -> PyErr { PyMaplibError::FunctionArgumentError(s).into() };
+        let base_iri = base_iri.unwrap_or_else(|| "urn:maplib:r2rml:".to_string());
+        // The folder of the mapping file, which relative paths of sources are also looked up in.
+        let mut mapping_folder: Option<PathBuf> = None;
+        let parsed = match (mapping, mapping_graph) {
+            (None, Some(mapping_graph)) => {
+                // The mapping is stored as triples in a graph of the model.
+                let mapping_graph = NamedGraph::NamedGraph(parse_named_node(mapping_graph)?);
+                py.detach(|| -> PyResult<r2rml::R2RMLMapping> {
+                    self.read_inner()
+                        .r2rml_mapping_from_graph(&mapping_graph)
+                        .map_err(|x| PyMaplibError::from(x).into())
+                })?
+            }
+            (Some(mapping), None) => {
+                // The mapping is a path to a Turtle file, or the Turtle itself.
+                let text: String = if let Ok(p) = mapping.extract::<PathBuf>() {
+                    let looks_like_turtle = mapping
+                        .extract::<String>()
+                        .map(|s| {
+                            s.contains('\n')
+                                || s.contains("rr:")
+                                || s.contains("rml:")
+                                || s.contains("r2rml#")
+                        })
+                        .unwrap_or(false);
+                    if !looks_like_turtle && p.exists() {
+                        mapping_folder = p.parent().map(|x| x.to_path_buf());
+                        std::fs::read_to_string(&p).map_err(|e| {
+                            argument_error(format!(
+                                "could not read the mapping {}: {e}",
+                                p.display()
+                            ))
+                        })?
+                    } else {
+                        mapping.extract::<String>()?
+                    }
+                } else {
+                    mapping.extract::<String>()?
+                };
+                r2rml::parse_mapping(&text, Some(&base_iri))
+                    .map_err(|e| PyMaplibError::from(maplib::errors::MaplibError::from(e)))?
+            }
+            (Some(_), Some(_)) => {
+                return Err(argument_error(
+                    "give either mapping or mapping_graph, not both".to_string(),
+                ))
+            }
+            (None, None) => {
+                return Err(argument_error(
+                    "give the mapping in mapping, or the graph that holds it in mapping_graph"
+                        .to_string(),
+                ))
+            }
+        };
+        let logical_sources = parsed.logical_sources();
+        if !rml_sources && !logical_sources.is_empty() {
+            return Err(argument_error(
+                "the mapping has RML logical sources (rml:logicalSource): map it with map_rml"
+                    .to_string(),
+            ));
+        }
+        // The result of each logical table query: given in tables (by query or table name), or
+        // from the database.
+        let mut results: HashMap<String, polars::prelude::DataFrame> = HashMap::new();
+        let fetch_start = std::time::Instant::now();
+        for tm in &parsed.triples_maps {
+            if !tm.logical_table.is_sql() {
+                continue;
+            }
+            let sql = tm.logical_table.sql();
+            if results.contains_key(&sql) {
+                continue;
+            }
+            let mut given = tables.as_ref().and_then(|t| t.get(&sql));
+            if given.is_none() {
+                if let LogicalTable::Table(name) = &tm.logical_table {
+                    let unquoted = name.trim_matches('"').to_string();
+                    given = tables
+                        .as_ref()
+                        .and_then(|t| t.get(name).or_else(|| t.get(&unquoted)));
+                }
+            }
+            let frame = match (given, database) {
+                (Some(df), _) => df.clone(),
+                (None, Some(db)) => db.call_method1("query", (sql.as_str(),))?,
+                (None, None) => {
+                    return Err(argument_error(format!(
+                        "no database was given, and tables has no result for the logical table {sql}"
+                    )))
+                }
+            };
+            let df = if frame.hasattr("to_arrow")? && frame.hasattr("height")? {
+                // A polars DataFrame
+                representation::python_df_to_rust::polars_df_to_rust_df(&frame)?
+            } else if frame.hasattr("to_arrow_table")? {
+                // duckdb relations give Arrow record batches directly, without a round trip
+                // through polars in Python.
+                let table = frame.call_method0("to_arrow_table")?;
+                let batches: Vec<Bound<'_, PyAny>> =
+                    table.call_method0("to_batches")?.extract()?;
+                if batches.is_empty() {
+                    polars::prelude::DataFrame::empty()
+                } else {
+                    representation::python_df_to_rust::array_to_rust_df(&batches)?
+                }
+            } else if frame.hasattr("pl")? {
+                representation::python_df_to_rust::polars_df_to_rust_df(
+                    &frame.call_method0("pl")?,
+                )?
+            } else {
+                representation::python_df_to_rust::polars_df_to_rust_df(&frame)?
+            };
+            results.insert(sql, df);
+        }
+        // The sources of the logical sources: given in sources by their rml:source, or read from
+        // the file that the rml:source names. CSV is read with polars, every column as strings,
+        // and JSON and XML are read as bytes.
+        let mut source_data: HashMap<String, maplib::rml::RmlSource> = HashMap::new();
+        for (source, _) in &logical_sources {
+            let name = &source.source;
+            if source_data.contains_key(name) {
+                continue;
+            }
+            let read_csv = |csv: &Bound<'_, PyAny>| -> PyResult<maplib::rml::RmlSource> {
+                let kwargs = PyDict::new(py);
+                kwargs.set_item("infer_schema_length", 0)?;
+                let df = py
+                    .import("polars")?
+                    .call_method("read_csv", (csv,), Some(&kwargs))?;
+                Ok(maplib::rml::RmlSource::Table(
+                    representation::python_df_to_rust::polars_df_to_rust_df(&df)?,
+                ))
+            };
+            let from_bytes = |bytes: Vec<u8>| -> PyResult<maplib::rml::RmlSource> {
+                match source.formulation {
+                    ReferenceFormulation::CSV => read_csv(PyBytes::new(py, &bytes).as_any()),
+                    ReferenceFormulation::JSONPath => Ok(maplib::rml::RmlSource::Json(bytes)),
+                    ReferenceFormulation::XPath => Ok(maplib::rml::RmlSource::Xml(bytes)),
+                }
+            };
+            let from_file = |path: &PathBuf| -> PyResult<maplib::rml::RmlSource> {
+                match source.formulation {
+                    ReferenceFormulation::CSV => {
+                        read_csv(PyString::new(py, &path.to_string_lossy()).as_any())
+                    }
+                    _ => from_bytes(std::fs::read(path).map_err(|e| {
+                        argument_error(format!(
+                            "could not read the source {}: {e}",
+                            path.display()
+                        ))
+                    })?),
+                }
+            };
+            let data = match sources.as_ref().and_then(|s| s.get(name)) {
+                Some(given) if given.hasattr("to_arrow")? && given.hasattr("height")? => {
+                    maplib::rml::RmlSource::Table(
+                        representation::python_df_to_rust::polars_df_to_rust_df(given)?,
+                    )
+                }
+                Some(given) if given.is_instance_of::<PyBytes>() => {
+                    from_bytes(given.extract::<Vec<u8>>()?)?
+                }
+                Some(given) => {
+                    // A path, or the document itself.
+                    let as_string = given.extract::<String>().ok();
+                    let is_document = as_string
+                        .as_ref()
+                        .map(|s| {
+                            let t = s.trim_start();
+                            s.contains('\n')
+                                || t.starts_with('{')
+                                || t.starts_with('[')
+                                || t.starts_with('<')
+                        })
+                        .unwrap_or(false);
+                    match (is_document, as_string, given.extract::<PathBuf>()) {
+                        (true, Some(s), _) => from_bytes(s.into_bytes())?,
+                        (false, _, Ok(path)) if path.exists() => from_file(&path)?,
+                        (false, Some(s), _) => {
+                            return Err(argument_error(format!(
+                                "the source {name:?} was given as {s:?}, which is not a file that exists"
+                            )))
+                        }
+                        _ => {
+                            return Err(argument_error(format!(
+                                "the source {name:?} must be a path, a document as a string or bytes, or a polars DataFrame"
+                            )))
+                        }
+                    }
+                }
+                None => {
+                    let path = PathBuf::from(name);
+                    let in_folder = mapping_folder.as_ref().map(|f| f.join(name));
+                    if path.exists() {
+                        from_file(&path)?
+                    } else if let Some(p) = in_folder.filter(|p| p.exists()) {
+                        from_file(&p)?
+                    } else {
+                        return Err(argument_error(format!(
+                            "the source {name:?} of the mapping is not in sources, and is not a file that exists"
+                        )));
+                    }
+                }
+            };
+            source_data.insert(name.clone(), data);
+        }
+        tracing::debug!(target: "r2rml_timing", "r2rml_timing: fetch={}", fetch_start.elapsed().as_secs_f64());
+        let graph = parse_optional_named_node(graph)?;
+        let options = r2rml::R2RMLOptions {
+            base_iri,
+            graph: NamedGraph::from_maybe_named_node(graph.as_ref()),
+            ignore_data_errors: ignore_data_errors.unwrap_or(false),
+            blank_node_prefix: format!("r2rml{}_", uuid::Uuid::new_v4().simple()),
+        };
+        let warnings = py.detach(move || -> PyResult<Vec<String>> {
+            let mut inner = self.write_inner();
+            inner
+                .map_rml(&parsed, &mut source_data, &results, &options)
+                .map_err(|x| PyMaplibError::from(x).into())
+        })?;
+        let category = py.get_type::<pyo3::exceptions::PyUserWarning>();
+        for w in &warnings {
+            let msg = std::ffi::CString::new(format!("R2RML: {w}").replace('\0', ""))
+                .unwrap_or_default();
+            PyErr::warn(py, category.as_any(), &msg, 1)?;
+        }
+        Ok(())
+    }
+}
+
 #[pymethods]
 impl PyModel {
     #[new]
@@ -577,130 +829,48 @@ impl PyModel {
         ignore_data_errors: Option<bool>,
         mapping_graph: Option<String>,
     ) -> PyResult<()> {
-        let base_iri = base_iri.unwrap_or_else(|| "urn:maplib:r2rml:".to_string());
-        let mapping = match (mapping, mapping_graph) {
-            (Some(mapping), None) => Ok(mapping),
-            (None, Some(mapping_graph)) => {
-                // The mapping is stored as triples in a graph of the model.
-                let mapping_graph = NamedGraph::NamedGraph(parse_named_node(mapping_graph)?);
-                Err(py.detach(|| -> PyResult<r2rml::R2RMLMapping> {
-                    self.read_inner()
-                        .r2rml_mapping_from_graph(&mapping_graph)
-                        .map_err(|x| PyMaplibError::from(x).into())
-                })?)
-            }
-            (Some(_), Some(_)) => {
-                return Err(PyMaplibError::FunctionArgumentError(
-                    "give either mapping or mapping_graph, not both".to_string(),
-                )
-                .into())
-            }
-            (None, None) => {
-                return Err(PyMaplibError::FunctionArgumentError(
-                    "give the R2RML mapping in mapping, or the graph that holds it in mapping_graph"
-                        .to_string(),
-                )
-                .into())
-            }
-        };
-        let parsed = match mapping {
-            Err(parsed) => parsed,
-            Ok(mapping) => {
-        // The mapping is a path to a Turtle file, or the Turtle itself.
-        let text: String = if let Ok(p) = mapping.extract::<PathBuf>() {
-            let looks_like_turtle = mapping
-                .extract::<String>()
-                .map(|s| s.contains('\n') || s.contains("rr:") || s.contains("r2rml#"))
-                .unwrap_or(false);
-            if !looks_like_turtle && p.exists() {
-                std::fs::read_to_string(&p).map_err(|e| {
-                    PyMaplibError::FunctionArgumentError(format!(
-                        "could not read the R2RML mapping {}: {e}",
-                        p.display()
-                    ))
-                })?
-            } else {
-                mapping.extract::<String>()?
-            }
-        } else {
-            mapping.extract::<String>()?
-        };
-        r2rml::parse_mapping(&text, Some(&base_iri))
-            .map_err(|e| PyMaplibError::from(maplib::errors::MaplibError::from(e)))?
-            }
-        };
-        // The result of each logical table query: given in tables (by query or table name), or
-        // from the database.
-        let mut results: HashMap<String, polars::prelude::DataFrame> = HashMap::new();
-        let fetch_start = std::time::Instant::now();
-        for tm in &parsed.triples_maps {
-            let sql = tm.logical_table.sql();
-            if results.contains_key(&sql) {
-                continue;
-            }
-            let mut given = tables.as_ref().and_then(|t| t.get(&sql));
-            if given.is_none() {
-                if let r2rml::mapping::LogicalTable::Table(name) = &tm.logical_table {
-                    let unquoted = name.trim_matches('"').to_string();
-                    given = tables
-                        .as_ref()
-                        .and_then(|t| t.get(name).or_else(|| t.get(&unquoted)));
-                }
-            }
-            let frame = match (given, database) {
-                (Some(df), _) => df.clone(),
-                (None, Some(db)) => db.call_method1("query", (sql.as_str(),))?,
-                (None, None) => {
-                    return Err(PyMaplibError::FunctionArgumentError(format!(
-                        "no database was given, and tables has no result for the logical table {sql}"
-                    ))
-                    .into())
-                }
-            };
-            let df = if frame.hasattr("to_arrow")? && frame.hasattr("height")? {
-                // A polars DataFrame
-                representation::python_df_to_rust::polars_df_to_rust_df(&frame)?
-            } else if frame.hasattr("to_arrow_table")? {
-                // duckdb relations give Arrow record batches directly, without a round trip
-                // through polars in Python.
-                let table = frame.call_method0("to_arrow_table")?;
-                let batches: Vec<Bound<'_, PyAny>> =
-                    table.call_method0("to_batches")?.extract()?;
-                if batches.is_empty() {
-                    polars::prelude::DataFrame::empty()
-                } else {
-                    representation::python_df_to_rust::array_to_rust_df(&batches)?
-                }
-            } else if frame.hasattr("pl")? {
-                representation::python_df_to_rust::polars_df_to_rust_df(
-                    &frame.call_method0("pl")?,
-                )?
-            } else {
-                representation::python_df_to_rust::polars_df_to_rust_df(&frame)?
-            };
-            results.insert(sql, df);
-        }
-        tracing::debug!(target: "r2rml_timing", "r2rml_timing: fetch={}", fetch_start.elapsed().as_secs_f64());
-        let graph = parse_optional_named_node(graph)?;
-        let options = r2rml::R2RMLOptions {
+        self.map_with_mapping(
+            py,
+            mapping,
+            mapping_graph,
+            database,
+            tables,
+            None,
+            false,
             base_iri,
-            graph: NamedGraph::from_maybe_named_node(graph.as_ref()),
-            ignore_data_errors: ignore_data_errors.unwrap_or(false),
-            blank_node_prefix: format!("r2rml{}_", uuid::Uuid::new_v4().simple()),
-        };
-        let warnings = py.detach(move || -> PyResult<Vec<String>> {
-            let mut inner = self.write_inner();
-            inner
-                .map_r2rml(&parsed, &results, &options)
-                .map_err(|x| PyMaplibError::from(x).into())
-        })?;
-        let category = py.get_type::<pyo3::exceptions::PyUserWarning>();
-        for w in &warnings {
-            let msg = std::ffi::CString::new(format!("R2RML: {w}").replace('\0', ""))
-                .unwrap_or_default();
-            PyErr::warn(py, category.as_any(), &msg, 1)?;
-        }
-        Ok(())
+            graph,
+            ignore_data_errors,
+        )
+    }
+
+    #[pyo3(signature = (mapping=None, sources=None, mapping_graph=None, database=None, tables=None,
+        base_iri=None, graph=None, ignore_data_errors=None))]
+    #[instrument(skip_all)]
+    #[allow(clippy::too_many_arguments)]
+    fn map_rml(
+        &self,
+        py: Python<'_>,
+        mapping: Option<&Bound<'_, PyAny>>,
+        sources: Option<HashMap<String, Bound<'_, PyAny>>>,
+        mapping_graph: Option<String>,
+        database: Option<&Bound<'_, PyAny>>,
+        tables: Option<HashMap<String, Bound<'_, PyAny>>>,
+        base_iri: Option<String>,
+        graph: Option<String>,
+        ignore_data_errors: Option<bool>,
+    ) -> PyResult<()> {
+        self.map_with_mapping(
+            py,
+            mapping,
+            mapping_graph,
+            database,
+            tables,
+            sources,
+            true,
+            base_iri,
+            graph,
+            ignore_data_errors,
+        )
     }
 
     #[pyo3(signature = (df, graph=None, uuid_namespace=None))]

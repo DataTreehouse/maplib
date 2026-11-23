@@ -330,6 +330,14 @@ fn new_key_property(
     prefix: &NamedNode,
     map: &mut HashMap<NamedNode, TripleTableBuilder>,
 ) -> NamedNode {
+    let keep_key = json_key_local_name(&key);
+    let key_nn = NamedNode::new(format!("{}{}", prefix.as_str(), keep_key)).unwrap();
+    add_new_property(&key_nn, map);
+    key_nn
+}
+
+/// The local name, in the xyz: namespace, of the property that a JSON key is mapped to.
+pub fn json_key_local_name(key: &str) -> String {
     let mut keep_chars = Vec::with_capacity(key.len());
     for (i, c) in key.chars().enumerate() {
         if i == 0 && (c.is_numeric() || c == '_' || c == '-' || c == '.') {
@@ -341,10 +349,7 @@ fn new_key_property(
             keep_chars.push('_');
         }
     }
-    let keep_key: String = keep_chars.into_iter().collect();
-    let key_nn = NamedNode::new(format!("{}{}", prefix.as_str(), keep_key)).unwrap();
-    add_new_property(&key_nn, map);
-    key_nn
+    keep_chars.into_iter().collect()
 }
 
 fn add_new_property(property: &NamedNode, map: &mut HashMap<NamedNode, TripleTableBuilder>) {
