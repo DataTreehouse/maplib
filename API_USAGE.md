@@ -1260,7 +1260,7 @@ ex:bob ex:name "Bob" ; ex:age 25 .
 | Query | Returns |
 |---|---|
 | `SELECT` | a `DataFrame` |
-| `CONSTRUCT` | a list of DataFrames with columns `subject`, `predicate`, `object`, one per predicate and type combination |
+| `CONSTRUCT` | a list of DataFrames with columns `subject`, `predicate`, `object`, one per predicate and type combination; quads from GRAPH blocks also have a `graph` column (see [CONSTRUCT with quads](#construct-with-quads-graph-blocks)) |
 | `ASK` | a `bool` |
 | `DESCRIBE` | as `CONSTRUCT`: a list of DataFrames with columns `subject`, `predicate`, `object` (see [DESCRIBE](#describe)) |
 
@@ -1296,13 +1296,57 @@ and the SPARQL endpoint of `Model.serve()` **EE** gives the same triples. `query
 
 ### return_format
 
-`return_format="json"` gives SPARQL JSON results (SELECT and ASK), and `"turtle"` gives Turtle
-(CONSTRUCT and DESCRIBE):
+`return_format="json"` gives SPARQL JSON results (SELECT and ASK), `"turtle"` gives Turtle
+(CONSTRUCT and DESCRIBE), and `"trig"` gives TriG (CONSTRUCT, including quads from GRAPH blocks):
 
 ```python
 print(m.query("SELECT ?name WHERE { ?p ex:name ?name }", return_format="json"))
 print(m.query("CONSTRUCT { ?p ex:label ?n } WHERE { ?p ex:name ?n }", return_format="turtle"))
 ```
+
+### CONSTRUCT with quads: GRAPH blocks
+
+A CONSTRUCT template can contain `GRAPH` blocks, so one query constructs quads: triples in named graphs
+as well as in the default graph. This is the syntax of Apache Jena and of SPARQL Update's `INSERT`
+templates ([w3c/sparql-dev#31](https://github.com/w3c/sparql-dev/issues/31)). The graph is an IRI or a
+variable from the WHERE clause:
+
+```python
+m = Model()
+m.add_prefixes({"ex": EX})
+m.reads(f"""
+@prefix ex: <{EX}> .
+ex:alice ex:name "Alice" ; ex:age 30 ; ex:team ex:red .
+ex:bob ex:name "Bob" ; ex:age 25 ; ex:team ex:blue .
+""", format="turtle")
+
+q = """
+CONSTRUCT {
+  ?p a ex:Person                      # default graph
+  GRAPH ex:ages { ?p ex:age ?a }      # a fixed named graph
+  GRAPH ?t { ?p ex:name ?n }          # one graph per team, from the WHERE clause
+} WHERE { ?p ex:age ?a ; ex:name ?n ; ex:team ?t }
+"""
+for df in m.query(q):
+    print(df)                          # the GRAPH parts have an extra `graph` column
+print(m.query(q, return_format="trig"))
+m.insert(q)                            # each GRAPH block goes to its own graph, in one pass
+```
+
+The results:
+- **Variable graph.** Each solution gives triples in the graph the variable is bound to. Solutions where
+  it is unbound, or bound to something other than an IRI, give none.
+- **`query`** returns one DataFrame per template triple and graph, as before. The default-graph part
+  has the columns `subject`, `predicate` and `object`. The DataFrames from GRAPH blocks also have a
+  `graph` column with the graph's IRI.
+- **`return_format`.** `"trig"` gives the quads as TriG. `"turtle"` raises an error when the result has
+  triples in named graphs.
+- **`insert`** adds the triples of each GRAPH block to that graph, and the other triples to
+  `target_graph` (the default graph if not given). The WHERE clause is evaluated once, not once per
+  graph.
+- **Blank nodes** in the template are shared between its GRAPH blocks, within each solution.
+- **The short form** works too: `CONSTRUCT WHERE { GRAPH ?g { ?s ex:age ?a } }` copies the matching
+  quads.
 
 ### bindings
 
@@ -1897,7 +1941,8 @@ print(m.insert(controversial))            # {}: nothing new
 ```
 
 `source_graph=` is the graph the query reads, and `target_graph=` the graph the triples go to,
-e.g. `TRANSIENT_GRAPH`. `solution_mappings=True` returns SolutionMappings. `include_graphs`,
+e.g. `TRANSIENT_GRAPH`. Triples from `GRAPH` blocks in the template go to their own graphs instead (see
+[CONSTRUCT with quads](#construct-with-quads-graph-blocks)). `solution_mappings=True` returns SolutionMappings. `include_graphs`,
 `parameters`, `max_rows` and `debug` work as for `query`.
 
 ### update
