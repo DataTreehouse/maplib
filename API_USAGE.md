@@ -1404,7 +1404,22 @@ except Exception as e:
 ```python
 m.query("SELECT ?x WHERE { ?x ex:nosuchpredicate ?y }", debug=True)
 # The following triple pattern has no solution mappings: ?x <http://example.net/ns#nosuchpredicate> ?y
+#   - The predicate <http://example.net/ns#nosuchpredicate> is not used in the queried graph
 ```
+
+The lines under a pattern are hints about it:
+
+- for a triple pattern: a predicate or subject that the graph does not have (with the graphs
+  that use the predicate, and predicates with the same local name), an object that is written
+  like objects in the data but is another term (`"42"` for the integer `42`, `"Bob"` for
+  `"Bob"@en`), examples of the objects that are there, and whether subject and object are in each
+  other's place
+- for patterns that match apart but not together: the variables they join on, and the kinds of
+  terms each side has for them (e.g. IRIs on one side, strings on the other)
+- for a `FILTER`: the number of solution mappings before it, the kinds of terms of its variables
+  and which of the conditions joined with `&&` are never true
+
+With `solution_mappings=True` the explanation is also in the `debug` field of the result.
 
 Ctrl-C stops a running query.
 

@@ -2,36 +2,50 @@ use spargebra::algebra::{Expression, GraphPattern, PropertyPathExpression};
 use spargebra::term::TriplePattern;
 use std::fmt::Display;
 
+/// Why a query, or a part of it, has no solution mappings. The hints are further findings
+/// about the reported pattern, one sentence each.
 #[derive(Clone, Debug)]
 pub enum DebugOutput {
-    NoResultsTriplePattern(TriplePattern),
-    NoResultsJoiningTriplePattern(Vec<TriplePattern>, TriplePattern),
-    NoResultsJoin(GraphPattern, GraphPattern),
+    NoResultsTriplePattern(TriplePattern, Vec<String>),
+    NoResultsJoiningTriplePattern(Vec<TriplePattern>, TriplePattern, Vec<String>),
+    NoResultsJoin(GraphPattern, GraphPattern, Vec<String>),
     NoResultsMinus(GraphPattern, GraphPattern),
-    NoResultsFilter(GraphPattern, Expression),
+    NoResultsFilter(GraphPattern, Expression, Vec<String>),
     NoResultsPath(PropertyPathExpression),
     NoResultsGraphPattern(GraphPattern),
+    /// The query has no solution mappings, but no part of it was found to be the reason.
+    NoExplanation,
     HasResults,
+}
+
+fn write_hints(f: &mut std::fmt::Formatter<'_>, hints: &[String]) -> std::fmt::Result {
+    for hint in hints {
+        write!(f, "\n  - {}", hint)?;
+    }
+    Ok(())
 }
 
 impl Display for DebugOutput {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            DebugOutput::NoResultsTriplePattern(tp) => {
+            DebugOutput::NoResultsTriplePattern(tp, hints) => {
                 write!(
                     f,
                     "The following triple pattern has no solution mappings: {}",
                     tp
-                )
+                )?;
+                write_hints(f, hints)
             }
-            DebugOutput::NoResultsJoiningTriplePattern(tps, tp) => {
+            DebugOutput::NoResultsJoiningTriplePattern(tps, tp, hints) => {
                 let tps_strings = tps.iter().map(|x| format!("{}", x)).collect::<Vec<_>>();
                 write!(f,
                        "There were no solution mappings after joining the triple pattern:\n{}\n with the triple patterns:\n{}",
-                       tp, tps_strings.join(",\n"))
+                       tp, tps_strings.join(",\n"))?;
+                write_hints(f, hints)
             }
-            DebugOutput::NoResultsJoin(left, right) => {
-                write!(f, "The join between the following graph patterns produced no solution mappings:\n{}\nand:\n{}", left, right)
+            DebugOutput::NoResultsJoin(left, right, hints) => {
+                write!(f, "The join between the following graph patterns produced no solution mappings:\n{}\nand:\n{}", left, right)?;
+                write_hints(f, hints)
             }
             DebugOutput::NoResultsMinus(left, right) => {
                 write!(
@@ -43,8 +57,9 @@ impl Display for DebugOutput {
                     }
                 )
             }
-            DebugOutput::NoResultsFilter(gp, expr) => {
-                write!(f, "No solution mappings after evaluating the expression:\n{}\non the graph pattern:\n{}", expr, gp)
+            DebugOutput::NoResultsFilter(gp, expr, hints) => {
+                write!(f, "No solution mappings after evaluating the expression:\n{}\non the graph pattern:\n{}", expr, gp)?;
+                write_hints(f, hints)
             }
             DebugOutput::NoResultsPath(path) => {
                 write!(
@@ -58,6 +73,12 @@ impl Display for DebugOutput {
                     f,
                     "No solution mappings after the following graph pattern:\n{}",
                     gp
+                )
+            }
+            DebugOutput::NoExplanation => {
+                write!(
+                    f,
+                    "This query has no solution mappings, but no part of it was found to be the reason"
                 )
             }
             DebugOutput::HasResults => {
