@@ -244,6 +244,137 @@ def test_xml_source():
     assert _rows(m, "SELECT ?s WHERE { ?s a ex:TaggedB }") == [("<http://example.org/pump/1>",)]
 
 
+PLANT_NS = "http://example.com/plant"
+
+# A default namespace, which the elements and the attributes without a prefix are in, and a
+# prefixed one. The default namespace has no separator at its end, so map_xml adds a #.
+NS_XML = """<plant xmlns="http://example.com/plant" xmlns:m="http://example.com/meta#" name="North">
+  <pump id="1" m:kind="feed"><name>Feed pump</name><m:note>checked</m:note></pump>
+  <pump id="2" m:kind="booster"><name>Booster</name></pump>
+</plant>"""
+
+
+def _ns_mapping(p: str, formulation: str = "ql:XPath") -> str:
+    """A mapping over NS_XML where the names in the default namespace have the prefix p (with its
+    colon), or none."""
+    return f"""
+    <#Pump> rml:logicalSource [ rml:source "plant.xml" ; rml:referenceFormulation {formulation} ;
+            rml:iterator "/{p}plant/{p}pump" ] ;
+        rr:subjectMap [ rr:template "http://example.org/pump/{{@id}}" ; rr:class ex:Pump ] ;
+        rr:predicateObjectMap [ rr:predicate ex:name ; rr:objectMap [ rml:reference "{p}name" ] ] ;
+        rr:predicateObjectMap [ rr:predicate ex:kind ; rr:objectMap [ rml:reference "@m:kind" ] ] ;
+        rr:predicateObjectMap [ rr:predicate ex:note ; rr:objectMap [ rml:reference "m:note" ] ] ;
+        rr:predicateObjectMap [ rr:predicate ex:plant ; rr:objectMap [ rml:reference "../@name" ] ] .
+    <#Feed> rml:logicalSource [ rml:source "plant.xml" ; rml:referenceFormulation {formulation} ;
+            rml:iterator "//{p}pump[@m:kind='feed'][{p}name='Feed pump']" ] ;
+        rr:subjectMap [ rr:template "http://example.org/pump/{{@id}}" ; rr:class ex:FeedPump ] .
+    """
+
+
+NS_EXPECTED = [
+    ("<http://example.org/pump/1>", "<http://example.org/kind>", "\"feed\""),
+    ("<http://example.org/pump/1>", "<http://example.org/name>", "\"Feed pump\""),
+    ("<http://example.org/pump/1>", "<http://example.org/note>", "\"checked\""),
+    ("<http://example.org/pump/1>", "<http://example.org/plant>", "\"North\""),
+    ("<http://example.org/pump/1>", "<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>", "<http://example.org/FeedPump>"),
+    ("<http://example.org/pump/1>", "<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>", "<http://example.org/Pump>"),
+    ("<http://example.org/pump/2>", "<http://example.org/kind>", "\"booster\""),
+    ("<http://example.org/pump/2>", "<http://example.org/name>", "\"Booster\""),
+    ("<http://example.org/pump/2>", "<http://example.org/plant>", "\"North\""),
+    ("<http://example.org/pump/2>", "<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>", "<http://example.org/Pump>"),
+]
+
+
+def test_xml_namespaces_given_as_argument():
+    """A prefix bound in namespaces for the default namespace of the document. The prefix m is
+    the one the document declares, and attributes without a prefix match in the default namespace
+    of their element."""
+    m = Model()
+    m.map_rml(OLD + _ns_mapping("p:"), sources={"plant.xml": NS_XML}, namespaces={"p": PLANT_NS})
+    assert _triples(m) == NS_EXPECTED
+    # Any prefix will do, and a given namespace wins over that of the document for the prefix.
+    m = Model()
+    m.map_rml(
+        OLD + _ns_mapping("m:").replace("@m:kind", "@k:kind").replace("m:note", "k:note"),
+        sources={"plant.xml": NS_XML},
+        namespaces={"m": PLANT_NS, "k": "http://example.com/meta#"},
+    )
+    assert _triples(m) == NS_EXPECTED
+
+
+def test_xml_default_namespace_for_names_without_prefix():
+    m = Model()
+    m.map_rml(OLD + _ns_mapping(""), sources={"plant.xml": NS_XML}, namespaces={"": PLANT_NS})
+    assert _triples(m) == NS_EXPECTED
+
+
+def test_xml_namespaces_declared_in_the_mapping():
+    formulation = (
+        '[ a rml:XPathReferenceFormulation ; rml:namespace [ a rml:Namespace ; '
+        f'rml:namespacePrefix "p" ; rml:namespaceURL "{PLANT_NS}" ] ]'
+    )
+    mapping = _ns_mapping("p:", formulation).replace("rr:", "rml:")
+    m = Model()
+    m.map_rml(NEW + mapping, sources={"plant.xml": NS_XML})
+    assert _triples(m) == NS_EXPECTED
+    # Also when the mapping is read from a graph.
+    m = Model()
+    m.reads(NEW + mapping, format="turtle", graph="urn:graph:rml", base_iri=EX)
+    m.map_rml(mapping_graph="urn:graph:rml", sources={"plant.xml": NS_XML}, graph="urn:graph:data")
+    assert _rows(m, "SELECT ?s ?p ?o WHERE { ?s ?p ?o } ORDER BY ?s ?p ?o", graph="urn:graph:data") == NS_EXPECTED
+
+
+def test_xml_prefixes_of_the_document():
+    """Without a default namespace: the prefix of the document resolves, and attributes without a
+    prefix have no namespace."""
+    doc = """<m:plant xmlns:m="urn:plant" name="North">
+      <m:pump id="1"><m:name>Feed pump</m:name></m:pump>
+    </m:plant>"""
+    mapping = """
+    <#Pump> rml:logicalSource [ rml:source "plant.xml" ; rml:referenceFormulation ql:XPath ;
+            rml:iterator "/m:plant/m:pump" ] ;
+        rr:subjectMap [ rr:template "http://example.org/pump/{@id}" ] ;
+        rr:predicateObjectMap [ rr:predicate ex:name ; rr:objectMap [ rml:reference "m:name" ] ] ;
+        rr:predicateObjectMap [ rr:predicate ex:plant ; rr:objectMap [ rml:reference "../@name" ] ] .
+    """
+    m = Model()
+    m.map_rml(OLD + mapping, sources={"plant.xml": doc})
+    assert _triples(m) == [
+        ("<http://example.org/pump/1>", "<http://example.org/name>", "Feed pump"),
+        ("<http://example.org/pump/1>", "<http://example.org/plant>", "North"),
+    ]
+
+
+def test_xml_namespace_errors():
+    m = Model()
+    # Names without a prefix over a document with a default namespace select nothing: an error
+    # that names the namespace, not an empty result.
+    with pytest.raises(Exception, match="declares the default namespace http://example.com/plant"):
+        m.map_rml(OLD + _ns_mapping(""), sources={"plant.xml": NS_XML})
+    # A prefix that neither the caller, the mapping nor the document declares.
+    with pytest.raises(Exception, match="prefix q, which is not declared"):
+        m.map_rml(OLD + _ns_mapping("q:"), sources={"plant.xml": NS_XML})
+    # A prefix that the document binds to two namespaces must be given.
+    doc = '<a xmlns:x="urn:one"><x:b id="1"/><c xmlns:x="urn:two"><x:b id="2"/></c></a>'
+    mapping = """
+    <#B> rml:logicalSource [ rml:source "d.xml" ; rml:referenceFormulation ql:XPath ; rml:iterator "//x:b" ] ;
+        rr:subjectMap [ rr:template "http://example.org/b/{@id}" ; rr:class ex:B ] .
+    """
+    with pytest.raises(Exception, match="binds to several namespaces"):
+        m.map_rml(OLD + mapping, sources={"d.xml": doc})
+    assert m.query("SELECT (COUNT(*) AS ?c) WHERE { ?s ?p ?o }")["c"].to_list() == [0]
+    m.map_rml(OLD + mapping, sources={"d.xml": doc}, namespaces={"x": "urn:two"})
+    assert _rows(m, "SELECT ?s WHERE { ?s a ex:B }") == [("<http://example.org/b/2>",)]
+    # An empty result is still fine when the names fit the document.
+    m = Model()
+    m.map_rml(
+        OLD + _ns_mapping("p:").replace("p:pump", "p:valve"),
+        sources={"plant.xml": NS_XML},
+        namespaces={"p": PLANT_NS},
+    )
+    assert _triples(m) == []
+
+
 def test_csv_sources(tmp_path):
     (tmp_path / "pumps.csv").write_text("id,name,site,kw\n1,Feed pump,N1,7.5\n2,Booster,N2,\n")
     mapping = """
@@ -358,7 +489,7 @@ def _xml_iterator(iterator: str, reference: str = "@id") -> str:
         (_json_iterator("$.*"), "plant.json", "wildcard over keys"),
         (_json_iterator("$.pumps[*]", "tags[1]"), "plant.json", "array index"),
         (_xml_iterator("/plant/pump[1]"), "plant.xml", "position"),
-        (_xml_iterator("/p:plant/p:pump"), "plant.xml", "namespaces are not supported"),
+        (_xml_iterator("/p:plant/p:pump"), "plant.xml", "prefix p, which is not declared"),
         (_xml_iterator("/plant/pump", "count(tag)"), "plant.xml", "function"),
         (_xml_iterator("/plant/pump[@id > 1]"), "plant.xml", "could not be parsed"),
         (_xml_iterator("plant/pump"), "plant.xml", "must start with /"),

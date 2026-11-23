@@ -78,6 +78,9 @@ pub struct LogicalSource {
     /// rml:iterator, which selects the records of the source. Without one, the records are the
     /// rows of a CSV source, the root of a JSON source and the root element of an XML source.
     pub iterator: Option<String>,
+    /// The XML namespaces (prefix, namespace) that the mapping declares for the XPath
+    /// expressions of the source, with rml:namespace on its reference formulation. Sorted.
+    pub namespaces: Vec<(String, String)>,
 }
 
 impl LogicalTable {
@@ -88,10 +91,11 @@ impl LogicalTable {
             LogicalTable::Table(t) => format!("SELECT * FROM {t}"),
             LogicalTable::Query(q) => q.trim().trim_end_matches(';').trim().to_string(),
             LogicalTable::Source(s) => format!(
-                "rml:logicalSource {:?} {:?} {:?}",
+                "rml:logicalSource {:?} {:?} {:?} {:?}",
                 s.source,
                 s.formulation,
-                s.iterator.as_deref().unwrap_or("")
+                s.iterator.as_deref().unwrap_or(""),
+                s.namespaces
             ),
         }
     }
@@ -347,6 +351,7 @@ impl<'a> Parser<'a> {
         };
         let iterator = self.string(ls, &rr("iterator"))?;
         let formulations = self.objects(ls, &rr("referenceFormulation"));
+        let mut namespaces: Vec<(String, String)> = vec![];
         let formulation = match formulations.as_slice() {
             [] => {
                 // By the extension of the source, and CSV otherwise.
@@ -359,20 +364,59 @@ impl<'a> Parser<'a> {
                     ReferenceFormulation::CSV
                 }
             }
-            [Term::NamedNode(nn)] => match local_name(nn.as_str(), &[QL, RML, RML_OLD]) {
-                Some("CSV") => ReferenceFormulation::CSV,
-                Some("JSONPath") => ReferenceFormulation::JSONPath,
-                Some("XPath") => ReferenceFormulation::XPath,
-                _ => {
-                    return mapping_err(format!(
-                        "the rml:referenceFormulation {nn} of {name} is not supported: use CSV, JSONPath or XPath"
-                    ))
-                }
-            },
             [t] => {
-                return mapping_err(format!(
-                    "the rml:referenceFormulation {t} of {name} must be one of the IRIs for CSV, JSONPath and XPath"
-                ))
+                let known = match t {
+                    Term::NamedNode(nn) => local_name(nn.as_str(), &[QL, RML, RML_OLD]),
+                    _ => None,
+                };
+                match known {
+                    Some("CSV") => ReferenceFormulation::CSV,
+                    Some("JSONPath") => ReferenceFormulation::JSONPath,
+                    Some("XPath") => ReferenceFormulation::XPath,
+                    _ => {
+                        // A described reference formulation: XPath with the XML namespaces of
+                        // its expressions, [ a rml:XPathReferenceFormulation ; rml:namespace
+                        // [ rml:namespacePrefix "ex" ; rml:namespaceURL "http://example.org/" ] ].
+                        let unsupported = || {
+                            mapping_err(format!(
+                                "the rml:referenceFormulation {t} of {name} is not supported: use CSV, JSONPath, \
+                                 XPath, or an rml:XPathReferenceFormulation with rml:namespace"
+                            ))
+                        };
+                        let Some(node) = as_node(t.as_ref()) else {
+                            return unsupported();
+                        };
+                        let is_xpath = self.objects(&node, &rdf::TYPE.into_owned()).iter().any(|ty| {
+                            matches!(ty, Term::NamedNode(nn) if matches!(
+                                local_name(nn.as_str(), &[QL, RML, RML_OLD]),
+                                Some("XPathReferenceFormulation" | "XPath")
+                            ))
+                        });
+                        let declared = self.nodes(&node, &rr("namespace"))?;
+                        if !is_xpath && declared.is_empty() {
+                            return unsupported();
+                        }
+                        for ns in declared {
+                            let prefix = self.string(&ns, &rr("namespacePrefix"))?;
+                            let url = match self.objects(&ns, &rr("namespaceURL")).as_slice() {
+                                [Term::Literal(l)] => Some(l.value().to_string()),
+                                [Term::NamedNode(nn)] => Some(nn.as_str().to_string()),
+                                _ => None,
+                            };
+                            match (prefix, url) {
+                                (Some(p), Some(u)) => namespaces.push((p, u)),
+                                _ => {
+                                    return mapping_err(format!(
+                                        "an rml:namespace of the logical source of {name} must have one \
+                                         rml:namespacePrefix and one rml:namespaceURL"
+                                    ))
+                                }
+                            }
+                        }
+                        namespaces.sort();
+                        ReferenceFormulation::XPath
+                    }
+                }
             }
             _ => return mapping_err(format!("the logical source of {name} has more than one rml:referenceFormulation")),
         };
@@ -380,6 +424,7 @@ impl<'a> Parser<'a> {
             source,
             formulation,
             iterator,
+            namespaces,
         }))
     }
 

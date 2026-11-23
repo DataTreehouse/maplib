@@ -491,7 +491,9 @@ impl Model {
 
     /// Maps the logical sources of an RML mapping to RDF, see [crate::rml]: `sources` holds the
     /// CSV, JSON and XML sources by their rml:source, and `tables` the results of the logical
-    /// tables of R2RML that the mapping may also have. Returns the warnings about data errors
+    /// tables of R2RML that the mapping may also have. `xml_namespaces` gives the namespaces of
+    /// the prefixes in the XPath expressions of XML sources, and with the empty prefix the
+    /// namespace of element names without a prefix. Returns the warnings about data errors
     /// that were ignored.
     #[instrument(skip_all)]
     pub fn map_rml(
@@ -499,10 +501,11 @@ impl Model {
         mapping: &r2rml::R2RMLMapping,
         sources: &mut HashMap<String, crate::rml::RmlSource>,
         tables: &HashMap<String, DataFrame>,
+        xml_namespaces: &HashMap<String, String>,
         options: &r2rml::R2RMLOptions,
     ) -> Result<Vec<String>, MaplibError> {
         let t0 = std::time::Instant::now();
-        let mut all_tables = crate::rml::source_tables(mapping, sources)?;
+        let mut all_tables = crate::rml::source_tables(mapping, sources, xml_namespaces)?;
         tracing::debug!(target: "r2rml_timing", "r2rml_timing: sources={}", t0.elapsed().as_secs_f64());
         for (k, df) in tables {
             all_tables.entry(k.clone()).or_insert_with(|| df.clone());

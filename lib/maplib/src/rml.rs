@@ -9,12 +9,25 @@
 //! or XPath expressions, are translated to one SPARQL query over that graph: the iterator binds
 //! the records, and each reference is an OPTIONAL pattern from the record to a value. A reference
 //! with several values for a record gives a row per value.
+//!
+//! XML namespaces: map_xml maps a name in a namespace to an IRI in that namespace, and a name
+//! without one to an IRI in the xyz: namespace. A prefixed name in an XPath expression (p:pump) is
+//! resolved with the namespaces given by the caller, those the mapping declares (rml:namespace)
+//! and, for prefixes that neither declares, those the document itself declares (xmlns:p). As in
+//! XPath, an element name without a prefix has no namespace, unless a namespace is given for the
+//! empty prefix. map_xml puts an attribute without a prefix in the default namespace of its
+//! element, so an attribute name without a prefix matches in no namespace and in the default
+//! namespaces of the document.
 
 use crate::errors::MaplibError;
 use crate::model::on_query_stack;
 use oxrdf::vocab::xsd;
 use oxrdf::Term;
 use polars::prelude::{Column, DataFrame, IntoColumn, NamedFrom, Series};
+use representation::constants::{FX_PREFIX_NAME, FX_XMLNS, FX_XYZ_PREFIX_IRI};
+use representation::solution_mapping::EagerSolutionMappings;
+use std::collections::BTreeSet;
+use triplestore::xml_name_iri;
 use r2rml::mapping::{LogicalSource, LogicalTable, ReferenceFormulation};
 use r2rml::{R2RMLError, R2RMLMapping};
 use representation::constants::{FX_CHILD, FX_ROOT, XYZ_PREFIX_IRI};
@@ -178,16 +191,125 @@ struct XmlStep {
     predicates: Vec<XmlPredicate>,
 }
 
+/// How the names in the XPath expressions over a source are resolved to the IRIs that map_xml
+/// gives the elements and attributes of the source.
+#[derive(Debug, Clone, Default)]
+struct XmlNames {
+    /// Namespaces by prefix: those of the caller and of the mapping, and those the document
+    /// declares for the other prefixes.
+    prefixes: HashMap<String, String>,
+    /// Prefixes that only the document declares, with more than one namespace.
+    ambiguous: HashMap<String, Vec<String>>,
+    /// The namespace of element names without a prefix, given for the empty prefix.
+    default_namespace: Option<String>,
+    /// The default namespaces (xmlns="...") that the document declares.
+    document_defaults: Vec<String>,
+}
+
+impl XmlNames {
+    /// `document_defaults` and `document_prefixes` are what the document declares, `mapping`
+    /// what the logical source declares and `given` what the caller gave, which wins.
+    fn new(
+        document_defaults: Vec<String>,
+        document_prefixes: Vec<(String, String)>,
+        mapping: &[(String, String)],
+        given: &HashMap<String, String>,
+    ) -> Result<Self, MaplibError> {
+        let mut declared: HashMap<String, String> = HashMap::new();
+        for (p, ns) in mapping.iter().map(|(p, ns)| (p, ns)).chain(given.iter()) {
+            if ns.is_empty() || ns.contains(['<', '>', '"', '{', '}', '|', '\\', '^', '`', ' ', '\n', '\t']) {
+                return err(format!("the namespace {ns:?} of the prefix {p:?} is not an IRI"));
+            }
+            declared.insert(p.clone(), ns.clone());
+        }
+        let default_namespace = declared.remove("");
+        let mut by_prefix: HashMap<String, BTreeSet<String>> = HashMap::new();
+        for (p, ns) in document_prefixes {
+            by_prefix.entry(p).or_default().insert(ns);
+        }
+        let mut prefixes = HashMap::new();
+        let mut ambiguous = HashMap::new();
+        for (p, namespaces) in by_prefix {
+            if declared.contains_key(&p) {
+                continue;
+            }
+            let mut namespaces: Vec<String> = namespaces.into_iter().collect();
+            if namespaces.len() == 1 {
+                prefixes.insert(p, namespaces.pop().unwrap());
+            } else {
+                ambiguous.insert(p, namespaces);
+            }
+        }
+        prefixes.extend(declared);
+        Ok(XmlNames {
+            prefixes,
+            ambiguous,
+            default_namespace,
+            document_defaults,
+        })
+    }
+
+    fn namespace(&self, prefix: &str, path: &str) -> Result<&str, MaplibError> {
+        if let Some(ns) = self.prefixes.get(prefix) {
+            return Ok(ns.as_str());
+        }
+        if let Some(namespaces) = self.ambiguous.get(prefix) {
+            return err(format!(
+                "the XPath {path:?} uses the prefix {prefix}, which the document binds to several \
+                 namespaces ({}): give the one that is meant in namespaces",
+                namespaces.join(", ")
+            ));
+        }
+        err(format!(
+            "the XPath {path:?} uses the prefix {prefix}, which is not declared: give its namespace \
+             in namespaces, or with rml:namespace on the reference formulation of the mapping"
+        ))
+    }
+
+    /// The IRI, in angle brackets, of the type of the elements with a name.
+    fn element(&self, name: &str, path: &str) -> Result<String, MaplibError> {
+        let iri = match name.split_once(':') {
+            Some((prefix, local)) => xml_name_iri(self.namespace(prefix, path)?, local),
+            None => xml_name_iri(self.default_namespace.as_deref().unwrap_or(XYZ_PREFIX_IRI), name),
+        };
+        Ok(format!("<{iri}>"))
+    }
+
+    /// The property, or the alternatives of properties, of the attributes with a name.
+    fn attribute(&self, name: &str, path: &str) -> Result<String, MaplibError> {
+        if let Some((prefix, local)) = name.split_once(':') {
+            return Ok(format!("<{}>", xml_name_iri(self.namespace(prefix, path)?, local)));
+        }
+        let mut namespaces: Vec<&str> = vec![XYZ_PREFIX_IRI];
+        for ns in self.document_defaults.iter().chain(self.default_namespace.iter()) {
+            if !namespaces.contains(&ns.as_str()) {
+                namespaces.push(ns);
+            }
+        }
+        let iris: Vec<String> = namespaces
+            .iter()
+            .map(|ns| format!("<{}>", xml_name_iri(ns, name)))
+            .collect();
+        Ok(if iris.len() == 1 {
+            iris[0].clone()
+        } else {
+            format!("({})", iris.join("|"))
+        })
+    }
+}
+
+/// Checks a name of an XPath expression, which may have a prefix.
 fn xml_name(name: &str, path: &str) -> Result<String, MaplibError> {
     let name = name.trim();
-    if name.contains(':') {
-        return err(format!(
-            "the XPath {path:?} uses the prefixed name {name}, but namespaces are not supported"
-        ));
-    }
-    let valid = !name.is_empty()
-        && name.chars().all(|c| c.is_alphanumeric() || matches!(c, '_' | '-' | '.'))
-        && !name.starts_with(|c: char| c.is_numeric() || c == '-' || c == '.');
+    let part_is_valid = |part: &str| {
+        !part.is_empty()
+            && part.chars().all(|c| c.is_alphanumeric() || matches!(c, '_' | '-' | '.'))
+            && !part.starts_with(|c: char| c.is_numeric() || c == '-' || c == '.')
+    };
+    let valid = match name.split_once(':') {
+        Some((prefix, local)) => part_is_valid(prefix) && part_is_valid(local),
+        None => part_is_valid(name),
+    };
     if !valid {
         return err(format!(
             "the XPath {path:?} could not be parsed at {name:?}: the supported steps are element \
@@ -341,10 +463,6 @@ fn parse_xml_path(path: &str) -> Result<(bool, Vec<XmlStep>), MaplibError> {
     Ok((absolute, steps))
 }
 
-fn xyz(name: &str) -> String {
-    format!("<{XYZ_PREFIX_IRI}{name}>")
-}
-
 fn string_literal(s: &str) -> String {
     let mut out = String::with_capacity(s.len() + 2);
     out.push('"');
@@ -370,6 +488,7 @@ fn xml_patterns(
     steps: &[XmlStep],
     from: Option<&str>,
     path: &str,
+    names: &XmlNames,
     vars: &mut Variables,
 ) -> Result<(String, String, bool), MaplibError> {
     let child = format!("<{FX_CHILD}>");
@@ -395,7 +514,7 @@ fn xml_patterns(
                 }
                 match &step.test {
                     XmlTest::Element(name) => {
-                        patterns.push_str(&format!("{next} {RDF_TYPE} {} . ", xyz(name)))
+                        patterns.push_str(&format!("{next} {RDF_TYPE} {} . ", names.element(name, path)?))
                     }
                     _ => {
                         if current.is_none() && step.descendant {
@@ -411,13 +530,13 @@ fn xml_patterns(
                     match p {
                         XmlPredicate::Attribute(a, v) => {
                             let o = v.as_deref().map(string_literal).unwrap_or_else(|| vars.fresh());
-                            patterns.push_str(&format!("{next} {} {o} . ", xyz(a)));
+                            patterns.push_str(&format!("{next} {} {o} . ", names.attribute(a, path)?));
                         }
                         XmlPredicate::Child(e, v) => {
                             let c = vars.fresh();
                             patterns.push_str(&format!(
                                 "{next} {child} {c} . {c} {RDF_TYPE} {} . ",
-                                xyz(e)
+                                names.element(e, path)?
                             ));
                             if let Some(v) = v {
                                 patterns.push_str(&format!("{c} {child} {} . ", string_literal(v)));
@@ -465,7 +584,7 @@ fn xml_patterns(
                 let next = vars.fresh();
                 match &step.test {
                     XmlTest::Attribute(a) => {
-                        patterns.push_str(&format!("{element} {} {next} . ", xyz(a)))
+                        patterns.push_str(&format!("{element} {} {next} . ", names.attribute(a, path)?))
                     }
                     _ => patterns.push_str(&format!("{element} {child} {next} . FILTER(isLiteral({next})) ")),
                 }
@@ -486,6 +605,7 @@ fn xml_patterns(
 fn source_query(
     source: &LogicalSource,
     references: &[String],
+    names: &XmlNames,
 ) -> Result<(String, Vec<String>), MaplibError> {
     let mut vars = Variables { next: 0 };
     let mut query = String::new();
@@ -519,7 +639,7 @@ fn source_query(
             if !absolute {
                 return err(format!("the XPath iterator {iterator:?} must start with /"));
             }
-            let (patterns, record, is_value) = xml_patterns(&steps, None, iterator, &mut vars)?;
+            let (patterns, record, is_value) = xml_patterns(&steps, None, iterator, names, &mut vars)?;
             if is_value {
                 return err(format!(
                     "the XPath iterator {iterator:?} must select elements, not attributes or text"
@@ -533,7 +653,7 @@ fn source_query(
                         "the XPath reference {r:?} must be relative to the record, not start with /"
                     ));
                 }
-                let (mut patterns, end, is_value) = xml_patterns(&steps, Some(&record), r, &mut vars)?;
+                let (mut patterns, end, is_value) = xml_patterns(&steps, Some(&record), r, names, &mut vars)?;
                 if is_value {
                     value_variables.push(end.trim_start_matches('?').to_string());
                 } else {
@@ -628,12 +748,7 @@ fn values_column(name: &str, terms: Vec<Option<Term>>) -> Column {
 
 /// The records of a logical source over the Façade-X graph of its source, as a DataFrame with a
 /// column per reference.
-fn source_table(
-    store: &Triplestore,
-    source: &LogicalSource,
-    references: &[String],
-) -> Result<DataFrame, MaplibError> {
-    let (query, value_variables) = source_query(source, references)?;
+fn select(store: &Triplestore, query: &str) -> Result<EagerSolutionMappings, MaplibError> {
     let settings = QuerySettings {
         include_graphs: vec![],
         max_rows: None,
@@ -641,13 +756,84 @@ fn source_table(
         federation: None,
         evaluation_hook: None,
     };
-    let result = on_query_stack(&query, || {
-        store.query(&query, None, &settings, None, None, false, None)
+    let result = on_query_stack(query, || {
+        store.query(query, None, &settings, None, None, false, None)
     })?;
     let QueryResultKind::Select(sm) = result.kind else {
         unreachable!("a SELECT query")
     };
+    Ok(sm)
+}
+
+/// The values of a variable of solutions, as strings: the IRIs and the lexical forms.
+fn strings(store: &Triplestore, sm: &EagerSolutionMappings, variable: &str) -> Vec<Option<String>> {
+    match (sm.mappings.column(variable), sm.rdf_node_types.get(variable)) {
+        (Ok(c), Some(t)) => column_as_terms(c, t, store.global_cats.clone(), false)
+            .into_iter()
+            .map(|t| match t {
+                Some(Term::NamedNode(nn)) => Some(nn.as_str().to_string()),
+                Some(Term::Literal(l)) => Some(l.value().to_string()),
+                _ => None,
+            })
+            .collect(),
+        _ => vec![None; sm.mappings.height()],
+    }
+}
+
+/// The namespaces that an XML document declares, from its Façade-X graph: the default
+/// namespaces (xmlns="...") and the prefixed ones (xmlns:p="...") as (prefix, namespace).
+fn document_namespaces(store: &Triplestore) -> Result<(Vec<String>, Vec<(String, String)>), MaplibError> {
+    let sm = select(store, &format!("SELECT DISTINCT ?ns WHERE {{ ?e <{FX_XMLNS}> ?ns }}"))?;
+    let mut defaults: Vec<String> = strings(store, &sm, "ns").into_iter().flatten().collect();
+    defaults.sort();
+    let sm = select(
+        store,
+        &format!(
+            "SELECT DISTINCT ?p ?ns WHERE {{ ?d <{FX_PREFIX_NAME}> ?p . ?d <{FX_XYZ_PREFIX_IRI}> ?ns }}"
+        ),
+    )?;
+    let prefixes = strings(store, &sm, "p")
+        .into_iter()
+        .zip(strings(store, &sm, "ns"))
+        .filter_map(|(p, ns)| Some((p?, ns?)))
+        .collect();
+    Ok((defaults, prefixes))
+}
+
+fn source_table(
+    store: &Triplestore,
+    source: &LogicalSource,
+    references: &[String],
+    names: &XmlNames,
+) -> Result<DataFrame, MaplibError> {
+    let (query, value_variables) = source_query(source, references, names)?;
+    let sm = select(store, &query)?;
     let height = sm.mappings.height();
+    if height == 0
+        && source.formulation == ReferenceFormulation::XPath
+        && names.default_namespace.is_none()
+        && !names.document_defaults.is_empty()
+    {
+        // No records, where the names of the iterator have no namespace and the elements of the
+        // document do: an empty result here is a mapping that does not fit the document.
+        let iterator = source.iterator.as_deref().unwrap_or("/*");
+        let (_, steps) = parse_xml_path(iterator)?;
+        let unqualified = steps
+            .iter()
+            .any(|s| matches!(&s.test, XmlTest::Element(n) if !n.contains(':')));
+        if unqualified {
+            let ns = &names.document_defaults[0];
+            return err(format!(
+                "the XPath iterator {iterator:?} selects no elements of the source {:?}. Its element \
+                 names have no prefix, so they are names without a namespace, but the document declares \
+                 the default namespace {}. Bind a prefix to it and use the prefix in the paths, e.g. \
+                 namespaces={{\"p\": \"{ns}\"}} with /p:name, or make it the namespace of names without a \
+                 prefix with namespaces={{\"\": \"{ns}\"}}",
+                source.source,
+                names.document_defaults.join(", "),
+            ));
+        }
+    }
     let mut columns = Vec::with_capacity(references.len());
     for (i, r) in references.iter().enumerate() {
         let variable = &value_variables[i];
@@ -671,8 +857,12 @@ fn source_table(
 pub fn source_tables(
     mapping: &R2RMLMapping,
     sources: &mut HashMap<String, RmlSource>,
+    xml_namespaces: &HashMap<String, String>,
 ) -> Result<HashMap<String, DataFrame>, MaplibError> {
     let mut out = HashMap::new();
+    // The namespaces that each XML source declares.
+    let mut declared: HashMap<String, (Vec<String>, Vec<(String, String)>)> = HashMap::new();
+    let no_names = XmlNames::default();
     // The Façade-X graph of each JSON or XML source, mapped once for all its iterators.
     let mut stores: HashMap<String, Triplestore> = HashMap::new();
     for (source, references) in mapping.logical_sources() {
@@ -700,15 +890,18 @@ pub fn source_tables(
                     store.map_json(&mut copy, None, &NamedGraph::DefaultGraph)?;
                     stores.insert(source.source.clone(), store);
                 }
-                source_table(&stores[&source.source], &source, &references)?
+                source_table(&stores[&source.source], &source, &references, &no_names)?
             }
             (RmlSource::Xml(bytes), ReferenceFormulation::XPath) => {
                 if !stores.contains_key(&source.source) {
                     let mut store = Triplestore::new(StorageOptions::memory(), None)?;
                     store.map_xml(bytes, &NamedGraph::DefaultGraph, None)?;
+                    declared.insert(source.source.clone(), document_namespaces(&store)?);
                     stores.insert(source.source.clone(), store);
                 }
-                source_table(&stores[&source.source], &source, &references)?
+                let (defaults, prefixes) = declared[&source.source].clone();
+                let names = XmlNames::new(defaults, prefixes, &source.namespaces, xml_namespaces)?;
+                source_table(&stores[&source.source], &source, &references, &names)?
             }
             (RmlSource::Json(_), ReferenceFormulation::XPath) => {
                 return err(format!(
@@ -770,7 +963,8 @@ mod tests {
         assert_eq!(steps[2].test, XmlTest::Attribute("name".into()));
         assert!(!parse_xml_path("name/text()").unwrap().0);
         assert!(parse_xml_path("/a/b[1]").is_err());
-        assert!(parse_xml_path("/p:a").is_err());
+        assert_eq!(parse_xml_path("/p:a/@q:b").unwrap().1[0].test, XmlTest::Element("p:a".into()));
+        assert!(parse_xml_path("/p:/a").is_err());
         assert!(parse_xml_path("count(a)").is_err());
     }
 }

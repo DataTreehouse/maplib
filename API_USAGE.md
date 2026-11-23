@@ -658,7 +658,7 @@ Things to know:
 ### CSV, JSON and XML with RML: map_rml
 
 `map_rml(mapping=None, sources=None, mapping_graph=None, database=None, tables=None, base_iri=None,
-graph=None, ignore_data_errors=False)` maps CSV, JSON and XML sources with an
+graph=None, ignore_data_errors=False, namespaces=None)` maps CSV, JSON and XML sources with an
 [RML](https://rml.io/specs/rml/) mapping. RML is R2RML with two changes: a *logical source*
 (`rml:logicalSource`) with a reference formulation and an iterator takes the place of the logical
 table, and *references* (`rml:reference`, and `{reference}` in templates) take the place of
@@ -752,6 +752,47 @@ m.map_rml(mapping, sources={"plant.xml": """<plant name="North">
 #     <http://example.net/ns#plant> "North" .
 ```
 
+**XML namespaces.** A name with a prefix in a path is in the namespace of the prefix. As in XPath,
+an element name without a prefix is a name *without* a namespace, so the elements of a document
+with a default namespace (`xmlns="..."`) need a prefix in the paths:
+
+```python
+doc = """<plant xmlns="http://example.com/plant" xmlns:m="http://example.com/meta#">
+  <pump id="1" m:kind="feed"><name>Feed pump</name></pump>
+</plant>"""
+
+mapping = """
+@prefix rr: <http://www.w3.org/ns/r2rml#> .
+@prefix rml: <http://semweb.mmlab.be/ns/rml#> .
+@prefix ql: <http://semweb.mmlab.be/ns/ql#> .
+@prefix ex: <http://example.net/ns#> .
+
+<#Pump> rml:logicalSource [ rml:source "plant.xml" ;
+        rml:referenceFormulation ql:XPath ; rml:iterator "/p:plant/p:pump[@m:kind='feed']" ] ;
+    rr:subjectMap [ rr:template "http://example.net/pump/{@id}" ] ;
+    rr:predicateObjectMap [ rr:predicate ex:name ; rr:objectMap [ rml:reference "p:name" ] ] .
+"""
+m.map_rml(mapping, sources={"plant.xml": doc}, namespaces={"p": "http://example.com/plant"})
+print(m.writes(format="turtle"))
+# <http://example.net/pump/1> <http://example.net/ns#name> "Feed pump" .
+```
+
+The namespace of a prefix is looked up in three places, in this order:
+
+1. `namespaces`, by prefix. The prefix is yours to choose; it need not be the one of the document.
+2. The mapping, in the vocabulary of the W3C community group: `rml:referenceFormulation
+   [ a rml:XPathReferenceFormulation ; rml:namespace [ rml:namespacePrefix "p" ;
+   rml:namespaceURL "http://example.com/plant" ] ]`.
+3. The document itself (`xmlns:m` above), when it declares one namespace for the prefix. A prefix
+   that the document binds to several namespaces must be given.
+
+`namespaces={"": "http://example.com/plant"}` makes a namespace that of the element names without
+a prefix, so that `/plant/pump` and `name` work as they are. An attribute without a prefix (`@id`)
+needs nothing: it matches without a namespace and in the default namespace of its element, which
+is where `map_xml` puts it. When an iterator without prefixes selects nothing in a document that
+declares a default namespace, `map_rml` raises an error that names the namespace, instead of
+mapping nothing.
+
 **CSV** sources have the reference formulation `ql:CSV` and no iterator: the records are the rows
 and the references are the column names.
 
@@ -774,15 +815,13 @@ library, and the supported paths are those that translate:
 | | Supported | Not supported: raises an error that names it |
 |---|---|---|
 | JSONPath | `$`, `.key`, `['key']`, `[*]`; a reference may leave out `$.`, and a reference without `.` and `[` is one key, also with spaces | array indexes and slices (`[0]`, `[1:3]`), filters (`[?(...)]`), recursive descent (`..`), wildcards over keys (`.*`) |
-| XPath | element names, `*`, `.`, `..`, `@attribute`, `text()`, separated by `/` and `//`; the predicates `[@a='v']`, `[e='v']`, `[.='v']`, `[@a]`, `[e]` | positions (`[1]`, `last()`), functions, axes (`following-sibling::`), unions, comparisons other than `=`, namespaces (prefixed names) |
+| XPath | element names, `*`, `.`, `..`, `@attribute`, `text()`, separated by `/` and `//`, with or without a namespace prefix; the predicates `[@a='v']`, `[e='v']`, `[.='v']`, `[@a]`, `[e]` | positions (`[1]`, `last()`), functions, axes (`following-sibling::`), unions, comparisons other than `=` |
 
 Other gaps to know:
 
 - **Array order and duplicates.** The Façade-X graph of a JSON document does not keep the order of
   array items, which is why indexes are not supported, and equal values in one array are one value.
-- **XML documents with namespaces.** Names in a path match elements and attributes without a
-  namespace. A document with `xmlns` declarations is mapped by `map_xml`, but its names can not be
-  selected here yet.
+- **`*` and namespaces.** `*` matches the elements of any namespace; `p:*` is not supported.
 - **Mixed content.** The value of an element is its own text, not the concatenated text of its
   descendants as in XPath.
 - **Memory.** The whole document is mapped to triples before anything is selected, and a triples

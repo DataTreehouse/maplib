@@ -13,6 +13,7 @@ mod vector_index;
 mod map_df;
 mod map_json;
 pub use map_json::{json_key_local_name, DocumentFormat};
+pub use map_xml::xml_name_iri;
 mod map_xml;
 pub mod query_cache;
 pub mod query_solutions;

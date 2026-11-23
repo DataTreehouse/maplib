@@ -142,11 +142,13 @@ impl PyModel {
         tables: Option<HashMap<String, Bound<'_, PyAny>>>,
         sources: Option<HashMap<String, Bound<'_, PyAny>>>,
         rml_sources: bool,
+        namespaces: Option<HashMap<String, String>>,
         base_iri: Option<String>,
         graph: Option<String>,
         ignore_data_errors: Option<bool>,
     ) -> PyResult<()> {
         use r2rml::mapping::{LogicalTable, ReferenceFormulation};
+        let namespaces = namespaces.unwrap_or_default();
         let argument_error =
             |s: String| -> PyErr { PyMaplibError::FunctionArgumentError(s).into() };
         let base_iri = base_iri.unwrap_or_else(|| "urn:maplib:r2rml:".to_string());
@@ -366,7 +368,7 @@ impl PyModel {
         let warnings = py.detach(move || -> PyResult<Vec<String>> {
             let mut inner = self.write_inner();
             inner
-                .map_rml(&parsed, &mut source_data, &results, &options)
+                .map_rml(&parsed, &mut source_data, &results, &namespaces, &options)
                 .map_err(|x| PyMaplibError::from(x).into())
         })?;
         let category = py.get_type::<pyo3::exceptions::PyUserWarning>();
@@ -837,6 +839,7 @@ impl PyModel {
             tables,
             None,
             false,
+            None,
             base_iri,
             graph,
             ignore_data_errors,
@@ -844,7 +847,7 @@ impl PyModel {
     }
 
     #[pyo3(signature = (mapping=None, sources=None, mapping_graph=None, database=None, tables=None,
-        base_iri=None, graph=None, ignore_data_errors=None))]
+        base_iri=None, graph=None, ignore_data_errors=None, namespaces=None))]
     #[instrument(skip_all)]
     #[allow(clippy::too_many_arguments)]
     fn map_rml(
@@ -858,6 +861,7 @@ impl PyModel {
         base_iri: Option<String>,
         graph: Option<String>,
         ignore_data_errors: Option<bool>,
+        namespaces: Option<HashMap<String, String>>,
     ) -> PyResult<()> {
         self.map_with_mapping(
             py,
@@ -867,6 +871,7 @@ impl PyModel {
             tables,
             sources,
             true,
+            namespaces,
             base_iri,
             graph,
             ignore_data_errors,

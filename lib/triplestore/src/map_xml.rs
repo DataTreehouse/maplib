@@ -425,20 +425,24 @@ fn qname_to_iri(
 ) -> Result<NamedNode, TriplestoreError> {
     let nn = if let Some((pre, suf)) = name.split_once(':') {
         if let Some(pre_nn) = prefix_map.get(pre) {
-            let use_sep = use_sep(pre_nn.as_str());
-            format!("{}{use_sep}{suf}", pre_nn.as_str())
+            xml_name_iri(pre_nn.as_str(), suf)
         } else {
             return Err(TriplestoreError::XMLError(format!(
                 "Could not find prefix {pre}"
             )));
         }
     } else {
-        let pre = base_prefix.as_str();
-        let use_sep = use_sep(pre);
-        format!("{pre}{use_sep}{name}")
+        xml_name_iri(base_prefix.as_str(), name)
     };
     NamedNode::new(&nn)
         .map_err(|e| TriplestoreError::XMLError(format!("Error parsing IRI {}: {}", nn, e)))
+}
+
+/// The IRI that an XML element or attribute name in a namespace is mapped to: the namespace and
+/// the local name, with a # (or a : after a urn: namespace) between them unless the namespace
+/// ends with a separator. Names without a namespace are in XYZ_PREFIX_IRI.
+pub fn xml_name_iri(namespace: &str, local_name: &str) -> String {
+    format!("{namespace}{}{local_name}", use_sep(namespace))
 }
 
 fn use_sep(pre: &str) -> &str {

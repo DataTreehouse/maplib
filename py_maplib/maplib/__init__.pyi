@@ -1340,6 +1340,7 @@ class Model:
             base_iri: str = None,
             graph: str = None,
             ignore_data_errors: bool = False,
+            namespaces: Dict[str, str] = None,
     ) -> None:
         """
         Map CSV, JSON and XML sources to RDF with an RML mapping (https://rml.io/specs/rml/,
@@ -1360,9 +1361,19 @@ class Model:
         Supported XPath: element names, *, ., .., @attribute and text() as steps, separated by / and //,
         with the predicates [@a='v'], [e='v'], [.='v'], [@a] and [e]. An iterator starts with /.
         Anything else in a path raises an error that names it. Not supported: array indexes and slices,
-        filters, recursive descent and wildcards over keys in JSONPath; positions, functions, axes, unions,
-        comparisons other than = and namespaces (prefixed names) in XPath; RML functions (FnO), RML-star,
-        logical targets, remote sources and sources described as databases or CSVW tables.
+        filters, recursive descent and wildcards over keys in JSONPath; positions, functions, axes, unions
+        and comparisons other than = in XPath; RML functions (FnO), RML-star, logical targets, remote
+        sources and sources described as databases or CSVW tables.
+
+        XML namespaces: a name with a prefix in an XPath expression (p:pump, @p:kind) is in the namespace
+        of the prefix. Prefixes are given in namespaces, declared in the mapping (rml:namespace with
+        rml:namespacePrefix and rml:namespaceURL on an rml:XPathReferenceFormulation), or else taken from
+        the declarations of the document (xmlns:p), when it declares one namespace for the prefix. As in
+        XPath, an element name without a prefix is a name without a namespace, so the elements of a
+        document with a default namespace (xmlns="...") need a prefix in the paths; namespaces={"": ...}
+        makes a namespace that of the element names without a prefix instead. An attribute without a
+        prefix matches in the default namespace of its element too. When an iterator without prefixes
+        selects nothing in a document with a default namespace, an error says so.
 
         Both RML vocabularies are read, also mixed: the rml: namespace of the W3C community group
         (http://w3id.org/rml/) and the first RML vocabulary (http://semweb.mmlab.be/ns/rml# with rr:
@@ -1389,6 +1400,9 @@ class Model:
         :param graph: The IRI of the graph of triples without a graph map (and of rr:defaultGraph).
         :param ignore_data_errors: Drop terms that are data errors (invalid IRIs, values not valid for the
             rr:datatype) with a warning, instead of raising an exception.
+        :param namespaces: The XML namespaces of the prefixes used in XPath expressions, by prefix. The
+            empty prefix gives the namespace of element names without a prefix. They win over the
+            namespaces declared in the mapping and in the document.
         :return: None
         """
 
