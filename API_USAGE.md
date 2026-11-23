@@ -765,46 +765,18 @@ m.map_rml(mapping, sources={"plant.xml": """<plant name="North">
 #     <http://example.net/ns#plant> "North" .
 ```
 
-**XML namespaces.** A name with a prefix in a path is in the namespace of the prefix. As in XPath,
-an element name without a prefix is a name *without* a namespace, so the elements of a document
-with a default namespace (`xmlns="..."`) need a prefix in the paths:
+**XML namespaces.** As in XPath, a name without a prefix has no namespace, so a document with a
+default namespace (`xmlns="..."`) needs prefixes in the paths. A prefix is looked up in
+`namespaces`, then in the mapping (`rml:namespace` on an `rml:XPathReferenceFormulation`), then in
+the document. `namespaces={"": "..."}` lets names without a prefix match the default namespace:
 
 ```python
-doc = """<plant xmlns="http://example.com/plant" xmlns:m="http://example.com/meta#">
-  <pump id="1" m:kind="feed"><name>Feed pump</name></pump>
-</plant>"""
-
-mapping = """
-@prefix rr: <http://www.w3.org/ns/r2rml#> .
-@prefix rml: <http://semweb.mmlab.be/ns/rml#> .
-@prefix ql: <http://semweb.mmlab.be/ns/ql#> .
-@prefix ex: <http://example.net/ns#> .
-
-<#Pump> rml:logicalSource [ rml:source "plant.xml" ;
-        rml:referenceFormulation ql:XPath ; rml:iterator "/p:plant/p:pump[@m:kind='feed']" ] ;
-    rr:subjectMap [ rr:template "http://example.net/pump/{@id}" ] ;
-    rr:predicateObjectMap [ rr:predicate ex:name ; rr:objectMap [ rml:reference "p:name" ] ] .
-"""
-m.map_rml(mapping, sources={"plant.xml": doc}, namespaces={"p": "http://example.com/plant"})
-print(m.writes(format="turtle"))
-# <http://example.net/pump/1> <http://example.net/ns#name> "Feed pump" .
+doc = """<plant xmlns="http://example.com/plant"><pump id="1" kind="feed"><name>Feed pump</name></pump></plant>"""
+m.map_rml(mapping, sources={"plant.xml": doc}, namespaces={"": "http://example.com/plant"})
 ```
 
-The namespace of a prefix is looked up in three places, in this order:
-
-1. `namespaces`, by prefix. The prefix is yours to choose; it need not be the one of the document.
-2. The mapping, in the vocabulary of the W3C community group: `rml:referenceFormulation
-   [ a rml:XPathReferenceFormulation ; rml:namespace [ rml:namespacePrefix "p" ;
-   rml:namespaceURL "http://example.com/plant" ] ]`.
-3. The document itself (`xmlns:m` above), when it declares one namespace for the prefix. A prefix
-   that the document binds to several namespaces must be given.
-
-`namespaces={"": "http://example.com/plant"}` makes a namespace that of the element names without
-a prefix, so that `/plant/pump` and `name` work as they are. An attribute without a prefix (`@id`)
-needs nothing: it matches without a namespace and in the default namespace of its element, which
-is where `map_xml` puts it. When an iterator without prefixes selects nothing in a document that
-declares a default namespace, `map_rml` raises an error that names the namespace, instead of
-mapping nothing.
+An iterator without prefixes that selects nothing in such a document raises an error that names
+the namespace.
 
 **CSV** sources have the reference formulation `ql:CSV` and no iterator: the records are the rows
 and the references are the column names.
@@ -839,54 +811,22 @@ above (`rml:` is `http://semweb.mmlab.be/ns/rml#`, with `rr:` term maps and the 
 formulations), and that of the W3C community group, where every term is in `http://w3id.org/rml/`
 (`rml:subjectMap`, `rml:template`, `rml:JSONPath`, ...).
 
-**How it works.** A JSON or XML source is first mapped to a temporary graph, outside the model,
-with the [Façade-X mapping](#façade-x-map_df-map_json-and-map_xml) of `map_json` and `map_xml`. The
-iterator and the references are translated to one SPARQL query over that graph, which gives a table
-with a row per record and a column per reference, and that table is mapped as the result of a
-logical table is. So the paths are evaluated by the SPARQL engine, not by a JSONPath or XPath
-library, and the supported paths are those that translate:
+**Paths.** JSON and XML sources are mapped to a temporary graph with the
+[Façade-X mapping](#façade-x-map_df-map_json-and-map_xml) of `map_json` and `map_xml`, and the
+iterator and references are translated to SPARQL over it. The supported paths are those that
+translate; anything else raises an error that names it:
 
-| | Supported | Not supported: raises an error that names it |
+| | Supported | Not supported |
 |---|---|---|
-| JSONPath | `$`, `.key`, `['key']`, `[*]`; a reference may leave out `$.`, and a reference without `.` and `[` is one key, also with spaces | array indexes and slices (`[0]`, `[1:3]`), filters (`[?(...)]`), recursive descent (`..`), wildcards over keys (`.*`) |
-| XPath | element names, `*`, `.`, `..`, `@attribute`, `text()`, separated by `/` and `//`, with or without a namespace prefix; the predicates `[@a='v']`, `[e='v']`, `[.='v']`, `[@a]`, `[e]` | positions (`[1]`, `last()`), functions, axes (`following-sibling::`), unions, comparisons other than `=` |
+| JSONPath | `$`, `.key`, `['key']`, `[*]` (`$.` may be left out) | indexes and slices, filters, `..`, `.*` |
+| XPath | names, `*`, `.`, `..`, `@a`, `text()`, `/`, `//`; predicates `[@a='v']`, `[e='v']`, `[.='v']`, `[@a]`, `[e]` | positions, functions, axes, unions, comparisons other than `=` |
 
-Other gaps to know:
-
-- **Array order and duplicates.** The Façade-X graph of a JSON document does not keep the order of
-  array items, which is why indexes are not supported, and equal values in one array are one value.
-- **`*` and namespaces.** `*` matches the elements of any namespace; `p:*` is not supported.
-- **Mixed content.** The value of an element is its own text, not the concatenated text of its
-  descendants as in XPath.
-- **Memory.** The whole document is mapped to triples before anything is selected, and a triples
-  map with several references that each have several values per record gets a row per combination
-  of them before the duplicates are removed. Split such a map in two if that gets large.
-- **Not part of this:** RML functions (FnO), RML-star, logical targets, remote sources, and sources
-  described as databases or CSVW tables in the mapping.
-- **JSON references select values.** A reference that selects an object or an array, such as
-  `tags` instead of `tags[*]`, is an error.
-- **Empty CSV cells** are no value, as NULL is in a logical table. RML-IO makes them empty
-  strings unless the source has `rml:null ""`.
-- **A reference that matches nothing** in a JSON or XML source gives no value, in one record or in
-  all of them, since a key or an element may be optional. A reference to a column that a CSV
-  source does not have is an error.
-- **Test coverage.** Three test suites of the RML community are included in the tests, 225 test
-  cases, of which 214 pass:
-
-  | Suite | Cases | Pass |
-  |---|---|---|
-  | RML-Core of the W3C community group (JSON sources) | 76 | 75 |
-  | RML-IO of the same group, the source test cases | 32 | 27 |
-  | The test cases of the first RML specification, with CSV, JSON and XML sources | 117 | 112 |
-
-  `py_maplib/tests/rml_community_known_failures.txt` has the 11 that do not pass, each with its
-  reason: sources described as SPARQL endpoints and database connections, a CSV row with too few
-  fields (which Polars accepts), the two gaps above, a literal as a graph (an error here, no
-  triples there) and IRIs with spaces from `rml:UnsafeIRI`. Two things differ in how the test
-  cases are run, both described in `test_rml_community.py`: they are mapped with
-  `ignore_data_errors=True`, and the JSON test cases of the first specification, which expect
-  numbers as plain strings, are compared without the datatype of numbers and booleans. Not
-  included: the test cases for logical targets and for databases described in the mapping.
+Array items have no order and equal items are one value; the value of an XML element is its own
+text; a JSON reference must select values, not an object or an array (`tags[*]`, not `tags`). A
+reference that matches nothing gives no value, except a missing CSV column, which is an error.
+Not supported: RML functions (FnO), RML-star, logical targets, remote sources and sources
+described as databases. `map_rml` passes 214 of the 225 cases of the RML-Core, RML-IO and first
+RML test suites; `py_maplib/tests/rml_community_known_failures.txt` lists the others with reasons.
 
 ### Templates from an ontology: generate_templates
 
