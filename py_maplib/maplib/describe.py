@@ -233,32 +233,32 @@ class ModelDescription:
     The tables are polars DataFrames with everything that was computed. The table of a section
     that was not asked for is empty.
 
-    sections: the sections that were computed.
-    graphs: one row per graph: graph, triples, predicates, classes, namespaces, and with the
-        subjects section subjects, untyped_subjects and blank_subjects.
-    predicates: one row per graph and predicate: graph, predicate, triples, distinct_subjects,
-        distinct_objects, exact (whether the distinct counts are exact), subject_kinds (IRI, Blank),
-        object_types (IRI, Blank or the datatype IRI), object_type_triples, max_triples_per_subject,
-        max_triples_per_object, functional (at most one object per subject) and inverse_functional
-        (at most one subject per object), both None when the statistics cannot tell,
-        common_objects and common_object_counts (the most common objects, as N-Triples terms),
-        example (examples section), declared and label (vocabulary section).
-    classes: graph, class, instances, and with the vocabulary section declared and label.
-    namespaces: graph, namespace, prefix (the prefix the report uses: a well-known prefix, or one
-        made from the namespace for the namespaces of predicates and classes), role (predicate,
-        class, and with the iri_namespaces section subject and object) and terms (the distinct
-        IRIs of that role in the namespace).
-    class_predicates: for each class, the predicates its instances have: graph, class, predicate,
-        instances, subjects (instances with the predicate), coverage (subjects / instances),
-        triples, min_per_subject and max_per_subject (among the instances that have it).
-    links: which classes are linked: graph, subject_class, predicate, object_class, triples.
-    literals: graph, predicate, datatype, min and max (as strings, not for strings), min_length
-        and max_length (strings only).
-    languages: graph, predicate, language, triples.
-    dangling: IRI objects that are not a subject in their graph: graph, predicate, objects,
-        triples, in_other_graphs (how many of the objects are a subject in another graph).
-    overlap: for pairs of the largest graphs: graph_a, graph_b, shared_predicates, shared_classes,
-        shared_subjects, a_refers_to_b (IRI objects of a that are subjects in b), b_refers_to_a.
+    - sections: the sections that were computed.
+    - graphs: one row per graph: graph, triples, predicates, classes, namespaces, and with the
+      subjects section subjects, untyped_subjects and blank_subjects.
+    - predicates: one row per graph and predicate: graph, predicate, triples, distinct_subjects,
+      distinct_objects, exact (whether the distinct counts are exact), subject_kinds (IRI, Blank),
+      object_types (IRI, Blank or the datatype IRI), object_type_triples, max_triples_per_subject,
+      max_triples_per_object, functional (at most one object per subject) and inverse_functional
+      (at most one subject per object), both None when the statistics cannot tell,
+      common_objects and common_object_counts (the most common objects, as N-Triples terms),
+      example (examples section), declared and label (vocabulary section).
+    - classes: graph, class, instances, and with the vocabulary section declared and label.
+    - namespaces: graph, namespace, prefix (the prefix the report uses: a well-known prefix, or one
+      made from the namespace for the namespaces of predicates and classes), role (predicate,
+      class, and with the iri_namespaces section subject and object) and terms (the distinct
+      IRIs of that role in the namespace).
+    - class_predicates: for each class, the predicates its instances have: graph, class, predicate,
+      instances, subjects (instances with the predicate), coverage (subjects / instances),
+      triples, min_per_subject and max_per_subject (among the instances that have it).
+    - links: which classes are linked: graph, subject_class, predicate, object_class, triples.
+    - literals: graph, predicate, datatype, min and max (as strings, not for strings), min_length
+      and max_length (strings only).
+    - languages: graph, predicate, language, triples.
+    - dangling: IRI objects that are not a subject in their graph: graph, predicate, objects,
+      triples, in_other_graphs (how many of the objects are a subject in another graph).
+    - overlap: for pairs of the largest graphs: graph_a, graph_b, shared_predicates, shared_classes,
+      shared_subjects, a_refers_to_b (IRI objects of a that are subjects in b), b_refers_to_a.
     """
 
     def __init__(self, tables: Dict[str, pl.DataFrame], sections: Sequence[str], prefixes: Dict[str, str]):

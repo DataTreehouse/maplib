@@ -1357,9 +1357,9 @@ class Model:
         an element that repeats) gives a term per value. JSON numbers and booleans give typed literals,
         the values of CSV and XML sources are strings unless the term map has an rr:datatype.
 
-        Supported JSONPath: $, .key, ['key'] and [*]. A reference may leave out the leading $. and a
+        Supported JSONPath: ``$``, ``.key``, ``['key']`` and ``[*]``. A reference may leave out the leading $. and a
         reference without . and [ is one key, also with spaces.
-        Supported XPath: element names, *, ., .., @attribute and text() as steps, separated by / and //,
+        Supported XPath: element names, ``*``, ``.``, ``..``, ``@attribute`` and ``text()`` as steps, separated by / and //,
         with the predicates [@a='v'], [e='v'], [.='v'], [@a] and [e]. An iterator starts with /.
         Anything else in a path raises an error that names it. Not supported: array indexes and slices,
         filters, recursive descent and wildcards over keys in JSONPath; positions, functions, axes, unions
