@@ -800,6 +800,27 @@ and the references are the column names.
 when all the values of a reference have that type. The values of CSV and XML sources are strings.
 Give the term map an `rr:datatype` for another type.
 
+**Term maps beyond R2RML.** These work in `map_rml` and in `map_r2rml`, on any kind of source:
+
+| In the mapping | Gives |
+|---|---|
+| `rml:languageMap [ rml:reference "lang" ]` on an object map (or a template) | the language of each literal from its record; a record without one gives no literal |
+| `rml:datatypeMap [ rml:reference "type" ]` (or a template, relative to the base IRI) | the datatype of each literal from its record |
+| `rml:baseIRI <http://example.net/>` on a triples map | the base IRI of the relative IRIs of that triples map, instead of `base_iri` |
+| `rml:childMap [ ... ]` and `rml:parentMap [ ... ]` in a join condition | a join on the values of a reference, a template or a constant, compared as strings |
+| a subject or object map with only `rr:termType rr:BlankNode` | a blank node per record |
+| `rr:termType rml:URI` | an IRI whose template values are percent encoded outside ASCII too (`Zo%C3%AB`) |
+| `rr:termType rml:UnsafeIRI` | an IRI whose template values are not encoded; a value that makes the IRI invalid is a data error |
+
+With `rr:termType rr:IRI`, or none, the values of a template are IRI-safe as R2RML defines it:
+characters that are reserved in IRIs are percent encoded (`A b` becomes `A%20b`), and letters
+outside ASCII are kept (`Zoë` stays `Zoë`).
+
+The references of a triples map are evaluated independently of each other. A literal and its
+language map therefore pair up per record, not per value: when a record has several labels, each
+with a language, iterate over the labels (`rml:iterator ".../label"` with the references `.` and
+`@lang`) rather than over their parent.
+
 **Vocabularies.** Both RML vocabularies are read, also mixed in one mapping: the first one shown
 above (`rml:` is `http://semweb.mmlab.be/ns/rml#`, with `rr:` term maps and the `ql:` reference
 formulations), and that of the W3C community group, where every term is in `http://w3id.org/rml/`
@@ -829,7 +850,13 @@ Other gaps to know:
   of them before the duplicates are removed. Split such a map in two if that gets large.
 - **Not part of this:** RML functions (FnO), RML-star, logical targets, remote sources, and sources
   described as databases or CSVW tables in the mapping.
-- **Test coverage.** The tests are maplib's own. The RML community test cases are not included yet.
+- **JSON references select values.** A reference that selects an object or an array, such as
+  `tags` instead of `tags[*]`, is an error.
+- **Test coverage.** The RML-Core test cases of the W3C community group (76 cases, JSON sources)
+  are included in the tests, and 75 pass. The one that does not expects IRIs with spaces from
+  `rml:UnsafeIRI`, which maplib reports as a data error
+  (`py_maplib/tests/rml_community_known_failures.txt`). That suite has no CSV or XML cases, which
+  are covered by maplib's own tests.
 
 ### Templates from an ontology: generate_templates
 

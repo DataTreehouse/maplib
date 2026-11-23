@@ -1,0 +1,12 @@
+[
+    {
+        "ID": 10,
+        "label": "apple",
+        "language": "en"
+    },
+    {
+        "ID": 10,
+        "label": "pomme",
+        "language": "fr"
+    }
+]

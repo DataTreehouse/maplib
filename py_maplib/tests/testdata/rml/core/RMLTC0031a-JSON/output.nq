@@ -1,0 +1,2 @@
+<http://example.com/10> <http://www.w3.org/2000/01/rdf-schema#label> "apple"@en .
+<http://example.com/20> <http://www.w3.org/2000/01/rdf-schema#label> "pear"@en .

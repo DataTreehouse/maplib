@@ -58,7 +58,8 @@ def test_iri_templates_and_percent_encoding(source):
         **source,
     )
     assert _strings(m, "SELECT ?s WHERE { ?s ex:rel ?o }", "s") == [
-        "<http://example.org/person/Bj%C3%B8rn/1>",
+        # Letters outside ASCII are unreserved in IRIs and are kept; reserved characters are encoded.
+        "<http://example.org/person/Bjørn/1>",
         "<http://example.org/person/a%2Fb%3Fc%23d/2>",
         "<http://example.org/person/~._-/-4>",
     ]

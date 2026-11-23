@@ -10,8 +10,8 @@
 use representation::CollectAuto;
 use crate::errors::R2RMLError;
 use crate::mapping::{
-    LogicalTable, ObjectMap, R2RMLMapping, RefObjectMap, TemplatePart, TermMap, TermType,
-    TermValue, TriplesMap,
+    IriEncoding, LogicalTable, ObjectMap, R2RMLMapping, RefObjectMap, TemplatePart, TermMap,
+    TermType, TermValue, TriplesMap, RECORD_COLUMN,
 };
 use oxiri::Iri;
 use oxrdf::vocab::{rdf, xsd};
@@ -79,9 +79,34 @@ enum Graphs {
 struct Ctx<'a> {
     options: &'a R2RMLOptions,
     warnings: &'a mut Vec<String>,
+    /// The base IRI of the triples map that is evaluated: its rml:baseIRI, or that of the options.
+    base_iri: String,
+    /// A tag for the logical table of the triples map that is evaluated, which keeps the blank
+    /// nodes of its records apart from those of other tables.
+    record_tag: String,
 }
 
 impl Ctx<'_> {
+    /// Sets the base IRI and the record tag to those of a triples map, and returns the previous.
+    fn enter(&mut self, tm: &TriplesMap) -> (String, String) {
+        use std::hash::{Hash, Hasher};
+        let mut hasher = std::collections::hash_map::DefaultHasher::new();
+        tm.logical_table.key().hash(&mut hasher);
+        let base = tm
+            .base_iri
+            .clone()
+            .unwrap_or_else(|| self.options.base_iri.clone());
+        (
+            std::mem::replace(&mut self.base_iri, base),
+            std::mem::replace(&mut self.record_tag, format!("r{:x}_", hasher.finish())),
+        )
+    }
+
+    fn leave(&mut self, previous: (String, String)) {
+        self.base_iri = previous.0;
+        self.record_tag = previous.1;
+    }
+
     fn data_error(&mut self, location: &str, msg: String) -> Result<(), R2RMLError> {
         if self.options.ignore_data_errors {
             self.warnings.push(format!("{location}: {msg}"));
@@ -213,30 +238,145 @@ fn is_unreserved(b: u8) -> bool {
 const HEX_UPPER: &[u8; 16] = b"0123456789ABCDEF";
 const HEX_LOWER: &[u8; 16] = b"0123456789abcdef";
 
-/// IRI-safe percent encoding of template values, <https://www.w3.org/TR/r2rml/#dfn-iri-safe>.
-fn push_iri_safe(v: &str, buf: &mut String) {
-    for b in v.bytes() {
-        if is_unreserved(b) {
-            buf.push(b as char);
+/// Whether a character outside ASCII is in the ucschar production of RFC 3987, and so unreserved
+/// in IRIs.
+fn is_ucschar(c: char) -> bool {
+    let c = c as u32;
+    matches!(c, 0xA0..=0xD7FF | 0xF900..=0xFDCF | 0xFDF0..=0xFFEF)
+        || (0x10000..=0xDFFFD).contains(&c) && (c & 0xFFFF) <= 0xFFFD
+        || (0xE1000..=0xEFFFD).contains(&c)
+}
+
+/// IRI-safe percent encoding of template values, <https://www.w3.org/TR/r2rml/#dfn-iri-safe>:
+/// every character that is not in the iunreserved production of RFC 3987 is percent encoded.
+/// With `keep_unicode`, the characters outside ASCII that are unreserved in IRIs are kept, as
+/// the definition says. Without it they are encoded as well, which gives URIs (rml:URI).
+fn push_iri_safe(v: &str, buf: &mut String, keep_unicode: bool) {
+    let mut utf8 = [0u8; 4];
+    for c in v.chars() {
+        if (c.is_ascii() && is_unreserved(c as u8)) || (keep_unicode && is_ucschar(c)) {
+            buf.push(c);
         } else {
-            buf.push('%');
-            buf.push(HEX_UPPER[(b >> 4) as usize] as char);
-            buf.push(HEX_UPPER[(b & 15) as usize] as char);
+            for b in c.encode_utf8(&mut utf8).bytes() {
+                buf.push('%');
+                buf.push(HEX_UPPER[(b >> 4) as usize] as char);
+                buf.push(HEX_UPPER[(b & 15) as usize] as char);
+            }
         }
     }
 }
 
 /// The IRI-safe form of the lexical forms of a column of the given type. Integers and booleans
 /// are IRI-safe as they are, as are strings without reserved characters.
-fn iri_safe_column(l: StringChunked, dtype: &DataType) -> Result<StringChunked, R2RMLError> {
-    if dtype.is_integer() || dtype == &DataType::Boolean {
+fn iri_safe_column(
+    l: StringChunked,
+    dtype: &DataType,
+    encoding: IriEncoding,
+) -> Result<StringChunked, R2RMLError> {
+    if encoding == IriEncoding::Unsafe || dtype.is_integer() || dtype == &DataType::Boolean {
         return Ok(l);
     }
-    if !par_any(&l, |v| !v.bytes().all(is_unreserved)) {
+    let keep_unicode = encoding == IriEncoding::Safe;
+    let is_safe = |v: &str| {
+        v.bytes().all(is_unreserved)
+            || (keep_unicode
+                && v.chars()
+                    .all(|c| (c.is_ascii() && is_unreserved(c as u8)) || is_ucschar(c)))
+    };
+    if !par_any(&l, |v| !is_safe(v)) {
         return Ok(l);
     }
-    par_strings(&l, push_iri_safe)
+    par_strings(&l, |v, buf| push_iri_safe(v, buf, keep_unicode))
 }
+
+/// The values of a language map, a datatype map or one side of a join condition, as strings:
+/// the constant, the lexical forms of a column, or a template without encoding of its values.
+fn value_strings(
+    df: &DataFrame,
+    value: &TermValue,
+    location: &str,
+) -> Result<StringChunked, R2RMLError> {
+    Ok(match value {
+        TermValue::Constant(t) => {
+            let s = match t {
+                Term::NamedNode(nn) => nn.as_str().to_string(),
+                Term::Literal(l) => l.value().to_string(),
+                t => t.to_string(),
+            };
+            StringChunked::full("v".into(), s.as_str(), df.height())
+        }
+        TermValue::Column(c) => lexical(resolve_column(df, c, location)?)?,
+        TermValue::Record => lexical(record_column(df, location)?)?,
+        TermValue::Template(parts) => {
+            let mut columns = vec![];
+            let mut exprs: Vec<Expr> = vec![];
+            for (i, p) in parts.iter().enumerate() {
+                match p {
+                    TemplatePart::Text(t) => exprs.push(lit(t.clone())),
+                    TemplatePart::Column(c) => {
+                        let name = format!("_{i}");
+                        let l = lexical(resolve_column(df, c, location)?)?;
+                        columns.push(l.with_name(name.as_str().into()).into_series().into_column());
+                        exprs.push(col(name));
+                    }
+                }
+            }
+            if columns.is_empty() {
+                StringChunked::full("v".into(), template_shape(parts, "").as_str(), df.height())
+            } else {
+                let out = DataFrame::new(df.height(), columns)?
+                    .lazy()
+                    .select([concat_str(exprs, "", false).alias("v")])
+                    .collect_auto()?;
+                out.column("v")?.str()?.clone()
+            }
+        }
+    })
+}
+
+/// The column that identifies the record of each row.
+fn record_column<'a>(df: &'a DataFrame, location: &str) -> Result<&'a Column, R2RMLError> {
+    df.column(RECORD_COLUMN).map_err(|_| {
+        R2RMLError::MappingError(format!(
+            "{location} generates a blank node per record, but the logical table has no record column"
+        ))
+    })
+}
+
+/// A column of language tagged strings with one language.
+fn language_tagged(strings: &StringChunked, language: &str) -> Result<Series, R2RMLError> {
+    let tmp = DataFrame::new(
+        strings.len(),
+        vec![strings.clone().with_name("v".into()).into_series().into_column()],
+    )?;
+    let out = tmp
+        .lazy()
+        .select([as_struct(vec![
+            col("v").alias(LANG_STRING_VALUE_FIELD),
+            lit(language.to_string()).alias(LANG_STRING_LANG_FIELD),
+        ])
+        .alias("t")])
+        .collect_auto()?;
+    Ok(out.column("t")?.as_materialized_series().clone())
+}
+
+/// The distinct values of the keys, with the strings of the rows of each: the rows of other
+/// keys are null. Rows without a key are left out.
+fn by_key(strings: &StringChunked, keys: &StringChunked) -> Vec<(String, StringChunked)> {
+    let distinct: BTreeSet<&str> = keys.iter().flatten().collect();
+    distinct
+        .into_iter()
+        .map(|k| {
+            let of_key: StringChunked = strings
+                .iter()
+                .zip(keys.iter())
+                .map(|(s, key)| if key == Some(k) { s } else { None })
+                .collect();
+            (k.to_string(), of_key.with_name(strings.name().clone()))
+        })
+        .collect()
+}
+
 
 /// Blank node labels: the prefix, then the value with characters other than ASCII letters and
 /// digits escaped as _xx.
@@ -310,16 +450,31 @@ fn evaluate(
     let mut valid_iris = false;
     let strings: StringChunked = match &tm.value {
         TermValue::Constant(t) => return Ok(Evaluated::Constant(t.clone())),
+        TermValue::Record => {
+            // The record, tagged with its logical table.
+            let records = lexical(record_column(df, location)?)?;
+            let tag = ctx.record_tag.as_str();
+            par_strings(&records, |v, buf| {
+                buf.push_str(tag);
+                buf.push_str(v);
+            })?
+        }
         TermValue::Column(c) => {
             let column = resolve_column(df, c, location)?;
-            if tm.term_type == TermType::Literal && tm.language.is_none() && tm.datatype.is_none() {
+            if tm.term_type == TermType::Literal
+                && tm.language.is_none()
+                && tm.datatype.is_none()
+                && tm.language_map.is_none()
+                && tm.datatype_map.is_none()
+            {
                 return Ok(Evaluated::Columns(vec![(None, natural_literal(column)?)]));
             }
             lexical(column)?
         }
         TermValue::Template(parts) => {
             let mut parts: Vec<TemplatePart> = parts.clone();
-            if tm.term_type == TermType::IRI {
+            // Values that are not encoded can make any template invalid.
+            if tm.term_type == TermType::IRI && tm.iri_encoding != IriEncoding::Unsafe {
                 if template_gives_valid_iris(&parts) {
                     valid_iris = true;
                 } else if !parts
@@ -328,7 +483,7 @@ fn evaluate(
                 {
                     // IRI-safe values have no colon, so without one in the text the IRIs are
                     // all relative, and resolved against the base IRI.
-                    let mut with_base = vec![TemplatePart::Text(ctx.options.base_iri.clone())];
+                    let mut with_base = vec![TemplatePart::Text(ctx.base_iri.clone())];
                     with_base.extend(parts.iter().cloned());
                     if template_gives_valid_iris(&with_base) {
                         parts = with_base;
@@ -345,7 +500,7 @@ fn evaluate(
                         let column = resolve_column(df, c, location)?;
                         let mut l = lexical(column)?;
                         if tm.term_type == TermType::IRI {
-                            l = iri_safe_column(l, column.dtype())?;
+                            l = iri_safe_column(l, column.dtype(), tm.iri_encoding)?;
                         }
                         let name = format!("_{i}");
                         lf_cols.push(l.with_name(name.as_str().into()).into_series().into_column());
@@ -369,7 +524,6 @@ fn evaluate(
             }
         }
     };
-    let n = strings.len();
     match tm.term_type {
         TermType::IRI => {
             let resolved = if valid_iris {
@@ -397,6 +551,46 @@ fn evaluate(
             )]))
         }
         TermType::Literal => {
+            let lang_state = || state(BaseRDFNodeType::Literal(rdf::LANG_STRING.into_owned(), None));
+            if let Some(language_map) = &tm.language_map {
+                // A group of literals per language of the language map.
+                let keys = value_strings(df, language_map, location)?;
+                let mut groups = vec![];
+                for (language, of_language) in by_key(&strings, &keys) {
+                    if oxilangtag::LanguageTag::parse(language.as_str()).is_err() {
+                        ctx.data_error(location, format!("the invalid language tag {language:?}"))?;
+                        continue;
+                    }
+                    groups.push((
+                        Some(of_language.is_not_null().into_series()),
+                        Terms {
+                            series: language_tagged(&of_language, &language)?,
+                            state: lang_state(),
+                        },
+                    ));
+                }
+                return Ok(Evaluated::Columns(groups));
+            }
+            if let Some(datatype_map) = &tm.datatype_map {
+                // A group of literals per datatype of the datatype map.
+                let keys = value_strings(df, datatype_map, location)?;
+                let mut groups = vec![];
+                for (datatype, of_datatype) in by_key(&strings, &keys) {
+                    let iri = if Iri::parse(datatype.as_str()).is_ok() {
+                        datatype
+                    } else {
+                        format!("{}{datatype}", ctx.base_iri)
+                    };
+                    let Ok(datatype) = NamedNode::new(iri.as_str()) else {
+                        ctx.data_error(location, format!("the invalid datatype IRI {iri:?}"))?;
+                        continue;
+                    };
+                    if let Evaluated::Columns(g) = typed_literals(ctx, &of_datatype, &datatype, location)? {
+                        groups.extend(g);
+                    }
+                }
+                return Ok(Evaluated::Columns(groups));
+            }
             if let Some(l) = &tm.language {
                 // Null values give null structs.
                 let mask = if strings.null_count() > 0 {
@@ -404,24 +598,12 @@ fn evaluate(
                 } else {
                     None
                 };
-                let tmp = DataFrame::new(
-                    n,
-                    vec![strings.with_name("v".into()).into_series().into_column()],
-                )?;
-                let out = tmp
-                    .lazy()
-                    .select([as_struct(vec![
-                        col("v").alias(LANG_STRING_VALUE_FIELD),
-                        lit(l.clone()).alias(LANG_STRING_LANG_FIELD),
-                    ])
-                    .alias("t")])
-                    .collect_auto()?;
-                let s = out.column("t")?.as_materialized_series().clone();
+                let s = language_tagged(&strings, l)?;
                 return Ok(Evaluated::Columns(vec![(
                     mask,
                     Terms {
                         series: s,
-                        state: state(BaseRDFNodeType::Literal(rdf::LANG_STRING.into_owned(), None)),
+                        state: lang_state(),
                     },
                 )]));
             }
@@ -441,7 +623,8 @@ fn resolve_iris(
     strings: StringChunked,
     location: &str,
 ) -> Result<StringChunked, R2RMLError> {
-    let base = ctx.options.base_iri.as_str();
+    let base = ctx.base_iri.clone();
+    let base = base.as_str();
     let parts: Vec<(StringChunked, Vec<String>)> = slices(strings.len())
         .into_par_iter()
         .map(|(o, l)| {
@@ -833,7 +1016,11 @@ fn constant_terms(t: &Term, height: usize) -> Result<Terms, R2RMLError> {
 
 fn subject_terms(ctx: &mut Ctx, tm: &TriplesMap, df: &DataFrame) -> Result<Terms, R2RMLError> {
     let location = format!("the subject map of {}", tm.name);
-    match evaluate(ctx, &tm.subject_map, df, &location)? {
+    // The subjects of a parent triples map have its base IRI, not that of the child.
+    let previous = ctx.enter(tm);
+    let evaluated = evaluate(ctx, &tm.subject_map, df, &location);
+    ctx.leave(previous);
+    match evaluated? {
         Evaluated::Constant(t) => constant_terms(&t, df.height()),
         Evaluated::Columns(mut c) => Ok(c.pop().unwrap().1),
     }
@@ -876,23 +1063,32 @@ fn join_tables(
     let mut left_on = vec![];
     let mut right_on = vec![];
     for (i, (c, p)) in r.join_conditions.iter().enumerate() {
-        let cc = resolve_column(child, c, location)?;
-        let pc = resolve_column(parent, p, location)?;
-        let (cs, ps) = if cc.dtype() == pc.dtype() {
-            (cc.as_materialized_series().clone(), pc.as_materialized_series().clone())
-        } else if cc.dtype().is_primitive_numeric() && pc.dtype().is_primitive_numeric() {
-            // Numbers are compared as numbers, as in SQL.
-            let t = if cc.dtype().is_float() || pc.dtype().is_float() {
-                DataType::Float64
-            } else {
-                DataType::Int64
-            };
-            (
-                cc.as_materialized_series().cast(&t)?,
-                pc.as_materialized_series().cast(&t)?,
-            )
-        } else {
-            (lexical(cc)?.into_series(), lexical(pc)?.into_series())
+        let (cs, ps) = match (c, p) {
+            (TermValue::Column(c), TermValue::Column(p)) => {
+                let cc = resolve_column(child, c, location)?;
+                let pc = resolve_column(parent, p, location)?;
+                if cc.dtype() == pc.dtype() {
+                    (cc.as_materialized_series().clone(), pc.as_materialized_series().clone())
+                } else if cc.dtype().is_primitive_numeric() && pc.dtype().is_primitive_numeric() {
+                    // Numbers are compared as numbers, as in SQL.
+                    let t = if cc.dtype().is_float() || pc.dtype().is_float() {
+                        DataType::Float64
+                    } else {
+                        DataType::Int64
+                    };
+                    (
+                        cc.as_materialized_series().cast(&t)?,
+                        pc.as_materialized_series().cast(&t)?,
+                    )
+                } else {
+                    (lexical(cc)?.into_series(), lexical(pc)?.into_series())
+                }
+            }
+            // The values of child and parent maps are compared as strings.
+            _ => (
+                value_strings(child, c, location)?.into_series(),
+                value_strings(parent, p, location)?.into_series(),
+            ),
         };
         let ln = format!("\u{1}jc{i}");
         let rn = format!("\u{1}jp{i}");
@@ -939,6 +1135,26 @@ pub fn execute(
     let mut ctx = Ctx {
         options,
         warnings: &mut warnings,
+        base_iri: options.base_iri.clone(),
+        record_tag: String::new(),
+    };
+    // Blank nodes per record need a column that identifies the record of each row: tables that
+    // come without one get the row number.
+    let with_records: HashMap<String, DataFrame>;
+    let tables = if mapping.uses_record() {
+        let mut numbered = HashMap::with_capacity(tables.len());
+        for (k, df) in tables {
+            let df = if df.width() == 0 || df.column(RECORD_COLUMN).is_ok() {
+                df.clone()
+            } else {
+                df.with_row_index(RECORD_COLUMN.into(), None)?
+            };
+            numbered.insert(k.clone(), df);
+        }
+        with_records = numbered;
+        &with_records
+    } else {
+        tables
     };
     let table = |lt: &LogicalTable| -> Result<&DataFrame, R2RMLError> {
         tables
@@ -952,6 +1168,8 @@ pub fn execute(
             // An empty result (which may come without columns) gives no triples.
             continue;
         }
+        // The term maps of this triples map have its base IRI and record tag.
+        let _ = ctx.enter(tm);
         let subjects = subject_terms(&mut ctx, tm, df)?;
         let subject_location = format!("the subject map of {}", tm.name);
         let subject_graph_maps: Vec<&TermMap> = tm.subject_graphs.iter().collect();

@@ -28,7 +28,8 @@ use representation::constants::{FX_PREFIX_NAME, FX_XMLNS, FX_XYZ_PREFIX_IRI};
 use representation::solution_mapping::EagerSolutionMappings;
 use std::collections::BTreeSet;
 use triplestore::xml_name_iri;
-use r2rml::mapping::{LogicalSource, LogicalTable, ReferenceFormulation};
+use r2rml::mapping::{LogicalSource, LogicalTable, ReferenceFormulation, RECORD_COLUMN};
+use representation::constants::FX_NULL;
 use r2rml::{R2RMLError, R2RMLMapping};
 use representation::constants::{FX_CHILD, FX_ROOT, XYZ_PREFIX_IRI};
 use representation::dataset::NamedGraph;
@@ -606,7 +607,7 @@ fn source_query(
     source: &LogicalSource,
     references: &[String],
     names: &XmlNames,
-) -> Result<(String, Vec<String>), MaplibError> {
+) -> Result<(String, Vec<String>, String), MaplibError> {
     let mut vars = Variables { next: 0 };
     let mut query = String::new();
     let mut value_variables: Vec<String> = vec![];
@@ -628,7 +629,8 @@ fn source_query(
                 } else {
                     let v = format!("?v{i}");
                     let (patterns, _) = json_patterns(&steps, "?record", Some(&v), &mut vars);
-                    query.push_str(&format!("OPTIONAL {{ {patterns}FILTER(isLiteral({v})) }} "));
+                    // Not only the values: an object or an array is an error, see values_column.
+                    query.push_str(&format!("OPTIONAL {{ {patterns}}} "));
                     value_variables.push(format!("v{i}"));
                 }
             }
@@ -681,13 +683,28 @@ fn source_query(
     let projection: Vec<String> = projection.iter().map(|v| format!("?{v}")).collect();
     let query = format!("SELECT {} WHERE {{ {query}}}", projection.join(" "));
     // The last variable is that of the records, which is not a reference.
-    value_variables.pop();
-    Ok((query, value_variables))
+    let record_variable = value_variables.pop().unwrap_or_default();
+    Ok((query, value_variables, record_variable))
 }
 
 /// A column of the values of a reference. JSON numbers and booleans keep their type when all
 /// the values of the reference have it, so that they give typed literals as columns of a table do.
-fn values_column(name: &str, terms: Vec<Option<Term>>) -> Column {
+fn values_column(name: &str, terms: Vec<Option<Term>>) -> Result<Column, MaplibError> {
+    // A JSON null is no value. An object or an array is not a value either, but a mistake.
+    if terms.iter().flatten().any(|t| match t {
+        Term::NamedNode(nn) => nn.as_str() != FX_NULL,
+        Term::Literal(_) => false,
+        _ => true,
+    }) {
+        return err(format!(
+            "the reference {name:?} selects an object or an array of the source, not a value: \
+             select its values, e.g. the items of an array with [*]"
+        ));
+    }
+    Ok(values_column_of_literals(name, terms))
+}
+
+fn values_column_of_literals(name: &str, terms: Vec<Option<Term>>) -> Column {
     let literals: Vec<Option<(&str, &str)>> = terms
         .iter()
         .map(|t| match t {
@@ -805,8 +822,9 @@ fn source_table(
     source: &LogicalSource,
     references: &[String],
     names: &XmlNames,
+    with_record: bool,
 ) -> Result<DataFrame, MaplibError> {
-    let (query, value_variables) = source_query(source, references, names)?;
+    let (query, value_variables, record_variable) = source_query(source, references, names)?;
     let sm = select(store, &query)?;
     let height = sm.mappings.height();
     if height == 0
@@ -842,11 +860,16 @@ fn source_table(
             // A reference without a value for any record.
             _ => vec![None; height],
         };
-        columns.push(values_column(r, terms));
+        columns.push(values_column(r, terms)?);
+    }
+    if with_record {
+        // The record of each row, for the blank nodes that the mapping generates per record.
+        let records = strings(store, &sm, &record_variable);
+        columns.push(Series::new(RECORD_COLUMN.into(), records).into_column());
     }
     if columns.is_empty() {
         // Only the number of records matters to a mapping of constants.
-        columns.push(Series::new("\u{1}record".into(), vec![0u32; height]).into_column());
+        columns.push(Series::new("\u{1}rows".into(), vec![0u32; height]).into_column());
     }
     Ok(DataFrame::new(height, columns).map_err(R2RMLError::from)?)
 }
@@ -863,6 +886,7 @@ pub fn source_tables(
     // The namespaces that each XML source declares.
     let mut declared: HashMap<String, (Vec<String>, Vec<(String, String)>)> = HashMap::new();
     let no_names = XmlNames::default();
+    let with_record = mapping.uses_record();
     // The Façade-X graph of each JSON or XML source, mapped once for all its iterators.
     let mut stores: HashMap<String, Triplestore> = HashMap::new();
     for (source, references) in mapping.logical_sources() {
@@ -890,7 +914,7 @@ pub fn source_tables(
                     store.map_json(&mut copy, None, &NamedGraph::DefaultGraph)?;
                     stores.insert(source.source.clone(), store);
                 }
-                source_table(&stores[&source.source], &source, &references, &no_names)?
+                source_table(&stores[&source.source], &source, &references, &no_names, with_record)?
             }
             (RmlSource::Xml(bytes), ReferenceFormulation::XPath) => {
                 if !stores.contains_key(&source.source) {
@@ -901,7 +925,7 @@ pub fn source_tables(
                 }
                 let (defaults, prefixes) = declared[&source.source].clone();
                 let names = XmlNames::new(defaults, prefixes, &source.namespaces, xml_namespaces)?;
-                source_table(&stores[&source.source], &source, &references, &names)?
+                source_table(&stores[&source.source], &source, &references, &names, with_record)?
             }
             (RmlSource::Json(_), ReferenceFormulation::XPath) => {
                 return err(format!(

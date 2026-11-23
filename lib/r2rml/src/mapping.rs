@@ -47,7 +47,14 @@ pub struct TriplesMap {
     pub classes: Vec<NamedNode>,
     pub subject_graphs: Vec<TermMap>,
     pub predicate_object_maps: Vec<PredicateObjectMap>,
+    /// rml:baseIRI: the base IRI of the relative IRIs that this triples map generates, instead
+    /// of the base IRI of the execution.
+    pub base_iri: Option<String>,
 }
+
+/// The name of the column that identifies the record of each row of a logical table or source.
+/// A blank node map without a value (TermValue::Record) generates a blank node per record from it.
+pub const RECORD_COLUMN: &str = "\u{1}record";
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum LogicalTable {
@@ -127,8 +134,23 @@ pub enum ObjectMap {
 pub struct RefObjectMap {
     /// Index of the parent triples map in R2RMLMapping::triples_maps.
     pub parent: usize,
-    /// (child column, parent column)
-    pub join_conditions: Vec<(String, String)>,
+    /// (child, parent): the columns of rr:child and rr:parent, or the values of rml:childMap and
+    /// rml:parentMap, which are compared as strings.
+    pub join_conditions: Vec<(TermValue, TermValue)>,
+}
+
+/// How the values in the template of an IRI are encoded, by the term type.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum IriEncoding {
+    /// rr:IRI: percent encoding of the characters that are not unreserved in IRIs (RFC 3987), so
+    /// letters outside ASCII are kept.
+    #[default]
+    Safe,
+    /// rml:URI: percent encoding of the characters that are not unreserved in URIs (RFC 3986),
+    /// so letters outside ASCII are encoded too.
+    Ascii,
+    /// rml:UnsafeIRI: no encoding.
+    Unsafe,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -149,25 +171,14 @@ pub enum TermValue {
     Constant(Term),
     Column(String),
     Template(Vec<TemplatePart>),
+    /// A blank node map without a value: a blank node per record.
+    Record,
 }
 
-#[derive(Debug, Clone)]
-pub struct TermMap {
-    pub value: TermValue,
-    pub term_type: TermType,
-    pub language: Option<String>,
-    pub datatype: Option<NamedNode>,
-}
-
-impl TermMap {
-    pub fn is_default_graph(&self) -> bool {
-        matches!(&self.value, TermValue::Constant(Term::NamedNode(nn))
-            if local_name(nn.as_str(), &TERM_NAMESPACES) == Some("defaultGraph"))
-    }
-
-    /// The columns the term map references.
+impl TermValue {
+    /// The columns the value references.
     pub fn columns(&self) -> Vec<&str> {
-        match &self.value {
+        match self {
             TermValue::Constant(_) => vec![],
             TermValue::Column(c) => vec![c.as_str()],
             TermValue::Template(parts) => parts
@@ -177,7 +188,39 @@ impl TermMap {
                     TemplatePart::Text(_) => None,
                 })
                 .collect(),
+            TermValue::Record => vec![RECORD_COLUMN],
         }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct TermMap {
+    pub value: TermValue,
+    pub term_type: TermType,
+    pub language: Option<String>,
+    pub datatype: Option<NamedNode>,
+    pub iri_encoding: IriEncoding,
+    /// rml:languageMap with a reference or a template: the language of each literal. A
+    /// constant-valued language map is in `language`.
+    pub language_map: Option<TermValue>,
+    /// rml:datatypeMap with a reference or a template: the datatype of each literal. A
+    /// constant-valued datatype map is in `datatype`.
+    pub datatype_map: Option<TermValue>,
+}
+
+impl TermMap {
+    pub fn is_default_graph(&self) -> bool {
+        matches!(&self.value, TermValue::Constant(Term::NamedNode(nn))
+            if local_name(nn.as_str(), &TERM_NAMESPACES) == Some("defaultGraph"))
+    }
+
+    /// The columns the term map references, with those of its language and datatype maps.
+    pub fn columns(&self) -> Vec<&str> {
+        let mut out = self.value.columns();
+        for m in self.language_map.iter().chain(self.datatype_map.iter()) {
+            out.extend(m.columns());
+        }
+        out
     }
 }
 
@@ -458,7 +501,15 @@ impl<'a> Parser<'a> {
             + reference.is_some() as usize
             + template.is_some() as usize;
         let column = column.or(reference);
-        if count != 1 {
+        let explicit_term_type = match self.iri(n, &rr("termType"))? {
+            Some(tt) => Some(parse_term_type(&tt)?),
+            None => None,
+        };
+        // A blank node map without a value gives a blank node per record.
+        let per_record = count == 0
+            && matches!(explicit_term_type, Some((TermType::BlankNode, _)))
+            && matches!(position, Position::Subject | Position::Object);
+        if count != 1 && !per_record {
             return mapping_err(format!(
                 "the {} {} must have exactly one of rr:constant, rr:column, rml:reference and rr:template",
                 position.name(),
@@ -468,8 +519,8 @@ impl<'a> Parser<'a> {
         if let Some(c) = constants.into_iter().next() {
             let tm = constant_term_map(c, position)?;
             // A term type, language or datatype on a constant must agree with the constant.
-            if let Some(tt) = self.iri(n, &rr("termType"))? {
-                if parse_term_type(&tt)? != tm.term_type {
+            if let Some((tt, _)) = explicit_term_type {
+                if tt != tm.term_type {
                     return mapping_err(format!(
                         "the rr:termType of the constant valued {} {} does not match the constant",
                         position.name(),
@@ -479,23 +530,65 @@ impl<'a> Parser<'a> {
             }
             return Ok(tm);
         }
-        let value = if let Some(c) = column {
+        let value = if per_record {
+            TermValue::Record
+        } else if let Some(c) = column {
             TermValue::Column(c)
         } else {
             let t = template.unwrap();
             TermValue::Template(parse_template(&t)?)
         };
-        let language = self.string(n, &rr("language"))?;
-        let datatype = self.iri(n, &rr("datatype"))?;
-        let term_type = match self.iri(n, &rr("termType"))? {
-            Some(tt) => parse_term_type(&tt)?,
+        let mut language = self.string(n, &rr("language"))?;
+        let mut datatype = self.iri(n, &rr("datatype"))?;
+        // rml:languageMap and rml:datatypeMap: a constant is the language or datatype itself, a
+        // reference or template gives one per literal.
+        let mut language_map = None;
+        let mut datatype_map = None;
+        for lm in self.nodes(n, &rr("languageMap"))? {
+            if language.is_some() || language_map.is_some() {
+                return mapping_err(format!(
+                    "the {} {} has more than one language",
+                    position.name(),
+                    node_name(n)
+                ));
+            }
+            match self.map_value(&lm, "language map")? {
+                TermValue::Constant(Term::Literal(l)) => language = Some(l.value().to_string()),
+                TermValue::Constant(t) => {
+                    return mapping_err(format!("the constant {t} of a language map must be a literal"))
+                }
+                v => language_map = Some(v),
+            }
+        }
+        for dm in self.nodes(n, &rr("datatypeMap"))? {
+            if datatype.is_some() || datatype_map.is_some() {
+                return mapping_err(format!(
+                    "the {} {} has more than one datatype",
+                    position.name(),
+                    node_name(n)
+                ));
+            }
+            match self.map_value(&dm, "datatype map")? {
+                TermValue::Constant(Term::NamedNode(nn)) => datatype = Some(nn),
+                TermValue::Constant(t) => {
+                    return mapping_err(format!("the constant {t} of a datatype map must be an IRI"))
+                }
+                v => datatype_map = Some(v),
+            }
+        }
+        let (term_type, iri_encoding) = match explicit_term_type {
+            Some(tt) => tt,
             None => {
                 if position == Position::Object
-                    && (matches!(value, TermValue::Column(_)) || language.is_some() || datatype.is_some())
+                    && (matches!(value, TermValue::Column(_))
+                        || language.is_some()
+                        || datatype.is_some()
+                        || language_map.is_some()
+                        || datatype_map.is_some())
                 {
-                    TermType::Literal
+                    (TermType::Literal, IriEncoding::Safe)
                 } else {
-                    TermType::IRI
+                    (TermType::IRI, IriEncoding::Safe)
                 }
             }
         };
@@ -504,9 +597,44 @@ impl<'a> Parser<'a> {
             term_type,
             language,
             datatype,
+            iri_encoding,
+            language_map,
+            datatype_map,
         };
         check_term_map(&tm, position, &node_name(n))?;
         Ok(tm)
+    }
+
+    /// The value of a map inside a term map or a join condition (rml:languageMap,
+    /// rml:datatypeMap, rml:childMap, rml:parentMap): a constant, a reference or a template.
+    fn map_value(&self, n: &NamedOrBlankNode, what: &str) -> Result<TermValue, R2RMLError> {
+        let constants = self.objects(n, &rr("constant"));
+        let column = match self.string(n, &rr("column"))? {
+            Some(c) => Some(c),
+            None => self.string(n, &rr("reference"))?,
+        };
+        let template = self.string(n, &rr("template"))?;
+        match (constants.as_slice(), column, template) {
+            ([c], None, None) => Ok(TermValue::Constant(c.clone())),
+            ([], Some(c), None) => Ok(TermValue::Column(c)),
+            ([], None, Some(t)) => Ok(TermValue::Template(parse_template(&t)?)),
+            _ => mapping_err(format!(
+                "the {what} {} must have exactly one of rml:constant, rml:reference and rml:template",
+                node_name(n)
+            )),
+        }
+    }
+
+    /// One side of a join condition: the column of rr:child or rr:parent, or the value of
+    /// rml:childMap or rml:parentMap.
+    fn join_side(&self, jc: &NamedOrBlankNode, side: &str) -> Result<Option<TermValue>, R2RMLError> {
+        if let Some(c) = self.string(jc, &rr(side))? {
+            return Ok(Some(TermValue::Column(c)));
+        }
+        match self.nodes(jc, &rr(&format!("{side}Map")))?.as_slice() {
+            [m] => Ok(Some(self.map_value(m, &format!("{side} map"))?)),
+            _ => Ok(None),
+        }
     }
 
     fn object_maps(&self, pom: &NamedOrBlankNode, index: &BTreeMap<String, usize>) -> Result<Vec<ObjectMap>, R2RMLError> {
@@ -525,8 +653,8 @@ impl<'a> Parser<'a> {
                     };
                     let mut join_conditions = vec![];
                     for jc in self.nodes(&n, &rr("joinCondition"))? {
-                        let child = self.string(&jc, &rr("child"))?;
-                        let parent = self.string(&jc, &rr("parent"))?;
+                        let child = self.join_side(&jc, "child")?;
+                        let parent = self.join_side(&jc, "parent")?;
                         match (child, parent) {
                             (Some(c), Some(p)) => join_conditions.push((c, p)),
                             _ => {
@@ -557,11 +685,13 @@ impl<'a> Parser<'a> {
     }
 }
 
-fn parse_term_type(tt: &NamedNode) -> Result<TermType, R2RMLError> {
+fn parse_term_type(tt: &NamedNode) -> Result<(TermType, IriEncoding), R2RMLError> {
     match local_name(tt.as_str(), &TERM_NAMESPACES) {
-        Some("IRI") => Ok(TermType::IRI),
-        Some("BlankNode") => Ok(TermType::BlankNode),
-        Some("Literal") => Ok(TermType::Literal),
+        Some("IRI") => Ok((TermType::IRI, IriEncoding::Safe)),
+        Some("URI") => Ok((TermType::IRI, IriEncoding::Ascii)),
+        Some("UnsafeIRI") => Ok((TermType::IRI, IriEncoding::Unsafe)),
+        Some("BlankNode") => Ok((TermType::BlankNode, IriEncoding::Safe)),
+        Some("Literal") => Ok((TermType::Literal, IriEncoding::Safe)),
         _ => mapping_err(format!("unknown rr:termType {tt}")),
     }
 }
@@ -579,13 +709,15 @@ fn check_term_map(tm: &TermMap, position: Position, name: &str) -> Result<(), R2
             tm.term_type
         ));
     }
-    if (tm.language.is_some() || tm.datatype.is_some()) && tm.term_type != TermType::Literal {
+    let has_language = tm.language.is_some() || tm.language_map.is_some();
+    let has_datatype = tm.datatype.is_some() || tm.datatype_map.is_some();
+    if (has_language || has_datatype) && tm.term_type != TermType::Literal {
         return mapping_err(format!(
             "the {} {name} has rr:language or rr:datatype, but does not generate literals",
             position.name()
         ));
     }
-    if tm.language.is_some() && tm.datatype.is_some() {
+    if has_language && has_datatype {
         return mapping_err(format!(
             "the {} {name} has both rr:language and rr:datatype",
             position.name()
@@ -623,6 +755,9 @@ fn constant_term_map(t: Term, position: Position) -> Result<TermMap, R2RMLError>
         term_type,
         language,
         datatype,
+        iri_encoding: IriEncoding::Safe,
+        language_map: None,
+        datatype_map: None,
     };
     // The language of a constant is part of the constant.
     let check = TermMap {
@@ -771,6 +906,7 @@ pub fn mapping_from_graph(g: &Graph) -> Result<R2RMLMapping, R2RMLError> {
                 graphs,
             });
         }
+        let base_iri = p.iri(n, &rr("baseIRI"))?.map(|b| b.as_str().to_string());
         triples_maps.push(TriplesMap {
             name: name.clone(),
             logical_table,
@@ -778,6 +914,7 @@ pub fn mapping_from_graph(g: &Graph) -> Result<R2RMLMapping, R2RMLError> {
             classes,
             subject_graphs,
             predicate_object_maps,
+            base_iri,
         });
     }
     // Referencing object maps without join conditions need the same logical table.
@@ -811,12 +948,33 @@ impl R2RMLMapping {
         set.into_iter().collect()
     }
 
+    /// Whether a term map of the mapping generates a blank node per record, for which the tables
+    /// need the record column.
+    pub fn uses_record(&self) -> bool {
+        self.triples_maps.iter().any(|tm| {
+            matches!(tm.subject_map.value, TermValue::Record)
+                || tm.predicate_object_maps.iter().any(|pom| {
+                    pom.objects
+                        .iter()
+                        .any(|om| matches!(om, ObjectMap::Term(t) if matches!(t.value, TermValue::Record)))
+                })
+        })
+    }
+
     /// The distinct logical sources of the mapping, each with the references that are evaluated
     /// on its records: those of the term maps of its triples maps, and of the join conditions
     /// that it is the child or the parent of. In a stable order.
     pub fn logical_sources(&self) -> Vec<(LogicalSource, Vec<String>)> {
         fn references(t: &TermMap) -> Vec<String> {
-            t.columns().into_iter().map(|c| c.to_string()).collect()
+            names(t.columns())
+        }
+        // The record column is not a reference of the source.
+        fn names(columns: Vec<&str>) -> Vec<String> {
+            columns
+                .into_iter()
+                .filter(|c| *c != RECORD_COLUMN)
+                .map(|c| c.to_string())
+                .collect()
         }
         let mut out: BTreeMap<LogicalSource, BTreeSet<String>> = BTreeMap::new();
         for tm in &self.triples_maps {
@@ -834,7 +992,9 @@ impl R2RMLMapping {
                         match om {
                             ObjectMap::Term(t) => found.extend(references(t)),
                             ObjectMap::Ref(r) => {
-                                found.extend(r.join_conditions.iter().map(|(c, _)| c.clone()))
+                                for (c, _) in &r.join_conditions {
+                                    found.extend(names(c.columns()));
+                                }
                             }
                         }
                     }
@@ -845,9 +1005,10 @@ impl R2RMLMapping {
                 for om in &pom.objects {
                     if let ObjectMap::Ref(r) = om {
                         if let LogicalTable::Source(source) = &self.triples_maps[r.parent].logical_table {
-                            out.entry(source.clone())
-                                .or_default()
-                                .extend(r.join_conditions.iter().map(|(_, p)| p.clone()));
+                            let found = out.entry(source.clone()).or_default();
+                            for (_, p) in &r.join_conditions {
+                                found.extend(names(p.columns()));
+                            }
                         }
                     }
                 }

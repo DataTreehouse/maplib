@@ -1,0 +1,2 @@
+<http://example.com/10> <http://www.w3.org/2000/01/rdf-schema#label> "aubergine"@en-GB .
+<http://example.com/10> <http://www.w3.org/2000/01/rdf-schema#label> "eggplant"@en-US .

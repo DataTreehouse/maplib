@@ -533,3 +533,91 @@ def test_map_r2rml_still_maps_tables():
     a.map_r2rml(mapping, tables={"t": t})
     b.map_rml(mapping, tables={"t": t})
     assert _triples(a) == _triples(b) and len(_triples(a)) == 2
+
+
+def test_maps_for_language_datatype_base_iri_joins_and_records_on_tables():
+    """The RML features beyond R2RML, on logical tables with map_r2rml: the language and the
+    datatype of a literal from the row, a base IRI per triples map, join conditions on templates,
+    a blank node per row, and the URI term type."""
+    people = pl.DataFrame(
+        {
+            "id": [1, 2, 3],
+            "label": ["apple", "pomme", "æble"],
+            "lang": ["en", "fr", None],
+            "value": ["1", "2.5", "3"],
+            "dt": ["integer", "decimal", "integer"],
+            "team": ["a", "b", "zz"],
+        }
+    )
+    teams = pl.DataFrame({"code": ["a", "b"]})
+    mapping = """
+    <#P> rr:logicalTable [ rr:tableName "people" ] ; rml:baseIRI <http://base.example/> ;
+        rr:subjectMap [ rr:template "p/{id}" ] ;
+        rr:predicateObjectMap [ rr:predicate ex:label ;
+            rr:objectMap [ rr:column "label" ; rml:languageMap [ rml:reference "lang" ] ] ] ;
+        rr:predicateObjectMap [ rr:predicate ex:value ; rr:objectMap [ rr:column "value" ;
+            rml:datatypeMap [ rr:template "http://www.w3.org/2001/XMLSchema#{dt}" ] ] ] ;
+        rr:predicateObjectMap [ rr:predicate ex:team ; rr:objectMap [ rr:parentTriplesMap <#T> ;
+            rr:joinCondition [ rml:childMap [ rr:template "t/{team}" ] ;
+                               rml:parentMap [ rr:template "t/{code}" ] ] ] ] ;
+        rr:predicateObjectMap [ rr:predicate ex:row ; rr:objectMap [ rr:termType rr:BlankNode ] ] ;
+        rr:predicateObjectMap [ rr:predicate ex:iri ;
+            rr:objectMap [ rr:template "http://example.org/l/{label}" ] ] ;
+        rr:predicateObjectMap [ rr:predicate ex:uri ;
+            rr:objectMap [ rr:template "http://example.org/l/{label}" ; rr:termType rml:URI ] ] .
+    <#T> rr:logicalTable [ rr:tableName "teams" ] ;
+        rr:subjectMap [ rr:template "team/{code}" ] ;
+        rr:predicateObjectMap [ rr:predicate ex:code ; rr:objectMap [ rr:column "code" ] ] .
+    """
+    m = Model()
+    m.map_r2rml(OLD + mapping, tables={"people": people, "teams": teams}, base_iri=EX)
+    # The language of each row; a row without a language gives no literal.
+    assert _rows(m, "SELECT ?s (STR(?l) AS ?v) (LANG(?l) AS ?lang) WHERE { ?s ex:label ?l } ORDER BY ?s") == [
+        ("<http://base.example/p/1>", "apple", "en"),
+        ("<http://base.example/p/2>", "pomme", "fr"),
+    ]
+    # The datatype of each row.
+    assert _rows(m, "SELECT ?s (STR(?v) AS ?x) (STR(DATATYPE(?v)) AS ?dt) WHERE { ?s ex:value ?v } ORDER BY ?s") == [
+        ("<http://base.example/p/1>", "1", "http://www.w3.org/2001/XMLSchema#integer"),
+        ("<http://base.example/p/2>", "2.5", "http://www.w3.org/2001/XMLSchema#decimal"),
+        ("<http://base.example/p/3>", "3", "http://www.w3.org/2001/XMLSchema#integer"),
+    ]
+    # Joined on the values of two templates. The parent has the base IRI of the call.
+    assert _rows(m, "SELECT ?s ?t WHERE { ?s ex:team ?t } ORDER BY ?s") == [
+        ("<http://base.example/p/1>", "<http://example.org/team/a>"),
+        ("<http://base.example/p/2>", "<http://example.org/team/b>"),
+    ]
+    # A blank node per row.
+    rows = _rows(m, "SELECT (COUNT(DISTINCT ?b) AS ?c) (COUNT(?b) AS ?n) WHERE { ?s ex:row ?b FILTER(ISBLANK(?b)) }")
+    assert rows == [(3, 3)]
+    # IRIs keep letters outside ASCII, URIs encode them.
+    assert _rows(m, "SELECT ?i ?u WHERE { <http://base.example/p/3> ex:iri ?i ; ex:uri ?u }") == [
+        ("<http://example.org/l/æble>", "<http://example.org/l/%C3%A6ble>"),
+    ]
+
+
+def test_language_map_on_xml_and_reference_to_an_array():
+    doc = """<fruits><fruit id="1"><label lang="en">apple</label><label lang="fr">pomme</label></fruit></fruits>"""
+    # The labels are the records, so that each label is paired with its own language.
+    mapping = """
+    <#L> rml:logicalSource [ rml:source "f.xml" ; rml:referenceFormulation ql:XPath ;
+            rml:iterator "/fruits/fruit/label" ] ;
+        rr:subjectMap [ rr:template "http://example.org/fruit/{../@id}" ] ;
+        rr:predicateObjectMap [ rr:predicate ex:label ;
+            rr:objectMap [ rml:reference "." ; rml:languageMap [ rml:reference "@lang" ] ] ] .
+    """
+    m = Model()
+    m.map_rml(OLD + mapping, sources={"f.xml": doc})
+    assert _rows(m, "SELECT (STR(?l) AS ?v) (LANG(?l) AS ?lang) WHERE { ?s ex:label ?l } ORDER BY ?v") == [
+        ("apple", "en"),
+        ("pomme", "fr"),
+    ]
+    # A JSON reference must select values: an array or an object is an error.
+    mapping = """
+    <#P> rml:logicalSource [ rml:source "plant.json" ; rml:referenceFormulation ql:JSONPath ;
+            rml:iterator "$.pumps[*]" ] ;
+        rr:subjectMap [ rr:template "http://example.org/pump/{id}" ] ;
+        rr:predicateObjectMap [ rr:predicate ex:tag ; rr:objectMap [ rml:reference "tags" ] ] .
+    """
+    with pytest.raises(Exception, match="selects an object or an array"):
+        Model().map_rml(OLD + mapping, sources={"plant.json": PLANT_JSON})

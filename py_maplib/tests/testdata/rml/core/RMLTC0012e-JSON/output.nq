@@ -1,0 +1,4 @@
+_:Blank1 <http://example.org/firstName> "Alice" .
+_:Blank1 <http://example.org/lastName> "Smith" .
+_:Blank2 <http://example.org/firstName> "Bob" .
+_:Blank2 <http://example.org/lastName> "Jones" .

@@ -1,0 +1,4 @@
+# The RML community test cases that maplib does not pass (test_rml_community.py), one per line:
+# the id of the test case as pytest shows it, then the reason. These are run too and must fail.
+
+core/RMLTC0027b-JSON rml:UnsafeIRI is read (the values of the template are not encoded), but the expected IRIs have spaces (<http://example.com/Person/Emily Smith>), which are not IRIs: maplib reports them as a data error instead of storing them.

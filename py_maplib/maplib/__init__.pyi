@@ -1375,6 +1375,14 @@ class Model:
         prefix matches in the default namespace of its element too. When an iterator without prefixes
         selects nothing in a document with a default namespace, an error says so.
 
+        Also supported, in map_r2rml as well: rml:languageMap and rml:datatypeMap (the language or the
+        datatype of each literal from a reference or a template), rml:baseIRI on a triples map,
+        rml:childMap and rml:parentMap in join conditions (compared as strings), a blank node per record
+        from a subject or object map with only the term type BlankNode, and the term types rml:URI
+        (template values percent encoded outside ASCII too) and rml:UnsafeIRI (not encoded). A JSON
+        reference that selects an object or an array instead of values is an error. The RML-Core test
+        cases of the W3C community group are included in the tests.
+
         Both RML vocabularies are read, also mixed: the rml: namespace of the W3C community group
         (http://w3id.org/rml/) and the first RML vocabulary (http://semweb.mmlab.be/ns/rml# with rr:
         term maps and the ql: reference formulations).

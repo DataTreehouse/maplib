@@ -1,0 +1,4 @@
+[
+	{ "FOO": 1, "BAR": "http://www.w3.org/2001/XMLSchema#string"},
+	{ "FOO": 2, "BAR": "http://www.w3.org/2001/XMLSchema#int"}
+]
