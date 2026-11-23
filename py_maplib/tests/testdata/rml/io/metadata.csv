@@ -1,0 +1,33 @@
+ID,title,base_iri,mapping,output1,error
+RMLSTC0001a,Source with UTF-8 encoding,http://example.com/,mapping.ttl,default.nq,false
+RMLSTC0001b,Source with UTF-16 encoding,http://example.com/,mapping.ttl,default.nq,false
+RMLSTC0002a,Source no compression,http://example.com/,mapping.ttl,default.nq,false
+RMLSTC0002b,Source GZip compression,http://example.com/,mapping.ttl,default.nq,false
+RMLSTC0002c,Source Zip compression,http://example.com/,mapping.ttl,default.nq,false
+RMLSTC0002d,Source TarXz compression,http://example.com/,mapping.ttl,default.nq,false
+RMLSTC0002e,Source TarGzip compression,http://example.com/,mapping.ttl,default.nq,false
+RMLSTC0003,Source with query,http://example.com/,mapping.ttl,default.nq,false
+RMLSTC0004a,Source with default NULL values,http://example.com/,mapping.ttl,default.nq,false
+RMLSTC0004b,Source with one NULL value,http://example.com/,mapping.ttl,default.nq,false
+RMLSTC0004c,Source with multiple NULL values,http://example.com/,mapping.ttl,default.nq,false
+RMLSTC0006a,Source with D2RQ access description,http://example.com/,mapping.ttl,default.nq,false
+RMLSTC0006b,Source with a Relative Path Source,http://example.com/,mapping.ttl,default.nq,false
+RMLSTC0007a,Source with JSONPath reference formulation,http://example.com/,mapping.ttl,default.nq,false
+RMLSTC0007b,Source with CSV reference formulation,http://example.com/,mapping.ttl,default.nq,false
+RMLSTC0007c,Source with XPath reference formulation,http://example.com/,mapping.ttl,default.nq,false
+RMLSTC0007d,Source with XPath reference formulation with namespaces,http://example.com/,mapping.ttl,default.nq,false
+RMLSTC0008a,Multiple sources of same type,http://example.com/,mapping.ttl,default.nq,false
+RMLSTC0008b,Multiple sources of different type,http://example.com/,mapping.ttl,default.nq,false
+RMLSTC0009a,Source with quoted columns,http://example.com/,mapping.ttl,default.nq,false
+RMLSTC0010a,"Invalid CSV source, reference to invalid column",http://example.com/,mapping.ttl,,true
+RMLSTC0010b,"Invalid CSV source, no reference to invalid column",http://example.com/,mapping.ttl,,true
+RMLSTC0011a,Complex JSON source,http://example.com/,mapping.ttl,default.nq,false
+RMLSTC0011b,Complex JSON source,http://example.com/,mapping.ttl,default.nq,false
+RMLSTC0011c,Complex JSON source,http://example.com/,mapping.ttl,default.nq,false
+RMLSTC0011d,Complex JSON source,http://example.com/,mapping.ttl,default.nq,false
+RMLSTC0011e,Complex JSON source,http://example.com/,mapping.ttl,default.nq,false
+RMLSTC0012a,Complex XML source,http://example.com/,mapping.ttl,default.nq,false
+RMLSTC0012b,Complex XML source,http://example.com/,mapping.ttl,default.nq,false
+RMLSTC0012c,Complex XML source,http://example.com/,mapping.ttl,default.nq,false
+RMLSTC0012d,Complex XML source,http://example.com/,mapping.ttl,default.nq,false
+RMLSTC0012e,Complex XML source,http://example.com/,mapping.ttl,default.nq,false

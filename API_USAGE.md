@@ -729,6 +729,19 @@ m.map_rml(mapping, sources={"plant.json": "/data/plant-2026.json"})
 m.map_rml(mapping, sources={"sites.csv": sites_df}, database=con)
 ```
 
+A source can also be described in the mapping, in the vocabulary of the W3C community group, with
+the values that are no value, a compression and an encoding:
+
+```turtle
+rml:source [ a rml:FilePath ; rml:path "readings.csv.gz" ;
+    rml:compression rml:gzip ;            # also rml:zip, rml:tarxz, rml:targz (the first file)
+    rml:encoding rml:UTF-16 ;             # when the file is not UTF-8
+    rml:null "" , "NULL" , "n/a" ] ;      # these values give no term
+```
+
+`rml:null` applies to the strings of any source, also one given as a DataFrame. A compressed or
+encoded source is read from its file, or from bytes in `sources`.
+
 **XML** sources have the reference formulation `ql:XPath`:
 
 ```python
@@ -852,11 +865,28 @@ Other gaps to know:
   described as databases or CSVW tables in the mapping.
 - **JSON references select values.** A reference that selects an object or an array, such as
   `tags` instead of `tags[*]`, is an error.
-- **Test coverage.** The RML-Core test cases of the W3C community group (76 cases, JSON sources)
-  are included in the tests, and 75 pass. The one that does not expects IRIs with spaces from
-  `rml:UnsafeIRI`, which maplib reports as a data error
-  (`py_maplib/tests/rml_community_known_failures.txt`). That suite has no CSV or XML cases, which
-  are covered by maplib's own tests.
+- **Empty CSV cells** are no value, as NULL is in a logical table. RML-IO makes them empty
+  strings unless the source has `rml:null ""`.
+- **A reference that matches nothing** in a JSON or XML source gives no value, in one record or in
+  all of them, since a key or an element may be optional. A reference to a column that a CSV
+  source does not have is an error.
+- **Test coverage.** Three test suites of the RML community are included in the tests, 225 test
+  cases, of which 214 pass:
+
+  | Suite | Cases | Pass |
+  |---|---|---|
+  | RML-Core of the W3C community group (JSON sources) | 76 | 75 |
+  | RML-IO of the same group, the source test cases | 32 | 27 |
+  | The test cases of the first RML specification, with CSV, JSON and XML sources | 117 | 112 |
+
+  `py_maplib/tests/rml_community_known_failures.txt` has the 11 that do not pass, each with its
+  reason: sources described as SPARQL endpoints and database connections, a CSV row with too few
+  fields (which Polars accepts), the two gaps above, a literal as a graph (an error here, no
+  triples there) and IRIs with spaces from `rml:UnsafeIRI`. Two things differ in how the test
+  cases are run, both described in `test_rml_community.py`: they are mapped with
+  `ignore_data_errors=True`, and the JSON test cases of the first specification, which expect
+  numbers as plain strings, are compared without the datatype of numbers and booleans. Not
+  included: the test cases for logical targets and for databases described in the mapping.
 
 ### Templates from an ontology: generate_templates
 

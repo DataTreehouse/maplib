@@ -1,4 +1,19 @@
 # The RML community test cases that maplib does not pass (test_rml_community.py), one per line:
 # the id of the test case as pytest shows it, then the reason. These are run too and must fail.
 
+# --- RML-Core
 core/RMLTC0027b-JSON rml:UnsafeIRI is read (the values of the template are not encoded), but the expected IRIs have spaces (<http://example.com/Person/Emily Smith>), which are not IRIs: maplib reports them as a data error instead of storing them.
+
+# --- RML-IO, source test cases
+io/RMLSTC0003 The source is a SPARQL endpoint (a query and the reference formulation SPARQL_Results_CSV). Sources that are described as connections in the mapping are not supported.
+io/RMLSTC0004a Without rml:null, RML-IO reads an empty CSV cell as an empty string, and the test case expects "" literals. maplib reads an empty cell as no value, as it does for NULL in a logical table, so no triple is generated. With rml:null "" (RMLSTC0004b) both agree.
+io/RMLSTC0006a The source is a database with a D2RQ access description. maplib maps databases through a Python database object (database=...), not through a connection in the mapping.
+io/RMLSTC0010a A CSV row with fewer fields than the header must be an error. Polars, which reads the CSV, fills the missing fields with empty values.
+io/RMLSTC0010b As RMLSTC0010a.
+
+# --- RMLio (the first RML specification)
+rmlio/RMLTC0002c-JSON A reference to a key that no record has must be an error. maplib gives no value for a key that is missing, in one record or in all, as a key may be optional. (A reference to a column that a CSV source does not have is an error, RMLTC0002c-CSV.)
+rmlio/RMLTC0002c-XML As RMLTC0002c-JSON, for an element that no record has.
+rmlio/RMLTC0007h-CSV The graph of the subject map is a literal. The test case expects no triples and no error; maplib raises an error for the mapping, as R2RML has it (R2RMLTC0007h).
+rmlio/RMLTC0007h-JSON As RMLTC0007h-CSV.
+rmlio/RMLTC0007h-XML As RMLTC0007h-CSV.

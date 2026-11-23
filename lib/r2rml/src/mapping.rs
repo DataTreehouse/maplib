@@ -88,6 +88,12 @@ pub struct LogicalSource {
     /// The XML namespaces (prefix, namespace) that the mapping declares for the XPath
     /// expressions of the source, with rml:namespace on its reference formulation. Sorted.
     pub namespaces: Vec<(String, String)>,
+    /// rml:null: the values of the source that are no value. Sorted.
+    pub nulls: Vec<String>,
+    /// rml:compression of the source: gzip, zip, tarxz or targz.
+    pub compression: Option<String>,
+    /// rml:encoding of the source when it is not UTF-8, e.g. UTF-16.
+    pub encoding: Option<String>,
 }
 
 impl LogicalTable {
@@ -98,11 +104,12 @@ impl LogicalTable {
             LogicalTable::Table(t) => format!("SELECT * FROM {t}"),
             LogicalTable::Query(q) => q.trim().trim_end_matches(';').trim().to_string(),
             LogicalTable::Source(s) => format!(
-                "rml:logicalSource {:?} {:?} {:?} {:?}",
+                "rml:logicalSource {:?} {:?} {:?} {:?} {:?}",
                 s.source,
                 s.formulation,
                 s.iterator.as_deref().unwrap_or(""),
-                s.namespaces
+                s.namespaces,
+                s.nulls
             ),
         }
     }
@@ -371,12 +378,14 @@ impl<'a> Parser<'a> {
     ) -> Result<LogicalTable, R2RMLError> {
         let name = node_name(tm);
         let sources = self.objects(ls, &rr("source"));
+        let mut source_description: Option<NamedOrBlankNode> = None;
         let source = match sources.as_slice() {
             [Term::Literal(l)] => l.value().to_string(),
             [t] => {
-                // A source description: only a path is read from it.
-                let path = match as_node(t.as_ref()) {
-                    Some(n) => self.string(&n, &rr("path"))?,
+                // A source description: its path, null values, compression and encoding.
+                source_description = as_node(t.as_ref());
+                let path = match &source_description {
+                    Some(n) => self.string(n, &rr("path"))?,
                     None => None,
                 };
                 match (path, t) {
@@ -392,6 +401,38 @@ impl<'a> Parser<'a> {
             [] => return mapping_err(format!("the logical source of {name} has no rml:source")),
             _ => return mapping_err(format!("the logical source of {name} has more than one rml:source")),
         };
+        // rml:null, on the source description or on the logical source.
+        let mut nulls: Vec<String> = vec![];
+        let mut compression = None;
+        let mut encoding = None;
+        for n in source_description.iter().chain(std::iter::once(ls)) {
+            for t in self.objects(n, &rr("null")) {
+                match t {
+                    Term::Literal(l) => nulls.push(l.value().to_string()),
+                    t => return mapping_err(format!("the rml:null {t} of {name} must be a literal")),
+                }
+            }
+            if let Some(c) = self.iri(n, &rr("compression"))? {
+                match local_name(c.as_str(), &[RML, RML_OLD]) {
+                    Some("none") => {}
+                    Some(c @ ("gzip" | "zip" | "tarxz" | "targz")) => compression = Some(c.to_string()),
+                    _ => {
+                        return mapping_err(format!(
+                            "the rml:compression {c} of {name} is not supported: use rml:gzip, rml:zip, rml:tarxz or rml:targz"
+                        ))
+                    }
+                }
+            }
+            if let Some(e) = self.iri(n, &rr("encoding"))? {
+                match local_name(e.as_str(), &[RML, RML_OLD]) {
+                    Some("UTF-8") => {}
+                    Some(e) => encoding = Some(e.to_string()),
+                    None => return mapping_err(format!("the rml:encoding {e} of {name} is not supported")),
+                }
+            }
+        }
+        nulls.sort();
+        nulls.dedup();
         let iterator = self.string(ls, &rr("iterator"))?;
         let formulations = self.objects(ls, &rr("referenceFormulation"));
         let mut namespaces: Vec<(String, String)> = vec![];
@@ -468,6 +509,9 @@ impl<'a> Parser<'a> {
             formulation,
             iterator,
             namespaces,
+            nulls,
+            compression,
+            encoding,
         }))
     }
 

@@ -1,0 +1,118 @@
+ID,title,base_iri,mapping,output1,error
+RMLTC0000-CSV,"one table, one column, zero rows",http://example.com/base/,mapping.ttl,output.nq,false
+RMLTC0000-JSON,"one table, one column, zero rows",http://example.com/base/,mapping.ttl,output.nq,false
+RMLTC0000-XML,"one table, one column, zero rows",http://example.com/base/,mapping.ttl,output.nq,false
+RMLTC0001a-CSV,"One column mapping, subject URI generation by using rr:template",http://example.com/base/,mapping.ttl,output.nq,false
+RMLTC0001a-JSON,"One column mapping, subject URI generation by using rr:template",http://example.com/base/,mapping.ttl,output.nq,false
+RMLTC0001a-XML,"One column mapping, subject URI generation by using rr:template",http://example.com/base/,mapping.ttl,output.nq,false
+RMLTC0001b-CSV,"One column mapping, generation of a BlankNode subject by using rr:termType",http://example.com/base/,mapping.ttl,output.nq,false
+RMLTC0001b-JSON,"One column mapping, generation of a BlankNode subject by using rr:termType",http://example.com/base/,mapping.ttl,output.nq,false
+RMLTC0001b-XML,"One column mapping, generation of a BlankNode subject by using rr:termType",http://example.com/base/,mapping.ttl,output.nq,false
+RMLTC0002a-CSV,"Two columns mapping, generation of a subject URI by the concatenation of two column values",http://example.com/base/,mapping.ttl,output.nq,false
+RMLTC0002a-JSON,"Two columns mapping, generation of a subject URI by the concatenation of two column values",http://example.com/base/,mapping.ttl,output.nq,false
+RMLTC0002a-XML,"Two columns mapping, generation of a subject URI by the concatenation of two column values",http://example.com/base/,mapping.ttl,output.nq,false
+RMLTC0002b-CSV,"Two columns mapping, generation of a BlankNode subject by using rr:template and rr:termType",http://example.com/base/,mapping.ttl,output.nq,false
+RMLTC0002b-JSON,"Two columns mapping, generation of a BlankNode subject by using rr:template and rr:termType",http://example.com/base/,mapping.ttl,output.nq,false
+RMLTC0002b-XML,"Two columns mapping, generation of a BlankNode subject by using rr:template and rr:termType",http://example.com/base/,mapping.ttl,output.nq,false
+RMLTC0002c-CSV,"Two columns mapping, an undefined SQL identifier / logical reference",http://example.com/base/,mapping.ttl,output.nq,true
+RMLTC0002c-JSON,"Two columns mapping, an undefined SQL identifier / logical reference",http://example.com/base/,mapping.ttl,output.nq,true
+RMLTC0002c-XML,"Two columns mapping, an undefined SQL identifier / logical reference",http://example.com/base/,mapping.ttl,output.nq,true
+RMLTC0002e-CSV,"Two columns mapping, an undefined rr:tableName",http://example.com/base/,mapping.ttl,,true
+RMLTC0002e-JSON,"Two columns mapping, an undefined rr:tableName",http://example.com/base/,mapping.ttl,,true
+RMLTC0002e-XML,"Two columns mapping, an undefined rr:tableName",http://example.com/base/,mapping.ttl,,true
+RMLTC0003c-CSV,"Three columns mapping, by using a rr:template to produce literal",http://example.com/base/,mapping.ttl,output.nq,false
+RMLTC0003c-JSON,"Three columns mapping, by using a rr:template to produce literal",http://example.com/base/,mapping.ttl,output.nq,false
+RMLTC0003c-XML,"Three columns mapping, by using a rr:template to produce literal",http://example.com/base/,mapping.ttl,output.nq,false
+RMLTC0004a-CSV,"Two column mapping, from one row table to two different triples",http://example.com/base/,mapping.ttl,output.nq,false
+RMLTC0004a-JSON,"Two column mapping, from one row table to two different triples",http://example.com/base/,mapping.ttl,output.nq,false
+RMLTC0004a-XML,"Two column mapping, from one row table to two different triples",http://example.com/base/,mapping.ttl,output.nq,false
+RMLTC0004b-CSV,"One column mapping, presence of rr:termType rr:Literal on rr:subjectMap",http://example.com/base/,mapping.ttl,output.nq,true
+RMLTC0004b-JSON,"One column mapping, presence of rr:termType rr:Literal on rr:subjectMap",http://example.com/base/,mapping.ttl,output.nq,true
+RMLTC0004b-XML,"One column mapping, presence of rr:termType rr:Literal on rr:subjectMap",http://example.com/base/,mapping.ttl,output.nq,true
+RMLTC0005a-CSV,Typing of resources,http://example.com/base/,mapping.ttl,output.nq,false
+RMLTC0005a-JSON,Typing of resources,http://example.com/base/,mapping.ttl,output.nq,false
+RMLTC0005a-XML,Typing of resources,http://example.com/base/,mapping.ttl,output.nq,false
+RMLTC0006a-CSV,"Long form of R2RML by using rr:constant in rr:subjectMap, rr:predicateMap, rr:objectMap and rr:graphMap",http://example.com/base/,mapping.ttl,output.nq,false
+RMLTC0006a-JSON,"Long form of R2RML by using rr:constant in rr:subjectMap, rr:predicateMap, rr:objectMap and rr:graphMap",http://example.com/base/,mapping.ttl,output.nq,false
+RMLTC0006a-XML,"Long form of R2RML by using rr:constant in rr:subjectMap, rr:predicateMap, rr:objectMap and rr:graphMap",http://example.com/base/,mapping.ttl,output.nq,false
+RMLTC0007a-CSV,Typing resources by relying on rdf:type predicate,http://example.com/base/,mapping.ttl,output.nq,false
+RMLTC0007a-JSON,Typing resources by relying on rdf:type predicate,http://example.com/base/,mapping.ttl,output.nq,false
+RMLTC0007a-XML,Typing resources by relying on rdf:type predicate,http://example.com/base/,mapping.ttl,output.nq,false
+RMLTC0007b-CSV,Assigning triples to Named Graphs,http://example.com/base/,mapping.ttl,output.nq,false
+RMLTC0007b-JSON,Assigning triples to Named Graphs,http://example.com/base/,mapping.ttl,output.nq,false
+RMLTC0007b-XML,Assigning triples to Named Graphs,http://example.com/base/,mapping.ttl,output.nq,false
+RMLTC0007c-CSV,"One row mapping, using rr:class",http://example.com/base/,mapping.ttl,output.nq,false
+RMLTC0007c-JSON,"One row mapping, using rr:class",http://example.com/base/,mapping.ttl,output.nq,false
+RMLTC0007c-XML,"One row mapping, using rr:class",http://example.com/base/,mapping.ttl,output.nq,false
+RMLTC0007d-CSV,"One column mapping, specifying an rr:predicateObjectMap with rdf:type",http://example.com/base/,mapping.ttl,output.nq,false
+RMLTC0007d-JSON,"One column mapping, specifying an rr:predicateObjectMap with rdf:type",http://example.com/base/,mapping.ttl,output.nq,false
+RMLTC0007d-XML,"One column mapping, specifying an rr:predicateObjectMap with rdf:type",http://example.com/base/,mapping.ttl,output.nq,false
+RMLTC0007e-CSV,"One column mapping, using rr:graphMap and rr:class",http://example.com/base/,mapping.ttl,output.nq,false
+RMLTC0007e-JSON,"One column mapping, using rr:graphMap and rr:class",http://example.com/base/,mapping.ttl,output.nq,false
+RMLTC0007e-XML,"One column mapping, using rr:graphMap and rr:class",http://example.com/base/,mapping.ttl,output.nq,false
+RMLTC0007f-CSV,"One column mapping, using rr:graphMap and specifying an rr:predicateObjectMap with rdf:type",http://example.com/base/,mapping.ttl,output.nq,false
+RMLTC0007f-JSON,"One column mapping, using rr:graphMap and specifying an rr:predicateObjectMap with rdf:type",http://example.com/base/,mapping.ttl,output.nq,false
+RMLTC0007f-XML,"One column mapping, using rr:graphMap and specifying an rr:predicateObjectMap with rdf:type",http://example.com/base/,mapping.ttl,output.nq,false
+RMLTC0007g-CSV,Assigning triples to the default graph,http://example.com/base/,mapping.ttl,output.nq,false
+RMLTC0007g-JSON,Assigning triples to the default graph,http://example.com/base/,mapping.ttl,output.nq,false
+RMLTC0007g-XML,Assigning triples to the default graph,http://example.com/base/,mapping.ttl,output.nq,false
+RMLTC0007h-CSV,Assigning triples to a non-IRI named graph,http://example.com/base/,mapping.ttl,output.nq,false
+RMLTC0007h-JSON,Assigning triples to a non-IRI named graph,http://example.com/base/,mapping.ttl,output.nq,false
+RMLTC0007h-XML,Assigning triples to a non-IRI named graph,http://example.com/base/,mapping.ttl,output.nq,false
+RMLTC0008a-CSV,Generation of triples to a target graph by using rr:graphMap and rr:template,http://example.com/base/,mapping.ttl,output.nq,false
+RMLTC0008a-JSON,Generation of triples to a target graph by using rr:graphMap and rr:template,http://example.com/base/,mapping.ttl,output.nq,false
+RMLTC0008a-XML,Generation of triples to a target graph by using rr:graphMap and rr:template,http://example.com/base/,mapping.ttl,output.nq,false
+RMLTC0008b-CSV,Generation of triples referencing object map,http://example.com/base/,mapping.ttl,output.nq,false
+RMLTC0008b-JSON,Generation of triples referencing object map,http://example.com/base/,mapping.ttl,output.nq,false
+RMLTC0008b-XML,Generation of triples referencing object map,http://example.com/base/,mapping.ttl,output.nq,false
+RMLTC0008c-CSV,Generation of triples by using multiple predicateMaps within a rr:predicateObjectMap,http://example.com/base/,mapping.ttl,output.nq,false
+RMLTC0008c-JSON,Generation of triples by using multiple predicateMaps within a rr:predicateObjectMap,http://example.com/base/,mapping.ttl,output.nq,false
+RMLTC0008c-XML,Generation of triples by using multiple predicateMaps within a rr:predicateObjectMap,http://example.com/base/,mapping.ttl,output.nq,false
+RMLTC0009a-CSV,Generation of triples from foreign key relations,http://example.com/base/,mapping.ttl,output.nq,false
+RMLTC0009a-JSON,Generation of triples from foreign key relations,http://example.com/base/,mapping.ttl,output.nq,false
+RMLTC0009a-XML,Generation of triples from foreign key relations,http://example.com/base/,mapping.ttl,output.nq,false
+RMLTC0009b-CSV,Generation of triples to multiple graphs,http://example.com/base/,mapping.ttl,output.nq,false
+RMLTC0009b-JSON,Generation of triples to multiple graphs,http://example.com/base/,mapping.ttl,output.nq,false
+RMLTC0009b-XML,Generation of triples to multiple graphs,http://example.com/base/,mapping.ttl,output.nq,false
+RMLTC0010a-CSV,Template with table column with special chars,http://example.com/base/,mapping.ttl,output.nq,false
+RMLTC0010a-JSON,Template with table column with special chars,http://example.com/base/,mapping.ttl,output.nq,false
+RMLTC0010b-CSV,Template with table columns with special chars,http://example.com/base/,mapping.ttl,output.nq,false
+RMLTC0010b-JSON,Template with table columns with special chars,http://example.com/base/,mapping.ttl,output.nq,false
+RMLTC0010b-XML,Template with table columns with special chars,http://example.com/base/,mapping.ttl,output.nq,false
+RMLTC0010c-CSV,Template with table columns with special chars and backslashes,http://example.com/base/,mapping.ttl,output.nq,false
+RMLTC0010c-JSON,Template with table columns with special chars and backslashes,http://example.com/base/,mapping.ttl,output.nq,false
+RMLTC0010c-XML,Template with table columns with special chars and backslashes,http://example.com/base/,mapping.ttl,output.nq,false
+RMLTC0011b-CSV,"M to M relation, by using an additional Triples Map",http://example.com/base/,mapping.ttl,output.nq,false
+RMLTC0011b-JSON,"M to M relation, by using an additional Triples Map",http://example.com/base/,mapping.ttl,output.nq,false
+RMLTC0011b-XML,"M to M relation, by using an additional Triples Map",http://example.com/base/,mapping.ttl,output.nq,false
+RMLTC0012a-CSV,Duplicate tuples generate same blank node,http://example.com/base/,mapping.ttl,output.nq,false
+RMLTC0012a-JSON,Duplicate tuples generate same blank node,http://example.com/base/,mapping.ttl,output.nq,false
+RMLTC0012a-XML,Duplicate tuples generate same blank node,http://example.com/base/,mapping.ttl,output.nq,false
+RMLTC0012b-CSV,Duplicate tuples generate same blank node,http://example.com/base/,mapping.ttl,output.nq,false
+RMLTC0012b-JSON,Duplicate tuples generate same blank node,http://example.com/base/,mapping.ttl,output.nq,false
+RMLTC0012b-XML,Duplicate tuples generate same blank node,http://example.com/base/,mapping.ttl,output.nq,false
+RMLTC0012c-CSV,TriplesMap without subjectMap,http://example.com/base/,mapping.ttl,,true
+RMLTC0012c-JSON,TriplesMap without subjectMap,http://example.com/base/,mapping.ttl,,true
+RMLTC0012c-XML,TriplesMap without subjectMap,http://example.com/base/,mapping.ttl,,true
+RMLTC0012d-CSV,TriplesMap with two subjectMap,http://example.com/base/,mapping.ttl,,true
+RMLTC0012d-JSON,TriplesMap with two subjectMap,http://example.com/base/,mapping.ttl,,true
+RMLTC0012d-XML,TriplesMap with two subjectMap,http://example.com/base/,mapping.ttl,,true
+RMLTC0013a-JSON,Null value in JSON file,http://example.com/base/,mapping.ttl,output.nq,false
+RMLTC0015a-CSV,Generation of language tags from a table with language information,http://example.com/base/,mapping.ttl,output.nq,false
+RMLTC0015a-JSON,Generation of language tags from a table with language information,http://example.com/base/,mapping.ttl,output.nq,false
+RMLTC0015a-XML,Generation of language tags from a table with language information,http://example.com/base/,mapping.ttl,output.nq,false
+RMLTC0015b-CSV,"Generation of language tags from a table with language information, and a term map with invalid rr:language value",http://example.com/base/,mapping.ttl,,true
+RMLTC0015b-JSON,"Generation of language tags from a table with language information, and a term map with invalid rr:language value",http://example.com/base/,mapping.ttl,,true
+RMLTC0015b-XML,"Generation of language tags from a table with language information, and a term map with invalid rr:language value",http://example.com/base/,mapping.ttl,,true
+RMLTC0019a-CSV,Generation of triples by using IRI value in columns,http://example.com/base/,mapping.ttl,output.nq,false
+RMLTC0019a-JSON,Generation of triples by using IRI value in columns,http://example.com/base/,mapping.ttl,output.nq,false
+RMLTC0019a-XML,Generation of triples by using IRI value in columns,http://example.com/base/,mapping.ttl,output.nq,false
+RMLTC0019b-CSV,"Generation of triples by using IRI value in columns, with data error",http://example.com/base/,mapping.ttl,output.nq,false
+RMLTC0019b-JSON,"Generation of triples by using IRI value in columns, with data error",http://example.com/base/,mapping.ttl,output.nq,false
+RMLTC0019b-XML,"Generation of triples by using IRI value in columns, with data error",http://example.com/base/,mapping.ttl,output.nq,false
+RMLTC0020a-CSV,Generation of triples by using IRI value in columns,http://example.com/base/,mapping.ttl,output.nq,false
+RMLTC0020a-JSON,Generation of triples by using IRI value in columns,http://example.com/base/,mapping.ttl,output.nq,false
+RMLTC0020a-XML,Generation of triples by using IRI value in columns,http://example.com/base/,mapping.ttl,output.nq,false
+RMLTC0020b-CSV,"Generation of triples by using IRI value in columns, with data errors",http://example.com/base/,mapping.ttl,output.nq,false
+RMLTC0020b-JSON,"Generation of triples by using IRI value in columns, with data errors",http://example.com/base/,mapping.ttl,output.nq,false
+RMLTC0020b-XML,"Generation of triples by using IRI value in columns, with data errors",http://example.com/base/,mapping.ttl,output.nq,false

@@ -284,7 +284,64 @@ impl PyModel {
                     representation::python_df_to_rust::polars_df_to_rust_df(&df)?,
                 ))
             };
+            // The bytes of the document from those of the file: decompressed (rml:compression) and
+            // decoded to UTF-8 (rml:encoding), with Python's standard library.
+            let prepared = |bytes: Vec<u8>| -> PyResult<Vec<u8>> {
+                let mut data = PyBytes::new(py, &bytes).into_any();
+                if let Some(compression) = &source.compression {
+                    let io = py.import("io")?;
+                    data = match compression.as_str() {
+                        "gzip" => py.import("gzip")?.call_method1("decompress", (data,))?,
+                        "zip" => {
+                            let archive = py
+                                .import("zipfile")?
+                                .call_method1("ZipFile", (io.call_method1("BytesIO", (data,))?,))?;
+                            let names: Vec<String> = archive.call_method0("namelist")?.extract()?;
+                            let Some(first) = names.into_iter().find(|n| !n.ends_with('/')) else {
+                                return Err(argument_error(format!(
+                                    "the zip archive of the source {name:?} has no file"
+                                )));
+                            };
+                            archive.call_method1("read", (first,))?
+                        }
+                        _ => {
+                            // tarxz and targz: the first file of the archive.
+                            let kwargs = PyDict::new(py);
+                            kwargs.set_item("fileobj", io.call_method1("BytesIO", (data,))?)?;
+                            kwargs.set_item("mode", "r:*")?;
+                            let archive = py.import("tarfile")?.call_method("open", (), Some(&kwargs))?;
+                            let mut found = None;
+                            for member in archive.call_method0("getmembers")?.try_iter()? {
+                                let member = member?;
+                                if member.call_method0("isfile")?.extract::<bool>()? {
+                                    found = Some(archive.call_method1("extractfile", (member,))?.call_method0("read")?);
+                                    break;
+                                }
+                            }
+                            match found {
+                                Some(f) => f,
+                                None => {
+                                    return Err(argument_error(format!(
+                                        "the tar archive of the source {name:?} has no file"
+                                    )))
+                                }
+                            }
+                        }
+                    };
+                }
+                if let Some(encoding) = &source.encoding {
+                    data = data
+                        .call_method1("decode", (encoding.as_str(),))?
+                        .call_method1("encode", ("utf-8",))?;
+                }
+                data.extract::<Vec<u8>>()
+            };
             let from_bytes = |bytes: Vec<u8>| -> PyResult<maplib::rml::RmlSource> {
+                let bytes = if source.compression.is_some() || source.encoding.is_some() {
+                    prepared(bytes)?
+                } else {
+                    bytes
+                };
                 match source.formulation {
                     ReferenceFormulation::CSV => read_csv(PyBytes::new(py, &bytes).as_any()),
                     ReferenceFormulation::JSONPath => Ok(maplib::rml::RmlSource::Json(bytes)),
@@ -293,7 +350,9 @@ impl PyModel {
             };
             let from_file = |path: &PathBuf| -> PyResult<maplib::rml::RmlSource> {
                 match source.formulation {
-                    ReferenceFormulation::CSV => {
+                    ReferenceFormulation::CSV
+                        if source.compression.is_none() && source.encoding.is_none() =>
+                    {
                         read_csv(PyString::new(py, &path.to_string_lossy()).as_any())
                     }
                     _ => from_bytes(std::fs::read(path).map_err(|e| {

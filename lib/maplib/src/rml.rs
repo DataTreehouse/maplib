@@ -23,7 +23,7 @@ use crate::errors::MaplibError;
 use crate::model::on_query_stack;
 use oxrdf::vocab::xsd;
 use oxrdf::Term;
-use polars::prelude::{Column, DataFrame, IntoColumn, NamedFrom, Series};
+use polars::prelude::{Column, DataFrame, IntoColumn, IntoSeries, NamedFrom, Series};
 use representation::constants::{FX_PREFIX_NAME, FX_XMLNS, FX_XYZ_PREFIX_IRI};
 use representation::solution_mapping::EagerSolutionMappings;
 use std::collections::BTreeSet;
@@ -874,6 +874,29 @@ fn source_table(
     Ok(DataFrame::new(height, columns).map_err(R2RMLError::from)?)
 }
 
+/// The table with the strings that the source declares as null values (rml:null) made null.
+fn without_nulls(table: DataFrame, nulls: &[String]) -> Result<DataFrame, MaplibError> {
+    if nulls.is_empty() {
+        return Ok(table);
+    }
+    let mut columns = Vec::with_capacity(table.width());
+    for c in table.columns() {
+        let s = c.as_materialized_series();
+        let column = match s.str() {
+            Ok(strings) if strings.iter().flatten().any(|v| nulls.iter().any(|n| n == v)) => {
+                let kept: polars::prelude::StringChunked = strings
+                    .iter()
+                    .map(|v| v.filter(|v| !nulls.iter().any(|n| n == v)))
+                    .collect();
+                kept.with_name(c.name().clone()).into_series().into_column()
+            }
+            _ => c.clone(),
+        };
+        columns.push(column);
+    }
+    Ok(DataFrame::new(table.height(), columns).map_err(R2RMLError::from)?)
+}
+
 /// The rows of the logical sources of an RML mapping, keyed as the R2RML engine looks up the
 /// result of a logical table (LogicalTable::key). `sources` holds the data of each rml:source
 /// by its name in the mapping.
@@ -940,7 +963,7 @@ pub fn source_tables(
                 ))
             }
         };
-        out.insert(key, table);
+        out.insert(key, without_nulls(table, &source.nulls)?);
     }
     Ok(out)
 }

@@ -1380,8 +1380,13 @@ class Model:
         rml:childMap and rml:parentMap in join conditions (compared as strings), a blank node per record
         from a subject or object map with only the term type BlankNode, and the term types rml:URI
         (template values percent encoded outside ASCII too) and rml:UnsafeIRI (not encoded). A JSON
-        reference that selects an object or an array instead of values is an error. The RML-Core test
-        cases of the W3C community group are included in the tests.
+        reference that selects an object or an array instead of values is an error. The RML-Core and
+        RML-IO source test cases of the W3C community group and the test cases of the first RML
+        specification for CSV, JSON and XML are included in the tests.
+
+        A source described in the mapping (rml:source [ rml:path "file" ; ... ]) may have rml:null (the
+        values that are no value), rml:compression (rml:gzip, rml:zip, rml:tarxz, rml:targz) and
+        rml:encoding (e.g. rml:UTF-16).
 
         Both RML vocabularies are read, also mixed: the rml: namespace of the W3C community group
         (http://w3id.org/rml/) and the first RML vocabulary (http://semweb.mmlab.be/ns/rml# with rr:
