@@ -1,6 +1,6 @@
 # Change log
 
-## Unreleased
+## v0.27.0
 ### Features
 - maplib Enterprise Edition: `m.serialize(path, raw_db=True)` keeps the full text search index of the model, with its options (`fts_predicates`, `fts_local_names`, `fts_iris`), and `Model.deserialize` gives a model that is searched right away, in memory, hybrid and disk storage. Before, the index was left out and `create_index(IndexingOptions(fts=True))` had to index every string again after deserializing. For a model with 4M indexed strings, the first search is answered 0.7 s after deserializing into disk storage instead of 5.0 s, and 1.4 s instead of 2.9 s in memory storage; serializing it takes 6.7 s instead of 4.1 s and the serialization is 436 MB instead of 255 MB. A serialization without `raw_db` has no index, as before
 

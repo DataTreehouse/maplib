@@ -1,3 +1,14 @@
+# What's new in v0.27.0
+
+A release of maplib Enterprise Edition that makes small queries and small steps cheaper and keeps the full text search index in a serialization. [CHANGES.md](../CHANGES.md) has every change.
+
+- **Full text search after deserializing (EE).** `m.serialize(path, raw_db=True)` keeps the full text search index, so a deserialized model is searched right away instead of indexing every string again: for 4M indexed strings, the first search comes 0.7 s after deserializing into disk storage instead of 5.0 s. Serializing takes longer and is larger with the index.
+- **Smaller fixed cost per query.** The small steps of a query, of property paths and of formatting results run on one thread instead of Polars' streaming engine, and results of plain values and `VALUES` need no plan: the smallest `VALUES` query takes 6.6 ms instead of 27 ms, and BSBM's explore mix about 29 ms instead of 45 ms.
+- **Faster joins, counts and paths.** Index nested loops look up the objects of all rows in one scan, `COUNT(DISTINCT)` over one datatype skips a filter, and `DISTINCT` over a sequence path with `+` or `*` is evaluated for its distinct ends.
+- **Small steps outside queries.** `map_df`, R2RML on small tables and the Turtle and HDT writers of small graphs avoid the streaming engine too, up to 1.45 times as fast.
+- **Fixes of 0.26.2 slowdowns.** OPTIONAL sub-selects are evaluated with the left side's values only where virtualized time series use them (the Model portal's equipment lookup takes 8 ms again instead of 15 ms), and splitting a Kusto query copies only the ids of each part.
+- **Graph portal (EE).** The bundled portal browses Cognite Data Fusion projects on the Assets page, keeps the map where it is on a click, no longer crashes on Served power's whole grid, opens the containment tree to the selected object and scrolls full pages on phones.
+
 # What's new in v0.26.2
 
 A fix release of maplib Enterprise Edition for the Graph portal's Served power page. [CHANGES.md](../CHANGES.md) has every change.
