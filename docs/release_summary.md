@@ -1,3 +1,14 @@
+# What's new in v0.28.0
+
+A release of maplib Enterprise Edition with RML mappings, a summary of a model's graphs and a SHACL fix. [CHANGES.md](../CHANGES.md) has every change.
+
+- **RML.** `Model.map_rml` maps CSV, JSON and XML sources with an RML mapping, in the W3C community group's vocabulary or the first RML vocabulary, on the R2RML engine. It reads language and datatype maps, XPath with namespaces, and `rml:null`, `rml:compression` and `rml:encoding` on sources, and passes 214 of the 225 cases of the RML-Core, RML-IO and RMLio test suites. `Model.map_r2rml` can also read its mapping from a graph of the model.
+- **IRI templates keep letters outside ASCII.** As R2RML defines IRI-safe, `http://example.com/{name}` with `Zoë` gives `<http://example.com/Zoë>` instead of `<http://example.com/Zo%C3%AB>`. **This changes the IRIs** that `map_r2rml` and `map_rml` generate from such values; `rr:termType rml:URI` gives the earlier encoding.
+- **`Model.describe`.** A summary of each graph: its predicates with the types of their objects and distinct counts, its classes and namespaces, and on request subjects, links between classes, literals, dangling IRIs and overlap between graphs. It prints as aligned tables of bounded length or as Markdown, and its tables are DataFrames.
+- **Counts per predicate from the stored tables.** `SELECT ?p (COUNT(DISTINCT ?s)) (COUNT(DISTINCT ?o)) WHERE { ?s ?p ?o } GROUP BY ?p` takes 2.1 ms instead of 55 ms on 3M triples.
+- **SHACL (EE).** `Model.validate` no longer panics on a property shape with several values of `sh:qualifiedValueShape`, and `m.opcua.add_typing_shapes` gives a declaration shared by several types one qualified value shape.
+- **Graph portal (EE).** The Validator's Difference page compares two validations in SPARQL and counts the unchanged results instead of listing them (6 s instead of 69 s for 100k results), and the Validator pages show the newest validation when a remembered one is gone.
+
 # What's new in v0.27.0
 
 A release of maplib Enterprise Edition that makes small queries and small steps cheaper and keeps the full text search index in a serialization. [CHANGES.md](../CHANGES.md) has every change.
