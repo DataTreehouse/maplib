@@ -6,7 +6,7 @@ and infer_rdfs."""
 import polars as pl
 import pytest
 
-from maplib import IRI, Model, RDFType, SolutionMappings, TRANSIENT_GRAPH
+from maplib import Model, RDFType, SolutionMappings, TRANSIENT_GRAPH
 
 EX = "http://example.net/ns#"
 G1 = "urn:graph:one"
@@ -135,20 +135,6 @@ def test_insert_include_graphs():
         include_graphs=[G1],
     )
     assert m.query(f"ASK {{ <{EX}c> <{EX}reaches> <{EX}e> }}")
-
-
-def test_get_predicate_iris_include_graphs():
-    m = _model()
-    m.reads(f"<{EX}x> <{EX}q> <{EX}y> .", format="ntriples", graph=G1)
-    preds = sorted(p.iri for p in m.get_predicate_iris(include_graphs=[G1]))
-    assert preds == [EX + "p", EX + "q"]
-
-
-def test_get_predicate_named_graph():
-    m = _model()
-    m.reads(f"<{EX}x> <{EX}p> <{EX}y> .", format="ntriples", graph=G1)
-    sms = m.get_predicate(IRI(EX + "p"), graph=G1)
-    assert sum(sm.mappings.height for sm in sms) == 1
 
 
 # --- max_rows / debug ----------------------------------------------------------------

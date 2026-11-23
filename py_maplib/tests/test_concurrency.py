@@ -13,7 +13,7 @@ import threading
 import polars as pl
 import pytest
 
-from maplib import IRI, Model, xsd
+from maplib import Model, xsd
 
 UDF = "urn:maplib:test:gate"
 TIMEOUT = 20
@@ -142,8 +142,6 @@ def test_read_operations_run_during_a_query():
         start(m.query, PLAIN_QUERY),
         start(m.size),
         start(m.writes, format="ntriples"),
-        start(m.get_predicate_iris),
-        start(m.get_predicate, IRI("http://example.net/num")),
         start(m.list_udfs),
         start(m.get_templates),
     ]
@@ -155,9 +153,7 @@ def test_read_operations_run_during_a_query():
         assert reads[0].get().height == 3
         assert reads[1].get() == 3
         assert reads[2].get().count("\n") == 3
-        assert [i.iri for i in reads[3].get()] == ["http://example.net/num"]
-        assert reads[4].get()[0].mappings.height == 3
-        assert reads[5].get() == [UDF]
+        assert reads[3].get() == [UDF]
     finally:
         gate.open()
     assert q.get().height == 3

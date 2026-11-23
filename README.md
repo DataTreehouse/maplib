@@ -168,7 +168,7 @@ Leave large time series in the databases that hold them, and query them in SPARQ
 | Method | What it does |
 |---|---|
 | [`Model(storage=..., storage_folder=...)`](API_USAGE.md#storage-modes) | Chooses `"memory"` (the default) or, with **EE**, `"hybrid"` (dictionaries on disk) or `"disk"` (triple tables on disk as Parquet too) for graphs larger than RAM. |
-| [`m.size(graph)`](API_USAGE.md#introspection), [`m.get_predicate_iris()`](API_USAGE.md#introspection), [`m.get_predicate(iri)`](API_USAGE.md#introspection) | Count triples, list predicates, or get the stored tables of a predicate as DataFrames. |
+| [`m.size(graph)`](API_USAGE.md#introspection) | Count the triples of a graph. |
 | [`m.add_graph(other, ...)`](API_USAGE.md#copying-detaching-and-emptying-graphs), [`maplib.add_triples(...)`](API_USAGE.md#copying-triples-between-models-add_triples) | Copy a graph from another model into this one. |
 | [`m.detach_graph(graph)`](API_USAGE.md#copying-detaching-and-emptying-graphs), [`m.truncate_graph(graph)`](API_USAGE.md#copying-detaching-and-emptying-graphs) | Split a named graph off into its own model, or empty it. |
 | [`m.create_index(IndexingOptions(...))`](API_USAGE.md#indexes-and-compaction), [`m.compact()`](API_USAGE.md#indexes-and-compaction) | Build object, full-text and geo indexes, and merge stored segments. |

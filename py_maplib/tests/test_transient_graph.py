@@ -88,13 +88,3 @@ def test_read_and_map_into_transient_graph():
     assert m.size(graph=TRANSIENT_GRAPH) > 1
     assert count(m, "?s ex:name ?n") == 1
     assert m.writes(format="ntriples") == ""
-
-
-def test_get_predicate_include_graphs():
-    m = model_with_transient_copy()
-    name = "http://example.org/name"
-    assert [str(x.iri) for x in m.get_predicate_iris()] == [name]
-    sms = m.get_predicate(m.get_predicate_iris()[0])
-    assert sum(sm.mappings.height for sm in sms) == 1
-    sms = m.get_predicate(m.get_predicate_iris()[0], include_graphs=[TRANSIENT_GRAPH])
-    assert sum(sm.mappings.height for sm in sms) == 2

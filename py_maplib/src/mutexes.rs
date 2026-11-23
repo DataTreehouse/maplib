@@ -22,8 +22,6 @@ use oxrdf::NamedNode;
 use oxrdfio::RdfFormat;
 use polars::frame::DataFrame;
 use pyo3::prelude::*;
-use representation::df_to_python::fix_cats_and_multicolumns;
-use representation::python::PyIRI;
 use representation::result::QueryResult;
 use representation::solution_mapping::EagerSolutionMappings;
 use representation::{BaseRDFNodeType, RDFNodeState};
@@ -926,48 +924,6 @@ pub(crate) fn writes_mutex(
     }
     let out = write_bytes_mutex(inner, format, graph, prefixes)?;
     String::from_utf8(out).map_err(|e| PyMaplibError::RuntimeError(e.to_string()).into())
-}
-
-pub(crate) fn get_predicate_iris_mutex(
-    inner: &InnerModel,
-    graph: Option<String>,
-    include_graphs: Option<Vec<String>>,
-) -> PyResult<Vec<PyIRI>> {
-    let graph = parse_optional_named_node(graph)?;
-    let named_graph = NamedGraph::from_maybe_named_node(graph.as_ref());
-    let nns = inner
-        .get_predicate_iris(&named_graph, &parse_include_graphs(include_graphs, false)?)
-        .map_err(PyMaplibError::from)?;
-    Ok(nns.into_iter().map(PyIRI::from).collect())
-}
-
-pub(crate) fn get_predicate_mutex(
-    inner: &InnerModel,
-    iri: PyIRI,
-    graph: Option<String>,
-    include_graphs: Option<Vec<String>>,
-) -> PyResult<Vec<EagerSolutionMappings>> {
-    let graph = parse_optional_named_node(graph)?;
-    let named_graph = NamedGraph::from_maybe_named_node(graph.as_ref());
-    let eager_sms = inner
-        .get_predicate(
-            &iri.into_inner(),
-            &named_graph,
-            &parse_include_graphs(include_graphs, false)?,
-        )
-        .map_err(PyMaplibError::from)?;
-    let global_cats = &inner.triplestore.global_cats;
-    let mut out_eager_sms = Vec::with_capacity(eager_sms.len());
-    for EagerSolutionMappings {
-        mut mappings,
-        mut rdf_node_types,
-    } in eager_sms
-    {
-        (mappings, rdf_node_types) =
-            fix_cats_and_multicolumns(mappings, rdf_node_types, true, global_cats.clone());
-        out_eager_sms.push(EagerSolutionMappings::new(mappings, rdf_node_types));
-    }
-    Ok(out_eager_sms)
 }
 
 pub(crate) fn infer_mutex(

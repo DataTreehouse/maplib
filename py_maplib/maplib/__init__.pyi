@@ -2573,25 +2573,6 @@ class Model:
         :return: A model.
         """
 
-    def get_predicate_iris(
-            self, graph: Optional[str] = None, include_graphs: Optional[List[str]] = None
-    ) -> List["IRI"]:
-        """
-        :param graph: The graph to get the predicate iris from.
-        :param include_graphs: IRIs of graphs whose predicates are included as well, e.g. [TRANSIENT_GRAPH].
-        :return: The IRIs of the predicates currently in the given graph.
-        """
-
-    def get_predicate(
-            self, iri: "IRI", graph: Optional[str] = None, include_graphs: Optional[List[str]] = None
-    ) -> List["SolutionMappings"]:
-        """
-        :param iri: The predicate IRI
-        :param graph: The graph to get the predicate from.
-        :param include_graphs: IRIs of graphs whose triples with the predicate are merged in, e.g. [TRANSIENT_GRAPH].
-        :return: A list of the underlying tables that store a given predicate.
-        """
-
     def create_index(self, options: Optional["IndexingOptions"] = None) -> None:
         """
         Sets the indexing options of the model and creates the indexes for the triples already in

@@ -51,7 +51,8 @@ def test_many_predicates_read_like_one_thread(tmp_path):
     count = "SELECT (COUNT(*) AS ?c) WHERE { ?s ?p ?o }"
     assert parallel.query(count)["c"][0] == expected
     assert single.query(count)["c"][0] == expected
-    assert len(parallel.get_predicate_iris()) == N_PREDICATES
+    predicates = "SELECT (COUNT(DISTINCT ?p) AS ?c) WHERE { ?s ?p ?o }"
+    assert parallel.query(predicates)["c"][0] == N_PREDICATES
 
     a = _all_triples(parallel)
     assert a.height == expected

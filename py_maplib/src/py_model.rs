@@ -3,7 +3,7 @@ use crate::error::PyMaplibError;
 use crate::mutexes::{
     add_graph_mutex, add_prefixes_mutex, add_template_mutex, add_udf_mutex,
     add_virtualization_mutex, compact_mutex, create_index_mutex, detach_graph_mutex,
-    generate_template_mutex, get_predicate_iris_mutex, get_predicate_mutex, infer_mutex,
+    generate_template_mutex, infer_mutex,
     infer_rdfs_mutex, insert_mutex, reason_mutex, list_udfs_mutex, map_default_batch_mutex, map_default_first_batch_mutex, map_default_mutex,
     map_df_mutex, map_mutex, map_resolved_mutex,
     map_triples_mutex, query_external_mutex, query_mutex, read_mutex, read_template_mutex,
@@ -53,7 +53,6 @@ use representation::python::PyIRI;
 use representation::result::{QueryResult, QueryResultKind};
 use triplestore::query_cache::{CachePlan, KeyBuilder, Lookup, QueryCache};
 use crate::py_query_cache::{options_from, stats_dict, PyQueryCacheOptions};
-use representation::solution_mapping::EagerSolutionMappings;
 use representation::BaseRDFNodeType;
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -2190,45 +2189,6 @@ impl PyModel {
             let inner = self.read_inner();
             writes_mutex(&inner, format, graph, use_prefixes)
         })
-    }
-
-    #[pyo3(signature = (graph=None, include_graphs=None))]
-    #[instrument(skip_all)]
-    fn get_predicate_iris(
-        &self,
-        py: Python<'_>,
-        graph: Option<String>,
-        include_graphs: Option<Vec<String>>,
-    ) -> PyResult<Vec<PyIRI>> {
-        py.detach(move || {
-            let inner = self.read_inner();
-            get_predicate_iris_mutex(&inner, graph, include_graphs)
-        })
-    }
-
-    #[pyo3(signature = (iri, graph=None, include_graphs=None))]
-    #[instrument(skip_all)]
-    fn get_predicate(
-        &self,
-        py: Python<'_>,
-        iri: PyIRI,
-        graph: Option<String>,
-        include_graphs: Option<Vec<String>>,
-    ) -> PyResult<Vec<Py<PyAny>>> {
-        let eager_sms = py.detach(|| {
-            let inner = self.read_inner();
-            get_predicate_mutex(&inner, iri, graph, include_graphs)
-        })?;
-        let mut out = vec![];
-        for EagerSolutionMappings {
-            mappings,
-            rdf_node_types,
-        } in eager_sms
-        {
-            let py_sm = df_to_py_df(mappings, rdf_node_types, None, None, true, py)?;
-            out.push(py_sm);
-        }
-        Ok(out)
     }
 
     #[pyo3(signature = (

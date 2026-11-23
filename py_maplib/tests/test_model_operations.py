@@ -1,5 +1,5 @@
 """Coverage for Model-level operations that were not exercised elsewhere:
-add_graph, add_triples, create_index / IndexingOptions, compact, size, get_predicate(_iris),
+add_graph, add_triples, create_index / IndexingOptions, compact, size,
 serialize/deserialize variants and query return formats."""
 
 import json
@@ -61,27 +61,6 @@ def test_size_counts_duplicates_once():
     m = _model()
     m.reads(DATA, format="ntriples")
     assert m.size() == 5
-
-
-def test_get_predicate_iris_and_get_predicate():
-    m = _model()
-    preds = sorted(p.iri for p in m.get_predicate_iris())
-    assert preds == sorted([EX + "p", EX + "name", EX + "age"])
-
-    sms = m.get_predicate(IRI(EX + "name"))
-    assert len(sms) >= 1
-    assert all(isinstance(sm, SolutionMappings) for sm in sms)
-    total = sum(sm.mappings.height for sm in sms)
-    assert total == 2
-    for sm in sms:
-        assert set(sm.mappings.columns) >= {"subject", "object"}
-        assert "subject" in sm.rdf_types
-
-
-def test_get_predicate_iris_named_graph():
-    m = _model()
-    m.reads(f"<{EX}x> <{EX}q> <{EX}y> .", format="ntriples", graph=G1)
-    assert [p.iri for p in m.get_predicate_iris(G1)] == [EX + "q"]
 
 
 # --- add_graph / add_triples ---------------------------------------------------------
@@ -318,8 +297,7 @@ def test_compact_after_many_additions():
     after = m.query(f"SELECT ?s ?v WHERE {{ ?s <{EX}v> ?v }} ORDER BY ?v")
     assert_frame_equal(before, after)
     assert m.size() == 20
-    total = sum(sm.mappings.height for sm in m.get_predicate(IRI(EX + "v")))
-    assert total == 20
+    assert m.query(f"SELECT (COUNT(*) AS ?c) WHERE {{ ?s <{EX}v> ?v }}")["c"][0] == 20
 
 
 # --- serialization -------------------------------------------------------------------

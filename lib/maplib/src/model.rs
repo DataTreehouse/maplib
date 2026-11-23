@@ -1390,30 +1390,6 @@ SELECT ?loc ?crs ?seq ?x ?y ?z WHERE {{
         self.triplestore.truncate(graph);
     }
 
-    pub fn get_predicate_iris(
-        &self,
-        graph: &NamedGraph,
-        include_graphs: &[NamedGraph],
-    ) -> Result<Vec<NamedNode>, MaplibError> {
-        self.triplestore
-            .get_predicate_iris(graph, include_graphs)
-            .map_err(MaplibError::TriplestoreError)
-    }
-
-    #[instrument(skip_all)]
-    pub fn get_predicate(
-        &self,
-        predicate: &NamedNode,
-        graph: &NamedGraph,
-        include_graphs: &[NamedGraph],
-    ) -> Result<Vec<EagerSolutionMappings>, MaplibError> {
-        let sms = self
-            .triplestore
-            .get_predicate_eager_solution_mappings(predicate, graph, include_graphs)
-            .map_err(MaplibError::TriplestoreError)?;
-        Ok(sms)
-    }
-
     #[instrument(skip_all)]
     pub fn create_index(&mut self, indexing: IndexingOptions) -> Result<(), MaplibError> {
         self.triplestore

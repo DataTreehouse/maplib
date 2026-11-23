@@ -1202,8 +1202,7 @@ print(m.query("SELECT * WHERE { ?s ?p ?o }", graph="urn:g1"))
 print(m.query("SELECT * WHERE { GRAPH <urn:g1> { ?s ?p ?o } }"))   # GRAPH works too
 ```
 
-`include_graphs` (in `query`, `update`, `insert`, `infer`, `get_predicate` and
-`get_predicate_iris`) merges other graphs into the queried graph, as `FROM` does:
+`include_graphs` (in `query`, `update`, `insert` and `infer`) merges other graphs into the queried graph, as `FROM` does:
 
 ```python
 print(m.query("SELECT ?s ?o WHERE { ?s <http://example.net/ns#p>+ ?o }", include_graphs=["urn:g1"]))
@@ -2681,14 +2680,12 @@ also compacts the model.
 
 ```python
 print(m.size())                                   # triples in the default graph
-print(m.get_predicate_iris())                     # [IRI(http://example.net/ns#serialNumber)]
-tables = m.get_predicate(IRI(EX + "serialNumber"))
-print(tables[0].mappings, tables[0].rdf_types)    # the stored tables, as SolutionMappings (columns subject, object)
 print(m.list_udfs(), len(m.get_templates()))
 print(maplib.__version__)
 ```
 
-`get_predicate_iris` and `get_predicate` take `graph=` and `include_graphs=`.
+The predicates of a graph and their triples are found with SPARQL, or summarised by
+[`describe`](#describing-a-model-describe).
 
 ### Describing a model: describe
 
@@ -2920,7 +2917,7 @@ Its `predicates` and `classes` are DataFrames with `before`, `after` and `change
 ### Threads
 
 A `Model` can be shared between threads. Reads (`query`, `query_external`, `write`, `writes`,
-`write_bytes`, `size`, `get_predicate`, `get_predicate_iris`, `get_templates` and `list_udfs`) run
+`write_bytes`, `size`, `get_templates` and `list_udfs`) run
 at the same time. Changes take an exclusive lock and wait for running reads. Queries release the
 GIL while they run, so other Python threads keep working.
 

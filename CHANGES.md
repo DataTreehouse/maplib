@@ -1,6 +1,9 @@
 # Change log
 
 ## Unreleased
+### Breaking changes
+- `Model.get_predicate_iris` and `Model.get_predicate` are removed. Query the predicates and their triples with SPARQL instead, e.g. `SELECT DISTINCT ?p WHERE { ?s ?p ?o }` and `SELECT ?s ?o WHERE { ?s <predicate> ?o }`, which also take `graph=` and `include_graphs=`, or summarise a model with `Model.describe`
+
 ### Features
 - `Model.query(debug=True)` says more about why a query has no results. For a triple pattern that matches nothing: a predicate that is not used in the queried graph, with the graphs that do use it and the predicates with the same local name in another namespace or case; a subject that has no triples; an object that is written like the objects in the data but is another term (e.g. `"42"` where the data has the integer `42`, or `"Bob"` where it has `"Bob"@en`), with examples of the objects that are there; and whether the pattern matches with subject and object in each other's place. For patterns that match apart but not together: the variables they join on, and when a variable is e.g. an IRI in one and a literal in the other. For a FILTER: how many solution mappings the pattern had, the kinds of terms of the variables of the expression, and which of the conditions joined with `&&` are never true.
 
