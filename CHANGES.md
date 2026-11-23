@@ -12,6 +12,7 @@
 - Index nested loops (see v0.24.0) look up the bound objects of all rows in one scan of a table that has no object sort, instead of one scan per row, so chains that go from object to subject several levels deep, e.g. a bill of materials through edge nodes, are answered by them instead of being declined for their estimated work
 - `COUNT(DISTINCT ?x)` over a variable of one datatype counts the distinct values of each group without filtering its unbound values first, e.g. the orders per country of customers with an `OPTIONAL` order
 - A sequence path with an arbitrary length step right under `DISTINCT`, e.g. `SELECT DISTINCT ?s ?o WHERE { ?s :includes/:rest+ ?o }`, is evaluated for its distinct ends, without a solution per intermediate node that `DISTINCT` then removes
+- The small steps outside of queries no longer run Polars' streaming engine either: `map_df`, the term maps of an R2RML mapping, the Turtle and HDT writers (a step per predicate and pair of types), rebuilding the full text, geo and vector indexes, the lists and casts of a mapped frame and the triples of a `CONSTRUCT` result. Mappings of small tables and writes of small graphs with many predicates are faster
 
 ## v0.26.2
 ### Performance
