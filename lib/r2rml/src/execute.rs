@@ -22,6 +22,7 @@ use polars::prelude::{
 };
 use representation::dataset::NamedGraph;
 use representation::polars_to_rdf::polars_type_to_literal_type;
+use representation::rdf_to_polars::default_decimal_type;
 use representation::{
     literal_time_zone, BaseRDFNodeType, RDFNodeState, SeriesBuilder, LANG_STRING_LANG_FIELD,
     LANG_STRING_VALUE_FIELD, OBJECT_COL_NAME, PREDICATE_COL_NAME, SUBJECT_COL_NAME,
@@ -645,6 +646,12 @@ fn natural_literal(c: &Column) -> Result<Terms, R2RMLError> {
                 series: lexical(c)?.into_series(),
                 state: literal(xsd::DATE_TIME),
             },
+        },
+        // DECIMAL and NUMERIC columns with a scale are xsd:decimal, stored with maplib's
+        // precision and scale. Values that do not fit are an error rather than dropped.
+        DataType::Decimal(_, scale) if *scale != 0 => Terms {
+            series: s.strict_cast(&default_decimal_type())?,
+            state: literal(xsd::DECIMAL),
         },
         dt => match polars_type_to_literal_type(dt) {
             Ok(st) => Terms {

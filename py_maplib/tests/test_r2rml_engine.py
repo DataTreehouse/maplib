@@ -154,6 +154,44 @@ MAPPING = """<#P> rr:logicalTable [ rr:tableName "person" ] ;
   rr:subjectMap [ rr:template "dept/{id}" ] ;
   rr:predicateObjectMap [ rr:predicate ex:name ; rr:objectMap [ rr:column "name" ] ] ."""
 
+@pytest.mark.parametrize("source", ["duckdb", "polars"])
+def test_decimal_columns_are_xsd_decimal(source):
+    """DECIMAL columns with a scale give xsd:decimal literals (the natural mapping), from Arrow
+    record batches and from polars DataFrames; a scale of 0 gives xsd:integer."""
+    con = duckdb.connect()
+    con.execute(
+        """CREATE TABLE price AS SELECT * FROM (VALUES
+            (1, 7.5, 1234567.125::DECIMAL(18,3), 42::DECIMAL(9,0)),
+            (2, -0.25, NULL, 7::DECIMAL(9,0)),
+            (3, 10.0, 0.001::DECIMAL(18,3), NULL)
+          ) t(id, small, big, whole)"""
+    )
+    mapping = """<#P> rr:logicalTable [ rr:tableName "price" ] ;
+      rr:subjectMap [ rr:template "http://example.org/price/{id}" ] ;
+      rr:predicateObjectMap [ rr:predicate ex:small ; rr:objectMap [ rr:column "small" ] ] ;
+      rr:predicateObjectMap [ rr:predicate ex:big ; rr:objectMap [ rr:column "big" ] ] ;
+      rr:predicateObjectMap [ rr:predicate ex:whole ; rr:objectMap [ rr:column "whole" ] ] ."""
+    kwargs = {"database": con} if source == "duckdb" else {"tables": {"price": con.sql("SELECT * FROM price").pl()}}
+    m = _map(mapping, **kwargs)
+    res = m.query(
+        """PREFIX ex: <http://example.org/>
+        SELECT ?p (STR(?o) AS ?v) (STR(DATATYPE(?o)) AS ?dt) WHERE { ?s ?p ?o } ORDER BY ?p ?o"""
+    )
+    xsd = "http://www.w3.org/2001/XMLSchema#"
+    assert res.rows() == [
+        ("<http://example.org/big>", "0.001", xsd + "decimal"),
+        ("<http://example.org/big>", "1234567.125", xsd + "decimal"),
+        ("<http://example.org/small>", "-0.25", xsd + "decimal"),
+        ("<http://example.org/small>", "7.5", xsd + "decimal"),
+        ("<http://example.org/small>", "10", xsd + "decimal"),
+        ("<http://example.org/whole>", "7", xsd + "integer"),
+        ("<http://example.org/whole>", "42", xsd + "integer"),
+    ]
+    # The values compare as numbers.
+    above = m.query("PREFIX ex: <http://example.org/> SELECT ?s WHERE { ?s ex:small ?v FILTER(?v > 7.0) }")
+    assert above.height == 2
+
+
 MAPPING_GRAPH = "urn:graph:r2rml"
 DATA_GRAPH = "urn:graph:data"
 

@@ -15,6 +15,9 @@
 - A sequence path with an arbitrary length step right under `DISTINCT`, e.g. `SELECT DISTINCT ?s ?o WHERE { ?s :includes/:rest+ ?o }`, is evaluated for its distinct ends, without a solution per intermediate node that `DISTINCT` then removes
 - The small steps outside of queries no longer run Polars' streaming engine either: `map_df`, the term maps of an R2RML mapping, the Turtle and HDT writers (a step per predicate and pair of types), rebuilding the full text, geo and vector indexes, the lists and casts of a mapped frame and the triples of a `CONSTRUCT` result. Mappings of small tables and writes of small graphs with many predicates are faster
 
+### Bug fixes
+- R2RML: a `DECIMAL` or `NUMERIC` column with a scale that is mapped without `rr:datatype` gives `xsd:decimal` literals, as the natural mapping of R2RML specifies, instead of plain strings. This is also the type of a literal such as `7.5` in DuckDB
+
 ## v0.26.2
 ### Performance
 - maplib Enterprise Edition: the Graph portal's Served power queries over meter readings reached through usage points ask the virtualized database only for the time series and aggregates they need. An OPTIONAL sub-select, e.g. the aggregates per consumer, is evaluated with the left side's values of the variables it groups by or projects, also under another name, `(?x AS ?c)`, or joined with more patterns; a GROUP BY is pushed down past an `EXISTS`, `NOT EXISTS` or `MINUS` without time series, such as a filter on a reading type's flow direction; and the blank nodes of virtualized rows are hashed column by column. On a stand-in of 164,000 consumers in DuckDB split like Azure Data Explorer, one consumer's Served power series takes 0.06 s instead of 104 s (4 queries and rows instead of 444 queries and 21.2M rows), and the coverage of every consumer for a day 9.9 s instead of 105 s
