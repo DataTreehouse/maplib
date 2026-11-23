@@ -114,6 +114,17 @@ def _scratch_graphs(self, *graphs: Optional[str]):
 
 Model.scratch_graphs = _scratch_graphs
 
+
+def _describe(self, graphs=None, sections=None, exact: bool = False) -> "describe.ModelDescription":
+    """A summary of each graph: predicates with their types and distinct counts, classes,
+    namespaces and more. See Model.describe."""
+    from .describe import describe
+
+    return describe(self, graphs=graphs, sections=sections, exact=exact)
+
+
+Model.describe = _describe
+
 if (pathlib.Path(__file__).parent.resolve() / "graph_explorer").exists():
     from .graph_explorer import explore as _explore
 else:

@@ -5,6 +5,7 @@ from typing import Any, overload, Union, List, Dict, Optional, Callable, Iterabl
 import polars as pl
 from maplib.opcua import OPCUA
 from maplib.cim import CIM
+from maplib.describe import ModelDescription as ModelDescription
 
 DEFAULT_GRAPH: str
 """
@@ -2632,6 +2633,79 @@ class Model:
             distinct_subjects, distinct_objects, max_triples_per_subject,
             max_triples_per_object, exact (whether the counts are exact rather than merged
             estimates), most_common_objects (N-Triples terms) and most_common_object_counts.
+        """
+
+    def describe(
+            self,
+            graphs: Optional[List[Optional[str]]] = None,
+            sections: Union[None, LiteralType["all"], List[str]] = None,
+            exact: bool = False,
+    ) -> "ModelDescription":
+        """
+        A summary of what is in each graph of the model.
+
+        By default it has the predicates of each graph with the types of their objects and the
+        number of distinct subjects and objects, the classes with their number of instances, and
+        the namespaces of the predicates and classes. This is made from the statistics the model
+        keeps (see analyze) and one count per class, so it is quick on large models. The distinct
+        counts of a predicate whose objects have several types (or whose subjects are both IRIs
+        and blank nodes) are then upper bounds, marked with exact = False in the table and with ~
+        in the text.
+
+        More sections can be asked for. Each reads the triples of the described graphs:
+
+        - "subjects": the distinct subjects of each graph, those without a type and blank nodes.
+        - "class_predicates": for each class, the predicates its instances have, the share of
+          instances that have them and the fewest and most objects per instance.
+        - "links": which classes are linked by which predicates.
+        - "literals": the least and greatest value per predicate and datatype, the lengths of
+          strings and the languages of language-tagged strings.
+        - "examples": an example object per predicate.
+        - "dangling": per predicate, the IRI objects that are not a subject in the graph, and how
+          many of them are subjects in another graph.
+        - "overlap": for pairs of the largest graphs, shared subjects, predicates and classes, and
+          the IRI objects of one that are subjects in the other.
+        - "vocabulary": whether each predicate and class is declared (owl:Class, rdfs:Class,
+          rdf:Property, owl:ObjectProperty, ...) in some graph of the model, and its rdfs:label.
+        - "iri_namespaces": the namespaces of the IRIs that are subjects and objects.
+
+        The size of the result follows the schema (graphs, predicates, classes), not the number of
+        triples. Printing it gives a text of bounded length: an overview of the graphs, then the
+        largest graphs in detail with the largest rows of each section, and counts of what was
+        left out; graphs with the same predicates are detailed once. See ModelDescription.to_text
+        for the limits, and show_class and show_predicate to look closer.
+
+        Usage:
+
+        >>> d = m.describe()
+        >>> print(d)
+        2 graphs, 14 triples
+          default graph: 11 triples, 5 predicates, 1 classes
+          <urn:g:two>: 3 triples, 2 predicates, 0 classes
+        <BLANKLINE>
+        default graph
+          namespaces (3):
+            foaf:      http://xmlns.com/foaf/0.1/  (3 predicate, 1 class)
+          classes (1):
+            foaf:Person                                         2
+          predicates (5):
+                                                      triples     subjects      objects  object types
+            foaf:name                                       4           ~4           ~4  xsd:string (3), rdf:langString (1)
+            foaf:age                                        2           ~2           ~2  xsd:decimal (1), xsd:integer (1)
+        >>> d.predicates
+        >>> d = m.describe(sections=["class_predicates", "links"], exact=True)
+        >>> print(d.show_class("foaf:Person"))
+        >>> print(m.describe(sections="all").to_text(max_graphs=1, max_rows=5))
+        >>> after.diff(before)
+
+        :param graphs: The graphs to describe, None in the list is the default graph. All non-empty
+            graphs when None.
+        :param sections: Sections to add to the default ones, or "all".
+        :param exact: Count the distinct subjects and objects of every predicate exactly, with one
+            query per graph that has a predicate whose counts are not exact already. The query
+            counts each predicate over the stored dictionary codes.
+        :return: A ModelDescription with the tables graphs, predicates, classes, namespaces,
+            class_predicates, links, literals, languages, dangling and overlap.
         """
 
     def add_graph(

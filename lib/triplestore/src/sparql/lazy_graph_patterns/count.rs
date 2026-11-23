@@ -11,6 +11,10 @@
 //!   counted over the stored columns, which are still dictionary codes for IRIs, blank nodes and
 //!   strings.
 //!
+//! With `GROUP BY ?p` on the predicate variable, the same counts are given per predicate: one row
+//! for each predicate with a table the pattern and filter select, e.g.
+//! `SELECT ?p (COUNT(DISTINCT ?s) AS ?c) WHERE { ?s ?p ?o } GROUP BY ?p`.
+//!
 //! Distinct counts are kept in a [DistinctCountCache], keyed by the generations of the tables
 //! counted, which every change of a table renews.
 
@@ -26,9 +30,9 @@ use polars_core::frame::DataFrame;
 use polars_core::prelude::{ChunkAgg, Column, DataType, UInt32Chunked};
 use rayon::prelude::*;
 use representation::dataset::QueryGraph;
-use representation::solution_mapping::SolutionMappings;
+use representation::solution_mapping::{BaseCatState, SolutionMappings};
 use representation::{
-    BaseRDFNodeType, LANG_STRING_LANG_FIELD, LANG_STRING_VALUE_FIELD, OBJECT_COL_NAME,
+    BaseRDFNodeType, RDFNodeState, LANG_STRING_LANG_FIELD, LANG_STRING_VALUE_FIELD, OBJECT_COL_NAME,
     SUBJECT_COL_NAME,
 };
 use spargebra::algebra::{AggregateExpression, AggregateFunction, Expression, Function, GraphPattern};
@@ -97,6 +101,7 @@ impl Kind {
 type Condition = (bool, Kind, bool);
 
 /// What one aggregate counts.
+#[derive(Clone, Copy)]
 enum Counted {
     /// All solutions (COUNT(*), COUNT(?v) of a variable of the pattern, COUNT(DISTINCT *)).
     Solutions,
@@ -109,9 +114,13 @@ impl Triplestore {
     /// Answers the aggregates if they are all counts over one triple pattern (with an optional
     /// filter on the kinds of its subject and object) that the stored tables answer directly.
     /// Returns None for anything else, which then takes the general path.
+    ///
+    /// `variables` are the GROUP BY variables: none, or only the predicate variable of the
+    /// pattern, which gives the counts per predicate.
     pub(crate) fn count_from_tables(
         &self,
         inner: &GraphPattern,
+        variables: &[Variable],
         aggregates: &[(Variable, AggregateExpression)],
         dataset: &QueryGraph,
     ) -> Result<Option<SolutionMappings>, SparqlError> {
@@ -147,6 +156,11 @@ impl Triplestore {
         if s == o || aggregates.is_empty() {
             return Ok(None);
         }
+        let group_by = match variables {
+            [] => None,
+            [v] if Some(v) == p && aggregates.iter().all(|(a, _)| a != v) => Some(v),
+            _ => return Ok(None),
+        };
         let mut conditions = vec![];
         if let Some(expr) = filter {
             if !kind_conditions(expr, s, o, &mut conditions) {
@@ -200,6 +214,10 @@ impl Triplestore {
             }
         }
 
+        if let Some(group_by) = group_by {
+            return self.counts_per_predicate(group_by, aggregates, &counted, tables);
+        }
+
         let mut columns = vec![];
         let mut types = HashMap::new();
         for ((v, _), c) in aggregates.iter().zip(counted) {
@@ -227,6 +245,79 @@ impl Triplestore {
 }
 
 impl Triplestore {
+    /// The counts per predicate: one row for each predicate of the tables (which are in the
+    /// order of their predicates), with the predicate as global IRI codes. The predicates are
+    /// counted in parallel. A predicate with a single table whose only segment has an exact
+    /// count reads no triples; the others are counted over their stored columns, and not kept
+    /// in the [DistinctCountCache], which is too small for one count per predicate.
+    fn counts_per_predicate(
+        &self,
+        group_by: &Variable,
+        aggregates: &[(Variable, AggregateExpression)],
+        counted: &[Counted],
+        tables: Vec<(&oxrdf::NamedNode, &Triples)>,
+    ) -> Result<Option<SolutionMappings>, SparqlError> {
+        let mut groups: Vec<Vec<(&oxrdf::NamedNode, &Triples)>> = vec![];
+        for (pred, t) in tables {
+            match groups.last_mut() {
+                Some(g) if g[0].0 == pred => g.push((pred, t)),
+                _ => groups.push(vec![(pred, t)]),
+            }
+        }
+        let predicates: Vec<Option<&str>> = groups.iter().map(|g| Some(g[0].0.as_str())).collect();
+        let codes = self.global_cats.read()?.maybe_encode_iri_slice(&predicates);
+        // Every stored predicate has a code; without one, the general path answers.
+        let Some(codes) = codes.into_iter().collect::<Option<Vec<u32>>>() else {
+            return Ok(None);
+        };
+        fast_path::hit(FastPath::CountGroupedByPredicate);
+        let distinct = |g: &[(&oxrdf::NamedNode, &Triples)], subject: bool| {
+            if let [(_, t)] = g {
+                if let Some(n) = t.exact_distinct(!subject) {
+                    fast_path::hit(FastPath::CountDistinctSegmentExact);
+                    return Ok(n);
+                }
+            }
+            distinct_values(g, subject)
+        };
+        let rows = groups
+            .par_iter()
+            .map(|g| {
+                counted
+                    .iter()
+                    .map(|c| {
+                        Ok(match c {
+                            Counted::Solutions => g.iter().map(|(_, t)| t.height()).sum(),
+                            Counted::DistinctPredicates => 1,
+                            Counted::DistinctSubjects => distinct(g, true)?,
+                            Counted::DistinctObjects => distinct(g, false)?,
+                        } as i64)
+                    })
+                    .collect::<Result<Vec<i64>, SparqlError>>()
+            })
+            .collect::<Result<Vec<_>, SparqlError>>()?;
+        let mut columns = vec![Column::new(group_by.as_str().into(), codes)];
+        let mut types = HashMap::from([(
+            group_by.as_str().to_string(),
+            RDFNodeState::from_bases(BaseRDFNodeType::IRI, BaseCatState::CategoricalNative(None)),
+        )]);
+        for (i, (v, _)) in aggregates.iter().enumerate() {
+            let counts: Vec<i64> = rows.iter().map(|r| r[i]).collect();
+            columns.push(Column::new(v.as_str().into(), counts));
+            types.insert(
+                v.as_str().to_string(),
+                BaseRDFNodeType::Literal(xsd::INTEGER.into_owned(), None)
+                    .into_default_input_rdf_node_state(),
+            );
+        }
+        let height = groups.len();
+        Ok(Some(SolutionMappings::new(
+            DataFrame::new(height, columns).unwrap().lazy(),
+            types,
+            height,
+        )))
+    }
+
     /// [distinct_values], from the exact count of a single table's only segment, or from the
     /// cache when none of the tables changed since they were last counted.
     fn cached_distinct_values(

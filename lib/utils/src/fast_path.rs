@@ -41,6 +41,8 @@ fast_paths! {
     // keyed by the generations of the tables counted.
     CountDistinctSegmentExact => "count_distinct.segment_exact",
     CountDistinctCached => "count_distinct.cached",
+    // Counts over one triple pattern grouped by its predicate variable, from the stored tables.
+    CountGroupedByPredicate => "count.grouped_by_predicate",
     // COUNT(*) over joins, EXISTS, OPTIONAL, MINUS and UNION of constant-predicate patterns,
     // counted on dictionary codes without building the joined rows.
     CountJoinsOnCodes => "count.joins_on_codes",
