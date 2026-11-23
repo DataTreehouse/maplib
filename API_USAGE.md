@@ -2785,11 +2785,11 @@ d = m.describe(sections=["subjects", "class_predicates", "links", "literals", "d
 print(d.show_class("ns:Pump"))
 # ns:Pump in default graph: 3 instances
 # =====================================
-#     predicate   instances with it  per instance
-#     ----------  -----------------  ------------
-#     ns:site                100.0%          1..1
-#     rdfs:label             100.0%          1..2
-#     ns:powerKW              66.7%          0..1
+#     predicate   coverage  per instance
+#     ----------  --------  ------------
+#     ns:site       100.0%          1..1
+#     rdfs:label    100.0%          1..2
+#     ns:powerKW     66.7%          0..1
 #
 #   Links
 #     subject class  predicate  object class  triples
@@ -2799,22 +2799,22 @@ print(d.show_class("ns:Pump"))
 print(d.show_predicate("rdfs:label"))
 # rdfs:label in default graph
 # ===========================
-#     predicate   triples  subjects  objects  object types                        notes
-#     ----------  -------  --------  -------  ----------------------------------  -----
+#     predicate   triples  subjects  objects  object types
+#     ----------  -------  --------  -------  ----------------------------------
 #     rdfs:label        5         4        5  xsd:string (3), rdf:langString (2)
 #     At most 2 per subject and 1 per object.
 #
 #   Literals
-#     datatype        min  max  length  languages
-#     --------------  ---  ---  ------  --------------
-#     rdf:langString            9..9    nb (1), en (1)
-#     xsd:string                5..7
+#     datatype        length  languages
+#     --------------  ------  --------------
+#     rdf:langString  9..9    nb (1), en (1)
+#     xsd:string      5..7
 #
 #   Classes with it
-#     class    instances  instances with it  per instance
-#     -------  ---------  -----------------  ------------
-#     ns:Pump          3             100.0%          1..2
-#     ns:Site          1             100.0%          1..1
+#     class    instances  coverage  per instance
+#     -------  ---------  --------  ------------
+#     ns:Pump          3    100.0%          1..2
+#     ns:Site          1    100.0%          1..1
 
 print(d.to_text(graphs=[None], sections=["literals", "dangling"]))
 # 2 graphs, 15 triples
@@ -2830,15 +2830,15 @@ print(d.to_text(graphs=[None], sections=["literals", "dangling"]))
 #   Literals (4)
 #     predicate   datatype        min  max  length  languages
 #     ----------  --------------  ---  ---  ------  --------------
-#     ns:powerKW  xsd:decimal     7.5  7.5
-#     ns:powerKW  xsd:integer     11   11
 #     rdfs:label  rdf:langString            9..9    nb (1), en (1)
 #     rdfs:label  xsd:string                5..7
+#     ns:powerKW  xsd:decimal     7.5  7.5
+#     ns:powerKW  xsd:integer     11   11
 #
 #   References out of the graph (1)
-#     predicate  objects that are not subjects here  of them subjects in other graphs
-#     ---------  ----------------------------------  --------------------------------
-#     ns:site                                     1                                 1
+#     predicate  objects not subjects here  of them in other graphs
+#     ---------  -------------------------  -----------------------
+#     ns:site                            1                        1
 ```
 
 In a class profile, `66.7%` and `0..1` say that two of the three pumps have a `powerKW`, and those
@@ -2876,7 +2876,10 @@ print(d.to_markdown(graphs=[None], sections=["classes", "links"]))
 
 The report does not grow with the model. Its first table has the 15 largest graphs, then the 5
 largest graphs are detailed with the 15 largest rows of each table, and lines such as
-`... 26 more predicates with 1,204 triples (0.3%)` count what is left out. Graphs with the
+`... 26 more predicates with 1,204 triples (0.3%)` count what is left out. The lines of the text
+report are at most 100 characters (`width`): a table that is wider has its widest columns cut with
+an ellipsis, the names of the rows last, and a column without values is left out. Markdown and
+the DataFrames have every cell in full. Graphs with the
 same predicates as a graph already detailed are only named (`Same predicates in 30 more graphs:
 ...`). `print(d)` gives at most 20,000 characters. To see more or less:
 
@@ -2885,6 +2888,7 @@ d.to_text(max_graphs=1, max_rows=5)             # None for no limit
 d.to_text(max_chars=4000)                       # halves max_rows, then max_graphs, until it fits
 d.to_text(graphs=["urn:graph:sites"])           # these graphs instead of the largest
 d.to_text(sections=["classes", "predicates"])   # only these sections
+d.to_text(width=140)                            # longer lines; None for no limit
 d.to_dict(max_rows=20, max_graphs=3)            # plain dicts and lists, e.g. for json.dumps
 ```
 

@@ -187,6 +187,11 @@ def test_literals_examples(full):
     assert row(full.languages, graph=None, predicate=FOAF + "name")["language"] == "en"
     assert row(full.predicates, graph=None, predicate=EX + "born")["example"] == "2020-01-01"
     assert "en (1)" in full.show_predicate("foaf:name")
+    assert ["a:born", "2020-01-01"] in [l.split() for l in str(full).splitlines()]
+    assert "Example object: 2020-01-01" in full.show_predicate("a:born")
+    # A column without values is left out: only strings here, so no min and max.
+    only_strings = full.to_text(graphs=[G2], sections=["literals"])
+    assert "languages" not in only_strings and "min" in only_strings
 
 
 def test_dangling_and_overlap(full):
@@ -227,6 +232,13 @@ def test_text_is_bounded():
     lines = text.splitlines()
     rule = next(i for i, l in enumerate(lines) if l.strip().startswith("---"))
     assert len(lines[rule]) == len(lines[rule - 1]) >= len(lines[rule + 1])
+    # No line is longer than the width; cells that do not fit are cut, and only then.
+    wide = d.to_text(max_graphs=None, max_rows=None, width=None)
+    assert max(map(len, wide.splitlines())) > 100
+    assert max(map(len, d.to_text(max_graphs=None, max_rows=None).splitlines())) <= 100
+    narrow = d.to_text(graphs=[None], sections=["predicates"], width=90)
+    assert max(map(len, narrow.splitlines())) <= 90 and "…" in narrow
+    assert "…" not in wide
     with pytest.raises(ValueError):
         d.to_text(format="html")
     limited = d.to_dict(max_rows=2, max_graphs=3)

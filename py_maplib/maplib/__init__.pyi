@@ -2672,7 +2672,8 @@ class Model:
         The size of the result follows the schema (graphs, predicates, classes), not the number of
         triples. Printing it gives a report of bounded length as aligned tables: the graphs, then
         the largest graphs in detail with the largest rows of each section, and counts of what was
-        left out; graphs with the same predicates are detailed once. to_markdown gives the report
+        left out; graphs with the same predicates are detailed once. Its lines are at most 100
+        characters: wider tables have their widest columns cut. to_markdown gives the report
         as Markdown, which notebooks show. IRIs are written with well-known prefixes, and with
         prefixes made from the other namespaces of predicates and classes, which the Namespaces
         table lists. See ModelDescription.to_text for the limits, and show_class and

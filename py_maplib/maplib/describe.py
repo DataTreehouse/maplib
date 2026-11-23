@@ -8,6 +8,7 @@ schema (graphs, predicates and classes), never by the number of triples. The tex
 are bounded further: see ModelDescription.to_text.
 """
 import re
+import textwrap
 from typing import Dict, List, Optional, Sequence, Union
 
 import polars as pl
@@ -109,7 +110,8 @@ def _graph_name(g: Optional[str]) -> str:
 class _Doc:
     """The parts of a report: headings, tables and notes, rendered as aligned text or Markdown."""
 
-    MAX_CELL = 64
+    #: No column of a text table is made narrower than this to fit the width.
+    MIN_COLUMN = 10
 
     def __init__(self):
         self.items = []
@@ -126,12 +128,16 @@ class _Doc:
             ["" if v is None else format(v, ",") if isinstance(v, int) else str(v) for v in r]
             for r in rows
         ]
-        self.items.append(("t", headers, aligns, cells))
+        # A column without a value in any row is left out.
+        keep = [i for i in range(len(headers)) if not cells or any(r[i] for r in cells)]
+        self.items.append((
+            "t", [headers[i] for i in keep], [aligns[i] for i in keep], [[r[i] for i in keep] for r in cells],
+        ))
 
     def note(self, text: str):
         self.items.append(("n", text))
 
-    def render(self, fmt: str) -> str:
+    def render(self, fmt: str, width: Optional[int] = 100) -> str:
         if fmt not in ("text", "markdown"):
             raise ValueError(f"format must be 'text' or 'markdown', not {fmt!r}")
         out = []
@@ -147,7 +153,13 @@ class _Doc:
                 else:
                     out += ["", "  " + text]
             elif item[0] == "n":
-                out += ([item[1], ""] if fmt == "markdown" else ["    " + item[1]])
+                if fmt == "markdown":
+                    out += [item[1], ""]
+                else:
+                    out += textwrap.wrap(
+                        item[1], width or 1 << 20, initial_indent="    ", subsequent_indent="      ",
+                        break_long_words=False, break_on_hyphens=False,
+                    )
             else:
                 _, headers, aligns, cells = item
                 if fmt == "markdown":
@@ -157,11 +169,22 @@ class _Doc:
                     out += ["| " + " | ".join(esc(c) for c in r) + " |" for r in cells]
                     out.append("")
                 else:
-                    cells = [
-                        [c if len(c) <= self.MAX_CELL else c[: self.MAX_CELL - 1] + "…" for c in r]
-                        for r in cells
-                    ]
                     widths = [max([len(h)] + [len(r[i]) for r in cells]) for i, h in enumerate(headers)]
+                    # A table wider than the width has its widest columns cut, so that no line
+                    # of the report is broken where it is shown. The first column, which names
+                    # the row, is cut last.
+                    floor = [min(w, max(len(h), self.MIN_COLUMN)) for w, h in zip(widths, headers)]
+                    while width is not None and 4 + sum(widths) + 2 * (len(widths) - 1) > width:
+                        rest = [i for i in range(1, len(widths)) if widths[i] > floor[i]]
+                        if rest:
+                            widths[max(rest, key=lambda i: widths[i])] -= 1
+                        elif widths[0] > floor[0]:
+                            widths[0] -= 1
+                        else:
+                            break
+                    cells = [
+                        [c if len(c) <= w else c[: w - 1] + "…" for c, w in zip(r, widths)] for r in cells
+                    ]
                     line = lambda r: "    " + "  ".join(
                         c.rjust(w) if a else c.ljust(w) for c, w, a in zip(r, widths, aligns)
                     ).rstrip()
@@ -181,7 +204,7 @@ class DescriptionDiff:
         self.classes = classes
         self._short = short or (lambda iri: f"<{iri}>")
 
-    def to_text(self, format: str = "text", max_rows: Optional[int] = 30) -> str:
+    def to_text(self, format: str = "text", max_rows: Optional[int] = 30, width: Optional[int] = 100) -> str:
         doc = _Doc()
         for name, df, key in (("predicates", self.predicates, "predicate"), ("classes", self.classes, "class")):
             doc.heading(2, f"{df.height} {name} changed")
@@ -195,7 +218,7 @@ class DescriptionDiff:
                 )
                 if df.height > _cap(max_rows):
                     doc.note(f"... {df.height - max_rows} more")
-        return doc.render(format)
+        return doc.render(format, width)
 
     def __repr__(self) -> str:
         return self.to_text()
@@ -350,6 +373,7 @@ class ModelDescription:
             max_rows: Optional[int] = 15,
             max_chars: Optional[int] = None,
             format: str = "text",
+            width: Optional[int] = 100,
     ) -> str:
         """The report: a table of the graphs, then for each of the largest graphs a table per
         section. Its length does not grow with the model: the overview has the largest max_rows
@@ -368,8 +392,12 @@ class ModelDescription:
         :param max_rows: The number of rows per table.
         :param max_chars: Halve max_rows, then max_graphs, until the report is at most this long.
         :param format: "text" for aligned columns, "markdown" for Markdown headings and tables.
+        :param width: The longest line of the text format: the widest columns of a table that is
+            wider are cut with an ellipsis (the DataFrames and Markdown have the cells in full).
+            Headers are not cut, so a table with many columns can stay wider than a small
+            width. None for no limit.
         """
-        text = self._doc(graphs, sections, max_graphs, max_rows).render(format)
+        text = self._doc(graphs, sections, max_graphs, max_rows).render(format, width)
         if max_chars is None:
             return text
         rows = max_rows if max_rows is not None else 1 << 20
@@ -379,7 +407,7 @@ class ModelDescription:
                 rows = max(3, rows // 2)
             else:
                 n_graphs = max(1, n_graphs // 2)
-            text = self._doc(graphs, sections, n_graphs, rows).render(format)
+            text = self._doc(graphs, sections, n_graphs, rows).render(format, width)
         if len(text) > max_chars:
             text = text[:max_chars] + "\n... cut at max_chars"
         return text
@@ -440,8 +468,8 @@ class ModelDescription:
             doc.heading(2, f"Overlap between graphs ({ov.height} of {self.overlap.height} pairs compared)")
             if ov.height:
                 doc.table(
-                    ["graph a", "graph b", ">shared subjects", ">a refers to b", ">b refers to a",
-                     ">shared predicates", ">shared classes"],
+                    ["graph a", "graph b", ">shared subjects", ">refs a to b", ">refs b to a",
+                     ">shared preds", ">shared classes"],
                     [
                         [_graph_name(r["graph_a"]), _graph_name(r["graph_b"]), r["shared_subjects"],
                          r["a_refers_to_b"], r["b_refers_to_a"], r["shared_predicates"], r["shared_classes"]]
@@ -457,7 +485,7 @@ class ModelDescription:
         return col in df.columns and df[col].null_count() < df.height
 
     def _predicate_table(self, doc: _Doc, pr: pl.DataFrame):
-        label, example = self._has(pr, "label"), self._has(pr, "example")
+        label = self._has(pr, "label")
         declared = self._has(pr, "declared")
         rows = []
         for r in pr.iter_rows(named=True):
@@ -478,14 +506,19 @@ class ModelDescription:
                 + ([r["label"]] if label else [])
                 + [r["triples"], approx + format(r["distinct_subjects"], ","),
                    approx + format(r["distinct_objects"], ","), types, ", ".join(notes)]
-                + ([r["example"]] if example else [])
             )
         doc.table(
             ["predicate"] + (["label"] if label else [])
-            + [">triples", ">subjects", ">objects", "object types", "notes"]
-            + (["example"] if example else []),
+            + [">triples", ">subjects", ">objects", "object types", "notes"],
             rows,
         )
+
+    def _example(self, value: Optional[str]) -> Optional[str]:
+        """An example object, with a prefix when it is an IRI in a namespace of the report."""
+        if value is None:
+            return None
+        short = self._short(value)
+        return value if short.startswith("<") else short
 
     @staticmethod
     def _literal_rows(short, lit: pl.DataFrame, languages: pl.DataFrame) -> List[list]:
@@ -518,7 +551,7 @@ class ModelDescription:
                 rows.append(["", None, f"... {one.height - cap} more", "", ""])
         return rows
 
-    _CLASS_COLUMNS = ["class", ">instances", "predicate", ">instances with it", ">per instance"]
+    _CLASS_COLUMNS = ["class", ">instances", "predicate", ">coverage", ">per instance"]
 
     def _graph_doc(self, doc: _Doc, g: Optional[str], show: set, cap: int):
         ns = self._of(self.namespaces, g)
@@ -557,6 +590,15 @@ class ModelDescription:
                 share = 100 * rest / max(int(pr["triples"].sum()), 1)
                 doc.note(f"... {pr.height - cap} more predicates with {rest:,} triples ({share:.1f}%)")
 
+        if "examples" in show and self._has(pr, "example"):
+            doc.heading(3, "Example objects")
+            doc.table(
+                ["predicate", "example"],
+                [[self._short(r["predicate"]), self._example(r["example"])] for r in pr.head(cap).iter_rows(named=True)],
+            )
+            if pr.height > cap:
+                doc.note(f"... {pr.height - cap} more")
+
         lit = self._of(self.literals, g)
         if "literals" in show and lit.height:
             doc.heading(3, f"Literals ({lit.height})")
@@ -594,7 +636,7 @@ class ModelDescription:
         if "dangling" in show and da.height:
             doc.heading(3, f"References out of the graph ({da.height})")
             doc.table(
-                ["predicate", ">objects that are not subjects here", ">of them subjects in other graphs"],
+                ["predicate", ">objects not subjects here", ">of them in other graphs"],
                 [[self._short(r["predicate"]), r["objects"], r["in_other_graphs"]]
                  for r in da.head(cap).iter_rows(named=True)],
             )
@@ -654,6 +696,7 @@ class ModelDescription:
             doc.note(
                 f"At most {r['max_triples_per_subject']:,} per subject and "
                 f"{r['max_triples_per_object']:,} per object."
+                + (f" Example object: {self._example(r['example'])}" if r.get("example") is not None else "")
             )
             if r["common_objects"]:
                 doc.heading(3, "Most common objects")
@@ -670,7 +713,7 @@ class ModelDescription:
             if cp.height:
                 doc.heading(3, "Classes with it")
                 doc.table(
-                    ["class", ">instances", ">instances with it", ">per instance"],
+                    ["class", ">instances", ">coverage", ">per instance"],
                     [
                         [self._short(c["class"]), c["instances"], f"{100 * c['coverage']:.1f}%",
                          f"{c['min_per_subject'] if c['subjects'] == c['instances'] else 0}..{c['max_per_subject']}"]
@@ -912,11 +955,14 @@ def describe(
                 g, "predicate", "datatype",
             ).with_columns(pl.lit(None, dtype=_S).alias("min"), pl.lit(None, dtype=_S).alias("max"))
             frames += [ranges, lengths]
-        literals = _frame("literals", frames).sort("predicate", "datatype", maintain_order=True)
-        literals = literals.sort(
-            pl.col("graph").map_elements(graph_list.index, return_dtype=pl.Int64, skip_nulls=False),
-            maintain_order=True,
-        ) if literals.height else literals
+        # In the order of the predicates: the largest graph and its largest predicates first.
+        order = predicates.select("graph", "predicate").with_row_index("_i")
+        literals = (
+            _frame("literals", frames)
+            .join(order, on=["graph", "predicate"], how="left", nulls_equal=True)
+            .sort("_i", "datatype")
+            .drop("_i")
+        )
         languages = _frame(
             "languages",
             by_graph(
