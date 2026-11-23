@@ -489,6 +489,30 @@ impl Model {
         Ok(res)
     }
 
+    /// Reads the R2RML mapping that is stored as triples in a graph of the model. The graph
+    /// must hold at least one triples map.
+    #[instrument(skip_all)]
+    pub fn r2rml_mapping_from_graph(
+        &self,
+        graph: &NamedGraph,
+    ) -> Result<r2rml::R2RMLMapping, MaplibError> {
+        // Through N-Triples, which keeps the blank nodes of the mapping apart by their labels.
+        let mut buffer = vec![];
+        self.triplestore
+            .write_triples(&mut buffer, RdfFormat::NTriples, graph, &HashMap::new())
+            .map_err(MaplibError::TriplestoreError)?;
+        let text = String::from_utf8(buffer)
+            .map_err(|e| r2rml::R2RMLError::ParseError(e.to_string()))?;
+        let mapping = r2rml::parse_mapping(&text, None)?;
+        if mapping.triples_maps.is_empty() {
+            return Err(r2rml::R2RMLError::MappingError(format!(
+                "no R2RML triples maps were found in {graph}"
+            ))
+            .into());
+        }
+        Ok(mapping)
+    }
+
     /// Maps the results of the logical table queries of an R2RML mapping to RDF, see
     /// <https://www.w3.org/TR/r2rml/>. `tables` holds the result of each query in
     /// `mapping.queries()`. The term maps are evaluated column-wise, and each predicate,

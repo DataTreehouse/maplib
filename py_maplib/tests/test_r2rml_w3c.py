@@ -20,6 +20,7 @@ duckdb = pytest.importorskip("duckdb")
 
 TESTDATA = Path(__file__).parent / "testdata" / "r2rml"
 BASE = "http://example.com/base/"
+MAPPING_GRAPH = "urn:maplib:test:r2rml-mapping"
 TEST = "http://www.w3.org/2006/03/test-description#"
 RDB2RDF = "http://purl.org/NET/rdb2rdf-test#"
 DCTERMS = "http://purl.org/dc/terms/"
@@ -113,8 +114,9 @@ def _graphs(ds: rdflib.Dataset):
 
 
 # The query results come as polars DataFrames (DuckDB above), or as Arrow record batches from
-# the duckdb connection itself.
-@pytest.mark.parametrize("source", ["polars", "arrow"])
+# the duckdb connection itself. With "graph", the mapping is first read into a graph of the model
+# and mapped with mapping_graph.
+@pytest.mark.parametrize("source", ["polars", "arrow", "graph"])
 @pytest.mark.parametrize("identifier,script,mapping,has_expected,output", _cases())
 def test_r2rml_w3c(identifier, script, mapping, has_expected, output, source, tmp_path):
     if identifier in KNOWN_DEVIATIONS:
@@ -123,11 +125,20 @@ def test_r2rml_w3c(identifier, script, mapping, has_expected, output, source, tm
     database = DuckDB(con) if source == "polars" else con
     m = Model()
     mapping_path = TESTDATA / identifier / mapping
+
+    def run():
+        if source == "graph":
+            m.read(mapping_path, format="turtle", graph=MAPPING_GRAPH, base_iri=BASE)
+            m.map_r2rml(mapping_graph=MAPPING_GRAPH, database=database, base_iri=BASE)
+            m.update(f"DROP GRAPH <{MAPPING_GRAPH}>")
+        else:
+            m.map_r2rml(mapping_path, database=database, base_iri=BASE)
+
     if not has_expected:
         with pytest.raises(Exception):
-            m.map_r2rml(mapping_path, database=database, base_iri=BASE)
+            run()
         return
-    m.map_r2rml(mapping_path, database=database, base_iri=BASE)
+    run()
     out = tmp_path / "out.nq"
     m.write(out, format="nquads")
     actual = rdflib.Dataset()

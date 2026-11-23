@@ -562,21 +562,50 @@ impl PyModel {
         Ok(res.update)
     }
 
-    #[pyo3(signature = (mapping, database=None, tables=None, base_iri=None, graph=None,
-        ignore_data_errors=None))]
+    #[pyo3(signature = (mapping=None, database=None, tables=None, base_iri=None, graph=None,
+        ignore_data_errors=None, mapping_graph=None))]
     #[instrument(skip_all)]
     #[allow(clippy::too_many_arguments)]
     fn map_r2rml(
         &self,
         py: Python<'_>,
-        mapping: &Bound<'_, PyAny>,
+        mapping: Option<&Bound<'_, PyAny>>,
         database: Option<&Bound<'_, PyAny>>,
         tables: Option<HashMap<String, Bound<'_, PyAny>>>,
         base_iri: Option<String>,
         graph: Option<String>,
         ignore_data_errors: Option<bool>,
+        mapping_graph: Option<String>,
     ) -> PyResult<()> {
         let base_iri = base_iri.unwrap_or_else(|| "urn:maplib:r2rml:".to_string());
+        let mapping = match (mapping, mapping_graph) {
+            (Some(mapping), None) => Ok(mapping),
+            (None, Some(mapping_graph)) => {
+                // The mapping is stored as triples in a graph of the model.
+                let mapping_graph = NamedGraph::NamedGraph(parse_named_node(mapping_graph)?);
+                Err(py.detach(|| -> PyResult<r2rml::R2RMLMapping> {
+                    self.read_inner()
+                        .r2rml_mapping_from_graph(&mapping_graph)
+                        .map_err(|x| PyMaplibError::from(x).into())
+                })?)
+            }
+            (Some(_), Some(_)) => {
+                return Err(PyMaplibError::FunctionArgumentError(
+                    "give either mapping or mapping_graph, not both".to_string(),
+                )
+                .into())
+            }
+            (None, None) => {
+                return Err(PyMaplibError::FunctionArgumentError(
+                    "give the R2RML mapping in mapping, or the graph that holds it in mapping_graph"
+                        .to_string(),
+                )
+                .into())
+            }
+        };
+        let parsed = match mapping {
+            Err(parsed) => parsed,
+            Ok(mapping) => {
         // The mapping is a path to a Turtle file, or the Turtle itself.
         let text: String = if let Ok(p) = mapping.extract::<PathBuf>() {
             let looks_like_turtle = mapping
@@ -596,8 +625,10 @@ impl PyModel {
         } else {
             mapping.extract::<String>()?
         };
-        let parsed = r2rml::parse_mapping(&text, Some(&base_iri))
-            .map_err(|e| PyMaplibError::from(maplib::errors::MaplibError::from(e)))?;
+        r2rml::parse_mapping(&text, Some(&base_iri))
+            .map_err(|e| PyMaplibError::from(maplib::errors::MaplibError::from(e)))?
+            }
+        };
         // The result of each logical table query: given in tables (by query or table name), or
         // from the database.
         let mut results: HashMap<String, polars::prelude::DataFrame> = HashMap::new();

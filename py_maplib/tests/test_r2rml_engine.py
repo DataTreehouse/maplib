@@ -143,3 +143,78 @@ def test_blank_nodes_and_graph_columns(source):
     assert m.query(
         "SELECT (COUNT(DISTINCT ?s) AS ?c) WHERE { GRAPH ?g { ?s ?p ?o } }"
     )["c"].to_list() == [3]
+
+
+MAPPING = """<#P> rr:logicalTable [ rr:tableName "person" ] ;
+  rr:subjectMap [ rr:template "http://example.org/person/{id}" ; rr:class ex:Person ] ;
+  rr:predicateObjectMap [ rr:predicate ex:first ; rr:objectMap [ rr:column "first" ] ] ;
+  rr:predicateObjectMap [ rr:predicate ex:dept ; rr:objectMap [ rr:parentTriplesMap <#D> ;
+    rr:joinCondition [ rr:child "dept" ; rr:parent "id" ] ] ] .
+<#D> rr:logicalTable [ rr:sqlQuery "SELECT id, name FROM dept" ] ;
+  rr:subjectMap [ rr:template "dept/{id}" ] ;
+  rr:predicateObjectMap [ rr:predicate ex:name ; rr:objectMap [ rr:column "name" ] ] ."""
+
+MAPPING_GRAPH = "urn:graph:r2rml"
+DATA_GRAPH = "urn:graph:data"
+
+
+@pytest.mark.parametrize("source", _sources(), ids=["duckdb", "polars"])
+def test_mapping_graph_gives_the_same_triples_as_the_mapping(source):
+    """A mapping read into a named graph (blank node term maps, a join and a relative IRI
+    template) maps as the same mapping given as Turtle, and stays in its graph."""
+    base = "http://example.org/base/"
+    if "tables" in source:
+        # Keyed by the table name and by the query.
+        tables = source["tables"]
+        source = {"tables": {"person": tables["person"], "SELECT id, name FROM dept": tables["dept"]}}
+    expected = _map(MAPPING, **source)
+
+    m = Model()
+    m.reads(PREFIXES + MAPPING, format="turtle", graph=MAPPING_GRAPH, base_iri=base)
+    mapping_size = m.query("SELECT (COUNT(*) AS ?c) WHERE { ?s ?p ?o }", graph=MAPPING_GRAPH)["c"].to_list()
+    m.map_r2rml(mapping_graph=MAPPING_GRAPH, base_iri=base, graph=DATA_GRAPH, **source)
+
+    query = "SELECT ?s ?p ?o WHERE { ?s ?p ?o } ORDER BY ?s ?p ?o"
+    actual = m.query(query, graph=DATA_GRAPH)
+    # 4 types, 3 first names, 3 departments of persons and 2 department names.
+    assert actual.height == 12
+    assert actual.rows() == expected.query(query).rows()
+    depts = m.query("PREFIX ex: <http://example.org/> SELECT ?d WHERE { ?p ex:dept ?d }", graph=DATA_GRAPH)
+    assert sorted(depts["d"].to_list()) == [
+        "<http://example.org/base/dept/10>",
+        "<http://example.org/base/dept/10>",
+        "<http://example.org/base/dept/20>",
+    ]
+    # The mapping is untouched, and no data went to the default graph.
+    assert m.query("SELECT (COUNT(*) AS ?c) WHERE { ?s ?p ?o }", graph=MAPPING_GRAPH)["c"].to_list() == mapping_size
+    assert m.query("SELECT (COUNT(*) AS ?c) WHERE { ?s ?p ?o }")["c"].to_list() == [0]
+
+
+def test_mapping_graph_follows_updates_of_the_mapping():
+    """The mapping is read from the graph at each call, so a SPARQL update of it takes effect."""
+    con = _database()
+    m = Model()
+    m.reads(PREFIXES + MAPPING, format="turtle", graph=MAPPING_GRAPH, base_iri="http://example.org/base/")
+    m.update(
+        """PREFIX rr: <http://www.w3.org/ns/r2rml#>
+        PREFIX ex: <http://example.org/>
+        DELETE { GRAPH <urn:graph:r2rml> { ?pom rr:predicate ex:first } }
+        INSERT { GRAPH <urn:graph:r2rml> { ?pom rr:predicate ex:givenName } }
+        WHERE { GRAPH <urn:graph:r2rml> { ?pom rr:predicate ex:first } }"""
+    )
+    m.map_r2rml(mapping_graph=MAPPING_GRAPH, database=con, graph=DATA_GRAPH)
+    names = m.query("PREFIX ex: <http://example.org/> SELECT ?n WHERE { ?s ex:givenName ?n }", graph=DATA_GRAPH)
+    assert sorted(names["n"].to_list()) == ["Ann B", "Cy", "Dee"]
+    assert m.query("PREFIX ex: <http://example.org/> SELECT ?n WHERE { ?s ex:first ?n }", graph=DATA_GRAPH).height == 0
+
+
+def test_mapping_graph_argument_errors():
+    con = _database()
+    m = Model()
+    with pytest.raises(Exception, match="mapping_graph"):
+        m.map_r2rml(database=con)
+    with pytest.raises(Exception, match="not both"):
+        m.map_r2rml(PREFIXES + MAPPING, mapping_graph=MAPPING_GRAPH, database=con)
+    # A graph without triples maps, here one that does not exist.
+    with pytest.raises(Exception, match="no R2RML triples maps"):
+        m.map_r2rml(mapping_graph="urn:graph:empty", database=con)

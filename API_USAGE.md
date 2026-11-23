@@ -531,6 +531,130 @@ Documents are never fetched over the network: `file:` IRIs are read directly, an
 `iri_mappings={"https://example.org/data/": "local_folder"}` maps other IRIs to local folders.
 Cells that don't match their datatype give Python warnings.
 
+### Relational databases: map_r2rml
+
+`map_r2rml(mapping=None, database=None, tables=None, base_iri=None, graph=None,
+ignore_data_errors=False, mapping_graph=None)` maps relational data to RDF with a W3C
+[R2RML](https://www.w3.org/TR/r2rml/) mapping. Each logical table of the mapping (`rr:tableName`
+or `rr:sqlQuery`) is queried once, and the term maps are then evaluated column by column, so no
+rows are handled one by one in Python.
+
+```python
+import duckdb
+
+con = duckdb.connect()
+con.execute("CREATE TABLE site AS SELECT * FROM (VALUES ('N1', 'North')) t(code, label)")
+con.execute("""CREATE TABLE pump AS SELECT * FROM (VALUES
+    (1, 'Feed pump', 'N1', 7.5::DOUBLE), (2, 'Booster', 'N1', NULL)) t(id, name, site, kw)""")
+
+mapping = """
+@prefix rr: <http://www.w3.org/ns/r2rml#> .
+@prefix ex: <http://example.net/ns#> .
+
+<#Pump> rr:logicalTable [ rr:tableName "pump" ] ;
+    rr:subjectMap [ rr:template "http://example.net/pump/{id}" ; rr:class ex:Pump ] ;
+    rr:predicateObjectMap [ rr:predicate ex:name ;
+        rr:objectMap [ rr:column "name" ; rr:language "en" ] ] ;
+    rr:predicateObjectMap [ rr:predicate ex:powerKW ; rr:objectMap [ rr:column "kw" ] ] ;
+    rr:predicateObjectMap [ rr:predicate ex:site ;
+        rr:objectMap [ rr:parentTriplesMap <#Site> ;
+            rr:joinCondition [ rr:child "site" ; rr:parent "code" ] ] ] .
+
+<#Site> rr:logicalTable [ rr:sqlQuery "SELECT code, label FROM site" ] ;
+    rr:subjectMap [ rr:template "http://example.net/site/{code}" ] ;
+    rr:predicateObjectMap [ rr:predicate ex:label ; rr:objectMap [ rr:column "label" ] ] .
+"""
+
+m = Model()
+m.map_r2rml(mapping, database=con)
+print(m.writes(format="turtle"))
+# <http://example.net/pump/1> a <http://example.net/ns#Pump> ;
+#     <http://example.net/ns#name> "Feed pump"@en ;
+#     <http://example.net/ns#powerKW> "7.5"^^xsd:double ;
+#     <http://example.net/ns#site> <http://example.net/site/N1> .
+# <http://example.net/pump/2> a <http://example.net/ns#Pump> ;
+#     <http://example.net/ns#name> "Booster"@en ;
+#     <http://example.net/ns#site> <http://example.net/site/N1> .
+# <http://example.net/site/N1> <http://example.net/ns#label> "North" .
+```
+
+`mapping` is a path to a Turtle file or the Turtle itself. A NULL gives no triple, as for the
+power of the second pump.
+
+**Where the rows come from.** maplib never opens the database connection itself: it calls your
+Python object with the SQL of each logical table (`SELECT * FROM <rr:tableName>`, or the
+`rr:sqlQuery` as written) and takes the result.
+
+- `database` is any object whose `query(sql)` returns a Polars `DataFrame`, such as the databases
+  in [`maplib.virtualization`](#maplibvirtualization), or a DuckDB connection, whose results are
+  taken as Arrow record batches.
+- `tables` holds results you fetched yourself as Polars DataFrames, keyed by the `rr:tableName` or
+  by the SQL query. Tables that are not in `tables` are queried from `database`.
+
+```python
+import polars as pl
+
+class Postgres:                       # an adapter for any other driver
+    def __init__(self, uri):
+        self.uri = uri
+
+    def query(self, sql: str) -> pl.DataFrame:
+        return pl.read_database_uri(sql, self.uri)
+
+m.map_r2rml("mapping.ttl", database=Postgres("postgresql://user@host/plant"))
+m.map_r2rml(mapping, tables={"pump": pump_df, "SELECT code, label FROM site": site_df})
+```
+
+The SQL is sent as it is in the mapping, without translation between dialects, so write table
+names and queries for the database you use.
+
+**The mapping in a named graph.** With `mapping_graph`, the mapping is read from the triples of a
+graph of the model instead. It can then be queried, changed with `update`, validated with SHACL,
+and it is kept by `serialize`.
+
+```python
+m = Model()
+m.reads(mapping, format="turtle", graph="urn:graph:r2rml", base_iri="http://example.net/maps")
+m.map_r2rml(mapping_graph="urn:graph:r2rml", database=con, graph="urn:graph:plant")
+
+m.query("""PREFIX rr: <http://www.w3.org/ns/r2rml#>
+SELECT ?map ?table WHERE { ?map rr:logicalTable/rr:tableName ?table }""",
+        graph="urn:graph:r2rml")
+# <http://example.net/maps#Pump>, "pump"
+```
+
+A mapping with relative IRIs such as `<#Pump>` needs a `base_iri` when it is read into the graph.
+
+`graph` is the graph of the triples without a graph map (and of `rr:defaultGraph`); triples with
+`rr:graph` or `rr:graphMap` go to the graphs these give. Keep it apart from the mapping graph
+unless you want the mapping and the data together.
+
+**IRIs.** Values in an IRI template are percent encoded (`A b` becomes `A%20b`). Relative IRIs
+that the mapping generates are resolved against `base_iri`, which defaults to `urn:maplib:r2rml:`.
+With `mapping`, `base_iri` also resolves the relative IRIs of the mapping document, such as
+`<#Pump>`; a mapping in a graph was resolved when it was read.
+
+**Data errors.** A value that gives an invalid IRI, or that is not valid for the `rr:datatype` of
+its term map, raises an exception. With `ignore_data_errors=True` the term is left out and a
+Python warning describes it.
+
+**What is supported.** `rr:tableName` and `rr:sqlQuery`; constant, column and template term maps
+and the shortcuts `rr:subject`, `rr:predicate`, `rr:object` and `rr:graph`; `rr:termType`,
+`rr:language` and `rr:datatype`; literals typed after the column type when no datatype is given;
+`rr:class`; graph maps; and referencing object maps with and without join conditions. Column
+names may be delimited (`"Name"`, matched exactly) or regular (`Name`, matched exactly or else
+without regard to case). The W3C R2RML test cases are included in the tests, run with DuckDB.
+
+Things to know:
+
+- Each logical table is read into memory in full, and joins between triples maps are done by
+  maplib, not by the database. Put the join in an `rr:sqlQuery` to have the database do it.
+- `rr:sqlVersion` and `rr:inverseExpression` are ignored.
+- This materializes the triples. To leave time series in the database and query them through
+  SPARQL, see [Virtualization](#13-virtualization-ee).
+- `m.map_fabric(...)` **EE** generates an R2RML mapping from a Microsoft Fabric ontology, runs it
+  with `map_r2rml` and returns it.
+
 ### Templates from an ontology: generate_templates
 
 `maplib.generate_templates(m, graph=None, prefixes=None)` makes one template per class of an

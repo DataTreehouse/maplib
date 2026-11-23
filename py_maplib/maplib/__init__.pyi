@@ -1279,12 +1279,13 @@ class Model:
 
     def map_r2rml(
             self,
-            mapping: Union[str, Path],
+            mapping: Union[str, Path] = None,
             database: Any = None,
             tables: Dict[str, DataFrame] = None,
             base_iri: str = None,
             graph: str = None,
             ignore_data_errors: bool = False,
+            mapping_graph: str = None,
     ) -> None:
         """
         Map relational data to RDF with an R2RML mapping (https://www.w3.org/TR/r2rml/).
@@ -1301,13 +1302,20 @@ class Model:
         Column names in rr:column, templates and join conditions may be delimited ("Name": exact
         match) or regular (Name: exact, or else case insensitive match).
 
+        The mapping is given in mapping, or it is read from the triples of the graph mapping_graph of
+        this model, e.g. after m.read("mapping.ttl", graph="urn:graph:r2rml"). There it can be queried,
+        updated and validated like other triples, and it is serialized with the model.
+
         Usage:
 
         >>> import duckdb
         >>> m.map_r2rml("mapping.ttl", database=duckdb.connect("plant.duckdb"))
         >>> m.map_r2rml(mapping_turtle, tables={"pumps": pumps_df}, base_iri="http://example.com/")
+        >>> m.read("mapping.ttl", graph="urn:graph:r2rml")
+        >>> m.map_r2rml(mapping_graph="urn:graph:r2rml", database=duckdb.connect("plant.duckdb"))
 
-        :param mapping: A path to an R2RML mapping in Turtle, or the Turtle itself.
+        :param mapping: A path to an R2RML mapping in Turtle, or the Turtle itself. Not together with
+            mapping_graph.
         :param database: An object whose query(sql) method returns a polars DataFrame (e.g. a database in
             maplib.virtualization), or something with .pl(), such as a duckdb connection.
         :param tables: Results of logical tables, keyed by their SQL query or by their rr:tableName.
@@ -1316,6 +1324,9 @@ class Model:
         :param graph: The IRI of the graph of triples without a graph map (and of rr:defaultGraph).
         :param ignore_data_errors: Drop terms that are R2RML data errors (invalid IRIs, values not valid for
             the rr:datatype) with a warning, instead of raising an exception.
+        :param mapping_graph: The IRI of the graph of this model that holds the R2RML mapping, instead of
+            mapping. Relative IRIs in the mapping were resolved when it was read into the graph, so base_iri
+            then only applies to the relative IRIs generated from the data.
         :return: None
         """
 
