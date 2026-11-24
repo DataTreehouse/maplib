@@ -25,3 +25,6 @@ uv.lock
 
 # Results of py_maplib/tests/bench/rdf12_benchmark.py
 /py_maplib/tests/bench/rdf12_results/
+
+# Results of py_maplib/tests/bench/run_maplib_benches.py
+/py_maplib/tests/bench/benches_results/
