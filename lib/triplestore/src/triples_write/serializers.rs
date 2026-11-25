@@ -177,6 +177,46 @@ pub(super) fn write_escaped(s: &str, buf: &mut Vec<u8>) {
     buf.extend_from_slice(&bytes[start..]);
 }
 
+/// Writes the strings as they are, for triple terms, which are decoded to their N-Triples form
+/// `<<( s p o )>>` (with their literals escaped) before they are written.
+pub(super) fn raw_string_serializer<'a, Iter: Send + 'a>(
+    mut f: impl FnMut(&mut Iter) -> Option<&str> + Send + 'a,
+    mut update: impl FnMut(&'a dyn Array) -> Iter + Send + 'a,
+    array: &'a dyn Array,
+) -> Box<dyn Serializer<'a> + 'a + Send> {
+    struct RawSerializer<F, Iter, Update> {
+        serialize: F,
+        update: Update,
+        iter: Iter,
+    }
+
+    impl<'a, F, Iter, Update> Serializer<'a> for RawSerializer<F, Iter, Update>
+    where
+        F: FnMut(&mut Iter, &mut Vec<u8>),
+        Update: FnMut(&'a dyn Array) -> Iter,
+    {
+        fn serialize(&mut self, buf: &mut Vec<u8>) {
+            (self.serialize)(&mut self.iter, buf);
+        }
+
+        fn update_array(&mut self, array: &'a dyn Array) {
+            self.iter = (self.update)(array);
+        }
+    }
+
+    let iter = update(array);
+    let serialize = move |iter: &mut Iter, buf: &mut Vec<u8>| {
+        if let Some(s) = f(iter) {
+            buf.extend_from_slice(s.as_bytes());
+        }
+    };
+    Box::new(RawSerializer {
+        serialize,
+        update,
+        iter,
+    })
+}
+
 pub(super) fn string_serializer<'a, Iter: Send + 'a>(
     mut f: impl FnMut(&mut Iter) -> Option<&str> + Send + 'a,
     mut update: impl FnMut(&'a dyn Array) -> Iter + Send + 'a,
@@ -400,6 +440,16 @@ pub(super) fn serializer_for<'a>(
         }
         // In JSON, IRIs, blank node labels and language tags are plain (escaped) strings.
         (DataType::String, _) if style == Style::Json => string_serializer(
+            |iter| Iterator::next(iter).expect(TOO_MANY_MSG),
+            |arr| {
+                arr.as_any()
+                    .downcast_ref::<Utf8ViewArray>()
+                    .expect(ARRAY_MISMATCH_MSG)
+                    .iter()
+            },
+            array,
+        ),
+        (DataType::String, BaseRDFNodeType::TripleTerm) => raw_string_serializer(
             |iter| Iterator::next(iter).expect(TOO_MANY_MSG),
             |arr| {
                 arr.as_any()

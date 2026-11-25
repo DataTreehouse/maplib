@@ -6,105 +6,215 @@ rdf-n-triples/c14n/dirlangtagged_string  # Literals with a base direction (rdf:d
 rdf-n-triples/c14n/literal_ascii_boundaries  # The N-Triples writer does not escape literals as in RDF 1.2 canonical N-Triples
 rdf-n-triples/c14n/literal_needing_uchar_escaping-01  # The N-Triples writer does not escape literals as in RDF 1.2 canonical N-Triples
 rdf-n-triples/c14n/literal_needing_uchar_escaping-02  # The N-Triples writer does not escape literals as in RDF 1.2 canonical N-Triples
-rdf-n-triples/c14n/triple-term-01  # Triple terms, reified triples and annotations are not supported yet
 rdf-n-triples/c14n/triple-term-02  # Triple terms, reified triples and annotations are not supported yet
-rdf-n-triples/c14n/triple-term-03  # Triple terms, reified triples and annotations are not supported yet
-rdf-n-triples/c14n/triple-term-04  # Triple terms, reified triples and annotations are not supported yet
 rdf-n-triples/syntax/ntriples-langdir-1  # Literals with a base direction (rdf:dirLangString) are not supported
 rdf-n-triples/syntax/ntriples-langdir-2  # Literals with a base direction (rdf:dirLangString) are not supported
 rdf-n-triples/syntax/ntriples-version-1  # The N-Triples / N-Quads parser (oxttl, as Oxigraph) does not read the VERSION directive
 rdf-n-quads/c14n/dirlangtagged_string  # Literals with a base direction (rdf:dirLangString) are not supported
-rdf-n-quads/c14n/triple-term-01  # Triple terms, reified triples and annotations are not supported yet
 rdf-n-quads/c14n/triple-term-02  # Triple terms, reified triples and annotations are not supported yet
-rdf-n-quads/c14n/triple-term-03  # Triple terms, reified triples and annotations are not supported yet
-rdf-n-quads/c14n/triple-term-04  # Triple terms, reified triples and annotations are not supported yet
 rdf-n-quads/syntax/nquads-langdir-1  # Literals with a base direction (rdf:dirLangString) are not supported
 rdf-n-quads/syntax/nquads-langdir-2  # Literals with a base direction (rdf:dirLangString) are not supported
-rdf-turtle/eval/turtle12-annotation-01  # Triple terms, reified triples and annotations are not supported yet
-rdf-turtle/eval/turtle12-annotation-02  # Triple terms, reified triples and annotations are not supported yet
-rdf-turtle/eval/turtle12-annotation-03  # Triple terms, reified triples and annotations are not supported yet
-rdf-turtle/eval/turtle12-annotation-04  # Triple terms, reified triples and annotations are not supported yet
-rdf-turtle/eval/turtle12-annotation-05  # Triple terms, reified triples and annotations are not supported yet
-rdf-turtle/eval/turtle12-annotation-06  # Triple terms, reified triples and annotations are not supported yet
-rdf-turtle/eval/turtle12-annotation-07  # Triple terms, reified triples and annotations are not supported yet
-rdf-turtle/eval/turtle12-annotation-08  # Triple terms, reified triples and annotations are not supported yet
-rdf-turtle/eval/turtle12-annotation-09  # Triple terms, reified triples and annotations are not supported yet
-rdf-turtle/eval/turtle12-annotation-10  # Triple terms, reified triples and annotations are not supported yet
-rdf-turtle/eval/turtle12-annotation-11  # Triple terms, reified triples and annotations are not supported yet
-rdf-turtle/eval/turtle12-annotation-12  # Triple terms, reified triples and annotations are not supported yet
-rdf-turtle/eval/turtle12-annotation-13  # Triple terms, reified triples and annotations are not supported yet
-rdf-turtle/eval/turtle12-bnode-01  # Triple terms, reified triples and annotations are not supported yet
-rdf-turtle/eval/turtle12-bnode-02  # Triple terms, reified triples and annotations are not supported yet
-rdf-turtle/eval/turtle12-reified-triples-annotation-01  # Triple terms, reified triples and annotations are not supported yet
-rdf-turtle/eval/turtle12-reified-triples-annotation-02  # Triple terms, reified triples and annotations are not supported yet
-rdf-turtle/eval/turtle12-reified-triples-annotation-03  # Triple terms, reified triples and annotations are not supported yet
-rdf-turtle/eval/turtle12-rt-01  # Triple terms, reified triples and annotations are not supported yet
-rdf-turtle/eval/turtle12-rt-02  # Triple terms, reified triples and annotations are not supported yet
-rdf-turtle/eval/turtle12-rt-03  # Triple terms, reified triples and annotations are not supported yet
-rdf-turtle/eval/turtle12-rt-04  # Triple terms, reified triples and annotations are not supported yet
-rdf-turtle/eval/turtle12-rt-05  # Triple terms, reified triples and annotations are not supported yet
-rdf-turtle/eval/turtle12-rt-06  # Triple terms, reified triples and annotations are not supported yet
-rdf-turtle/eval/turtle12-rt-07  # Triple terms, reified triples and annotations are not supported yet
-rdf-turtle/eval/turtle12-rt-08  # Triple terms, reified triples and annotations are not supported yet
 rdf-turtle/eval/turtle12-rt-09  # Triple terms, reified triples and annotations are not supported yet
-rdf-turtle/eval/turtle12-tt-01  # Triple terms, reified triples and annotations are not supported yet
-rdf-turtle/eval/turtle12-tt-02  # Triple terms, reified triples and annotations are not supported yet
-rdf-turtle/eval/turtle12-tt-03  # Triple terms, reified triples and annotations are not supported yet
-rdf-turtle/eval/turtle12-tt-04  # Triple terms, reified triples and annotations are not supported yet
 rdf-turtle/eval/turtle12-tt-05  # Triple terms, reified triples and annotations are not supported yet
 rdf-turtle/syntax/nt-ttl12-langdir-1  # Literals with a base direction (rdf:dirLangString) are not supported
 rdf-turtle/syntax/nt-ttl12-langdir-2  # Literals with a base direction (rdf:dirLangString) are not supported
-rdf-trig/eval/trig12-annotation-01  # Triple terms, reified triples and annotations are not supported yet
-rdf-trig/eval/trig12-annotation-02  # Triple terms, reified triples and annotations are not supported yet
-rdf-trig/eval/trig12-annotation-03  # Triple terms, reified triples and annotations are not supported yet
-rdf-trig/eval/trig12-annotation-04  # Triple terms, reified triples and annotations are not supported yet
-rdf-trig/eval/trig12-annotation-05  # Triple terms, reified triples and annotations are not supported yet
-rdf-trig/eval/trig12-annotation-06  # Triple terms, reified triples and annotations are not supported yet
-rdf-trig/eval/trig12-annotation-07  # Triple terms, reified triples and annotations are not supported yet
-rdf-trig/eval/trig12-annotation-08  # Triple terms, reified triples and annotations are not supported yet
-rdf-trig/eval/trig12-annotation-09  # Triple terms, reified triples and annotations are not supported yet
-rdf-trig/eval/trig12-annotation-10  # Triple terms, reified triples and annotations are not supported yet
-rdf-trig/eval/trig12-annotation-11  # Triple terms, reified triples and annotations are not supported yet
-rdf-trig/eval/trig12-annotation-12  # Triple terms, reified triples and annotations are not supported yet
-rdf-trig/eval/trig12-annotation-13  # Triple terms, reified triples and annotations are not supported yet
-rdf-trig/eval/trig12-bnode-1  # Triple terms, reified triples and annotations are not supported yet
-rdf-trig/eval/trig12-bnode-2  # Triple terms, reified triples and annotations are not supported yet
-rdf-trig/eval/trig12-reified-triples-annotation-01  # Triple terms, reified triples and annotations are not supported yet
-rdf-trig/eval/trig12-reified-triples-annotation-02  # Triple terms, reified triples and annotations are not supported yet
-rdf-trig/eval/trig12-reified-triples-annotation-03  # Triple terms, reified triples and annotations are not supported yet
-rdf-trig/eval/trig12-rt-01  # Triple terms, reified triples and annotations are not supported yet
-rdf-trig/eval/trig12-rt-02  # Triple terms, reified triples and annotations are not supported yet
-rdf-trig/eval/trig12-rt-03  # Triple terms, reified triples and annotations are not supported yet
-rdf-trig/eval/trig12-rt-04  # Triple terms, reified triples and annotations are not supported yet
-rdf-trig/eval/trig12-rt-05  # Triple terms, reified triples and annotations are not supported yet
-rdf-trig/eval/trig12-rt-06  # Triple terms, reified triples and annotations are not supported yet
-rdf-trig/eval/trig12-rt-07  # Triple terms, reified triples and annotations are not supported yet
-rdf-trig/eval/trig12-rt-08  # Triple terms, reified triples and annotations are not supported yet
 rdf-trig/syntax/trig12-base-1  # Literals with a base direction (rdf:dirLangString) are not supported
 rdf-trig/syntax/trig12-base-2  # Literals with a base direction (rdf:dirLangString) are not supported
-rdf-xml/eval/rdf12-xml-an-01  # RDF/XML annotations (rdf:annotation, rdf:annotationNodeID) are not supported
-rdf-xml/eval/rdf12-xml-an-02  # RDF/XML annotations (rdf:annotation, rdf:annotationNodeID) are not supported
-rdf-xml/eval/rdf12-xml-an-03  # RDF/XML annotations (rdf:annotation, rdf:annotationNodeID) are not supported
-rdf-xml/eval/rdf12-xml-an-04  # RDF/XML annotations (rdf:annotation, rdf:annotationNodeID) are not supported
-rdf-xml/eval/rdf12-xml-an-05  # RDF/XML annotations (rdf:annotation, rdf:annotationNodeID) are not supported
-rdf-xml/eval/rdf12-xml-an-06  # RDF/XML annotations (rdf:annotation, rdf:annotationNodeID) are not supported
-rdf-xml/eval/rdf12-xml-an-07  # RDF/XML annotations (rdf:annotation, rdf:annotationNodeID) are not supported
-rdf-xml/eval/rdf12-xml-an-08  # RDF/XML annotations (rdf:annotation, rdf:annotationNodeID) are not supported
-rdf-xml/eval/rdf12-xml-an-09  # RDF/XML annotations (rdf:annotation, rdf:annotationNodeID) are not supported
-rdf-xml/eval/rdf12-xml-an-10  # RDF/XML annotations (rdf:annotation, rdf:annotationNodeID) are not supported
-rdf-xml/eval/rdf12-xml-an-11  # RDF/XML annotations (rdf:annotation, rdf:annotationNodeID) are not supported
-rdf-xml/eval/rdf12-xml-an-12  # RDF/XML annotations (rdf:annotation, rdf:annotationNodeID) are not supported
 rdf-xml/eval/rdf12-xml-an-13  # RDF/XML annotations (rdf:annotation, rdf:annotationNodeID) are not supported
 rdf-xml/eval/rdf12-xml-an-14  # RDF/XML annotations (rdf:annotation, rdf:annotationNodeID) are not supported
-rdf-xml/eval/rdf12-xml-an-15  # RDF/XML annotations (rdf:annotation, rdf:annotationNodeID) are not supported
-rdf-xml/eval/rdf12-xml-an-16  # RDF/XML annotations (rdf:annotation, rdf:annotationNodeID) are not supported
-rdf-xml/eval/rdf12-xml-an-reif-01  # RDF/XML annotations (rdf:annotation, rdf:annotationNodeID) are not supported
 rdf-xml/eval/rdf12-xml-dir-01  # Literals with a base direction (rdf:dirLangString) are not supported
 rdf-xml/eval/rdf12-xml-dir-03  # Literals with a base direction (rdf:dirLangString) are not supported
 rdf-xml/eval/rdf12-xml-dir-04  # Literals with a base direction (rdf:dirLangString) are not supported
 rdf-xml/eval/rdf12-xml-dir-05  # Literals with a base direction (rdf:dirLangString) are not supported
-rdf-xml/eval/rdf12-xml-tt-02  # RDF/XML triple terms (rdf:parseType="Triple") are not supported
-rdf-xml/eval/rdf12-xml-tt-03  # RDF/XML triple terms (rdf:parseType="Triple") are not supported
-rdf-xml/eval/rdf12-xml-tt-04  # RDF/XML triple terms (rdf:parseType="Triple") are not supported
-rdf-xml/eval/rdf12-xml-tt-05  # RDF/XML triple terms (rdf:parseType="Triple") are not supported
-rdf-xml/eval/rdf12-xml-tt-06  # RDF/XML triple terms (rdf:parseType="Triple") are not supported
+
+# Round trips through formats that cannot hold triple terms.
+rdf-trig/eval/trig12-annotation-01@json-ld  # JSON-LD has no triple terms, so the dataset cannot be written as JSON-LD
+rdf-trig/eval/trig12-annotation-02@json-ld  # JSON-LD has no triple terms, so the dataset cannot be written as JSON-LD
+rdf-trig/eval/trig12-annotation-03@json-ld  # JSON-LD has no triple terms, so the dataset cannot be written as JSON-LD
+rdf-trig/eval/trig12-annotation-04@json-ld  # JSON-LD has no triple terms, so the dataset cannot be written as JSON-LD
+rdf-trig/eval/trig12-annotation-05@json-ld  # JSON-LD has no triple terms, so the dataset cannot be written as JSON-LD
+rdf-trig/eval/trig12-annotation-06@json-ld  # JSON-LD has no triple terms, so the dataset cannot be written as JSON-LD
+rdf-trig/eval/trig12-annotation-07@json-ld  # JSON-LD has no triple terms, so the dataset cannot be written as JSON-LD
+rdf-trig/eval/trig12-annotation-08@json-ld  # JSON-LD has no triple terms, so the dataset cannot be written as JSON-LD
+rdf-trig/eval/trig12-annotation-09@json-ld  # JSON-LD has no triple terms, so the dataset cannot be written as JSON-LD
+rdf-trig/eval/trig12-annotation-10@json-ld  # JSON-LD has no triple terms, so the dataset cannot be written as JSON-LD
+rdf-trig/eval/trig12-annotation-11@json-ld  # JSON-LD has no triple terms, so the dataset cannot be written as JSON-LD
+rdf-trig/eval/trig12-annotation-12@hdt  # HDT has no triple terms, so the dataset cannot be written as HDT
+rdf-trig/eval/trig12-annotation-12@json-ld  # JSON-LD has no triple terms, so the dataset cannot be written as JSON-LD
+rdf-trig/eval/trig12-annotation-12@rdf/xml  # Writing triple terms as RDF/XML (rdf:parseType="Triple") is not supported
+rdf-trig/eval/trig12-annotation-13@hdt  # HDT has no triple terms, so the dataset cannot be written as HDT
+rdf-trig/eval/trig12-annotation-13@json-ld  # JSON-LD has no triple terms, so the dataset cannot be written as JSON-LD
+rdf-trig/eval/trig12-annotation-13@rdf/xml  # Writing triple terms as RDF/XML (rdf:parseType="Triple") is not supported
+rdf-trig/eval/trig12-bnode-1@json-ld  # JSON-LD has no triple terms, so the dataset cannot be written as JSON-LD
+rdf-trig/eval/trig12-bnode-2@json-ld  # JSON-LD has no triple terms, so the dataset cannot be written as JSON-LD
+rdf-trig/eval/trig12-reified-triples-annotation-01@json-ld  # JSON-LD has no triple terms, so the dataset cannot be written as JSON-LD
+rdf-trig/eval/trig12-reified-triples-annotation-02@json-ld  # JSON-LD has no triple terms, so the dataset cannot be written as JSON-LD
+rdf-trig/eval/trig12-reified-triples-annotation-03@json-ld  # JSON-LD has no triple terms, so the dataset cannot be written as JSON-LD
+rdf-trig/eval/trig12-rt-01@json-ld  # JSON-LD has no triple terms, so the dataset cannot be written as JSON-LD
+rdf-trig/eval/trig12-rt-02@json-ld  # JSON-LD has no triple terms, so the dataset cannot be written as JSON-LD
+rdf-trig/eval/trig12-rt-03@json-ld  # JSON-LD has no triple terms, so the dataset cannot be written as JSON-LD
+rdf-trig/eval/trig12-rt-04@hdt  # HDT has no triple terms, so the dataset cannot be written as HDT
+rdf-trig/eval/trig12-rt-04@json-ld  # JSON-LD has no triple terms, so the dataset cannot be written as JSON-LD
+rdf-trig/eval/trig12-rt-04@rdf/xml  # Writing triple terms as RDF/XML (rdf:parseType="Triple") is not supported
+rdf-trig/eval/trig12-rt-05@hdt  # HDT has no triple terms, so the dataset cannot be written as HDT
+rdf-trig/eval/trig12-rt-05@json-ld  # JSON-LD has no triple terms, so the dataset cannot be written as JSON-LD
+rdf-trig/eval/trig12-rt-05@rdf/xml  # Writing triple terms as RDF/XML (rdf:parseType="Triple") is not supported
+rdf-trig/eval/trig12-rt-06@hdt  # HDT has no triple terms, so the dataset cannot be written as HDT
+rdf-trig/eval/trig12-rt-06@json-ld  # JSON-LD has no triple terms, so the dataset cannot be written as JSON-LD
+rdf-trig/eval/trig12-rt-06@rdf/xml  # Writing triple terms as RDF/XML (rdf:parseType="Triple") is not supported
+rdf-trig/eval/trig12-rt-07@hdt  # HDT has no triple terms, so the dataset cannot be written as HDT
+rdf-trig/eval/trig12-rt-07@json-ld  # JSON-LD has no triple terms, so the dataset cannot be written as JSON-LD
+rdf-trig/eval/trig12-rt-07@rdf/xml  # Writing triple terms as RDF/XML (rdf:parseType="Triple") is not supported
+rdf-trig/eval/trig12-rt-08@hdt  # HDT has no triple terms, so the dataset cannot be written as HDT
+rdf-trig/eval/trig12-rt-08@json-ld  # JSON-LD has no triple terms, so the dataset cannot be written as JSON-LD
+rdf-trig/eval/trig12-rt-08@rdf/xml  # Writing triple terms as RDF/XML (rdf:parseType="Triple") is not supported
+rdf-turtle/eval/turtle12-annotation-01@hdt  # HDT has no triple terms, so the dataset cannot be written as HDT
+rdf-turtle/eval/turtle12-annotation-01@json-ld  # JSON-LD has no triple terms, so the dataset cannot be written as JSON-LD
+rdf-turtle/eval/turtle12-annotation-01@rdf/xml  # Writing triple terms as RDF/XML (rdf:parseType="Triple") is not supported
+rdf-turtle/eval/turtle12-annotation-02@hdt  # HDT has no triple terms, so the dataset cannot be written as HDT
+rdf-turtle/eval/turtle12-annotation-02@json-ld  # JSON-LD has no triple terms, so the dataset cannot be written as JSON-LD
+rdf-turtle/eval/turtle12-annotation-02@rdf/xml  # Writing triple terms as RDF/XML (rdf:parseType="Triple") is not supported
+rdf-turtle/eval/turtle12-annotation-03@hdt  # HDT has no triple terms, so the dataset cannot be written as HDT
+rdf-turtle/eval/turtle12-annotation-03@json-ld  # JSON-LD has no triple terms, so the dataset cannot be written as JSON-LD
+rdf-turtle/eval/turtle12-annotation-03@rdf/xml  # Writing triple terms as RDF/XML (rdf:parseType="Triple") is not supported
+rdf-turtle/eval/turtle12-annotation-04@hdt  # HDT has no triple terms, so the dataset cannot be written as HDT
+rdf-turtle/eval/turtle12-annotation-04@json-ld  # JSON-LD has no triple terms, so the dataset cannot be written as JSON-LD
+rdf-turtle/eval/turtle12-annotation-04@rdf/xml  # Writing triple terms as RDF/XML (rdf:parseType="Triple") is not supported
+rdf-turtle/eval/turtle12-annotation-05@hdt  # HDT has no triple terms, so the dataset cannot be written as HDT
+rdf-turtle/eval/turtle12-annotation-05@json-ld  # JSON-LD has no triple terms, so the dataset cannot be written as JSON-LD
+rdf-turtle/eval/turtle12-annotation-05@rdf/xml  # Writing triple terms as RDF/XML (rdf:parseType="Triple") is not supported
+rdf-turtle/eval/turtle12-annotation-06@hdt  # HDT has no triple terms, so the dataset cannot be written as HDT
+rdf-turtle/eval/turtle12-annotation-06@json-ld  # JSON-LD has no triple terms, so the dataset cannot be written as JSON-LD
+rdf-turtle/eval/turtle12-annotation-06@rdf/xml  # Writing triple terms as RDF/XML (rdf:parseType="Triple") is not supported
+rdf-turtle/eval/turtle12-annotation-07@hdt  # HDT has no triple terms, so the dataset cannot be written as HDT
+rdf-turtle/eval/turtle12-annotation-07@json-ld  # JSON-LD has no triple terms, so the dataset cannot be written as JSON-LD
+rdf-turtle/eval/turtle12-annotation-07@rdf/xml  # Writing triple terms as RDF/XML (rdf:parseType="Triple") is not supported
+rdf-turtle/eval/turtle12-annotation-08@hdt  # HDT has no triple terms, so the dataset cannot be written as HDT
+rdf-turtle/eval/turtle12-annotation-08@json-ld  # JSON-LD has no triple terms, so the dataset cannot be written as JSON-LD
+rdf-turtle/eval/turtle12-annotation-08@rdf/xml  # Writing triple terms as RDF/XML (rdf:parseType="Triple") is not supported
+rdf-turtle/eval/turtle12-annotation-09@hdt  # HDT has no triple terms, so the dataset cannot be written as HDT
+rdf-turtle/eval/turtle12-annotation-09@json-ld  # JSON-LD has no triple terms, so the dataset cannot be written as JSON-LD
+rdf-turtle/eval/turtle12-annotation-09@rdf/xml  # Writing triple terms as RDF/XML (rdf:parseType="Triple") is not supported
+rdf-turtle/eval/turtle12-annotation-10@hdt  # HDT has no triple terms, so the dataset cannot be written as HDT
+rdf-turtle/eval/turtle12-annotation-10@json-ld  # JSON-LD has no triple terms, so the dataset cannot be written as JSON-LD
+rdf-turtle/eval/turtle12-annotation-10@rdf/xml  # Writing triple terms as RDF/XML (rdf:parseType="Triple") is not supported
+rdf-turtle/eval/turtle12-annotation-11@hdt  # HDT has no triple terms, so the dataset cannot be written as HDT
+rdf-turtle/eval/turtle12-annotation-11@json-ld  # JSON-LD has no triple terms, so the dataset cannot be written as JSON-LD
+rdf-turtle/eval/turtle12-annotation-11@rdf/xml  # Writing triple terms as RDF/XML (rdf:parseType="Triple") is not supported
+rdf-turtle/eval/turtle12-annotation-12@hdt  # HDT has no triple terms, so the dataset cannot be written as HDT
+rdf-turtle/eval/turtle12-annotation-12@json-ld  # JSON-LD has no triple terms, so the dataset cannot be written as JSON-LD
+rdf-turtle/eval/turtle12-annotation-12@rdf/xml  # Writing triple terms as RDF/XML (rdf:parseType="Triple") is not supported
+rdf-turtle/eval/turtle12-annotation-13@hdt  # HDT has no triple terms, so the dataset cannot be written as HDT
+rdf-turtle/eval/turtle12-annotation-13@json-ld  # JSON-LD has no triple terms, so the dataset cannot be written as JSON-LD
+rdf-turtle/eval/turtle12-annotation-13@rdf/xml  # Writing triple terms as RDF/XML (rdf:parseType="Triple") is not supported
+rdf-turtle/eval/turtle12-bnode-01@hdt  # HDT has no triple terms, so the dataset cannot be written as HDT
+rdf-turtle/eval/turtle12-bnode-01@json-ld  # JSON-LD has no triple terms, so the dataset cannot be written as JSON-LD
+rdf-turtle/eval/turtle12-bnode-01@rdf/xml  # Writing triple terms as RDF/XML (rdf:parseType="Triple") is not supported
+rdf-turtle/eval/turtle12-bnode-02@hdt  # HDT has no triple terms, so the dataset cannot be written as HDT
+rdf-turtle/eval/turtle12-bnode-02@json-ld  # JSON-LD has no triple terms, so the dataset cannot be written as JSON-LD
+rdf-turtle/eval/turtle12-bnode-02@rdf/xml  # Writing triple terms as RDF/XML (rdf:parseType="Triple") is not supported
+rdf-turtle/eval/turtle12-reified-triples-annotation-01@hdt  # HDT has no triple terms, so the dataset cannot be written as HDT
+rdf-turtle/eval/turtle12-reified-triples-annotation-01@json-ld  # JSON-LD has no triple terms, so the dataset cannot be written as JSON-LD
+rdf-turtle/eval/turtle12-reified-triples-annotation-01@rdf/xml  # Writing triple terms as RDF/XML (rdf:parseType="Triple") is not supported
+rdf-turtle/eval/turtle12-reified-triples-annotation-02@hdt  # HDT has no triple terms, so the dataset cannot be written as HDT
+rdf-turtle/eval/turtle12-reified-triples-annotation-02@json-ld  # JSON-LD has no triple terms, so the dataset cannot be written as JSON-LD
+rdf-turtle/eval/turtle12-reified-triples-annotation-02@rdf/xml  # Writing triple terms as RDF/XML (rdf:parseType="Triple") is not supported
+rdf-turtle/eval/turtle12-reified-triples-annotation-03@hdt  # HDT has no triple terms, so the dataset cannot be written as HDT
+rdf-turtle/eval/turtle12-reified-triples-annotation-03@json-ld  # JSON-LD has no triple terms, so the dataset cannot be written as JSON-LD
+rdf-turtle/eval/turtle12-reified-triples-annotation-03@rdf/xml  # Writing triple terms as RDF/XML (rdf:parseType="Triple") is not supported
+rdf-turtle/eval/turtle12-rt-01@hdt  # HDT has no triple terms, so the dataset cannot be written as HDT
+rdf-turtle/eval/turtle12-rt-01@json-ld  # JSON-LD has no triple terms, so the dataset cannot be written as JSON-LD
+rdf-turtle/eval/turtle12-rt-01@rdf/xml  # Writing triple terms as RDF/XML (rdf:parseType="Triple") is not supported
+rdf-turtle/eval/turtle12-rt-02@hdt  # HDT has no triple terms, so the dataset cannot be written as HDT
+rdf-turtle/eval/turtle12-rt-02@json-ld  # JSON-LD has no triple terms, so the dataset cannot be written as JSON-LD
+rdf-turtle/eval/turtle12-rt-02@rdf/xml  # Writing triple terms as RDF/XML (rdf:parseType="Triple") is not supported
+rdf-turtle/eval/turtle12-rt-03@hdt  # HDT has no triple terms, so the dataset cannot be written as HDT
+rdf-turtle/eval/turtle12-rt-03@json-ld  # JSON-LD has no triple terms, so the dataset cannot be written as JSON-LD
+rdf-turtle/eval/turtle12-rt-03@rdf/xml  # Writing triple terms as RDF/XML (rdf:parseType="Triple") is not supported
+rdf-turtle/eval/turtle12-rt-04@hdt  # HDT has no triple terms, so the dataset cannot be written as HDT
+rdf-turtle/eval/turtle12-rt-04@json-ld  # JSON-LD has no triple terms, so the dataset cannot be written as JSON-LD
+rdf-turtle/eval/turtle12-rt-04@rdf/xml  # Writing triple terms as RDF/XML (rdf:parseType="Triple") is not supported
+rdf-turtle/eval/turtle12-rt-05@hdt  # HDT has no triple terms, so the dataset cannot be written as HDT
+rdf-turtle/eval/turtle12-rt-05@json-ld  # JSON-LD has no triple terms, so the dataset cannot be written as JSON-LD
+rdf-turtle/eval/turtle12-rt-05@rdf/xml  # Writing triple terms as RDF/XML (rdf:parseType="Triple") is not supported
+rdf-turtle/eval/turtle12-rt-06@hdt  # HDT has no triple terms, so the dataset cannot be written as HDT
+rdf-turtle/eval/turtle12-rt-06@json-ld  # JSON-LD has no triple terms, so the dataset cannot be written as JSON-LD
+rdf-turtle/eval/turtle12-rt-06@rdf/xml  # Writing triple terms as RDF/XML (rdf:parseType="Triple") is not supported
+rdf-turtle/eval/turtle12-rt-07@hdt  # HDT has no triple terms, so the dataset cannot be written as HDT
+rdf-turtle/eval/turtle12-rt-07@json-ld  # JSON-LD has no triple terms, so the dataset cannot be written as JSON-LD
+rdf-turtle/eval/turtle12-rt-07@rdf/xml  # Writing triple terms as RDF/XML (rdf:parseType="Triple") is not supported
+rdf-turtle/eval/turtle12-rt-08@hdt  # HDT has no triple terms, so the dataset cannot be written as HDT
+rdf-turtle/eval/turtle12-rt-08@json-ld  # JSON-LD has no triple terms, so the dataset cannot be written as JSON-LD
+rdf-turtle/eval/turtle12-rt-08@rdf/xml  # Writing triple terms as RDF/XML (rdf:parseType="Triple") is not supported
+rdf-turtle/eval/turtle12-tt-01@hdt  # HDT has no triple terms, so the dataset cannot be written as HDT
+rdf-turtle/eval/turtle12-tt-01@json-ld  # JSON-LD has no triple terms, so the dataset cannot be written as JSON-LD
+rdf-turtle/eval/turtle12-tt-01@rdf/xml  # Writing triple terms as RDF/XML (rdf:parseType="Triple") is not supported
+rdf-turtle/eval/turtle12-tt-02@hdt  # HDT has no triple terms, so the dataset cannot be written as HDT
+rdf-turtle/eval/turtle12-tt-02@json-ld  # JSON-LD has no triple terms, so the dataset cannot be written as JSON-LD
+rdf-turtle/eval/turtle12-tt-02@rdf/xml  # Writing triple terms as RDF/XML (rdf:parseType="Triple") is not supported
+rdf-turtle/eval/turtle12-tt-03@hdt  # HDT has no triple terms, so the dataset cannot be written as HDT
+rdf-turtle/eval/turtle12-tt-03@json-ld  # JSON-LD has no triple terms, so the dataset cannot be written as JSON-LD
+rdf-turtle/eval/turtle12-tt-03@rdf/xml  # Writing triple terms as RDF/XML (rdf:parseType="Triple") is not supported
+rdf-turtle/eval/turtle12-tt-04@hdt  # HDT has no triple terms, so the dataset cannot be written as HDT
+rdf-turtle/eval/turtle12-tt-04@json-ld  # JSON-LD has no triple terms, so the dataset cannot be written as JSON-LD
+rdf-turtle/eval/turtle12-tt-04@rdf/xml  # Writing triple terms as RDF/XML (rdf:parseType="Triple") is not supported
+rdf-xml/eval/rdf12-xml-an-01@hdt  # HDT has no triple terms, so the dataset cannot be written as HDT
+rdf-xml/eval/rdf12-xml-an-01@json-ld  # JSON-LD has no triple terms, so the dataset cannot be written as JSON-LD
+rdf-xml/eval/rdf12-xml-an-01@rdf/xml  # Writing triple terms as RDF/XML (rdf:parseType="Triple") is not supported
+rdf-xml/eval/rdf12-xml-an-02@hdt  # HDT has no triple terms, so the dataset cannot be written as HDT
+rdf-xml/eval/rdf12-xml-an-02@json-ld  # JSON-LD has no triple terms, so the dataset cannot be written as JSON-LD
+rdf-xml/eval/rdf12-xml-an-02@rdf/xml  # Writing triple terms as RDF/XML (rdf:parseType="Triple") is not supported
+rdf-xml/eval/rdf12-xml-an-03@hdt  # HDT has no triple terms, so the dataset cannot be written as HDT
+rdf-xml/eval/rdf12-xml-an-03@json-ld  # JSON-LD has no triple terms, so the dataset cannot be written as JSON-LD
+rdf-xml/eval/rdf12-xml-an-03@rdf/xml  # Writing triple terms as RDF/XML (rdf:parseType="Triple") is not supported
+rdf-xml/eval/rdf12-xml-an-04@hdt  # HDT has no triple terms, so the dataset cannot be written as HDT
+rdf-xml/eval/rdf12-xml-an-04@json-ld  # JSON-LD has no triple terms, so the dataset cannot be written as JSON-LD
+rdf-xml/eval/rdf12-xml-an-04@rdf/xml  # Writing triple terms as RDF/XML (rdf:parseType="Triple") is not supported
+rdf-xml/eval/rdf12-xml-an-05@hdt  # HDT has no triple terms, so the dataset cannot be written as HDT
+rdf-xml/eval/rdf12-xml-an-05@json-ld  # JSON-LD has no triple terms, so the dataset cannot be written as JSON-LD
+rdf-xml/eval/rdf12-xml-an-05@rdf/xml  # Writing triple terms as RDF/XML (rdf:parseType="Triple") is not supported
+rdf-xml/eval/rdf12-xml-an-06@hdt  # HDT has no triple terms, so the dataset cannot be written as HDT
+rdf-xml/eval/rdf12-xml-an-06@json-ld  # JSON-LD has no triple terms, so the dataset cannot be written as JSON-LD
+rdf-xml/eval/rdf12-xml-an-06@rdf/xml  # Writing triple terms as RDF/XML (rdf:parseType="Triple") is not supported
+rdf-xml/eval/rdf12-xml-an-07@hdt  # HDT has no triple terms, so the dataset cannot be written as HDT
+rdf-xml/eval/rdf12-xml-an-07@json-ld  # JSON-LD has no triple terms, so the dataset cannot be written as JSON-LD
+rdf-xml/eval/rdf12-xml-an-07@rdf/xml  # Writing triple terms as RDF/XML (rdf:parseType="Triple") is not supported
+rdf-xml/eval/rdf12-xml-an-08@hdt  # HDT has no triple terms, so the dataset cannot be written as HDT
+rdf-xml/eval/rdf12-xml-an-08@json-ld  # JSON-LD has no triple terms, so the dataset cannot be written as JSON-LD
+rdf-xml/eval/rdf12-xml-an-08@rdf/xml  # Writing triple terms as RDF/XML (rdf:parseType="Triple") is not supported
+rdf-xml/eval/rdf12-xml-an-09@hdt  # HDT has no triple terms, so the dataset cannot be written as HDT
+rdf-xml/eval/rdf12-xml-an-09@json-ld  # JSON-LD has no triple terms, so the dataset cannot be written as JSON-LD
+rdf-xml/eval/rdf12-xml-an-09@rdf/xml  # Writing triple terms as RDF/XML (rdf:parseType="Triple") is not supported
+rdf-xml/eval/rdf12-xml-an-10@hdt  # HDT has no triple terms, so the dataset cannot be written as HDT
+rdf-xml/eval/rdf12-xml-an-10@json-ld  # JSON-LD has no triple terms, so the dataset cannot be written as JSON-LD
+rdf-xml/eval/rdf12-xml-an-10@rdf/xml  # Writing triple terms as RDF/XML (rdf:parseType="Triple") is not supported
+rdf-xml/eval/rdf12-xml-an-11@hdt  # HDT has no triple terms, so the dataset cannot be written as HDT
+rdf-xml/eval/rdf12-xml-an-11@json-ld  # JSON-LD has no triple terms, so the dataset cannot be written as JSON-LD
+rdf-xml/eval/rdf12-xml-an-11@rdf/xml  # Writing triple terms as RDF/XML (rdf:parseType="Triple") is not supported
+rdf-xml/eval/rdf12-xml-an-12@hdt  # HDT has no triple terms, so the dataset cannot be written as HDT
+rdf-xml/eval/rdf12-xml-an-12@json-ld  # JSON-LD has no triple terms, so the dataset cannot be written as JSON-LD
+rdf-xml/eval/rdf12-xml-an-12@rdf/xml  # Writing triple terms as RDF/XML (rdf:parseType="Triple") is not supported
+rdf-xml/eval/rdf12-xml-an-15@hdt  # HDT has no triple terms, so the dataset cannot be written as HDT
+rdf-xml/eval/rdf12-xml-an-15@json-ld  # JSON-LD has no triple terms, so the dataset cannot be written as JSON-LD
+rdf-xml/eval/rdf12-xml-an-15@rdf/xml  # Writing triple terms as RDF/XML (rdf:parseType="Triple") is not supported
+rdf-xml/eval/rdf12-xml-an-16@hdt  # HDT has no triple terms, so the dataset cannot be written as HDT
+rdf-xml/eval/rdf12-xml-an-16@json-ld  # JSON-LD has no triple terms, so the dataset cannot be written as JSON-LD
+rdf-xml/eval/rdf12-xml-an-16@rdf/xml  # Writing triple terms as RDF/XML (rdf:parseType="Triple") is not supported
+rdf-xml/eval/rdf12-xml-an-reif-01@hdt  # HDT has no triple terms, so the dataset cannot be written as HDT
+rdf-xml/eval/rdf12-xml-an-reif-01@json-ld  # JSON-LD has no triple terms, so the dataset cannot be written as JSON-LD
+rdf-xml/eval/rdf12-xml-an-reif-01@rdf/xml  # Writing triple terms as RDF/XML (rdf:parseType="Triple") is not supported
+rdf-xml/eval/rdf12-xml-tt-02@hdt  # HDT has no triple terms, so the dataset cannot be written as HDT
+rdf-xml/eval/rdf12-xml-tt-02@json-ld  # JSON-LD has no triple terms, so the dataset cannot be written as JSON-LD
+rdf-xml/eval/rdf12-xml-tt-02@rdf/xml  # Writing triple terms as RDF/XML (rdf:parseType="Triple") is not supported
+rdf-xml/eval/rdf12-xml-tt-03@hdt  # HDT has no triple terms, so the dataset cannot be written as HDT
+rdf-xml/eval/rdf12-xml-tt-03@json-ld  # JSON-LD has no triple terms, so the dataset cannot be written as JSON-LD
+rdf-xml/eval/rdf12-xml-tt-03@rdf/xml  # Writing triple terms as RDF/XML (rdf:parseType="Triple") is not supported
+rdf-xml/eval/rdf12-xml-tt-04@hdt  # HDT has no triple terms, so the dataset cannot be written as HDT
+rdf-xml/eval/rdf12-xml-tt-04@json-ld  # JSON-LD has no triple terms, so the dataset cannot be written as JSON-LD
+rdf-xml/eval/rdf12-xml-tt-04@rdf/xml  # Writing triple terms as RDF/XML (rdf:parseType="Triple") is not supported
+rdf-xml/eval/rdf12-xml-tt-05@hdt  # HDT has no triple terms, so the dataset cannot be written as HDT
+rdf-xml/eval/rdf12-xml-tt-05@json-ld  # JSON-LD has no triple terms, so the dataset cannot be written as JSON-LD
+rdf-xml/eval/rdf12-xml-tt-05@rdf/xml  # Writing triple terms as RDF/XML (rdf:parseType="Triple") is not supported
+rdf-xml/eval/rdf12-xml-tt-06@hdt  # HDT has no triple terms, so the dataset cannot be written as HDT
+rdf-xml/eval/rdf12-xml-tt-06@json-ld  # JSON-LD has no triple terms, so the dataset cannot be written as JSON-LD
+rdf-xml/eval/rdf12-xml-tt-06@rdf/xml  # Writing triple terms as RDF/XML (rdf:parseType="Triple") is not supported

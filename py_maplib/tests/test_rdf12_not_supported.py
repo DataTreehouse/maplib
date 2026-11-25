@@ -54,13 +54,10 @@ def test_version_directive_is_read():
 @pytest.mark.parametrize(
     "query",
     [
-        f"SELECT * WHERE {{ ?r <http://www.w3.org/1999/02/22-rdf-syntax-ns#reifies> <<( ?s ?p ?o )>> }}",
-        f"SELECT * WHERE {{ << ?s <{EX}p> ?o >> <{EX}source> ?src }}",
         f"SELECT * WHERE {{ VALUES ?t {{ <<( <{EX}a> <{EX}p> <{EX}b> )>> }} }}",
         f"SELECT ?t WHERE {{ ?s ?p ?o BIND(TRIPLE(?s, ?p, ?o) AS ?t) }}",
         f"SELECT * WHERE {{ ?s ?p ?o FILTER(isTRIPLE(?o)) }}",
         f"CONSTRUCT {{ ?s <{EX}q> <<( ?s ?p ?o )>> }} WHERE {{ ?s ?p ?o }}",
-        f"SELECT * WHERE {{ ?s ?p ?o FILTER(EXISTS {{ ?x ?y <<( ?s ?p ?o )>> }}) }}",
     ],
 )
 def test_queries_with_triple_terms_are_refused(query):

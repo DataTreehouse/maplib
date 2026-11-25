@@ -22,6 +22,7 @@ mod project;
 mod pvalues;
 pub(crate) mod service;
 mod triple;
+mod triple_terms;
 pub mod triples_ordering;
 mod union;
 mod values;
@@ -206,6 +207,14 @@ impl Triplestore {
                 // so that the values it binds restrict where the paths start.
                 let (patterns, length_paths) =
                     length_path::extract_length_path_patterns(&patterns)?;
+                // Triple term patterns are matched against the triple terms after the rest,
+                // see triple_terms.
+                let (patterns, triple_term_patterns) =
+                    triple_terms::extract_triple_term_patterns(&patterns);
+                triple_terms::constrain_triple_term_variables(
+                    &mut pushdowns,
+                    &triple_term_patterns,
+                );
                 self.check_maplib_predicates(&patterns)?;
                 pushdowns.add_patterns_pushdowns(&patterns);
                 // A pattern whose variables can have no stored type has no solutions: nothing is
@@ -217,6 +226,7 @@ impl Triplestore {
                 if !proven_empty
                     && solution_mappings.is_none()
                     && length_paths.is_empty()
+                    && triple_term_patterns.is_empty()
                     && inl::inl_enabled()
                 {
                     if let Some(sm) = self.inl_bgp(&patterns, dataset, query_settings)? {
@@ -292,6 +302,19 @@ impl Triplestore {
                         &pushdowns,
                         query_settings,
                         dataset,
+                    )?);
+                }
+
+                if !triple_term_patterns.is_empty() {
+                    let sm = updated_solution_mappings.unwrap_or_else(|| SolutionMappings {
+                        mappings: DataFrame::empty_with_height(1).lazy(),
+                        rdf_node_types: HashMap::new(),
+                        height_estimate: 1,
+                    });
+                    updated_solution_mappings = Some(self.join_triple_term_patterns(
+                        sm,
+                        &triple_term_patterns,
+                        query_settings.max_rows,
                     )?);
                 }
 

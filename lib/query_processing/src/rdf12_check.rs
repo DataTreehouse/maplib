@@ -129,9 +129,24 @@ fn ground_quad(q: &GroundQuad) -> Check {
     ground_term(&q.object)
 }
 
+/// A term pattern of a triple pattern of a basic graph pattern, where triple term patterns are
+/// supported.
+fn bgp_term_pattern(t: &TermPattern) -> Check {
+    match t {
+        TermPattern::Triple(tp) => {
+            bgp_term_pattern(&tp.subject)?;
+            bgp_term_pattern(&tp.object)
+        }
+        t => term_pattern(t),
+    }
+}
+
 fn graph_pattern(gp: &GraphPattern) -> Check {
     match gp {
-        GraphPattern::Bgp { patterns } => patterns.iter().try_for_each(triple_pattern),
+        GraphPattern::Bgp { patterns } => patterns.iter().try_for_each(|tp| {
+            bgp_term_pattern(&tp.subject)?;
+            bgp_term_pattern(&tp.object)
+        }),
         GraphPattern::Path {
             subject,
             path,

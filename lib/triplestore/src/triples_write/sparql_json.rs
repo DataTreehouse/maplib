@@ -78,6 +78,10 @@ pub fn sparql_json(
             if t.is_none() {
                 continue;
             }
+            // Triple terms are nested objects in SPARQL JSON, which the general writer writes.
+            if t.is_triple_term() {
+                return Ok(None);
+            }
             let c = if state.is_multi() {
                 extract_column_from_multitype(column, t)
             } else {
@@ -307,7 +311,8 @@ fn wrapping(t: &BaseRDFNodeType) -> (Vec<u8>, Vec<u8>) {
             }
         }
         BaseRDFNodeType::None => (vec![], vec![]),
-        BaseRDFNodeType::TripleTerm => representation::rdf12::unreachable_triple_term(),
+        // Results with triple terms are written by the general writer (see sparql_json).
+        BaseRDFNodeType::TripleTerm => unreachable!("triple terms are not written here"),
     }
 }
 

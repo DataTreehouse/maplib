@@ -80,6 +80,12 @@ pub(super) fn write_hdt<W: Write>(
             let p = predicates.len();
             predicates.push(predicate.clone());
             for ((subject_type, object_type), tt) in df_map {
+                // The HDT format has no triple terms.
+                if object_type.is_triple_term() && !tt.is_empty() {
+                    return Err(TriplestoreError::HDTError(
+                        "HDT cannot hold RDF 1.2 triple terms".to_string(),
+                    ));
+                }
                 for (lf, _) in tt.get_lazy_frames(&None, &None)? {
                     let df = lf
                         .select([col(SUBJECT_COL_NAME), col(OBJECT_COL_NAME)])

@@ -5,9 +5,7 @@ where the triple term is a value (the object of rdf:reifies, for example). These
 ids through joins on triple terms, which compare ids: two statements about the same triple term
 join, statements about different triple terms do not.
 
-Queries that bind a triple term to a projected variable, and triple term patterns, come with the
-query support of triple terms; until then these tests only join, count and filter on other
-variables.
+Triple terms are returned to Python, and written, in their N-Triples form `<<( s p o )>>`.
 """
 
 import polars as pl
@@ -164,3 +162,90 @@ def test_triple_term_iris_survive_garbage_collection():
     )
     assert same_triple_term(m, ":r1", ":r2")
     assert count(m, "?s :tmp ?o") == 0
+
+
+QUERY_DATA = f"""PREFIX : <{EX}>
+:pump1 :hasPower 37.5 {{| :source :log1 |}} .
+:pump2 :hasPower 12.0 ~ :r2 {{| :source :log2 |}} .
+:pump1 :label "p1"@en {{| :source :log2 |}} .
+:r4 rdf:reifies <<( :x :says <<( :pump1 :hasPower 37.5 )>> )>> .
+""".replace("PREFIX : ", f"PREFIX rdf: <{RDF}>\nPREFIX : ")
+
+
+@pytest.fixture(scope="module")
+def qm():
+    m = Model()
+    m.reads(QUERY_DATA, format="turtle")
+    return m
+
+
+def rows(m, query):
+    df = m.query(PREFIXES + query)
+    return sorted(tuple(str(v) for v in r) for r in df.iter_rows())
+
+
+@pytest.mark.parametrize(
+    "query,expected",
+    [
+        ("SELECT ?s ?src WHERE { ?r rdf:reifies <<( ?s :hasPower ?o )>> . ?r :source ?src }",
+         [(f"<{EX}pump1>", f"<{EX}log1>"), (f"<{EX}pump2>", f"<{EX}log2>")]),
+        ("SELECT ?r WHERE { ?r rdf:reifies <<( :pump2 :hasPower ?o )>> }", [(f"<{EX}r2>",)]),
+        ('SELECT ?src WHERE { ?r rdf:reifies <<( :pump1 :label "p1"@en )>> ; :source ?src }',
+         [(f"<{EX}log2>",)]),
+        ('SELECT ?src WHERE { ?r rdf:reifies <<( :pump1 :label "p1"@de )>> ; :source ?src }', []),
+        ("SELECT ?p WHERE { ?r rdf:reifies <<( :pump1 ?p ?o )>> }",
+         [(f"<{EX}hasPower>",), (f"<{EX}label>",)]),
+        ("SELECT ?who ?s WHERE { ?r rdf:reifies <<( ?who :says <<( ?s :hasPower ?v )>> )>> }",
+         [(f"<{EX}x>", f"<{EX}pump1>")]),
+        ("SELECT ?s ?src WHERE { << ?s :hasPower ?o >> :source ?src }",
+         [(f"<{EX}pump1>", f"<{EX}log1>"), (f"<{EX}pump2>", f"<{EX}log2>")]),
+        ("SELECT ?s ?src WHERE { ?s :hasPower ?o {| :source ?src |} }",
+         [(f"<{EX}pump1>", f"<{EX}log1>"), (f"<{EX}pump2>", f"<{EX}log2>")]),
+        ("SELECT ?r WHERE { ?r rdf:reifies <<( :nobody :hasPower ?o )>> }", []),
+        ("SELECT ?s WHERE { ?s :hasPower ?o FILTER EXISTS { ?r rdf:reifies <<( ?s :hasPower ?o )>> ; :source :log2 } }",
+         [(f"<{EX}pump2>",)]),
+        ("SELECT ?t WHERE { :r2 rdf:reifies ?t }",
+         # Numbers are stored as values, so the decimal is written in its canonical form.
+         [(f"<<( <{EX}pump2> <{EX}hasPower> \"12\"^^<http://www.w3.org/2001/XMLSchema#decimal> )>>",)]),
+    ],
+)
+def test_triple_term_patterns(qm, query, expected):
+    assert rows(qm, query) == expected
+
+
+def test_triple_terms_in_sparql_json(qm):
+    import json
+
+    res = json.loads(qm.query(PREFIXES + "SELECT ?t WHERE { :r4 rdf:reifies ?t }", return_format="json"))
+    t = res["results"]["bindings"][0]["t"]
+    assert t["type"] == "triple"
+    assert t["value"]["predicate"] == {"type": "uri", "value": f"{EX}says"}
+    assert t["value"]["object"]["type"] == "triple"
+
+
+@pytest.mark.parametrize("fmt", ["ntriples", "nquads", "turtle", "trig"])
+def test_writing_and_reading_triple_terms_back(qm, fmt):
+    written = qm.writes(format=fmt)
+    m = Model()
+    m.reads(written, format=fmt)
+    assert count(m, "?s ?p ?o") == count(qm, "?s ?p ?o")
+    assert rows(m, "SELECT ?s ?src WHERE { ?s :hasPower ?o {| :source ?src |} }") == rows(
+        qm, "SELECT ?s ?src WHERE { ?s :hasPower ?o {| :source ?src |} }")
+
+
+def test_turtle_keeps_blank_nodes_in_triple_terms():
+    m = Model()
+    m.reads(f"PREFIX : <{EX}>\n_:b :p :o .\n_:r <{RDF}reifies> <<( _:b :p :o )>> .", format="turtle")
+    m2 = Model()
+    m2.reads(m.writes(format="turtle"), format="turtle")
+    # The blank node of the triple term is the subject of :p, not a new blank node.
+    assert count(m2, "?r rdf:reifies <<( ?b :p :o )>> . ?b :p :o") == 1
+
+
+@pytest.mark.parametrize("fmt", ["rdf/xml", "json-ld", "hdt"])
+def test_formats_without_triple_terms_refuse_them(qm, fmt):
+    with pytest.raises(Exception, match="(?i)triple terms"):
+        if fmt == "hdt":
+            qm.write_bytes(format=fmt)
+        else:
+            qm.writes(format=fmt)

@@ -232,6 +232,10 @@ pub fn maybe_decode_complex_expr(
     base_state: &BaseCatState,
     global_cats: LockedCats,
 ) -> Expr {
+    // Triple terms are ids of the dictionary of triple terms, decoded to their N-Triples form.
+    if base_type.is_triple_term() {
+        return crate::polars_to_rdf::triple_term_expr_to_string(expr, global_cats);
+    }
     match base_state {
         BaseCatState::CategoricalNative(local_cats) => {
             if base_type.is_lang_string() {

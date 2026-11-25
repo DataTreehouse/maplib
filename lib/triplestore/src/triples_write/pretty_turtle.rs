@@ -671,10 +671,14 @@ impl Triplestore {
         // List nodes are written separately from their other properties, so they must be
         // labeled rather than written as [ ... ] or inlined, or they would split into
         // several blank nodes.
+        // Blank nodes in triple terms are written by their labels inside the triple terms, so
+        // they must be labeled where they are subjects as well.
+        let triple_term_blanks = self.blank_nodes_in_triple_terms()?;
         for u in self
             .list_nodes_with_other_properties(map)?
             .iter()
             .chain(labeled_blanks)
+            .chain(triple_term_blanks.iter())
         {
             blanks_in_degree_zero.remove(u);
             blanks_in_degree_one.remove(u);
@@ -1231,6 +1235,24 @@ impl Triplestore {
                             .into_iter()
                             .filter(|u| list_nodes.contains(u)),
                     );
+                }
+            }
+        }
+        Ok(out)
+    }
+
+    /// The codes of the blank nodes that are subjects or objects of triple terms.
+    fn blank_nodes_in_triple_terms(&self) -> Result<HashSet<u32>, TriplestoreError> {
+        let cats = self.global_cats.read()?;
+        let mut out = HashSet::new();
+        for part in cats.triple_terms.partitions() {
+            for (c, t) in [
+                (SUBJECT_COL_NAME, &part.key.subject_type),
+                (OBJECT_COL_NAME, &part.key.object_type),
+            ] {
+                if t.is_blank_node() {
+                    let codes = part.df().column(c).unwrap().u32().unwrap();
+                    out.extend(codes.iter().flatten());
                 }
             }
         }

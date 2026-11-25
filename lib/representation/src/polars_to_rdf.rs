@@ -18,7 +18,7 @@ use oxrdf::{BlankNode, Literal, NamedNode, NamedOrBlankNode, Triple, Variable};
 use polars::datatypes::StringChunked;
 use polars::prelude::IntoSeries;
 use polars::prelude::{
-    col, AnyValue, Column, DataFrame, DataType, IntoColumn, IntoLazy, Series, TimeZone,
+    col, AnyValue, Column, DataFrame, DataType, Expr, Field, IntoColumn, IntoLazy, Series, TimeZone,
 };
 use rayon::iter::IndexedParallelIterator;
 use rayon::iter::IntoParallelIterator;
@@ -164,7 +164,9 @@ pub fn basic_rdf_node_type_column_to_term_vec(
     blanks_from_u32: bool,
 ) -> Vec<Option<Term>> {
     match &base_type {
-        BaseRDFNodeType::TripleTerm => crate::rdf12::unreachable_triple_term(),
+        BaseRDFNodeType::TripleTerm => {
+            triple_term_column_to_term_vec(column, global_cats, blanks_from_u32)
+        }
         BaseRDFNodeType::IRI => decode_column(column, base_type, base_state, global_cats)
             .str()
             .unwrap()
@@ -537,4 +539,86 @@ pub fn hack_format_timestamp_with_timezone(column: &Column, tz: &mut TimeZone) -
 
 pub fn blank_node_to_normal_string(u: &u32) -> String {
     format!("b{u}")
+}
+
+/// The triple terms of a column of their ids (see cats::triple_terms), None for nulls. The rows of
+/// the triple terms are taken from their partitions under the read lock of the dictionaries, and
+/// their subjects and objects are decoded after it is released, as decoding takes it again.
+/// `blanks_from_u32` labels their blank nodes by their codes, as for other blank node columns.
+pub fn triple_term_column_to_term_vec(
+    column: &Column,
+    global_cats: LockedCats,
+    blanks_from_u32: bool,
+) -> Vec<Option<Term>> {
+    use crate::cats::triple_terms::TripleTermPartitionKey;
+    use polars::prelude::{IdxCa, IdxSize};
+    use std::collections::HashMap;
+
+    let ids = column.u32().expect("triple terms are u32 ids");
+    let mut out: Vec<Option<Term>> = vec![None; ids.len()];
+    let mut parts: HashMap<TripleTermPartitionKey, (DataFrame, Vec<IdxSize>, Vec<usize>)> =
+        HashMap::new();
+    {
+        let cats = global_cats.read().unwrap();
+        for (pos, id) in ids.iter().enumerate() {
+            let Some(id) = id else { continue };
+            let Some((p, row)) = cats.triple_terms.location(id) else {
+                continue;
+            };
+            let e = parts
+                .entry(p.key.clone())
+                .or_insert_with(|| (p.df().clone(), vec![], vec![]));
+            e.1.push(row as IdxSize);
+            e.2.push(pos);
+        }
+    }
+    for (key, (df, rows, positions)) in parts {
+        let df = df.take(&IdxCa::from_vec("rows".into(), rows)).unwrap();
+        let state = |t: &BaseRDFNodeType| t.default_stored_cat_state();
+        let subjects = basic_rdf_node_type_column_to_term_vec(
+            df.column(SUBJECT_COL_NAME).unwrap(),
+            &key.subject_type,
+            &state(&key.subject_type),
+            global_cats.clone(),
+            blanks_from_u32,
+        );
+        let objects = basic_rdf_node_type_column_to_term_vec(
+            df.column(OBJECT_COL_NAME).unwrap(),
+            &key.object_type,
+            &state(&key.object_type),
+            global_cats.clone(),
+            blanks_from_u32,
+        );
+        for ((pos, s), o) in positions.into_iter().zip(subjects).zip(objects) {
+            let subject = match s {
+                Some(Term::NamedNode(nn)) => NamedOrBlankNode::NamedNode(nn),
+                Some(Term::BlankNode(b)) => NamedOrBlankNode::BlankNode(b),
+                _ => continue,
+            };
+            if let Some(o) = o {
+                out[pos] = Some(Term::Triple(Box::new(Triple::new(
+                    subject,
+                    key.predicate.clone(),
+                    o,
+                ))));
+            }
+        }
+    }
+    out
+}
+
+/// The triple terms of an expression of their ids as strings in the N-Triples form
+/// `<<( s p o )>>`, as they are returned to Python and written as text.
+pub fn triple_term_expr_to_string(expr: Expr, global_cats: LockedCats) -> Expr {
+    expr.map(
+        move |x| {
+            let terms = triple_term_column_to_term_vec(&x, global_cats.clone(), false);
+            let strings: StringChunked = terms
+                .into_iter()
+                .map(|t| t.map(|t| t.to_string()))
+                .collect();
+            Ok(strings.with_name(x.name().clone()).into_column())
+        },
+        |_, f| Ok(Field::new(f.name().clone(), DataType::String)),
+    )
 }

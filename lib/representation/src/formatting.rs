@@ -34,7 +34,9 @@ pub fn base_expression_to_formatted(
     literal_string_rep: bool,
 ) -> Expr {
     let expr = match base_type {
-        BaseRDFNodeType::TripleTerm => crate::rdf12::unreachable_triple_term(),
+        BaseRDFNodeType::TripleTerm => {
+            crate::polars_to_rdf::triple_term_expr_to_string(expr, global_cats)
+        }
         BaseRDFNodeType::IRI => wrap_decoded(expr, base_type, base_state, global_cats, "<", ">"),
         BaseRDFNodeType::BlankNode => {
             wrap_decoded(expr, base_type, base_state, global_cats, "_:", "")
@@ -212,7 +214,9 @@ pub fn base_expression_to_native(
 ) -> Vec<Expr> {
     let mut exprs = vec![];
     match base_type {
-        BaseRDFNodeType::TripleTerm => crate::rdf12::unreachable_triple_term(),
+        BaseRDFNodeType::TripleTerm => exprs.push(
+            crate::polars_to_rdf::triple_term_expr_to_string(expr, global_cats),
+        ),
         BaseRDFNodeType::IRI => {
             exprs.push(maybe_decode_expr(expr, base_type, base_state, global_cats))
         }
