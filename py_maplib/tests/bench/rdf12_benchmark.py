@@ -64,6 +64,11 @@ OBJECT_KINDS = ["iri", "string", "integer", "datetime"]
 
 # Rows generated at a time, which bounds the memory of the generator.
 CHUNK = 2_000_000
+# Model.read parses this many triples before storing them. Where the batches end changes the
+# memory of the stored triples by about 5% (segments and their statistics are made per batch),
+# in different directions for different files, so the files are read in one batch to compare
+# encodings fairly.
+BATCH_SIZE = 2_000_000_000
 
 
 # ---------------------------------------------------------------------------------------------
@@ -264,14 +269,16 @@ def result_rows(res) -> int:
     return res.height
 
 
-def measure(path: Path, encoding: str, n: int, predicates: int, repeats: int) -> dict:
+def measure(
+    path: Path, encoding: str, n: int, predicates: int, repeats: int, batch_size: int
+) -> dict:
     import maplib
 
     out = {"rss_start_mb": rss_mb()}
     m = maplib.Model()
     t = time.perf_counter()
     try:
-        m.read(str(path), format="ntriples")
+        m.read(str(path), format="ntriples", triples_batch_size=batch_size)
     except Exception as e:  # noqa: BLE001 - recorded, so other runs go on
         out["error"] = f"{type(e).__name__}: {str(e)[:300]}"
         return out
@@ -310,7 +317,10 @@ def measure(path: Path, encoding: str, n: int, predicates: int, repeats: int) ->
 
 
 def child(args):
-    res = measure(Path(args.path), args.encoding, args.triples, args.predicates, args.repeats)
+    res = measure(
+        Path(args.path), args.encoding, args.triples, args.predicates, args.repeats,
+        args.batch_size,
+    )  # fmt: skip
     print("RESULT " + json.dumps(res), flush=True)
 
 
@@ -393,10 +403,13 @@ def check_build(info: dict, allow_stale: bool):
         print("WARNING: " + msg)
 
 
-def run_child(path: Path, encoding: str, n: int, predicates: int, repeats: int) -> dict:
+def run_child(
+    path: Path, encoding: str, n: int, predicates: int, repeats: int, batch_size: int
+) -> dict:
     cmd = [
         sys.executable, __file__, "child", "--path", str(path), "--encoding", encoding,
         "--triples", str(n), "--predicates", str(predicates), "--repeats", str(repeats),
+        "--batch-size", str(batch_size),
     ]  # fmt: skip
     env = dict(os.environ)
     # The allocator of maplib counts allocations per thread and adds them to the global count
@@ -435,6 +448,7 @@ def run(args):
             "reified": args.reified,
             "seed": args.seed,
             "repeats": args.repeats,
+            "batch_size": args.batch_size,
         },
         "runs": [],
     }
@@ -442,7 +456,7 @@ def run(args):
         for enc in encodings:
             path = ensure_data(Path(args.data_dir), n, enc, args.predicates, args.reified, args.seed)
             print(f"{n:>12,} {enc:<12} ", end="", flush=True)
-            res = run_child(path, enc, n, args.predicates, args.repeats)
+            res = run_child(path, enc, n, args.predicates, args.repeats, args.batch_size)
             res.update({"triples": n, "encoding": enc, "file_mb": path.stat().st_size / 1e6})
             results["runs"].append(res)
             if "error" in res:
@@ -528,6 +542,10 @@ def main():
     p.add_argument("--out", default=None)
     p.add_argument("--data-dir", default=str(DEFAULT_DATA))
     p.add_argument(
+        "--batch-size", type=parse_count, default=BATCH_SIZE,
+        help="triples_batch_size of Model.read (default: the whole file in one batch)",
+    )  # fmt: skip
+    p.add_argument(
         "--allow-stale", action="store_true",
         help="measure even if the compiled maplib is older than its sources",
     )  # fmt: skip
@@ -553,6 +571,7 @@ def main():
     p.add_argument("--triples", type=int, required=True)
     p.add_argument("--predicates", type=int, required=True)
     p.add_argument("--repeats", type=int, required=True)
+    p.add_argument("--batch-size", type=int, required=True)
     p.set_defaults(func=child)
 
     args = ap.parse_args()
