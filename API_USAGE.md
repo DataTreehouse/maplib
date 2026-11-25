@@ -452,6 +452,18 @@ iterable of batches, where the template comes from the first batch with all para
 ```python
 df = pl.DataFrame({"id": [EX + "a", EX + "b"], "weight": [1.5, None], "label": ["A", "B"]})
 template = m.map_default(df, "id")
+print(template)
+```
+
+The returned text ends with a usage example in stOTTR comments, so it is still a template that
+`map` takes:
+
+```
+# This template is added to the Model, and the data is mapped with it.
+# Usage example, mapping more data with the same columns:
+#   m.map("urn:maplib_default:default_template_...", df)
+# Usage example, querying the mapped data:
+#   m.query("SELECT ?id ?weight WHERE { ?id <urn:maplib_default:weight> ?weight }")
 ```
 
 `generate_template(data, primary_key_column)` is its dry run: it returns the same template without

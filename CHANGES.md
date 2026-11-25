@@ -6,6 +6,7 @@
 
 ### Features
 - `Model.query(debug=True)` says more about why a query has no results. For a triple pattern that matches nothing: a predicate that is not used in the queried graph, with the graphs that do use it and the predicates with the same local name in another namespace or case; a subject that has no triples; an object that is written like the objects in the data but is another term (e.g. `"42"` where the data has the integer `42`, or `"Bob"` where it has `"Bob"@en`), with examples of the objects that are there; and whether the pattern matches with subject and object in each other's place. For patterns that match apart but not together: the variables they join on, and when a variable is e.g. an IRI in one and a literal in the other. For a FILTER: how many solution mappings the pattern had, the kinds of terms of the variables of the expression, and which of the conditions joined with `&&` are never true.
+- The template string that `Model.map_default` returns ends with a usage example in stOTTR comments: a `Model.map` call with the IRI of the template, which maps more data with the same columns, and a query over the mapped data. The string is still a template that `Model.map` and `Model.add_template` take
 
 ### Bug fixes
 - `Model.query(debug=True)` reported "This query has at least one solution mapping" for some queries without results: those where an `OFFSET`, the right side of `LATERAL` or a `SERVICE` leaves nothing. It now reports that pattern, or that no part of the query was found to be the reason.

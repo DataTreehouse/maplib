@@ -119,7 +119,26 @@ def test_map_default_adds_template_and_maps():
     # The same template as the dry run, apart from its random IRI.
     dry = m.generate_template(_df(), "s")
     unnamed = lambda t: re.sub(r"default_template_\w+", "default_template", t)
-    assert unnamed(tmpl) == unnamed(dry)
+    assert unnamed(tmpl).startswith(unnamed(dry).rstrip())
+
+
+def test_map_default_returns_usage_example():
+    m = Model()
+    df = _df()
+    tmpl = m.map_default(df, "s")
+    name = re.search(r"default_template_\w+", tmpl).group(0)
+    usage = [l[1:].strip() for l in tmpl.splitlines() if l.startswith("#")]
+    map_example = f'm.map("urn:maplib_default:{name}", df)'
+    assert map_example in usage
+    query_example = next(l for l in usage if l.startswith("m.query("))
+    # The examples run as they are, and the text is still a template that can be mapped.
+    df = df.with_columns(pl.col("s") + "_more")
+    eval(map_example)
+    assert _count(m) == 2 * N
+    assert eval(query_example).height > 0
+    m2 = Model()
+    m2.map(tmpl, df)
+    assert _count(m2) == N
 
 
 def test_map_default_graph():

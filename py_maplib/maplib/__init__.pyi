@@ -1083,6 +1083,9 @@ class Model:
         >>> template_string = m.map_default(df, "myKeyCol")
         ... print(template_string)
 
+        The returned string ends with a usage example in stOTTR comments, with the IRI of the template:
+        a Model.map call that maps more data with it, and a query over the mapped data.
+
         :param data: DataFrame where the columns have the same names as the template arguments (when piping the output of queries back in, use SolutionMappings).
             May also be a LazyFrame, which is consumed in a single pass using collect_batches(), or an iterable of DataFrames, LazyFrames or SolutionMappings with the same schema.
             In that case, the template is created from the first batch and all its parameters are optional.
@@ -1097,7 +1100,7 @@ class Model:
         :param compact_every: With stream and in_place, compact the Model and remove unused dictionary
             entries every N batches. None (the default) never does.
             The template is then created from the first batch when the stream is collected.
-        :return: The generated template, or a ModelStream when stream is set.
+        :return: The generated template followed by a usage example in comments, or a ModelStream when stream is set.
         """
 
     def generate_template(

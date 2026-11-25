@@ -58,6 +58,8 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::str::FromStr;
 use std::sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard};
+use representation::constants::DEFAULT_PREFIX_IRI;
+use templates::ast::Template;
 use templates::python::PyTemplate;
 use tracing::instrument;
 use triplestore::sparql::InsertResult;
@@ -766,6 +768,7 @@ impl PyModel {
             )?;
             return Ok(Py::new(py, stream)?.into_any());
         }
+        let key_column = primary_key_column.clone();
         let template = match classify_mapping_data(data, py)? {
             MappingData::Eager(mappings, types) => py.detach(move || {
                 let mut inner = this.write_inner();
@@ -814,7 +817,8 @@ impl PyModel {
                 })?
             }
         };
-        Ok(PyString::new(py, &format!("{template}")).into_any().unbind())
+        let out = default_template_with_usage(&template, &key_column);
+        Ok(PyString::new(py, &out).into_any().unbind())
     }
 
     /// Generates a default template from the data. This is always a dry run: nothing is mapped
@@ -2813,6 +2817,29 @@ pub fn add_triples(
             .map_err(PyMaplibError::from)?;
         Ok(())
     })
+}
+
+/// The stOTTR text of the template made by map_default, followed by a usage example in stOTTR
+/// comments, so that the text is still a template that Model.map and Model.add_template take.
+fn default_template_with_usage(template: &Template, primary_key_column: &str) -> String {
+    let iri = template.signature.iri.as_str();
+    let mut out = format!("{template}").trim_end().to_string();
+    out.push_str("\n\n# This template is added to the Model, and the data is mapped with it.\n");
+    out.push_str("# Usage example, mapping more data with the same columns:\n");
+    out.push_str(&format!("#   m.map(\"{iri}\", df)\n"));
+    let column = template
+        .signature
+        .parameter_list
+        .iter()
+        .map(|p| p.variable.as_str())
+        .find(|c| *c != primary_key_column);
+    if let Some(column) = column {
+        out.push_str("# Usage example, querying the mapped data:\n");
+        out.push_str(&format!(
+            "#   m.query(\"SELECT ?{primary_key_column} ?{column} WHERE {{ ?{primary_key_column} <{DEFAULT_PREFIX_IRI}{column}> ?{column} }}\")\n"
+        ));
+    }
+    out
 }
 
 fn path_to_string(path: PathBuf) -> String {
