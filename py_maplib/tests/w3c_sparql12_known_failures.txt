@@ -10,9 +10,8 @@ eval-triple-terms/construct-4  # Triple terms, reified triples and annotations a
 eval-triple-terms/construct-5  # Triple terms, reified triples and annotations are not supported yet
 eval-triple-terms/expr-1  # Triple terms, reified triples and annotations are not supported yet
 eval-triple-terms/expr-2  # Triple terms, reified triples and annotations are not supported yet
-eval-triple-terms/op-2  # Triple terms, reified triples and annotations are not supported yet
-eval-triple-terms/order-1  # Triple terms, reified triples and annotations are not supported yet
-eval-triple-terms/order-2  # Triple terms, reified triples and annotations are not supported yet
+eval-triple-terms/op-2  # = on triple terms compares the terms (their ids), not the values of their parts, so <<( :a :b 123 )>> = <<( :a :b 123.0 )>> is false
+eval-triple-terms/order-2  # ORDER BY orders triple terms by their ids (the order they were first stored in), not by their subjects, predicates and objects
 eval-triple-terms/update-1  # Triple terms, reified triples and annotations are not supported yet
 eval-triple-terms/update-2  # Triple terms, reified triples and annotations are not supported yet
 eval-triple-terms/update-3  # Triple terms, reified triples and annotations are not supported yet

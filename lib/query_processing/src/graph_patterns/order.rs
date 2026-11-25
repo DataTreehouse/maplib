@@ -242,6 +242,15 @@ pub fn ordering_exprs_with_lang(
                             .cmp(&group(y, y_l.clone()))
                             .then_with(|| x_l.cmp(y_l))
                             .then_with(|| x.cmp(y))
+                    } else if y.is_triple_term() {
+                        // SPARQL 1.2: triple terms come after literals.
+                        Ordering::Less
+                    } else {
+                        Ordering::Greater
+                    }
+                } else if x.is_triple_term() {
+                    if y.is_triple_term() {
+                        Ordering::Equal
                     } else {
                         Ordering::Greater
                     }
