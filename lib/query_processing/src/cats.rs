@@ -124,6 +124,10 @@ pub fn create_compatible_cats(
                             BaseRDFNodeType::None => {
                                 unreachable!()
                             }
+                            // Triple term ids are not codes of a string dictionary.
+                            BaseRDFNodeType::TripleTerm => {
+                                representation::rdf12::unreachable_triple_term()
+                            }
                         };
                         if let Some(renc) = renc {
                             for e in e_vec.iter_mut() {

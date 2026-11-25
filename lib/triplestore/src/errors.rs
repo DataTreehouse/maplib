@@ -76,6 +76,9 @@ pub enum TriplestoreError {
     UnparseableValue(String),
     #[error("File format of {0} is not supported, supply the format explicitly")]
     UnsupportedReadFormat(String),
+    /// An RDF 1.2 feature that maplib does not support yet, see representation::rdf12.
+    #[error("{0}")]
+    Rdf12NotSupported(String),
     #[error("Prefix {0} has an invalid IRI: {1}")]
     InvalidPrefix(String, String),
     #[error("Could not memory map file: {0}")]

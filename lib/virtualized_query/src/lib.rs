@@ -361,6 +361,8 @@ impl BasicVirtualizedQuery {
                 TermPattern::Variable(v) => {
                     s.insert(v.as_str());
                 }
+                // Queries with triple terms are refused before they are virtualized.
+                TermPattern::Triple(_) => representation::rdf12::unreachable_triple_term(),
             }
         }
         if let Some(grouping_var) = &self.grouping_col {

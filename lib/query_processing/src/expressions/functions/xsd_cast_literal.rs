@@ -135,8 +135,8 @@ pub fn xsd_cast_literal(
                     trg_type.clone(),
                     global_cats.clone(),
                 )?,
-                // Casting a blank node is an error, which leaves the result unbound
-                BaseRDFNodeType::BlankNode => {
+                // Casting a blank node or a triple term is an error, which leaves the result unbound
+                BaseRDFNodeType::BlankNode | BaseRDFNodeType::TripleTerm => {
                     lit(LiteralValue::untyped_null()).cast(trg_type.clone())
                 }
                 BaseRDFNodeType::Literal(src_nn, _) => cast_literal(
@@ -159,7 +159,9 @@ pub fn xsd_cast_literal(
             BaseRDFNodeType::IRI => {
                 cast_iri_to_xsd_literal(col(c), t, s, trg_nn, trg_type.clone(), global_cats.clone())
             }
-            BaseRDFNodeType::BlankNode => Ok(lit(LiteralValue::untyped_null()).cast(trg_type)),
+            BaseRDFNodeType::BlankNode | BaseRDFNodeType::TripleTerm => {
+                Ok(lit(LiteralValue::untyped_null()).cast(trg_type))
+            }
             BaseRDFNodeType::Literal(src_nn, _) => Ok(cast_literal(
                 // A language-tagged string is a struct of its value and its language; its value
                 // is cast. In a column of several types, above, the value is a field of its own.

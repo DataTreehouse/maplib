@@ -1,10 +1,10 @@
-use crate::multitype::{MULTI_BLANK_DT, MULTI_IRI_DT, MULTI_NONE_DT};
+use crate::multitype::{MULTI_BLANK_DT, MULTI_IRI_DT, MULTI_NONE_DT, MULTI_TRIPLE_DT};
 use crate::rdf_state::RDFNodeState;
 use crate::rdf_to_polars::{default_decimal_type, default_time_unit, default_time_zone};
 use crate::solution_mapping::BaseCatState;
 use crate::{
     literal_is_numeric, LANG_STRING_LANG_FIELD, LANG_STRING_VALUE_FIELD, RDF_NODE_TYPE_BLANK_NODE,
-    RDF_NODE_TYPE_IRI, RDF_NODE_TYPE_NONE,
+    RDF_NODE_TYPE_IRI, RDF_NODE_TYPE_NONE, RDF_NODE_TYPE_TRIPLE_TERM,
 };
 use oxrdf::vocab::{rdf, xsd};
 use oxrdf::{NamedNode, NamedNodeRef, NamedOrBlankNode, Term};
@@ -19,11 +19,16 @@ use std::fmt::{Display, Formatter};
 /// offset in minutes from UTC (e.g. 0 for "Z" and -480 for "-08:00"). None means that the values
 /// have no time zone. The values themselves are stored as UTC instants, and values with
 /// different offsets are different types, so that the offset of each value is preserved.
+///
+/// An RDF 1.2 triple term is stored as a u32 id of the triple term, see TripleTerm. A triple term
+/// can only be an object, never a subject.
 #[derive(Debug, Clone, Ord, PartialOrd, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum BaseRDFNodeType {
     IRI,
     BlankNode,
     Literal(NamedNode, Option<i16>),
+    /// An RDF 1.2 triple term, as the u32 id it has in the triplestore's triple terms.
+    TripleTerm,
     None,
 }
 
@@ -38,6 +43,7 @@ impl BaseRDFNodeType {
             BaseRDFNodeType::BlankNode => MULTI_BLANK_DT.to_string(),
             BaseRDFNodeType::Literal(l, None) => l.to_string(),
             BaseRDFNodeType::Literal(l, Some(tz)) => format!("{l}{TIME_ZONE_SEPARATOR}{tz}"),
+            BaseRDFNodeType::TripleTerm => MULTI_TRIPLE_DT.to_string(),
             BaseRDFNodeType::None => MULTI_NONE_DT.to_string(),
         }
     }
@@ -87,6 +93,7 @@ impl BaseRDFNodeType {
                     vec![self.field_col_name().to_string()]
                 }
             }
+            BaseRDFNodeType::TripleTerm => vec![MULTI_TRIPLE_DT.to_string()],
             BaseRDFNodeType::None => {
                 vec![MULTI_NONE_DT.to_string()]
             }
@@ -98,8 +105,13 @@ impl BaseRDFNodeType {
             Self::IRI => BaseRDFNodeTypeRef::IRI,
             Self::BlankNode => BaseRDFNodeTypeRef::BlankNode,
             Self::Literal(l, tz) => BaseRDFNodeTypeRef::Literal(l.as_ref(), *tz),
+            Self::TripleTerm => BaseRDFNodeTypeRef::TripleTerm,
             Self::None => BaseRDFNodeTypeRef::None,
         }
+    }
+
+    pub fn is_triple_term(&self) -> bool {
+        matches!(self, BaseRDFNodeType::TripleTerm)
     }
 
     pub fn is_iri(&self) -> bool {
@@ -151,6 +163,7 @@ impl BaseRDFNodeType {
                 l.datatype().into_owned(),
                 literal_time_zone(l.value(), l.datatype()),
             ),
+            Term::Triple(_) => BaseRDFNodeType::TripleTerm,
         }
     }
 
@@ -159,6 +172,8 @@ impl BaseRDFNodeType {
             Self::IRI
         } else if s == MULTI_BLANK_DT {
             Self::BlankNode
+        } else if s == MULTI_TRIPLE_DT {
+            Self::TripleTerm
         } else if s == MULTI_NONE_DT {
             Self::None
         } else {
@@ -186,7 +201,8 @@ impl BaseRDFNodeType {
     }
 
     pub fn default_stored_cat_state(&self) -> BaseCatState {
-        if matches!(self, BaseRDFNodeType::None) {
+        // Triple term ids are not codes of a string dictionary.
+        if matches!(self, BaseRDFNodeType::None | BaseRDFNodeType::TripleTerm) {
             BaseCatState::NonString
         } else if matches!(self, BaseRDFNodeType::IRI | BaseRDFNodeType::BlankNode) {
             BaseCatState::CategoricalNative(None)
@@ -204,6 +220,8 @@ impl BaseRDFNodeType {
     pub fn polars_data_type(&self, base_cat_state: &BaseCatState, single_col: bool) -> DataType {
         if matches!(self, BaseRDFNodeType::None) {
             DataType::Boolean
+        } else if matches!(self, BaseRDFNodeType::TripleTerm) {
+            DataType::UInt32
         } else if matches!(self, BaseRDFNodeType::IRI | BaseRDFNodeType::BlankNode) {
             match base_cat_state {
                 BaseCatState::CategoricalNative(_) => DataType::UInt32,
@@ -222,6 +240,8 @@ impl BaseRDFNodeType {
     pub fn default_input_polars_data_type(&self) -> DataType {
         if matches!(self, BaseRDFNodeType::None) {
             DataType::Boolean
+        } else if matches!(self, BaseRDFNodeType::TripleTerm) {
+            DataType::UInt32
         } else if matches!(self, BaseRDFNodeType::IRI | BaseRDFNodeType::BlankNode) {
             DataType::String
         } else if let BaseRDFNodeType::Literal(l, _) = self {
@@ -234,6 +254,8 @@ impl BaseRDFNodeType {
     pub fn default_stored_polars_data_type(&self) -> DataType {
         if matches!(self, BaseRDFNodeType::None) {
             DataType::Boolean
+        } else if matches!(self, BaseRDFNodeType::TripleTerm) {
+            DataType::UInt32
         } else if matches!(self, BaseRDFNodeType::IRI | BaseRDFNodeType::BlankNode) {
             DataType::UInt32
         } else if let BaseRDFNodeType::Literal(l, _) = self {
@@ -301,6 +323,9 @@ impl Display for BaseRDFNodeType {
             Self::Literal(l, _) => {
                 write!(f, "{l}")
             }
+            Self::TripleTerm => {
+                write!(f, "{RDF_NODE_TYPE_TRIPLE_TERM}")
+            }
             Self::None => {
                 write!(f, "{RDF_NODE_TYPE_NONE}")
             }
@@ -341,6 +366,7 @@ pub enum BaseRDFNodeTypeRef<'a> {
     IRI,
     BlankNode,
     Literal(NamedNodeRef<'a>, Option<i16>),
+    TripleTerm,
     None,
 }
 
@@ -361,6 +387,7 @@ impl BaseRDFNodeTypeRef<'_> {
                 l.datatype(),
                 literal_time_zone(l.value(), l.datatype()),
             ),
+            Term::Triple(_) => BaseRDFNodeTypeRef::TripleTerm,
         }
     }
 
@@ -369,6 +396,7 @@ impl BaseRDFNodeTypeRef<'_> {
             BaseRDFNodeTypeRef::IRI => BaseRDFNodeType::IRI,
             BaseRDFNodeTypeRef::BlankNode => BaseRDFNodeType::BlankNode,
             BaseRDFNodeTypeRef::Literal(l, tz) => BaseRDFNodeType::Literal(l.into_owned(), tz),
+            BaseRDFNodeTypeRef::TripleTerm => BaseRDFNodeType::TripleTerm,
             BaseRDFNodeTypeRef::None => BaseRDFNodeType::None,
         }
     }
@@ -378,6 +406,7 @@ impl BaseRDFNodeTypeRef<'_> {
             Self::IRI => MULTI_IRI_DT,
             Self::BlankNode => MULTI_BLANK_DT,
             Self::Literal(l, _) => l.as_str(),
+            Self::TripleTerm => MULTI_TRIPLE_DT,
             Self::None => MULTI_NONE_DT,
         }
     }
@@ -397,6 +426,7 @@ pub fn get_term_datatype_ref(t: &Term) -> BaseRDFNodeTypeRef<'_> {
         Term::Literal(l) => {
             BaseRDFNodeTypeRef::Literal(l.datatype(), literal_time_zone(l.value(), l.datatype()))
         }
+        Term::Triple(_) => BaseRDFNodeTypeRef::TripleTerm,
     }
 }
 
@@ -406,6 +436,7 @@ pub fn get_ground_term_datatype_ref(t: &GroundTerm) -> BaseRDFNodeTypeRef<'_> {
         GroundTerm::Literal(l) => {
             BaseRDFNodeTypeRef::Literal(l.datatype(), literal_time_zone(l.value(), l.datatype()))
         }
+        GroundTerm::Triple(_) => BaseRDFNodeTypeRef::TripleTerm,
     }
 }
 

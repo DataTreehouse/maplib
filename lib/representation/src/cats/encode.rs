@@ -122,6 +122,8 @@ impl Cats {
             BaseRDFNodeType::IRI => self.iri_counter,
             BaseRDFNodeType::BlankNode => self.blank_counter,
             BaseRDFNodeType::Literal(l, _) => self.literal_counter_map.get(l).copied().unwrap_or(0),
+            // Triple term ids are not codes of a string dictionary.
+            BaseRDFNodeType::TripleTerm => crate::rdf12::unreachable_triple_term(),
             BaseRDFNodeType::None => {
                 unreachable!("Should never happen")
             }

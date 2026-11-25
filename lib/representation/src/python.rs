@@ -141,6 +141,9 @@ fn write_base(f: &mut Formatter<'_>, t: &BaseRDFNodeType) -> std::fmt::Result {
         BaseRDFNodeType::Literal(l, _) => {
             write!(f, "RDFType.Literal(\"{}\")", l.as_str())
         }
+        BaseRDFNodeType::TripleTerm => {
+            write!(f, "RDFType.TripleTerm()")
+        }
         BaseRDFNodeType::None => {
             write!(f, "RDFType.None()")
         }

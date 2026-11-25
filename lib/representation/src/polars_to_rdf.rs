@@ -164,6 +164,7 @@ pub fn basic_rdf_node_type_column_to_term_vec(
     blanks_from_u32: bool,
 ) -> Vec<Option<Term>> {
     match &base_type {
+        BaseRDFNodeType::TripleTerm => crate::rdf12::unreachable_triple_term(),
         BaseRDFNodeType::IRI => decode_column(column, base_type, base_state, global_cats)
             .str()
             .unwrap()

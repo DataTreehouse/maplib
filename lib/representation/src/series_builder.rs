@@ -202,6 +202,7 @@ impl SeriesBuilder {
                 },
                 _ => SeriesBuilder::String(StringColumnBuilder::with_capacity(cap)),
             },
+            BaseRDFNodeType::TripleTerm => crate::rdf12::unreachable_triple_term(),
             BaseRDFNodeType::None => {
                 unreachable!("Should never happen")
             }
@@ -362,7 +363,16 @@ impl SeriesBuilder {
                 self.push_str(bl.as_str());
                 Ok(())
             }
+            // The base direction would be lost, as language strings have no place for it.
+            Term::Literal(l) if crate::rdf12::has_base_direction(l) => {
+                Err(RepresentationError::Rdf12NotSupported(
+                    crate::rdf12::BASE_DIRECTION_NOT_SUPPORTED.to_string(),
+                ))
+            }
             Term::Literal(l) => self.parse_literal(l.value(), l.language()),
+            Term::Triple(_) => Err(RepresentationError::Rdf12NotSupported(
+                crate::rdf12::TRIPLE_TERMS_NOT_SUPPORTED.to_string(),
+            )),
         }
     }
 

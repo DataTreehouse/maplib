@@ -101,6 +101,8 @@ impl Triplestore {
         graph: Option<&NamedGraph>,
         debug_no_results: bool,
     ) -> Result<QueryResult, SparqlError> {
+        query_processing::rdf12_check::check_query(query)
+            .map_err(|m| SparqlError::NotSupportedYet(m.to_string()))?;
         if let Some(construct) = describe_as_construct(query) {
             return self.query_parsed(
                 &construct,
@@ -299,6 +301,8 @@ impl Triplestore {
         target_graph: &NamedGraph,
         debug_no_results: bool,
     ) -> Result<InsertResult, SparqlError> {
+        query_processing::rdf12_check::check_query(query)
+            .map_err(|m| SparqlError::NotSupportedYet(m.to_string()))?;
         if let Query::Construct { .. } = &query {
             let res = self.query_parsed(
                 query,
@@ -403,6 +407,8 @@ impl Triplestore {
         debug_no_results: bool,
         keep_triples: bool,
     ) -> Result<UpdateResult, SparqlError> {
+        query_processing::rdf12_check::check_update(update)
+            .map_err(|m| SparqlError::NotSupportedYet(m.to_string()))?;
         // The token of the update stops the evaluation of WHERE clauses, and is checked before
         // each operation, but writes run without it so that an operation is never left half
         // done. Operations that were done before a timeout stay done.
@@ -757,7 +763,7 @@ impl Triplestore {
             }
             // Triples with values that cannot be parsed cannot be stored, so there is nothing
             // to delete for them.
-            let (ttas, _dropped) = triples_to_triples_to_add(triples, &g);
+            let (ttas, _dropped) = triples_to_triples_to_add(triples, &g)?;
             let sms: Vec<_> = ttas
                 .into_iter()
                 .map(|tta| {

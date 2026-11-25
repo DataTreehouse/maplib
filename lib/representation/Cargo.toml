@@ -10,7 +10,8 @@ pyo3 = ["utils/pyo3"]
 [dependencies]
 utils = { path = "../utils" }
 file_io = { path = "../file_io" }
-spargebra = { path = "../spargebra" }
+# SPARQL 1.2 (triple terms in queries). Cargo unifies features, so this enables it for every crate.
+spargebra = { path = "../spargebra", features = ["sparql-12"] }
 disk = { path = "../disk" }
 in_memory = { path = "../in_memory" }
 

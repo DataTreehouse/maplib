@@ -12,6 +12,9 @@ pub fn rdf_term_to_polars_expr(term: &Term) -> Result<Expr, RepresentationError>
         Term::NamedNode(named_node) => Ok(lit(rdf_named_node_to_polars_literal_value(named_node))),
         Term::Literal(l) => rdf_literal_to_polars_expr(l),
         Term::BlankNode(bl) => Ok(lit(rdf_blank_node_to_polars_literal_value(bl))),
+        Term::Triple(_) => Err(RepresentationError::Rdf12NotSupported(
+            crate::rdf12::TRIPLE_TERMS_NOT_SUPPORTED.to_string(),
+        )),
     }
 }
 

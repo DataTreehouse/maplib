@@ -23,6 +23,7 @@ enum Kind {
     Iri,
     BlankNode,
     Literal(NamedNode),
+    TripleTerm,
 }
 
 fn kind(t: &BaseRDFNodeType) -> Option<Kind> {
@@ -30,6 +31,7 @@ fn kind(t: &BaseRDFNodeType) -> Option<Kind> {
         BaseRDFNodeType::IRI => Some(Kind::Iri),
         BaseRDFNodeType::BlankNode => Some(Kind::BlankNode),
         BaseRDFNodeType::Literal(dt, _) => Some(Kind::Literal(dt.clone())),
+        BaseRDFNodeType::TripleTerm => Some(Kind::TripleTerm),
         // Anything may match.
         BaseRDFNodeType::None => None,
     }

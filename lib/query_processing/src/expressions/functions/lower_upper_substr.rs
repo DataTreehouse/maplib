@@ -62,7 +62,10 @@ pub fn lower_upper_substr(
         let b = t.get_base_type().unwrap();
         let s = t.get_base_state().unwrap();
         match b {
-            BaseRDFNodeType::IRI | BaseRDFNodeType::BlankNode | BaseRDFNodeType::None => {
+            BaseRDFNodeType::IRI
+            | BaseRDFNodeType::BlankNode
+            | BaseRDFNodeType::None
+            | BaseRDFNodeType::TripleTerm => {
                 solution_mappings.mappings = solution_mappings.mappings.with_column(
                     lit(LiteralValue::untyped_null())
                         .cast(BaseRDFNodeType::None.default_input_polars_data_type())

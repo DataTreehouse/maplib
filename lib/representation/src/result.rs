@@ -396,6 +396,9 @@ fn term_pattern_expression(
 ) -> Result<(Expr, RDFNodeState), RepresentationError> {
     match tp {
         TermPattern::NamedNode(nn) => Ok(named_node_u32_lit(nn, name, global_cats)),
+        TermPattern::Triple(_) => Err(RepresentationError::Rdf12NotSupported(
+            crate::rdf12::TRIPLE_TERMS_NOT_SUPPORTED.to_string(),
+        )),
         TermPattern::BlankNode(bl) => Ok(blank_node_expresson(rdf_node_types, bl, name)?),
         // A literal cannot be a subject, so the template produces no triples.
         TermPattern::Literal(_) if subject => {

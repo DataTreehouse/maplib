@@ -232,6 +232,8 @@ impl From<&RDFNodeState> for PType {
                     PType::Basic(NamedNode::new_unchecked(OTTR_BLANK_NODE))
                 }
                 BaseRDFNodeType::Literal(l, _) => PType::Basic(l.to_owned()),
+                // OTTR has no type for triple terms; rdfs:Resource is the type of any term.
+                BaseRDFNodeType::TripleTerm => PType::Basic(rdfs::RESOURCE.into_owned()),
                 BaseRDFNodeType::None => PType::None,
             }
         } else {

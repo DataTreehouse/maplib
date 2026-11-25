@@ -270,6 +270,12 @@ fn keyed_triples(
         .collect();
     let object_column = df.column(OBJECT_COL_NAME).unwrap();
     let objects: Vec<TermKey> = match object_type {
+        // The HDT format has no triple terms.
+        BaseRDFNodeType::TripleTerm => {
+            return Err(TriplestoreError::HDTError(
+                "HDT cannot hold RDF 1.2 triple terms".to_string(),
+            ))
+        }
         BaseRDFNodeType::IRI => u32_column(object_column)?
             .into_iter()
             .map(TermKey::Iri)
@@ -513,6 +519,8 @@ fn dictionary_string(term: &Term) -> String {
         Term::Literal(l) => literal_string(l.value(), l.language(), Some(l.datatype().as_str())),
         Term::NamedNode(n) => n.as_str().to_owned(),
         Term::BlankNode(b) => b.to_string(),
+        // Tables of triple terms are refused before their objects are converted.
+        Term::Triple(_) => representation::rdf12::unreachable_triple_term(),
     }
 }
 

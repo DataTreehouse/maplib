@@ -307,6 +307,7 @@ fn wrapping(t: &BaseRDFNodeType) -> (Vec<u8>, Vec<u8>) {
             }
         }
         BaseRDFNodeType::None => (vec![], vec![]),
+        BaseRDFNodeType::TripleTerm => representation::rdf12::unreachable_triple_term(),
     }
 }
 

@@ -203,6 +203,23 @@ pub fn func_expression(
                 global_cats,
             )?;
         }
+        // The functions of RDF 1.2 triple terms and base directions.
+        Function::Triple
+        | Function::Subject
+        | Function::Predicate
+        | Function::Object
+        | Function::IsTriple => {
+            return Err(QueryProcessingError::UnimplementedFunction(format!(
+                "{func} ({})",
+                representation::rdf12::TRIPLE_TERMS_NOT_SUPPORTED
+            )))
+        }
+        Function::LangDir | Function::HasLang | Function::HasLangDir | Function::StrLangDir => {
+            return Err(QueryProcessingError::UnimplementedFunction(format!(
+                "{func} ({})",
+                representation::rdf12::BASE_DIRECTION_NOT_SUPPORTED
+            )))
+        }
         Function::Custom(nn) => {
             solution_mappings = custom_(
                 nn,

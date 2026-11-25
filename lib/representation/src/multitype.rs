@@ -12,6 +12,8 @@ use utils::polars::collect_sized;
 pub const MULTI_IRI_DT: &str = "I";
 pub const MULTI_BLANK_DT: &str = "B";
 pub const MULTI_NONE_DT: &str = "N";
+/// The field of RDF 1.2 triple terms (their u32 ids) in a multi type column.
+pub const MULTI_TRIPLE_DT: &str = "T";
 
 /// Separates a column name from the name of one of its fields in the columns of unnested
 /// multitype columns. It cannot occur in a SPARQL variable name, so `?o`'s language tag column
@@ -38,6 +40,7 @@ pub fn convert_lf_col_to_multitype(expr: Expr, dt: &RDFNodeState) -> Expr {
                     as_struct(vec![expr.alias(&colname)])
                 }
             }
+            BaseRDFNodeType::TripleTerm => as_struct(vec![expr.alias(MULTI_TRIPLE_DT)]),
             BaseRDFNodeType::None => as_struct(vec![expr.alias(MULTI_NONE_DT)]),
         }
     } else {

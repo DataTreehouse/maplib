@@ -15,6 +15,9 @@ pub enum RepresentationError {
     ConstructWithUndefinedBlankNode(String),
     #[error("A lock was open when a thread crashed, cannot guarantee data constitency")]
     PoisonedLockError,
+    /// An RDF 1.2 feature that maplib does not support yet, see crate::rdf12.
+    #[error("{0}")]
+    Rdf12NotSupported(String),
 }
 
 impl<T> From<PoisonError<T>> for RepresentationError {

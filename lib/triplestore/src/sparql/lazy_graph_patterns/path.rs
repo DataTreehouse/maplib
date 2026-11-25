@@ -395,6 +395,11 @@ impl Triplestore {
                 out_df = out_df.lazy().filter(e).collect().unwrap();
                 out_df = out_df.drop(SUBJECT_COL_NAME).unwrap();
             }
+            TermPattern::Triple(_) => {
+                return Err(SparqlError::NotSupportedYet(
+                    representation::rdf12::TRIPLE_TERMS_NOT_SUPPORTED.to_string(),
+                ))
+            }
             TermPattern::Variable(v) => {
                 var_cols.push(v.as_str().to_string());
                 if v.as_str() != SUBJECT_COL_NAME {
@@ -443,6 +448,11 @@ impl Triplestore {
                 out_df = out_df.lazy().filter(e).collect().unwrap();
                 constant_match_height = out_df.height();
                 out_df = out_df.drop(OBJECT_COL_NAME).unwrap();
+            }
+            TermPattern::Triple(_) => {
+                return Err(SparqlError::NotSupportedYet(
+                    representation::rdf12::TRIPLE_TERMS_NOT_SUPPORTED.to_string(),
+                ))
             }
             TermPattern::Variable(v) => {
                 var_cols.push(v.as_str().to_string());

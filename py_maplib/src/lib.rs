@@ -1003,7 +1003,21 @@ fn maybe_parse_bindings(
                                 )
                                 .into());
                             }
+                            Term::Literal(l) if representation::rdf12::has_base_direction(&l) => {
+                                return Err(PyMaplibError::FunctionArgumentError(format!(
+                                    "Binding for variable {k}: {}",
+                                    representation::rdf12::BASE_DIRECTION_NOT_SUPPORTED
+                                ))
+                                .into());
+                            }
                             Term::Literal(l) => GroundTerm::Literal(l),
+                            Term::Triple(_) => {
+                                return Err(PyMaplibError::FunctionArgumentError(format!(
+                                    "Binding for variable {k}: {}",
+                                    representation::rdf12::TRIPLE_TERMS_NOT_SUPPORTED
+                                ))
+                                .into());
+                            }
                         };
                         use_bindings.insert(k, gt);
                     }

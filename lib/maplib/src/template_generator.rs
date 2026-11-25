@@ -498,6 +498,7 @@ fn run_query(
                             Term::NamedNode(nn) => nn.into_string(),
                             Term::BlankNode(b) => b.into_string(),
                             Term::Literal(l) => l.value().to_string(),
+                            t @ Term::Triple(_) => t.to_string(),
                         })
                 })
                 .collect()

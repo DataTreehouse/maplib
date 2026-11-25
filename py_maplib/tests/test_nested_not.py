@@ -2,7 +2,8 @@
 
 The parser tried every `!` as the SPARQL 1.2 double negation first, parsed its whole operand,
 failed without SPARQL 1.2 and parsed the operand again, so parsing took time exponential in the
-nesting depth: 43 levels took more than 20 s. A client of Model.serve could send such a query.
+nesting depth: 43 levels took more than 20 s. SPARQL 1.2 (which maplib's parser is now built with)
+allows `!!` without parentheses, which is checked as well. A client of Model.serve could send such a query.
 
 The answers are compared with pyoxigraph, over values that make the inner test an error (a string
 or an IRI compared with a number) and an unbound variable, which three-valued logic must keep.
@@ -105,15 +106,17 @@ def test_nested_not_in_bind_fast_and_matches_oxigraph():
     assert got == _oxigraph(q)
 
 
-def test_double_negation_without_parentheses_is_still_a_syntax_error():
+@pytest.mark.parametrize("n", [2, 3, 200, 201])
+def test_negations_without_parentheses_fast_and_match_oxigraph(n):
+    # SPARQL 1.2 allows `!!` without parentheses (it was a syntax error in SPARQL 1.1). A long
+    # run of `!` must still be parsed at once.
     m = Model()
     m.reads(DATA, format="ntriples")
-    with pytest.raises(Exception):
-        m.query(f"PREFIX ex: <{EX}> SELECT ?s WHERE {{ {PATTERN} FILTER(!!(?v > 2)) }}")
+    q = f"PREFIX ex: <{EX}> SELECT ?s WHERE {{ {PATTERN} FILTER({'!' * n}(?v > 2)) }}"
     start = time.perf_counter()
-    with pytest.raises(Exception):
-        m.query(f"PREFIX ex: <{EX}> SELECT ?s WHERE {{ {PATTERN} FILTER({'!' * 200}(?v > 2)) }}")
+    got = _maplib(m, q)
     assert time.perf_counter() - start < 5.0
+    assert got == _oxigraph(q)
 
 
 @pytest.mark.parametrize("function", ["SUM", "COUNT", "MAX", "SAMPLE", "GROUP_CONCAT"])

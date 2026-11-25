@@ -8,6 +8,7 @@ pub mod find_query_variables;
 pub mod graph_patterns;
 pub mod pushdown_values;
 pub mod pushdowns;
+pub mod rdf12_check;
 pub mod type_constraints;
 pub mod udf;
 pub mod window;

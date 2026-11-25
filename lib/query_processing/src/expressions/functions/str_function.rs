@@ -38,7 +38,10 @@ pub fn str_function(c: &str, t: &RDFNodeState, global_cats: LockedCats) -> Expr 
                         )
                     }
                 }
-                BaseRDFNodeType::None => lit(LiteralValue::untyped_null()).cast(DataType::String),
+                // STR of a triple term is an error, which leaves it unbound.
+                BaseRDFNodeType::None | BaseRDFNodeType::TripleTerm => {
+                    lit(LiteralValue::untyped_null()).cast(DataType::String)
+                }
             })
         }
         coalesce(to_coalesce.as_slice()).alias(c)
@@ -56,7 +59,9 @@ pub fn str_function(c: &str, t: &RDFNodeState, global_cats: LockedCats) -> Expr 
                     literal_expr_to_string(maybe_decode_expr(col(c), b, s, global_cats), b)
                 }
             }
-            BaseRDFNodeType::None => lit(LiteralValue::untyped_null()).cast(DataType::String),
+            BaseRDFNodeType::None | BaseRDFNodeType::TripleTerm => {
+                lit(LiteralValue::untyped_null()).cast(DataType::String)
+            }
         }
     }
 }

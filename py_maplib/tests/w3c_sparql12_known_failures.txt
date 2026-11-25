@@ -1,52 +1,52 @@
 # W3C SPARQL 1.2 tests that maplib currently fails (used by test_w3c_sparql12.py).
 # One test id per line, optionally followed by "# reason".
 # These are marked as strict xfails: when a test starts passing, remove it from this list.
-eval-triple-terms/basic-2  # Triple terms, reified triples and annotations are not supported (the parsers are built without RDF 1.2 / SPARQL 1.2)
-eval-triple-terms/basic-3  # Triple terms, reified triples and annotations are not supported (the parsers are built without RDF 1.2 / SPARQL 1.2)
-eval-triple-terms/basic-4  # Triple terms, reified triples and annotations are not supported (the parsers are built without RDF 1.2 / SPARQL 1.2)
-eval-triple-terms/basic-5  # Triple terms, reified triples and annotations are not supported (the parsers are built without RDF 1.2 / SPARQL 1.2)
-eval-triple-terms/basic-6  # Triple terms, reified triples and annotations are not supported (the parsers are built without RDF 1.2 / SPARQL 1.2)
-eval-triple-terms/basic-7  # Triple terms, reified triples and annotations are not supported (the parsers are built without RDF 1.2 / SPARQL 1.2)
-eval-triple-terms/basic-8  # Triple terms, reified triples and annotations are not supported (the parsers are built without RDF 1.2 / SPARQL 1.2)
-eval-triple-terms/basic-9  # Triple terms, reified triples and annotations are not supported (the parsers are built without RDF 1.2 / SPARQL 1.2)
-eval-triple-terms/construct-1  # Triple terms, reified triples and annotations are not supported (the parsers are built without RDF 1.2 / SPARQL 1.2)
-eval-triple-terms/construct-2  # Triple terms, reified triples and annotations are not supported (the parsers are built without RDF 1.2 / SPARQL 1.2)
-eval-triple-terms/construct-3  # Triple terms, reified triples and annotations are not supported (the parsers are built without RDF 1.2 / SPARQL 1.2)
-eval-triple-terms/construct-4  # Triple terms, reified triples and annotations are not supported (the parsers are built without RDF 1.2 / SPARQL 1.2)
-eval-triple-terms/construct-5  # Triple terms, reified triples and annotations are not supported (the parsers are built without RDF 1.2 / SPARQL 1.2)
-eval-triple-terms/expr-1  # Triple terms, reified triples and annotations are not supported (the parsers are built without RDF 1.2 / SPARQL 1.2)
-eval-triple-terms/expr-2  # Triple terms, reified triples and annotations are not supported (the parsers are built without RDF 1.2 / SPARQL 1.2)
-eval-triple-terms/graphs-1  # Triple terms, reified triples and annotations are not supported (the parsers are built without RDF 1.2 / SPARQL 1.2)
-eval-triple-terms/graphs-2  # Triple terms, reified triples and annotations are not supported (the parsers are built without RDF 1.2 / SPARQL 1.2)
-eval-triple-terms/op-1  # Triple terms, reified triples and annotations are not supported (the parsers are built without RDF 1.2 / SPARQL 1.2)
-eval-triple-terms/op-2  # Triple terms, reified triples and annotations are not supported (the parsers are built without RDF 1.2 / SPARQL 1.2)
-eval-triple-terms/order-1  # Triple terms, reified triples and annotations are not supported (the parsers are built without RDF 1.2 / SPARQL 1.2)
-eval-triple-terms/order-2  # Triple terms, reified triples and annotations are not supported (the parsers are built without RDF 1.2 / SPARQL 1.2)
-eval-triple-terms/pattern-1  # Triple terms, reified triples and annotations are not supported (the parsers are built without RDF 1.2 / SPARQL 1.2)
-eval-triple-terms/pattern-10  # Triple terms, reified triples and annotations are not supported (the parsers are built without RDF 1.2 / SPARQL 1.2)
-eval-triple-terms/pattern-11  # Triple terms, reified triples and annotations are not supported (the parsers are built without RDF 1.2 / SPARQL 1.2)
-eval-triple-terms/pattern-2  # Triple terms, reified triples and annotations are not supported (the parsers are built without RDF 1.2 / SPARQL 1.2)
-eval-triple-terms/pattern-3  # Triple terms, reified triples and annotations are not supported (the parsers are built without RDF 1.2 / SPARQL 1.2)
-eval-triple-terms/pattern-3-nomatch  # Triple terms, reified triples and annotations are not supported (the parsers are built without RDF 1.2 / SPARQL 1.2)
-eval-triple-terms/pattern-4  # Triple terms, reified triples and annotations are not supported (the parsers are built without RDF 1.2 / SPARQL 1.2)
-eval-triple-terms/pattern-5  # Triple terms, reified triples and annotations are not supported (the parsers are built without RDF 1.2 / SPARQL 1.2)
-eval-triple-terms/pattern-6  # Triple terms, reified triples and annotations are not supported (the parsers are built without RDF 1.2 / SPARQL 1.2)
-eval-triple-terms/pattern-7  # Triple terms, reified triples and annotations are not supported (the parsers are built without RDF 1.2 / SPARQL 1.2)
-eval-triple-terms/pattern-8  # Triple terms, reified triples and annotations are not supported (the parsers are built without RDF 1.2 / SPARQL 1.2)
-eval-triple-terms/pattern-8-nomatch  # Triple terms, reified triples and annotations are not supported (the parsers are built without RDF 1.2 / SPARQL 1.2)
-eval-triple-terms/pattern-9  # Triple terms, reified triples and annotations are not supported (the parsers are built without RDF 1.2 / SPARQL 1.2)
-eval-triple-terms/results-reifiedtriples-1j  # Triple terms, reified triples and annotations are not supported (the parsers are built without RDF 1.2 / SPARQL 1.2)
-eval-triple-terms/results-reifiedtriples-1x  # Triple terms, reified triples and annotations are not supported (the parsers are built without RDF 1.2 / SPARQL 1.2)
-eval-triple-terms/results-tripleterms-1j  # Triple terms, reified triples and annotations are not supported (the parsers are built without RDF 1.2 / SPARQL 1.2)
-eval-triple-terms/results-tripleterms-1x  # Triple terms, reified triples and annotations are not supported (the parsers are built without RDF 1.2 / SPARQL 1.2)
-eval-triple-terms/update-1  # Triple terms, reified triples and annotations are not supported (the parsers are built without RDF 1.2 / SPARQL 1.2)
-eval-triple-terms/update-2  # Triple terms, reified triples and annotations are not supported (the parsers are built without RDF 1.2 / SPARQL 1.2)
-eval-triple-terms/update-3  # Triple terms, reified triples and annotations are not supported (the parsers are built without RDF 1.2 / SPARQL 1.2)
+eval-triple-terms/basic-2  # Triple terms, reified triples and annotations are not supported yet
+eval-triple-terms/basic-3  # Triple terms, reified triples and annotations are not supported yet
+eval-triple-terms/basic-4  # Triple terms, reified triples and annotations are not supported yet
+eval-triple-terms/basic-5  # Triple terms, reified triples and annotations are not supported yet
+eval-triple-terms/basic-6  # Triple terms, reified triples and annotations are not supported yet
+eval-triple-terms/basic-7  # Triple terms, reified triples and annotations are not supported yet
+eval-triple-terms/basic-8  # Triple terms, reified triples and annotations are not supported yet
+eval-triple-terms/basic-9  # Triple terms, reified triples and annotations are not supported yet
+eval-triple-terms/construct-1  # Triple terms, reified triples and annotations are not supported yet
+eval-triple-terms/construct-2  # Triple terms, reified triples and annotations are not supported yet
+eval-triple-terms/construct-3  # Triple terms, reified triples and annotations are not supported yet
+eval-triple-terms/construct-4  # Triple terms, reified triples and annotations are not supported yet
+eval-triple-terms/construct-5  # Triple terms, reified triples and annotations are not supported yet
+eval-triple-terms/expr-1  # Triple terms, reified triples and annotations are not supported yet
+eval-triple-terms/expr-2  # Triple terms, reified triples and annotations are not supported yet
+eval-triple-terms/graphs-1  # Triple terms, reified triples and annotations are not supported yet
+eval-triple-terms/graphs-2  # Triple terms, reified triples and annotations are not supported yet
+eval-triple-terms/op-1  # Triple terms, reified triples and annotations are not supported yet
+eval-triple-terms/op-2  # Triple terms, reified triples and annotations are not supported yet
+eval-triple-terms/order-1  # Triple terms, reified triples and annotations are not supported yet
+eval-triple-terms/order-2  # Triple terms, reified triples and annotations are not supported yet
+eval-triple-terms/pattern-1  # Triple terms, reified triples and annotations are not supported yet
+eval-triple-terms/pattern-10  # Triple terms, reified triples and annotations are not supported yet
+eval-triple-terms/pattern-11  # Triple terms, reified triples and annotations are not supported yet
+eval-triple-terms/pattern-2  # Triple terms, reified triples and annotations are not supported yet
+eval-triple-terms/pattern-3  # Triple terms, reified triples and annotations are not supported yet
+eval-triple-terms/pattern-3-nomatch  # Triple terms, reified triples and annotations are not supported yet
+eval-triple-terms/pattern-4  # Triple terms, reified triples and annotations are not supported yet
+eval-triple-terms/pattern-5  # Triple terms, reified triples and annotations are not supported yet
+eval-triple-terms/pattern-6  # Triple terms, reified triples and annotations are not supported yet
+eval-triple-terms/pattern-7  # Triple terms, reified triples and annotations are not supported yet
+eval-triple-terms/pattern-8  # Triple terms, reified triples and annotations are not supported yet
+eval-triple-terms/pattern-8-nomatch  # Triple terms, reified triples and annotations are not supported yet
+eval-triple-terms/pattern-9  # Triple terms, reified triples and annotations are not supported yet
+eval-triple-terms/results-reifiedtriples-1j  # Triple terms, reified triples and annotations are not supported yet
+eval-triple-terms/results-reifiedtriples-1x  # Triple terms, reified triples and annotations are not supported yet
+eval-triple-terms/results-tripleterms-1j  # Triple terms, reified triples and annotations are not supported yet
+eval-triple-terms/results-tripleterms-1x  # Triple terms, reified triples and annotations are not supported yet
+eval-triple-terms/update-1  # Triple terms, reified triples and annotations are not supported yet
+eval-triple-terms/update-2  # Triple terms, reified triples and annotations are not supported yet
+eval-triple-terms/update-3  # Triple terms, reified triples and annotations are not supported yet
 expression/not-not  # Double negation (!!) is not supported
-expression/triple-on-literals  # Triple terms, reified triples and annotations are not supported (the parsers are built without RDF 1.2 / SPARQL 1.2)
+expression/triple-on-literals  # Triple terms, reified triples and annotations are not supported yet
 expression/triple-on-str-literals  # Literals with a base direction (rdf:dirLangString) and their functions are not supported
-expression/triple-on-triple-terms  # Triple terms, reified triples and annotations are not supported (the parsers are built without RDF 1.2 / SPARQL 1.2)
-expression/triple-on-undefs  # Triple terms, reified triples and annotations are not supported (the parsers are built without RDF 1.2 / SPARQL 1.2)
+expression/triple-on-triple-terms  # Triple terms, reified triples and annotations are not supported yet
+expression/triple-on-undefs  # Triple terms, reified triples and annotations are not supported yet
 grouping/group01  # Numeric literals are stored as values, so "001"^^xsd:integer and "1"^^xsd:integer are grouped together (the test requires mf:NoCanonicalizationOfNumerics)
 lang-basedir/concat  # Literals with a base direction (rdf:dirLangString) and their functions are not supported
 lang-basedir/contains  # Literals with a base direction (rdf:dirLangString) and their functions are not supported
@@ -59,123 +59,120 @@ lang-basedir/langdir  # Literals with a base direction (rdf:dirLangString) and t
 lang-basedir/langdir-literal  # Literals with a base direction (rdf:dirLangString) and their functions are not supported
 lang-basedir/strlang  # STRLANG with an empty language tag gives a simple literal instead of an error
 lang-basedir/strlangdir  # Literals with a base direction (rdf:dirLangString) and their functions are not supported
-syntax-triple-terms-positive/annotation-anonreifier-01  # Triple terms, reified triples and annotations are not supported (the parsers are built without RDF 1.2 / SPARQL 1.2)
-syntax-triple-terms-positive/annotation-anonreifier-02  # Triple terms, reified triples and annotations are not supported (the parsers are built without RDF 1.2 / SPARQL 1.2)
-syntax-triple-terms-positive/annotation-anonreifier-03  # Triple terms, reified triples and annotations are not supported (the parsers are built without RDF 1.2 / SPARQL 1.2)
-syntax-triple-terms-positive/annotation-anonreifier-04  # Triple terms, reified triples and annotations are not supported (the parsers are built without RDF 1.2 / SPARQL 1.2)
-syntax-triple-terms-positive/annotation-anonreifier-05  # Triple terms, reified triples and annotations are not supported (the parsers are built without RDF 1.2 / SPARQL 1.2)
-syntax-triple-terms-positive/annotation-anonreifier-06  # Triple terms, reified triples and annotations are not supported (the parsers are built without RDF 1.2 / SPARQL 1.2)
-syntax-triple-terms-positive/annotation-anonreifier-07  # Triple terms, reified triples and annotations are not supported (the parsers are built without RDF 1.2 / SPARQL 1.2)
-syntax-triple-terms-positive/annotation-anonreifier-08  # Triple terms, reified triples and annotations are not supported (the parsers are built without RDF 1.2 / SPARQL 1.2)
-syntax-triple-terms-positive/annotation-anonreifier-09  # Triple terms, reified triples and annotations are not supported (the parsers are built without RDF 1.2 / SPARQL 1.2)
-syntax-triple-terms-positive/annotation-anonreifier-multiple-01  # Triple terms, reified triples and annotations are not supported (the parsers are built without RDF 1.2 / SPARQL 1.2)
-syntax-triple-terms-positive/annotation-anonreifier-multiple-02  # Triple terms, reified triples and annotations are not supported (the parsers are built without RDF 1.2 / SPARQL 1.2)
-syntax-triple-terms-positive/annotation-anonreifier-multiple-03  # Triple terms, reified triples and annotations are not supported (the parsers are built without RDF 1.2 / SPARQL 1.2)
-syntax-triple-terms-positive/annotation-anonreifier-multiple-04  # Triple terms, reified triples and annotations are not supported (the parsers are built without RDF 1.2 / SPARQL 1.2)
-syntax-triple-terms-positive/annotation-reifier-01  # Triple terms, reified triples and annotations are not supported (the parsers are built without RDF 1.2 / SPARQL 1.2)
-syntax-triple-terms-positive/annotation-reifier-02  # Triple terms, reified triples and annotations are not supported (the parsers are built without RDF 1.2 / SPARQL 1.2)
-syntax-triple-terms-positive/annotation-reifier-03  # Triple terms, reified triples and annotations are not supported (the parsers are built without RDF 1.2 / SPARQL 1.2)
-syntax-triple-terms-positive/annotation-reifier-04  # Triple terms, reified triples and annotations are not supported (the parsers are built without RDF 1.2 / SPARQL 1.2)
-syntax-triple-terms-positive/annotation-reifier-05  # Triple terms, reified triples and annotations are not supported (the parsers are built without RDF 1.2 / SPARQL 1.2)
-syntax-triple-terms-positive/annotation-reifier-06  # Triple terms, reified triples and annotations are not supported (the parsers are built without RDF 1.2 / SPARQL 1.2)
-syntax-triple-terms-positive/annotation-reifier-07  # Triple terms, reified triples and annotations are not supported (the parsers are built without RDF 1.2 / SPARQL 1.2)
-syntax-triple-terms-positive/annotation-reifier-08  # Triple terms, reified triples and annotations are not supported (the parsers are built without RDF 1.2 / SPARQL 1.2)
-syntax-triple-terms-positive/annotation-reifier-09  # Triple terms, reified triples and annotations are not supported (the parsers are built without RDF 1.2 / SPARQL 1.2)
-syntax-triple-terms-positive/annotation-reifier-multiple-01  # Triple terms, reified triples and annotations are not supported (the parsers are built without RDF 1.2 / SPARQL 1.2)
-syntax-triple-terms-positive/annotation-reifier-multiple-02  # Triple terms, reified triples and annotations are not supported (the parsers are built without RDF 1.2 / SPARQL 1.2)
-syntax-triple-terms-positive/annotation-reifier-multiple-03  # Triple terms, reified triples and annotations are not supported (the parsers are built without RDF 1.2 / SPARQL 1.2)
-syntax-triple-terms-positive/annotation-reifier-multiple-04  # Triple terms, reified triples and annotations are not supported (the parsers are built without RDF 1.2 / SPARQL 1.2)
-syntax-triple-terms-positive/annotation-reifier-multiple-05  # Triple terms, reified triples and annotations are not supported (the parsers are built without RDF 1.2 / SPARQL 1.2)
-syntax-triple-terms-positive/annotation-reifier-multiple-06  # Triple terms, reified triples and annotations are not supported (the parsers are built without RDF 1.2 / SPARQL 1.2)
-syntax-triple-terms-positive/annotation-reifier-multiple-07  # Triple terms, reified triples and annotations are not supported (the parsers are built without RDF 1.2 / SPARQL 1.2)
-syntax-triple-terms-positive/annotation-reifier-multiple-08  # Triple terms, reified triples and annotations are not supported (the parsers are built without RDF 1.2 / SPARQL 1.2)
-syntax-triple-terms-positive/annotation-reifier-multiple-09  # Triple terms, reified triples and annotations are not supported (the parsers are built without RDF 1.2 / SPARQL 1.2)
-syntax-triple-terms-positive/annotation-reifier-multiple-10  # Triple terms, reified triples and annotations are not supported (the parsers are built without RDF 1.2 / SPARQL 1.2)
-syntax-triple-terms-positive/basic-anonreifier-01  # Triple terms, reified triples and annotations are not supported (the parsers are built without RDF 1.2 / SPARQL 1.2)
-syntax-triple-terms-positive/basic-anonreifier-02  # Triple terms, reified triples and annotations are not supported (the parsers are built without RDF 1.2 / SPARQL 1.2)
-syntax-triple-terms-positive/basic-anonreifier-03  # Triple terms, reified triples and annotations are not supported (the parsers are built without RDF 1.2 / SPARQL 1.2)
-syntax-triple-terms-positive/basic-anonreifier-04  # Triple terms, reified triples and annotations are not supported (the parsers are built without RDF 1.2 / SPARQL 1.2)
-syntax-triple-terms-positive/basic-anonreifier-06  # Triple terms, reified triples and annotations are not supported (the parsers are built without RDF 1.2 / SPARQL 1.2)
-syntax-triple-terms-positive/basic-anonreifier-07  # Triple terms, reified triples and annotations are not supported (the parsers are built without RDF 1.2 / SPARQL 1.2)
-syntax-triple-terms-positive/basic-anonreifier-08  # Triple terms, reified triples and annotations are not supported (the parsers are built without RDF 1.2 / SPARQL 1.2)
-syntax-triple-terms-positive/basic-anonreifier-09  # Triple terms, reified triples and annotations are not supported (the parsers are built without RDF 1.2 / SPARQL 1.2)
-syntax-triple-terms-positive/basic-anonreifier-10  # Triple terms, reified triples and annotations are not supported (the parsers are built without RDF 1.2 / SPARQL 1.2)
-syntax-triple-terms-positive/basic-anonreifier-11  # Triple terms, reified triples and annotations are not supported (the parsers are built without RDF 1.2 / SPARQL 1.2)
-syntax-triple-terms-positive/basic-anonreifier-12  # Triple terms, reified triples and annotations are not supported (the parsers are built without RDF 1.2 / SPARQL 1.2)
-syntax-triple-terms-positive/basic-anonreifier-13  # Triple terms, reified triples and annotations are not supported (the parsers are built without RDF 1.2 / SPARQL 1.2)
-syntax-triple-terms-positive/basic-reifier-01  # Triple terms, reified triples and annotations are not supported (the parsers are built without RDF 1.2 / SPARQL 1.2)
-syntax-triple-terms-positive/basic-reifier-02  # Triple terms, reified triples and annotations are not supported (the parsers are built without RDF 1.2 / SPARQL 1.2)
-syntax-triple-terms-positive/basic-reifier-03  # Triple terms, reified triples and annotations are not supported (the parsers are built without RDF 1.2 / SPARQL 1.2)
-syntax-triple-terms-positive/basic-reifier-04  # Triple terms, reified triples and annotations are not supported (the parsers are built without RDF 1.2 / SPARQL 1.2)
-syntax-triple-terms-positive/basic-reifier-06  # Triple terms, reified triples and annotations are not supported (the parsers are built without RDF 1.2 / SPARQL 1.2)
-syntax-triple-terms-positive/basic-reifier-07  # Triple terms, reified triples and annotations are not supported (the parsers are built without RDF 1.2 / SPARQL 1.2)
-syntax-triple-terms-positive/basic-reifier-08  # Triple terms, reified triples and annotations are not supported (the parsers are built without RDF 1.2 / SPARQL 1.2)
-syntax-triple-terms-positive/basic-reifier-09  # Triple terms, reified triples and annotations are not supported (the parsers are built without RDF 1.2 / SPARQL 1.2)
-syntax-triple-terms-positive/basic-reifier-10  # Triple terms, reified triples and annotations are not supported (the parsers are built without RDF 1.2 / SPARQL 1.2)
-syntax-triple-terms-positive/basic-reifier-11  # Triple terms, reified triples and annotations are not supported (the parsers are built without RDF 1.2 / SPARQL 1.2)
-syntax-triple-terms-positive/basic-reifier-12  # Triple terms, reified triples and annotations are not supported (the parsers are built without RDF 1.2 / SPARQL 1.2)
-syntax-triple-terms-positive/basic-reifier-13  # Triple terms, reified triples and annotations are not supported (the parsers are built without RDF 1.2 / SPARQL 1.2)
-syntax-triple-terms-positive/basic-tripleterm-01  # Triple terms, reified triples and annotations are not supported (the parsers are built without RDF 1.2 / SPARQL 1.2)
-syntax-triple-terms-positive/basic-tripleterm-02  # Triple terms, reified triples and annotations are not supported (the parsers are built without RDF 1.2 / SPARQL 1.2)
-syntax-triple-terms-positive/basic-tripleterm-03  # Triple terms, reified triples and annotations are not supported (the parsers are built without RDF 1.2 / SPARQL 1.2)
-syntax-triple-terms-positive/basic-tripleterm-04  # Triple terms, reified triples and annotations are not supported (the parsers are built without RDF 1.2 / SPARQL 1.2)
-syntax-triple-terms-positive/basic-tripleterm-05  # Triple terms, reified triples and annotations are not supported (the parsers are built without RDF 1.2 / SPARQL 1.2)
-syntax-triple-terms-positive/basic-tripleterm-06  # Triple terms, reified triples and annotations are not supported (the parsers are built without RDF 1.2 / SPARQL 1.2)
-syntax-triple-terms-positive/basic-tripleterm-07  # Triple terms, reified triples and annotations are not supported (the parsers are built without RDF 1.2 / SPARQL 1.2)
-syntax-triple-terms-positive/bnode-anonreifier-01  # Triple terms, reified triples and annotations are not supported (the parsers are built without RDF 1.2 / SPARQL 1.2)
-syntax-triple-terms-positive/bnode-anonreifier-02  # Triple terms, reified triples and annotations are not supported (the parsers are built without RDF 1.2 / SPARQL 1.2)
-syntax-triple-terms-positive/bnode-anonreifier-03  # Triple terms, reified triples and annotations are not supported (the parsers are built without RDF 1.2 / SPARQL 1.2)
-syntax-triple-terms-positive/bnode-reifier-01  # Triple terms, reified triples and annotations are not supported (the parsers are built without RDF 1.2 / SPARQL 1.2)
-syntax-triple-terms-positive/bnode-reifier-02  # Triple terms, reified triples and annotations are not supported (the parsers are built without RDF 1.2 / SPARQL 1.2)
-syntax-triple-terms-positive/bnode-reifier-03  # Triple terms, reified triples and annotations are not supported (the parsers are built without RDF 1.2 / SPARQL 1.2)
-syntax-triple-terms-positive/bnode-tripleterm-01  # Triple terms, reified triples and annotations are not supported (the parsers are built without RDF 1.2 / SPARQL 1.2)
-syntax-triple-terms-positive/bnode-tripleterm-02  # Triple terms, reified triples and annotations are not supported (the parsers are built without RDF 1.2 / SPARQL 1.2)
-syntax-triple-terms-positive/bnode-tripleterm-03  # Triple terms, reified triples and annotations are not supported (the parsers are built without RDF 1.2 / SPARQL 1.2)
-syntax-triple-terms-positive/compound-all  # Triple terms, reified triples and annotations are not supported (the parsers are built without RDF 1.2 / SPARQL 1.2)
-syntax-triple-terms-positive/compound-anonreifier  # Triple terms, reified triples and annotations are not supported (the parsers are built without RDF 1.2 / SPARQL 1.2)
-syntax-triple-terms-positive/compound-reifier  # Triple terms, reified triples and annotations are not supported (the parsers are built without RDF 1.2 / SPARQL 1.2)
-syntax-triple-terms-positive/compound-tripleterm  # Triple terms, reified triples and annotations are not supported (the parsers are built without RDF 1.2 / SPARQL 1.2)
-syntax-triple-terms-positive/compound-tripleterm-subject  # Triple terms, reified triples and annotations are not supported (the parsers are built without RDF 1.2 / SPARQL 1.2)
-syntax-triple-terms-positive/expr-tripleterm-01  # Triple terms, reified triples and annotations are not supported (the parsers are built without RDF 1.2 / SPARQL 1.2)
-syntax-triple-terms-positive/expr-tripleterm-03  # Triple terms, reified triples and annotations are not supported (the parsers are built without RDF 1.2 / SPARQL 1.2)
-syntax-triple-terms-positive/expr-tripleterm-04  # Triple terms, reified triples and annotations are not supported (the parsers are built without RDF 1.2 / SPARQL 1.2)
-syntax-triple-terms-positive/expr-tripleterm-05  # Triple terms, reified triples and annotations are not supported (the parsers are built without RDF 1.2 / SPARQL 1.2)
-syntax-triple-terms-positive/expr-tripleterm-06  # Triple terms, reified triples and annotations are not supported (the parsers are built without RDF 1.2 / SPARQL 1.2)
-syntax-triple-terms-positive/inside-anonreifier-01  # Triple terms, reified triples and annotations are not supported (the parsers are built without RDF 1.2 / SPARQL 1.2)
-syntax-triple-terms-positive/inside-anonreifier-02  # Triple terms, reified triples and annotations are not supported (the parsers are built without RDF 1.2 / SPARQL 1.2)
-syntax-triple-terms-positive/inside-reifier-01  # Triple terms, reified triples and annotations are not supported (the parsers are built without RDF 1.2 / SPARQL 1.2)
-syntax-triple-terms-positive/inside-reifier-02  # Triple terms, reified triples and annotations are not supported (the parsers are built without RDF 1.2 / SPARQL 1.2)
-syntax-triple-terms-positive/inside-tripleterm-01  # Triple terms, reified triples and annotations are not supported (the parsers are built without RDF 1.2 / SPARQL 1.2)
-syntax-triple-terms-positive/inside-tripleterm-02  # Triple terms, reified triples and annotations are not supported (the parsers are built without RDF 1.2 / SPARQL 1.2)
-syntax-triple-terms-positive/nested-anonreifier-01  # Triple terms, reified triples and annotations are not supported (the parsers are built without RDF 1.2 / SPARQL 1.2)
-syntax-triple-terms-positive/nested-anonreifier-02  # Triple terms, reified triples and annotations are not supported (the parsers are built without RDF 1.2 / SPARQL 1.2)
-syntax-triple-terms-positive/nested-reifier-01  # Triple terms, reified triples and annotations are not supported (the parsers are built without RDF 1.2 / SPARQL 1.2)
-syntax-triple-terms-positive/nested-reifier-02  # Triple terms, reified triples and annotations are not supported (the parsers are built without RDF 1.2 / SPARQL 1.2)
-syntax-triple-terms-positive/nested-tripleterm-01  # Triple terms, reified triples and annotations are not supported (the parsers are built without RDF 1.2 / SPARQL 1.2)
-syntax-triple-terms-positive/nested-tripleterm-02  # Triple terms, reified triples and annotations are not supported (the parsers are built without RDF 1.2 / SPARQL 1.2)
-syntax-triple-terms-positive/subject-tripleterm  # Triple terms, reified triples and annotations are not supported (the parsers are built without RDF 1.2 / SPARQL 1.2)
-syntax-triple-terms-positive/update-anonreifier-01  # Triple terms, reified triples and annotations are not supported (the parsers are built without RDF 1.2 / SPARQL 1.2)
-syntax-triple-terms-positive/update-anonreifier-02  # Triple terms, reified triples and annotations are not supported (the parsers are built without RDF 1.2 / SPARQL 1.2)
-syntax-triple-terms-positive/update-anonreifier-03  # Triple terms, reified triples and annotations are not supported (the parsers are built without RDF 1.2 / SPARQL 1.2)
-syntax-triple-terms-positive/update-anonreifier-04  # Triple terms, reified triples and annotations are not supported (the parsers are built without RDF 1.2 / SPARQL 1.2)
-syntax-triple-terms-positive/update-anonreifier-05  # Triple terms, reified triples and annotations are not supported (the parsers are built without RDF 1.2 / SPARQL 1.2)
-syntax-triple-terms-positive/update-anonreifier-06  # Triple terms, reified triples and annotations are not supported (the parsers are built without RDF 1.2 / SPARQL 1.2)
-syntax-triple-terms-positive/update-reifier-01  # Triple terms, reified triples and annotations are not supported (the parsers are built without RDF 1.2 / SPARQL 1.2)
-syntax-triple-terms-positive/update-reifier-02  # Triple terms, reified triples and annotations are not supported (the parsers are built without RDF 1.2 / SPARQL 1.2)
-syntax-triple-terms-positive/update-reifier-03  # Triple terms, reified triples and annotations are not supported (the parsers are built without RDF 1.2 / SPARQL 1.2)
-syntax-triple-terms-positive/update-reifier-04  # Triple terms, reified triples and annotations are not supported (the parsers are built without RDF 1.2 / SPARQL 1.2)
-syntax-triple-terms-positive/update-reifier-05  # Triple terms, reified triples and annotations are not supported (the parsers are built without RDF 1.2 / SPARQL 1.2)
-syntax-triple-terms-positive/update-reifier-06  # Triple terms, reified triples and annotations are not supported (the parsers are built without RDF 1.2 / SPARQL 1.2)
-syntax-triple-terms-positive/update-reifier-07  # Triple terms, reified triples and annotations are not supported (the parsers are built without RDF 1.2 / SPARQL 1.2)
-syntax-triple-terms-positive/update-reifier-08  # Triple terms, reified triples and annotations are not supported (the parsers are built without RDF 1.2 / SPARQL 1.2)
-syntax-triple-terms-positive/update-tripleterm-01  # Triple terms, reified triples and annotations are not supported (the parsers are built without RDF 1.2 / SPARQL 1.2)
-syntax-triple-terms-positive/update-tripleterm-03  # Triple terms, reified triples and annotations are not supported (the parsers are built without RDF 1.2 / SPARQL 1.2)
-syntax-triple-terms-positive/update-tripleterm-04  # Triple terms, reified triples and annotations are not supported (the parsers are built without RDF 1.2 / SPARQL 1.2)
-syntax-triple-terms-positive/update-tripleterm-05  # Triple terms, reified triples and annotations are not supported (the parsers are built without RDF 1.2 / SPARQL 1.2)
+syntax-triple-terms-positive/annotation-anonreifier-01  # Triple terms, reified triples and annotations are not supported yet
+syntax-triple-terms-positive/annotation-anonreifier-02  # Triple terms, reified triples and annotations are not supported yet
+syntax-triple-terms-positive/annotation-anonreifier-03  # Triple terms, reified triples and annotations are not supported yet
+syntax-triple-terms-positive/annotation-anonreifier-04  # Triple terms, reified triples and annotations are not supported yet
+syntax-triple-terms-positive/annotation-anonreifier-05  # Triple terms, reified triples and annotations are not supported yet
+syntax-triple-terms-positive/annotation-anonreifier-06  # Triple terms, reified triples and annotations are not supported yet
+syntax-triple-terms-positive/annotation-anonreifier-07  # Triple terms, reified triples and annotations are not supported yet
+syntax-triple-terms-positive/annotation-anonreifier-08  # Triple terms, reified triples and annotations are not supported yet
+syntax-triple-terms-positive/annotation-anonreifier-09  # Triple terms, reified triples and annotations are not supported yet
+syntax-triple-terms-positive/annotation-anonreifier-multiple-01  # Triple terms, reified triples and annotations are not supported yet
+syntax-triple-terms-positive/annotation-anonreifier-multiple-02  # Triple terms, reified triples and annotations are not supported yet
+syntax-triple-terms-positive/annotation-anonreifier-multiple-03  # Triple terms, reified triples and annotations are not supported yet
+syntax-triple-terms-positive/annotation-anonreifier-multiple-04  # Triple terms, reified triples and annotations are not supported yet
+syntax-triple-terms-positive/annotation-reifier-01  # Triple terms, reified triples and annotations are not supported yet
+syntax-triple-terms-positive/annotation-reifier-02  # Triple terms, reified triples and annotations are not supported yet
+syntax-triple-terms-positive/annotation-reifier-03  # Triple terms, reified triples and annotations are not supported yet
+syntax-triple-terms-positive/annotation-reifier-04  # Triple terms, reified triples and annotations are not supported yet
+syntax-triple-terms-positive/annotation-reifier-05  # Triple terms, reified triples and annotations are not supported yet
+syntax-triple-terms-positive/annotation-reifier-06  # Triple terms, reified triples and annotations are not supported yet
+syntax-triple-terms-positive/annotation-reifier-07  # Triple terms, reified triples and annotations are not supported yet
+syntax-triple-terms-positive/annotation-reifier-08  # Triple terms, reified triples and annotations are not supported yet
+syntax-triple-terms-positive/annotation-reifier-09  # Triple terms, reified triples and annotations are not supported yet
+syntax-triple-terms-positive/annotation-reifier-multiple-01  # Triple terms, reified triples and annotations are not supported yet
+syntax-triple-terms-positive/annotation-reifier-multiple-02  # Triple terms, reified triples and annotations are not supported yet
+syntax-triple-terms-positive/annotation-reifier-multiple-03  # Triple terms, reified triples and annotations are not supported yet
+syntax-triple-terms-positive/annotation-reifier-multiple-04  # Triple terms, reified triples and annotations are not supported yet
+syntax-triple-terms-positive/annotation-reifier-multiple-05  # Triple terms, reified triples and annotations are not supported yet
+syntax-triple-terms-positive/annotation-reifier-multiple-06  # Triple terms, reified triples and annotations are not supported yet
+syntax-triple-terms-positive/annotation-reifier-multiple-07  # Triple terms, reified triples and annotations are not supported yet
+syntax-triple-terms-positive/annotation-reifier-multiple-08  # Triple terms, reified triples and annotations are not supported yet
+syntax-triple-terms-positive/annotation-reifier-multiple-09  # Triple terms, reified triples and annotations are not supported yet
+syntax-triple-terms-positive/annotation-reifier-multiple-10  # Triple terms, reified triples and annotations are not supported yet
+syntax-triple-terms-positive/basic-anonreifier-01  # Triple terms, reified triples and annotations are not supported yet
+syntax-triple-terms-positive/basic-anonreifier-02  # Triple terms, reified triples and annotations are not supported yet
+syntax-triple-terms-positive/basic-anonreifier-03  # Triple terms, reified triples and annotations are not supported yet
+syntax-triple-terms-positive/basic-anonreifier-04  # Triple terms, reified triples and annotations are not supported yet
+syntax-triple-terms-positive/basic-anonreifier-06  # Triple terms, reified triples and annotations are not supported yet
+syntax-triple-terms-positive/basic-anonreifier-07  # Triple terms, reified triples and annotations are not supported yet
+syntax-triple-terms-positive/basic-anonreifier-08  # Triple terms, reified triples and annotations are not supported yet
+syntax-triple-terms-positive/basic-anonreifier-09  # Triple terms, reified triples and annotations are not supported yet
+syntax-triple-terms-positive/basic-anonreifier-10  # Triple terms, reified triples and annotations are not supported yet
+syntax-triple-terms-positive/basic-anonreifier-11  # Triple terms, reified triples and annotations are not supported yet
+syntax-triple-terms-positive/basic-anonreifier-12  # Triple terms, reified triples and annotations are not supported yet
+syntax-triple-terms-positive/basic-anonreifier-13  # Triple terms, reified triples and annotations are not supported yet
+syntax-triple-terms-positive/basic-reifier-01  # Triple terms, reified triples and annotations are not supported yet
+syntax-triple-terms-positive/basic-reifier-02  # Triple terms, reified triples and annotations are not supported yet
+syntax-triple-terms-positive/basic-reifier-03  # Triple terms, reified triples and annotations are not supported yet
+syntax-triple-terms-positive/basic-reifier-04  # Triple terms, reified triples and annotations are not supported yet
+syntax-triple-terms-positive/basic-reifier-06  # Triple terms, reified triples and annotations are not supported yet
+syntax-triple-terms-positive/basic-reifier-07  # Triple terms, reified triples and annotations are not supported yet
+syntax-triple-terms-positive/basic-reifier-08  # Triple terms, reified triples and annotations are not supported yet
+syntax-triple-terms-positive/basic-reifier-09  # Triple terms, reified triples and annotations are not supported yet
+syntax-triple-terms-positive/basic-reifier-10  # Triple terms, reified triples and annotations are not supported yet
+syntax-triple-terms-positive/basic-reifier-11  # Triple terms, reified triples and annotations are not supported yet
+syntax-triple-terms-positive/basic-reifier-12  # Triple terms, reified triples and annotations are not supported yet
+syntax-triple-terms-positive/basic-reifier-13  # Triple terms, reified triples and annotations are not supported yet
+syntax-triple-terms-positive/basic-tripleterm-01  # Triple terms, reified triples and annotations are not supported yet
+syntax-triple-terms-positive/basic-tripleterm-02  # Triple terms, reified triples and annotations are not supported yet
+syntax-triple-terms-positive/basic-tripleterm-03  # Triple terms, reified triples and annotations are not supported yet
+syntax-triple-terms-positive/basic-tripleterm-04  # Triple terms, reified triples and annotations are not supported yet
+syntax-triple-terms-positive/basic-tripleterm-05  # Triple terms, reified triples and annotations are not supported yet
+syntax-triple-terms-positive/basic-tripleterm-06  # Triple terms, reified triples and annotations are not supported yet
+syntax-triple-terms-positive/basic-tripleterm-07  # Triple terms, reified triples and annotations are not supported yet
+syntax-triple-terms-positive/bnode-anonreifier-01  # Triple terms, reified triples and annotations are not supported yet
+syntax-triple-terms-positive/bnode-anonreifier-02  # Triple terms, reified triples and annotations are not supported yet
+syntax-triple-terms-positive/bnode-anonreifier-03  # Triple terms, reified triples and annotations are not supported yet
+syntax-triple-terms-positive/bnode-reifier-01  # Triple terms, reified triples and annotations are not supported yet
+syntax-triple-terms-positive/bnode-reifier-02  # Triple terms, reified triples and annotations are not supported yet
+syntax-triple-terms-positive/bnode-reifier-03  # Triple terms, reified triples and annotations are not supported yet
+syntax-triple-terms-positive/bnode-tripleterm-01  # Triple terms, reified triples and annotations are not supported yet
+syntax-triple-terms-positive/bnode-tripleterm-02  # Triple terms, reified triples and annotations are not supported yet
+syntax-triple-terms-positive/bnode-tripleterm-03  # Triple terms, reified triples and annotations are not supported yet
+syntax-triple-terms-positive/compound-all  # Triple terms, reified triples and annotations are not supported yet
+syntax-triple-terms-positive/compound-anonreifier  # Triple terms, reified triples and annotations are not supported yet
+syntax-triple-terms-positive/compound-reifier  # Triple terms, reified triples and annotations are not supported yet
+syntax-triple-terms-positive/compound-tripleterm  # Triple terms, reified triples and annotations are not supported yet
+syntax-triple-terms-positive/compound-tripleterm-subject  # Triple terms, reified triples and annotations are not supported yet
+syntax-triple-terms-positive/expr-tripleterm-01  # Triple terms, reified triples and annotations are not supported yet
+syntax-triple-terms-positive/expr-tripleterm-03  # Triple terms, reified triples and annotations are not supported yet
+syntax-triple-terms-positive/expr-tripleterm-04  # Triple terms, reified triples and annotations are not supported yet
+syntax-triple-terms-positive/expr-tripleterm-05  # Triple terms, reified triples and annotations are not supported yet
+syntax-triple-terms-positive/expr-tripleterm-06  # Triple terms, reified triples and annotations are not supported yet
+syntax-triple-terms-positive/inside-anonreifier-01  # Triple terms, reified triples and annotations are not supported yet
+syntax-triple-terms-positive/inside-anonreifier-02  # Triple terms, reified triples and annotations are not supported yet
+syntax-triple-terms-positive/inside-reifier-01  # Triple terms, reified triples and annotations are not supported yet
+syntax-triple-terms-positive/inside-reifier-02  # Triple terms, reified triples and annotations are not supported yet
+syntax-triple-terms-positive/inside-tripleterm-01  # Triple terms, reified triples and annotations are not supported yet
+syntax-triple-terms-positive/inside-tripleterm-02  # Triple terms, reified triples and annotations are not supported yet
+syntax-triple-terms-positive/nested-anonreifier-01  # Triple terms, reified triples and annotations are not supported yet
+syntax-triple-terms-positive/nested-anonreifier-02  # Triple terms, reified triples and annotations are not supported yet
+syntax-triple-terms-positive/nested-reifier-01  # Triple terms, reified triples and annotations are not supported yet
+syntax-triple-terms-positive/nested-reifier-02  # Triple terms, reified triples and annotations are not supported yet
+syntax-triple-terms-positive/nested-tripleterm-01  # Triple terms, reified triples and annotations are not supported yet
+syntax-triple-terms-positive/nested-tripleterm-02  # Triple terms, reified triples and annotations are not supported yet
+syntax-triple-terms-positive/subject-tripleterm  # Triple terms, reified triples and annotations are not supported yet
+syntax-triple-terms-positive/update-anonreifier-01  # Triple terms, reified triples and annotations are not supported yet
+syntax-triple-terms-positive/update-anonreifier-02  # Triple terms, reified triples and annotations are not supported yet
+syntax-triple-terms-positive/update-anonreifier-03  # Triple terms, reified triples and annotations are not supported yet
+syntax-triple-terms-positive/update-anonreifier-04  # Triple terms, reified triples and annotations are not supported yet
+syntax-triple-terms-positive/update-anonreifier-05  # Triple terms, reified triples and annotations are not supported yet
+syntax-triple-terms-positive/update-anonreifier-06  # Triple terms, reified triples and annotations are not supported yet
+syntax-triple-terms-positive/update-reifier-01  # Triple terms, reified triples and annotations are not supported yet
+syntax-triple-terms-positive/update-reifier-02  # Triple terms, reified triples and annotations are not supported yet
+syntax-triple-terms-positive/update-reifier-03  # Triple terms, reified triples and annotations are not supported yet
+syntax-triple-terms-positive/update-reifier-04  # Triple terms, reified triples and annotations are not supported yet
+syntax-triple-terms-positive/update-reifier-05  # Triple terms, reified triples and annotations are not supported yet
+syntax-triple-terms-positive/update-reifier-06  # Triple terms, reified triples and annotations are not supported yet
+syntax-triple-terms-positive/update-reifier-07  # Triple terms, reified triples and annotations are not supported yet
+syntax-triple-terms-positive/update-reifier-08  # Triple terms, reified triples and annotations are not supported yet
+syntax-triple-terms-positive/update-tripleterm-01  # Triple terms, reified triples and annotations are not supported yet
+syntax-triple-terms-positive/update-tripleterm-03  # Triple terms, reified triples and annotations are not supported yet
+syntax-triple-terms-positive/update-tripleterm-04  # Triple terms, reified triples and annotations are not supported yet
+syntax-triple-terms-positive/update-tripleterm-05  # Triple terms, reified triples and annotations are not supported yet
 syntax/nested-aggregate-functions  # Nested aggregates (COUNT(COUNT(*))) are not rejected
-version/version-01  # The VERSION declaration is not supported
-version/version-02  # The VERSION declaration is not supported
-version/version-03  # The VERSION declaration is not supported
-version/version-04  # The VERSION declaration is not supported
-version/version-05  # The VERSION declaration is not supported
-version/version-06  # The VERSION declaration is not supported
+version/version-01  # Triple terms, reified triples and annotations are not supported yet
+version/version-02  # Triple terms, reified triples and annotations are not supported yet
+version/version-05  # Triple terms, reified triples and annotations are not supported yet

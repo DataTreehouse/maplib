@@ -17,7 +17,10 @@ pub fn create_regex_expr(
     global_cats: LockedCats,
 ) -> Expr {
     let do_regex = match t {
-        BaseRDFNodeType::BlankNode | BaseRDFNodeType::None | BaseRDFNodeType::IRI => false,
+        BaseRDFNodeType::BlankNode
+        | BaseRDFNodeType::None
+        | BaseRDFNodeType::IRI
+        | BaseRDFNodeType::TripleTerm => false,
         BaseRDFNodeType::Literal(l, _) => {
             matches!(l.as_ref(), xsd::STRING | rdf::LANG_STRING)
         }

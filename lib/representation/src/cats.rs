@@ -72,6 +72,8 @@ impl CatType {
             BaseRDFNodeType::None => {
                 unimplemented!("Should not be called for None")
             }
+            // Triple term ids are not codes of a string dictionary.
+            BaseRDFNodeType::TripleTerm => crate::rdf12::unreachable_triple_term(),
         }
     }
 }

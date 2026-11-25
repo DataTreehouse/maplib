@@ -62,12 +62,13 @@ polars-config = { git = 'https://github.com/pola-rs/polars', rev = "7f902bd3ffd2
 polars-async = { git = 'https://github.com/pola-rs/polars', rev = "7f902bd3ffd27ff82d14278a09a295ff2f7aed92" }
 rayon = "1.12.0"
 regex = "1.13.1"
-oxrdf = { version = "0.3.3" }
-oxrdfio = { version = "0.2.5" }
+# RDF 1.2 (triple terms, base directions) in the RDF model and the parsers and serializers.
+oxrdf = { version = "0.3.3", features = ["rdf-12"] }
+oxrdfio = { version = "0.2.5", features = ["rdf-12"] }
 # the vendored copies also as paths, not only in [patch.crates-io], so maturin puts them in the sdist
-oxttl = { version = "0.2.3", path = "lib/oxttl" }
+oxttl = { version = "0.2.3", path = "lib/oxttl", features = ["rdf-12"] }
 oxiri = "0.2.11"
-sparesults = { version = "0.3.3", path = "lib/sparesults" }
+sparesults = { version = "0.3.3", path = "lib/sparesults", features = ["sparql-12"] }
 oxsdatatypes = "0.2.2"
 chrono = "0.4.41"
 chrono-tz = "0.10.3"

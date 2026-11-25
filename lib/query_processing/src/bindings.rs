@@ -319,6 +319,10 @@ pub fn replace_bindings_expression(
                 match t {
                     GroundTerm::NamedNode(n) => Ok(Expression::NamedNode(n.clone())),
                     GroundTerm::Literal(l) => Ok(Expression::Literal(l.clone())),
+                    // An expression has no constant for a triple term.
+                    GroundTerm::Triple(_) => Err(RepresentationError::Rdf12NotSupported(
+                        representation::rdf12::TRIPLE_TERMS_NOT_SUPPORTED.to_string(),
+                    )),
                 }
             } else {
                 Ok(Expression::Variable(v))
@@ -467,6 +471,7 @@ fn maybe_replace_term_pattern(
             match t {
                 GroundTerm::NamedNode(n) => TermPattern::NamedNode(n.clone()),
                 GroundTerm::Literal(l) => TermPattern::Literal(l.clone()),
+                GroundTerm::Triple(_) => TermPattern::from(GroundTermPattern::from(t.clone())),
             }
         } else {
             TermPattern::Variable(v)
@@ -486,6 +491,9 @@ fn maybe_replace_named_node_pattern(
                 GroundTerm::NamedNode(n) => Ok(NamedNodePattern::NamedNode(n.clone())),
                 GroundTerm::Literal(_) => Err(RepresentationError::DatatypeError(format!(
                     "Cannot replace binding of variable {v} with a literal when an IRI is expected"
+                ))),
+                GroundTerm::Triple(_) => Err(RepresentationError::DatatypeError(format!(
+                    "Cannot replace binding of variable {v} with a triple term when an IRI is expected"
                 ))),
             }
         } else {
@@ -562,6 +570,7 @@ fn maybe_replace_ground_term_pattern(
             return match t {
                 GroundTerm::NamedNode(n) => GroundTermPattern::NamedNode(n.clone()),
                 GroundTerm::Literal(l) => GroundTermPattern::Literal(l.clone()),
+                GroundTerm::Triple(_) => GroundTermPattern::from(t.clone()),
             };
         }
     }

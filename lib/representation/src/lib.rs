@@ -20,6 +20,7 @@ pub mod python;
 pub mod python_df_to_rust;
 pub mod query_context;
 mod rdf_state;
+pub mod rdf12;
 pub mod rdf_to_polars;
 mod rdf_type;
 pub mod response_format;
@@ -55,6 +56,7 @@ pub const LANG_STRING_LANG_FIELD: &str = "l";
 pub const RDF_NODE_TYPE_IRI: &str = "IRI";
 pub const RDF_NODE_TYPE_BLANK_NODE: &str = "Blank";
 pub const RDF_NODE_TYPE_NONE: &str = "None";
+pub const RDF_NODE_TYPE_TRIPLE_TERM: &str = "TripleTerm";
 
 pub fn literal_iri_to_namednode(s: &str) -> NamedNode {
     NamedNode::new_unchecked(s)

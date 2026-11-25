@@ -39,6 +39,7 @@ pub fn term_base_type(t: &Term) -> BaseRDFNodeType {
         Term::NamedNode(_) => BaseRDFNodeType::IRI,
         Term::BlankNode(_) => BaseRDFNodeType::BlankNode,
         Term::Literal(l) => BaseRDFNodeType::Literal(l.datatype().into_owned(), None),
+        Term::Triple(_) => BaseRDFNodeType::TripleTerm,
     }
 }
 
@@ -171,7 +172,8 @@ impl PushdownValues {
                             Term::Literal(Literal::new_typed_literal(s, dt.clone()))
                         }
                     }
-                    BaseRDFNodeType::None => continue,
+                    // Not code types (see is_code_type), so they have no codes here.
+                    BaseRDFNodeType::None | BaseRDFNodeType::TripleTerm => continue,
                 });
             }
         }
@@ -194,6 +196,8 @@ impl PushdownValues {
                     Term::NamedNode(nn) => nn.as_str(),
                     Term::BlankNode(bl) => bl.as_str(),
                     Term::Literal(l) => l.value(),
+                    // Triple terms are not a code type, so they are not of the type `bt`.
+                    Term::Triple(_) => unreachable!("triple terms are not a code type"),
                 })
             })
             .collect();
@@ -203,7 +207,7 @@ impl PushdownValues {
                 BaseRDFNodeType::IRI => cats.maybe_encode_iri_slice(&strs),
                 BaseRDFNodeType::BlankNode => cats.maybe_encode_blanks(&strs),
                 BaseRDFNodeType::Literal(dt, _) => cats.maybe_encode_literals(&strs, dt.clone()),
-                BaseRDFNodeType::None => vec![],
+                BaseRDFNodeType::None | BaseRDFNodeType::TripleTerm => vec![],
             };
             let n = codes.len();
             codes.extend(found.into_iter().flatten());

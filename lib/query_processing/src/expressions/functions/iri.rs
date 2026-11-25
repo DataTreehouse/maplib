@@ -53,7 +53,8 @@ pub fn iri(
                     )
                 }
             }
-            BaseRDFNodeType::BlankNode | BaseRDFNodeType::None => (
+            // IRI() of a blank node or a triple term is an error, which leaves it unbound.
+            BaseRDFNodeType::BlankNode | BaseRDFNodeType::None | BaseRDFNodeType::TripleTerm => (
                 lit(LiteralValue::untyped_null()).cast(DataType::String),
                 BaseCatState::String,
             ),

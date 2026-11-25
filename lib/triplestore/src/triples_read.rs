@@ -7,7 +7,7 @@ use std::cmp;
 
 use cimxml_import::{fix_cim_quad, Remapper};
 use memmap2::MmapOptions;
-use oxrdf::{BlankNode, GraphName, NamedNode, NamedOrBlankNode, Quad, Term, Triple};
+use oxrdf::{BlankNode, GraphName, Literal, NamedNode, NamedOrBlankNode, Quad, Term, Triple};
 use oxrdfio::{
     JsonLdProfileSet, LoadedDocument, RdfFormat, RdfParser, RdfSyntaxError, SliceQuadParser,
 };
@@ -401,7 +401,7 @@ impl Triplestore {
         triples: Vec<Triple>,
         graph: &NamedGraph,
     ) -> Result<Vec<NewTriples>, TriplestoreError> {
-        let (ttas, dropped) = triples_to_triples_to_add(triples, graph);
+        let (ttas, dropped) = triples_to_triples_to_add(triples, graph)?;
         dropped.warn("triples");
         self.add_triples_vec(ttas)
     }
@@ -413,7 +413,7 @@ impl Triplestore {
 pub(crate) fn triples_to_triples_to_add(
     triples: Vec<Triple>,
     graph: &NamedGraph,
-) -> (Vec<TriplesToAdd>, DroppedValues) {
+) -> Result<(Vec<TriplesToAdd>, DroppedValues), TriplestoreError> {
     let mut dropped = DroppedValues::default();
     let mut subj_type_map: HashMap<String, Vec<BaseRDFNodeType>> = HashMap::new();
     let mut obj_type_map: HashMap<String, Vec<BaseRDFNodeType>> = HashMap::new();
@@ -424,6 +424,11 @@ pub(crate) fn triples_to_triples_to_add(
         object,
     } in triples
     {
+        if let Some(m) = representation::rdf12::unsupported_in_term(&object) {
+            return Err(TriplestoreError::Rdf12NotSupported(format!(
+                "{m}: {subject} {predicate} {object}"
+            )));
+        }
         let subject_type = get_or_insert_dt(get_subject_datatype_ref(&subject), &mut subj_type_map);
         let object_type = get_or_insert_dt(get_term_datatype_ref(&object), &mut obj_type_map);
         let (subjects, objects) = predicate_map
@@ -471,7 +476,22 @@ pub(crate) fn triples_to_triples_to_add(
             }
         }
     }
-    (ttas, dropped)
+    Ok((ttas, dropped))
+}
+
+/// The literal without its RDF 1.2 base direction ("a"@en--rtl becomes "a"@en), see
+/// create_predicate_map.
+fn drop_base_direction(t: Term) -> Term {
+    match t {
+        Term::Literal(l) if l.direction().is_some() => {
+            let (value, language) = (l.value().to_string(), l.language().map(str::to_string));
+            Term::Literal(match language {
+                Some(language) => Literal::new_language_tagged_literal_unchecked(value, language),
+                None => Literal::new_simple_literal(value),
+            })
+        }
+        t => t,
+    }
 }
 
 pub(crate) fn term_to_oxrdf_term(t: Term, parser_call: &str) -> Term {
@@ -525,6 +545,10 @@ fn create_predicate_map<'a>(
     let mut subj_type_map: HashMap<String, Vec<BaseRDFNodeType>> = HashMap::new();
     let mut obj_type_map: HashMap<String, Vec<BaseRDFNodeType>> = HashMap::new();
     let mut dropped = DroppedValues::default();
+    let is_json_ld = matches!(
+        rdf_format,
+        ExtendedRdfFormat::Normal(RdfFormat::JsonLd { .. })
+    );
     let mut empty_iter = false;
     let mut reached_max = false;
     let mut i = 0usize;
@@ -536,6 +560,20 @@ fn create_predicate_map<'a>(
                 object,
                 graph_name,
             } = q.map_err(TriplestoreError::RDFSyntaxError)?;
+            // JSON-LD 1.1 drops the @direction of strings when converting to RDF (without the
+            // rdfDirection option), and so did the JSON-LD parser before it was built with
+            // RDF 1.2, which made it keep the direction in the literal. The direction is dropped
+            // here instead, so JSON-LD documents read as JSON-LD 1.1 specifies.
+            let object = if is_json_ld {
+                drop_base_direction(object)
+            } else {
+                object
+            };
+            if let Some(m) = representation::rdf12::unsupported_in_term(&object) {
+                return Err(TriplestoreError::Rdf12NotSupported(format!(
+                    "{m}: {subject} {predicate} {object}"
+                )));
+            }
             let graph_name = graph_name_to_oxrdf_graph_name(graph_name, parser_call);
             let predicate_map =
                 if let Some(predicate_map) = graph_predicate_map.get_mut(&graph_name) {

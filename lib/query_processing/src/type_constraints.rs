@@ -12,6 +12,7 @@ pub enum ConstraintBaseRDFNodeType {
     IRI,
     BlankNode,
     Literal(NamedNode),
+    TripleTerm,
     None,
 }
 
@@ -21,6 +22,7 @@ impl ConstraintBaseRDFNodeType {
             BaseRDFNodeType::IRI => ConstraintBaseRDFNodeType::IRI,
             BaseRDFNodeType::BlankNode => ConstraintBaseRDFNodeType::BlankNode,
             BaseRDFNodeType::Literal(l, _) => ConstraintBaseRDFNodeType::Literal(l.clone()),
+            BaseRDFNodeType::TripleTerm => ConstraintBaseRDFNodeType::TripleTerm,
             BaseRDFNodeType::None => ConstraintBaseRDFNodeType::None,
         }
     }
@@ -44,6 +46,9 @@ impl ConstraintExpr {
             ConstraintExpr::Constraint(c) => match c.as_ref() {
                 ConstraintBaseRDFNodeType::IRI => t == &ConstraintBaseRDFNodeType::IRI,
                 ConstraintBaseRDFNodeType::BlankNode => t == &ConstraintBaseRDFNodeType::BlankNode,
+                ConstraintBaseRDFNodeType::TripleTerm => {
+                    t == &ConstraintBaseRDFNodeType::TripleTerm
+                }
                 ConstraintBaseRDFNodeType::Literal(l_ctr) => {
                     if let ConstraintBaseRDFNodeType::Literal(l) = t {
                         is_literal_subtype(l.as_ref(), l_ctr.as_ref())
@@ -301,6 +306,7 @@ pub fn bt_as_constrained(bt: &BaseRDFNodeType) -> ConstraintBaseRDFNodeType {
         BaseRDFNodeType::IRI => ConstraintBaseRDFNodeType::IRI,
         BaseRDFNodeType::BlankNode => ConstraintBaseRDFNodeType::BlankNode,
         BaseRDFNodeType::Literal(l, _) => ConstraintBaseRDFNodeType::Literal(l.clone()),
+        BaseRDFNodeType::TripleTerm => ConstraintBaseRDFNodeType::TripleTerm,
         BaseRDFNodeType::None => {
             unreachable!("Should never happen")
         }

@@ -828,6 +828,11 @@ impl<'c> TermEncodings<'c> {
                     .map_err(|x| TriplestoreError::SparqlQueryError(x.to_string()))?;
                 Some(e)
             }
+            Term::Triple(_) => {
+                return Err(TriplestoreError::SparqlQueryError(
+                    representation::rdf12::TRIPLE_TERMS_NOT_SUPPORTED.to_string(),
+                ))
+            }
         };
         self.encodings.insert(term.clone(), enc.clone());
         Ok(enc)
@@ -866,6 +871,7 @@ impl<'c> TermEncodings<'c> {
                 Term::NamedNode(nn) => nn.as_str(),
                 Term::BlankNode(bl) => bl.as_str(),
                 Term::Literal(l) => l.value(),
+                Term::Triple(_) => representation::rdf12::unreachable_triple_term(),
             })
             .collect();
         if !terms.is_empty() {
@@ -877,6 +883,7 @@ impl<'c> TermEncodings<'c> {
                     global_cats.maybe_encode_literals(&strs, dt.clone())
                 }
                 BaseRDFNodeType::None => vec![None; strs.len()],
+                BaseRDFNodeType::TripleTerm => representation::rdf12::unreachable_triple_term(),
             };
             let strings = self.strings.entry(bt.clone()).or_default();
             for (s, c) in terms.into_iter().zip(found) {
@@ -1079,6 +1086,7 @@ fn term_matches_type(t: &Term, bt: &BaseRDFNodeType) -> bool {
                 false
             }
         }
+        Term::Triple(_) => bt.is_triple_term(),
     }
 }
 

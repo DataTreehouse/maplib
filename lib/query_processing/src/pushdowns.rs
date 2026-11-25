@@ -244,6 +244,7 @@ impl Pushdowns {
                     let mut terms = HashSet::new();
                     let mut literal_types = HashSet::new();
                     let mut iri = false;
+                    let mut triple = false;
                     for gs in bindings {
                         let g = gs.get(i).unwrap();
                         if let Some(g) = g {
@@ -255,6 +256,9 @@ impl Pushdowns {
                                 GroundTerm::Literal(l) => {
                                     literal_types.insert(l.datatype());
                                 }
+                                GroundTerm::Triple(_) => {
+                                    triple = true;
+                                }
                             }
                         }
                     }
@@ -265,11 +269,15 @@ impl Pushdowns {
                     if iri {
                         types.push(ConstraintBaseRDFNodeType::IRI);
                     }
+                    if triple {
+                        types.push(ConstraintBaseRDFNodeType::TripleTerm);
+                    }
                     let use_terms: HashSet<_> = terms
                         .into_iter()
                         .map(|x| match x {
                             GroundTerm::NamedNode(nn) => Term::NamedNode(nn),
                             GroundTerm::Literal(l) => Term::Literal(l),
+                            t @ GroundTerm::Triple(_) => Term::from(t),
                         })
                         .collect();
                     if !use_terms.is_empty() {
