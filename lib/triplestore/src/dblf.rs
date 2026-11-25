@@ -6,7 +6,7 @@ use oxrdf::{NamedNode, NamedOrBlankNode, Term};
 use polars::prelude::{
     as_struct, by_name, col, concat, lit, Expr, IntoLazy, LazyFrame, UnionArgs,
 };
-use polars_core::prelude::{Column, DataFrame};
+use polars_core::prelude::{Column, DataFrame, NamedFrom, Series};
 use query_processing::expressions::{blank_node_enc, literal_enc, named_node_enc};
 use query_processing::graph_patterns::{distinct, union};
 use query_processing::pushdown_values::{is_code_type, term_base_type, PushdownValues};
@@ -642,6 +642,9 @@ enum Targets {
     Codes(Arc<Vec<u32>>),
     /// Terms of the type of a column that does not hold codes.
     Terms(Vec<Term>),
+    /// Ids of triple terms (see representation::cats::triple_terms), sorted, for a column of
+    /// triple terms. Such columns have no sparse index, so the ids are a filter on the rows.
+    TripleTermIds(Arc<Vec<u32>>),
 }
 
 /// An expression for the column value of a single target, None if there are several. The
@@ -656,6 +659,9 @@ fn single_target_expr(
             Some(Some(lit(c[0]).cast(polars_core::prelude::DataType::UInt32)))
         }
         Targets::Terms(t) if t.len() == 1 => Some(encodings.encode(&t[0], global_cats)?),
+        Targets::TripleTermIds(ids) if ids.len() == 1 => Some(Some(
+            lit(ids[0]).cast(polars_core::prelude::DataType::UInt32),
+        )),
         _ => None,
     })
 }
@@ -784,8 +790,15 @@ fn single_triples_to_lf<'c>(
         lfs.pop().unwrap()
     };
     // A single subject or object (e.g. a constant of the triple pattern) is filtered on here, as
-    // the sparse index ranges hold other rows too.
+    // the sparse index ranges hold other rows too, and so are the ids of triple terms.
     for (targets, c) in [(subjects, SUBJECT_COL_NAME), (objects, OBJECT_COL_NAME)] {
+        if let Some(Targets::TripleTermIds(ids)) = targets {
+            if ids.len() > 1 {
+                let ids = Series::new("".into(), ids.as_slice());
+                lf = lf.filter(col(c).is_in(lit(ids).implode(false), false));
+                continue;
+            }
+        }
         if let Some(targets) = targets {
             if let Some(enc) = single_target_expr(targets, global_cats, encodings)? {
                 lf = match enc {
@@ -972,6 +985,11 @@ fn targets_of_type(
     if holds_codes(bt) {
         let codes = encodings.codes_of_type(values, by_object, bt, global_cats);
         (!codes.is_empty()).then_some(Targets::Codes(codes))
+    } else if bt.is_triple_term() && values.codes.contains_key(bt) {
+        // Triple terms are pushed down as ids only (see sparql::lazy_graph_patterns::
+        // triple_terms), never as terms.
+        let ids = values.codes.get(bt).unwrap();
+        (!ids.is_empty()).then(|| Targets::TripleTermIds(Arc::new(ids.clone())))
     } else {
         let terms: Vec<Term> = values
             .terms

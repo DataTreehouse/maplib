@@ -308,6 +308,7 @@ impl Triplestore {
                                     sm,
                                     &mut pending_triple_terms,
                                     query_settings.max_rows,
+                                    &pushdowns.variables_values,
                                 )?);
                         }
                     }
@@ -336,6 +337,7 @@ impl Triplestore {
                         sm,
                         &pending_triple_terms,
                         query_settings.max_rows,
+                        &pushdowns.variables_values,
                     )?);
                 }
 

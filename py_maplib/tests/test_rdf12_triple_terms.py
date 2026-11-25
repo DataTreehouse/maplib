@@ -213,6 +213,37 @@ def test_triple_term_patterns(qm, query, expected):
     assert rows(qm, query) == expected
 
 
+@pytest.mark.parametrize(
+    "query,expected",
+    [
+        # Values of the variables of a triple term pattern (from VALUES, or from patterns
+        # evaluated before it) limit the triple terms matched before the pattern it is in.
+        ("SELECT ?s ?src WHERE { VALUES ?s { :pump2 :nobody } ?r rdf:reifies <<( ?s ?p ?o )>> ; :source ?src }",
+         [(f"<{EX}pump2>", f"<{EX}log2>")]),
+        ("SELECT ?s ?p WHERE { VALUES ?s { :pump1 } ?r rdf:reifies <<( ?s ?p ?o )>> }",
+         [(f"<{EX}pump1>", f"<{EX}hasPower>"), (f"<{EX}pump1>", f"<{EX}label>")]),
+        ("SELECT ?r WHERE { VALUES ?s { :nobody } ?r rdf:reifies <<( ?s ?p ?o )>> }", []),
+        ("SELECT ?r WHERE { VALUES ?s { \"not an IRI\" } ?r rdf:reifies <<( ?s ?p ?o )>> }", []),
+        ("SELECT ?src WHERE { :pump1 :label ?l . ?r rdf:reifies <<( :pump1 :label ?l )>> ; :source ?src }",
+         [(f"<{EX}log2>",)]),
+        # A literal object: its values are not codes, so the join with the solutions does it.
+        ("SELECT ?s WHERE { VALUES ?o { 12.0 } ?r rdf:reifies <<( ?s :hasPower ?o )>> }",
+         [(f"<{EX}pump2>",)]),
+        ("SELECT ?s WHERE { ?s :hasPower ?o . ?r rdf:reifies <<( ?s :hasPower ?o )>> ; :source :log1 }",
+         [(f"<{EX}pump1>",)]),
+        # Nested: the values of the inner pattern's subject.
+        ("SELECT ?r ?who WHERE { VALUES ?s { :pump1 } ?r rdf:reifies <<( ?who :says <<( ?s ?p ?o )>> )>> }",
+         [(f"<{EX}r4>", f"<{EX}x>")]),
+        ("SELECT ?r WHERE { VALUES ?s { :pump2 } ?r rdf:reifies <<( ?who :says <<( ?s ?p ?o )>> )>> }", []),
+        # The reifier bound as well.
+        ("SELECT ?s WHERE { VALUES (?r ?s) { (:r2 :pump2) (:r2 :pump1) } ?r rdf:reifies <<( ?s ?p ?o )>> }",
+         [(f"<{EX}pump2>",)]),
+    ],
+)
+def test_triple_term_patterns_with_bound_variables(qm, query, expected):
+    assert rows(qm, query) == expected
+
+
 def test_triple_terms_in_sparql_json(qm):
     import json
 

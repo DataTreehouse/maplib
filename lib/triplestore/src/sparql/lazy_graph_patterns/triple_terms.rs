@@ -8,13 +8,22 @@
 //! variable predicate), with its constants as filters on the stored subjects and objects. The
 //! matches are joined with the solutions on the id of the triple term, and the variable is
 //! dropped. A nested triple term pattern is matched the same way, inside the one it is in.
+//!
+//! When the solutions so far bind variables of a triple term pattern (VALUES ?s { ... }, or an
+//! earlier pattern), it is matched before the triple pattern it is in instead: with the values
+//! pushed down for its variables as filters on the dictionary, joined with the solutions, and
+//! with the ids of the triple terms that matched pushed down to the triple pattern, which then
+//! reads only the rows with those ids.
 
 use super::Triplestore;
 use crate::sparql::errors::SparqlError;
 use oxrdf::{Term, Variable};
-use polars::prelude::{by_name, col, lit, Column, DataFrame, IntoLazy, JoinType, LazyFrame};
+use polars::prelude::{
+    by_name, col, lit, Column, DataFrame, IntoLazy, JoinType, LazyFrame, NamedFrom, Series,
+};
 use query_processing::expressions::{literal_enc, named_node_enc};
 use query_processing::graph_patterns::{join, union};
+use query_processing::pushdown_values::PushdownValues;
 use query_processing::pushdowns::Pushdowns;
 use query_processing::type_constraints::{ConstraintBaseRDFNodeType, PossibleTypes};
 use representation::cats::triple_terms::TRIPLE_TERM_ID_COL_NAME;
@@ -22,8 +31,12 @@ use representation::cats::Cats;
 use representation::solution_mapping::{BaseCatState, SolutionMappings};
 use representation::{BaseRDFNodeType, RDFNodeState, OBJECT_COL_NAME, SUBJECT_COL_NAME};
 use spargebra::term::{NamedNodePattern, TermPattern, TriplePattern};
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::sync::atomic::{AtomicUsize, Ordering};
+
+/// The most solutions whose triple term ids are pushed down to the triple pattern that the
+/// triple term pattern is in (see Triplestore::lazy_bgp_triple_pattern).
+const MAX_PUSHED_DOWN_TRIPLE_TERMS: usize = 100_000;
 
 /// Variables that stand for triple term patterns are named `#tt<n>`: `#` cannot occur in a SPARQL
 /// variable name, so they do not clash with the variables of the query.
@@ -92,6 +105,11 @@ fn constant_matches_type(t: &Term, bt: &BaseRDFNodeType) -> bool {
         Term::Literal(l) => &BaseRDFNodeType::from_literal(l) == bt,
         Term::Triple(_) => bt.is_triple_term(),
     }
+}
+
+/// Whether the term pattern is the variable.
+fn is_variable(t: &TermPattern, v: &Variable) -> bool {
+    matches!(t, TermPattern::Variable(x) if x == v)
 }
 
 /// Whether the triple pattern has one of the variables of the triple term patterns.
@@ -204,7 +222,57 @@ impl Triplestore {
         query_settings: &crate::sparql::QuerySettings,
         dataset: &representation::dataset::QueryGraph,
     ) -> Result<SolutionMappings, SparqlError> {
+        // Triple term patterns of this pattern with variables that the solutions bind are
+        // matched first, with the values pushed down for those variables, and joined with the
+        // solutions. The pattern then looks up only the ids of the triple terms that matched,
+        // instead of every triple term of its predicate being joined with the solutions.
         if let Some(sm) = &solution_mappings {
+            let first: Vec<usize> = pending
+                .iter()
+                .enumerate()
+                .filter(|(_, (v, ttp))| {
+                    (is_variable(&tp.subject, v) || is_variable(&tp.object, v))
+                        && pattern_variables(ttp, pending)
+                            .iter()
+                            .any(|x| sm.rdf_node_types.contains_key(x))
+                })
+                .map(|(i, _)| i)
+                .collect();
+            if !first.is_empty() {
+                let mut sm = solution_mappings.unwrap();
+                let mut variables = vec![];
+                for i in first.into_iter().rev() {
+                    let (v, ttp) = pending.remove(i);
+                    let matches = self.triple_term_pattern_solution_mappings(
+                        &v,
+                        &ttp,
+                        query_settings.max_rows,
+                        &pushdowns.variables_values,
+                    )?;
+                    sm = join(
+                        sm,
+                        matches,
+                        JoinType::Inner,
+                        self.global_cats.clone(),
+                        query_settings.max_rows,
+                    )?;
+                    sm = push_down_triple_term_ids(sm, &v, pushdowns)?;
+                    variables.push(v);
+                }
+                let mut sm = self.lazy_triple_pattern(
+                    Some(sm),
+                    tp,
+                    context,
+                    pushdowns,
+                    query_settings,
+                    dataset,
+                )?;
+                for v in variables {
+                    pushdowns.variables_values.remove(v.as_str());
+                    sm = drop_variable(sm, v.as_str());
+                }
+                return Ok(sm);
+            }
             let own: Vec<String> = [&tp.subject, &tp.object]
                 .into_iter()
                 .filter_map(variable_name)
@@ -222,8 +290,12 @@ impl Triplestore {
                     query_settings,
                     dataset,
                 )?;
-                let unit =
-                    self.join_bound_triple_term_patterns(unit, pending, query_settings.max_rows)?;
+                let unit = self.join_bound_triple_term_patterns(
+                    unit,
+                    pending,
+                    query_settings.max_rows,
+                    &pushdowns.variables_values,
+                )?;
                 return Ok(join(
                     solution_mappings.unwrap(),
                     unit,
@@ -250,12 +322,13 @@ impl Triplestore {
         sm: SolutionMappings,
         pending: &mut Vec<(Variable, TriplePattern)>,
         max_rows: Option<usize>,
+        values: &HashMap<String, PushdownValues>,
     ) -> Result<SolutionMappings, SparqlError> {
         let (bound, rest): (Vec<_>, Vec<_>) = std::mem::take(pending)
             .into_iter()
             .partition(|(v, _)| sm.rdf_node_types.contains_key(v.as_str()));
         *pending = rest;
-        self.join_triple_term_patterns(sm, &bound, max_rows)
+        self.join_triple_term_patterns(sm, &bound, max_rows, values)
     }
 
     /// Joins the solutions of a basic graph pattern with the matches of its triple term
@@ -265,9 +338,10 @@ impl Triplestore {
         mut sm: SolutionMappings,
         triple_term_patterns: &[(Variable, TriplePattern)],
         max_rows: Option<usize>,
+        values: &HashMap<String, PushdownValues>,
     ) -> Result<SolutionMappings, SparqlError> {
         for (v, tp) in triple_term_patterns {
-            let matches = self.triple_term_pattern_solution_mappings(v, tp, max_rows)?;
+            let matches = self.triple_term_pattern_solution_mappings(v, tp, max_rows, values)?;
             sm = join(
                 sm,
                 matches,
@@ -281,12 +355,14 @@ impl Triplestore {
     }
 
     /// The triple terms that match the triple term pattern, with their ids in `var` and the
-    /// values of the variables of the pattern.
+    /// values of the variables of the pattern, which are limited to the values pushed down for
+    /// them in `values`.
     fn triple_term_pattern_solution_mappings(
         &self,
         var: &Variable,
         tp: &TriplePattern,
         max_rows: Option<usize>,
+        values: &HashMap<String, PushdownValues>,
     ) -> Result<SolutionMappings, SparqlError> {
         let subject_name = variable_name(&tp.subject);
         let predicate_name = match &tp.predicate {
@@ -331,6 +407,16 @@ impl Triplestore {
                 else {
                     continue;
                 };
+                let Some(filtered) = filter_pushed_down(
+                    filtered,
+                    SUBJECT_COL_NAME,
+                    &tp.subject,
+                    &key.subject_type,
+                    values,
+                    &cats,
+                ) else {
+                    continue;
+                };
                 lf = filtered;
                 if nested.is_some() && !key.object_type.is_triple_term() {
                     continue;
@@ -339,6 +425,16 @@ impl Triplestore {
                     let Some(filtered) =
                         filter_constant(lf, OBJECT_COL_NAME, &tp.object, &key.object_type, &cats)?
                     else {
+                        continue;
+                    };
+                    let Some(filtered) = filter_pushed_down(
+                        filtered,
+                        OBJECT_COL_NAME,
+                        &tp.object,
+                        &key.object_type,
+                        values,
+                        &cats,
+                    ) else {
                         continue;
                     };
                     lf = filtered;
@@ -396,7 +492,8 @@ impl Triplestore {
             union(sms, false, self.global_cats.clone())?
         };
         if let Some((v, inner)) = &nested {
-            let inner_sm = self.triple_term_pattern_solution_mappings(v, inner, max_rows)?;
+            let inner_sm =
+                self.triple_term_pattern_solution_mappings(v, inner, max_rows, values)?;
             sm = join(
                 sm,
                 inner_sm,
@@ -437,6 +534,77 @@ fn filter_constant(
         // A subject is never a triple term; nested objects are joined instead (see above).
         TermPattern::Triple(_) => None,
     })
+}
+
+/// The rows of `lf` whose column `c` (of type `bt`) holds one of the values pushed down for the
+/// variable of the term pattern, all rows if no values are pushed down for it or values of the
+/// type are not codes, and None if none of the values can be in the column.
+fn filter_pushed_down(
+    lf: LazyFrame,
+    c: &str,
+    t: &TermPattern,
+    bt: &BaseRDFNodeType,
+    values: &HashMap<String, PushdownValues>,
+    cats: &Cats,
+) -> Option<LazyFrame> {
+    let Some(vs) = variable_name(t).and_then(|name| values.get(&name)) else {
+        return Some(lf);
+    };
+    let codes = if bt.is_triple_term() {
+        vs.codes.get(bt).cloned()
+    } else {
+        vs.codes_of_type(bt, cats)
+    };
+    match codes {
+        None => Some(lf),
+        Some(codes) if codes.is_empty() => None,
+        Some(codes) => {
+            let codes = Series::new("".into(), codes);
+            Some(lf.filter(col(c).is_in(lit(codes).implode(false), false)))
+        }
+    }
+}
+
+/// Pushes the ids of the triple terms of the variable `v` of the solutions down to the triple
+/// pattern that has the variable, when there are few enough solutions to collect them. The
+/// variable stands for a triple term pattern, so no other pattern has it.
+fn push_down_triple_term_ids(
+    sm: SolutionMappings,
+    v: &Variable,
+    pushdowns: &mut Pushdowns,
+) -> Result<SolutionMappings, SparqlError> {
+    if sm.height_estimate > MAX_PUSHED_DOWN_TRIPLE_TERMS {
+        return Ok(sm);
+    }
+    let eager = sm.as_eager();
+    if eager.mappings.height() <= MAX_PUSHED_DOWN_TRIPLE_TERMS {
+        // No triple term matched when the variable is not of the type of triple terms (the
+        // matches are empty), and then no ids are pushed down, so the pattern has no matches.
+        let is_triple_term = eager
+            .rdf_node_types
+            .get(v.as_str())
+            .is_some_and(|t| t.map.contains_key(&BaseRDFNodeType::TripleTerm));
+        let mut ids: Vec<u32> = if is_triple_term {
+            let ids = eager
+                .mappings
+                .column(v.as_str())
+                .and_then(|c| c.u32().cloned())
+                .map_err(|e| SparqlError::NotSupportedYet(e.to_string()))?;
+            ids.iter().flatten().collect()
+        } else {
+            vec![]
+        };
+        ids.sort_unstable();
+        ids.dedup();
+        pushdowns.variables_values.insert(
+            v.as_str().to_string(),
+            PushdownValues {
+                terms: Default::default(),
+                codes: BTreeMap::from([(BaseRDFNodeType::TripleTerm, ids)]),
+            },
+        );
+    }
+    Ok(eager.as_lazy())
 }
 
 fn drop_variable(mut sm: SolutionMappings, v: &str) -> SolutionMappings {
