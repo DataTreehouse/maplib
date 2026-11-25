@@ -15,8 +15,9 @@
 //! which works alike for every object type.
 //!
 //! The partitions refer to codes of the string dictionaries of the same Cats, so whatever
-//! re-encodes or removes those codes has to do the same here (not done yet: garbage collection
-//! and compaction of the string dictionaries keep the codes of triple terms).
+//! re-encodes or removes those codes does the same here: garbage collection keeps the codes the
+//! partitions use, compaction renumbers them (see mapped_codes), and serialization writes the
+//! partitions with the string dictionaries (see cats::serialization).
 
 use crate::BaseRDFNodeType;
 use oxrdf::NamedNode;
@@ -139,6 +140,52 @@ impl TripleTerms {
             out.push(df);
         }
         Ok(out)
+    }
+
+    /// The triple terms of partitions read back from a serialization: each partition's key and
+    /// table (the columns id, subject and object, as `partitions` gives them). The ids must be
+    /// 0 to n-1 for n triple terms, each once, as the counter gives them and nothing removes
+    /// them; the next triple term added gets the id n.
+    pub fn from_partitions(
+        parts: Vec<(TripleTermPartitionKey, DataFrame)>,
+    ) -> Result<Self, String> {
+        let n: usize = parts.iter().map(|(_, df)| df.height()).sum();
+        let mut locations: Vec<Option<(u32, u32)>> = vec![None; n];
+        let mut triple_terms = TripleTerms::default();
+        for (key, df) in parts {
+            let names: Vec<&str> = df.get_column_names().iter().map(|c| c.as_str()).collect();
+            if names != [TRIPLE_TERM_ID_COL_NAME, SUBJECT, OBJECT] {
+                return Err(format!(
+                    "the triple terms of {} have the columns {names:?}, not id, subject and object",
+                    key.predicate
+                ));
+            }
+            if triple_terms.index.contains_key(&key) {
+                return Err(format!("two partitions of triple terms are {key:?}"));
+            }
+            let p = triple_terms.partitions.len();
+            let ids = df
+                .column(TRIPLE_TERM_ID_COL_NAME)
+                .and_then(|c| c.u32().cloned())
+                .map_err(|e| e.to_string())?;
+            for (row, id) in ids.iter().enumerate() {
+                let id = id.ok_or("a triple term has no id")?;
+                let slot = locations
+                    .get_mut(id as usize)
+                    .ok_or(format!("the triple term id {id} is not below {n}"))?;
+                if slot.is_some() {
+                    return Err(format!("two triple terms have the id {id}"));
+                }
+                *slot = Some((p as u32, row as u32));
+            }
+            triple_terms.index.insert(key.clone(), p);
+            triple_terms
+                .partitions
+                .push(TripleTermPartition { key, df });
+        }
+        // n distinct ids below n fill every slot.
+        triple_terms.locations = locations.into_iter().map(Option::unwrap).collect();
+        Ok(triple_terms)
     }
 
     /// Replaces the tables of the partitions by tables from mapped_codes, which have the same
@@ -344,6 +391,37 @@ mod tests {
         let (p, row) = tt.location(2).unwrap();
         assert_eq!(p.key, k);
         assert_eq!(row, 2);
+    }
+
+    #[test]
+    fn from_partitions_rebuilds_the_ids_and_the_counter() {
+        let mut tt = TripleTerms::default();
+        let (a, b) = (key(BaseRDFNodeType::IRI), key(BaseRDFNodeType::BlankNode));
+        tt.ids(&a, &codes(&[1, 2], &[5, 5]), true).unwrap();
+        tt.ids(&b, &codes(&[1], &[7]), true).unwrap();
+        tt.ids(&a, &codes(&[3], &[5]), true).unwrap();
+        let parts: Vec<_> = tt
+            .partitions()
+            .iter()
+            .map(|p| (p.key.clone(), p.df().clone()))
+            .collect();
+        let mut back = TripleTerms::from_partitions(parts.clone()).unwrap();
+        assert_eq!(back.len(), 4);
+        for id in 0..4 {
+            let (p, row) = tt.location(id).unwrap();
+            let (q, row_back) = back.location(id).unwrap();
+            assert_eq!((&p.key, row), (&q.key, row_back));
+        }
+        // Stored triple terms keep their ids, and the next one gets the next id.
+        let more = back.ids(&a, &codes(&[2, 4], &[5, 5]), true).unwrap();
+        assert_eq!(ids(&more), vec![Some(1), Some(4)]);
+
+        // Ids that are not 0 to n-1, each once, are refused.
+        let mut twice = parts.clone();
+        twice[1].1 = twice[0].1.head(Some(1));
+        assert!(TripleTerms::from_partitions(twice).is_err());
+        let same_key = vec![parts[0].clone(), (parts[0].0.clone(), parts[1].1.clone())];
+        assert!(TripleTerms::from_partitions(same_key).is_err());
     }
 
     #[test]

@@ -249,3 +249,63 @@ def test_formats_without_triple_terms_refuse_them(qm, fmt):
             qm.write_bytes(format=fmt)
         else:
             qm.writes(format=fmt)
+
+
+# --- saving and loading ----------------------------------------------------------------
+
+ROUND_TRIP_QUERIES = [
+    "SELECT ?s ?src WHERE { ?r rdf:reifies <<( ?s :hasPower ?o )>> . ?r :source ?src }",
+    'SELECT ?src WHERE { ?r rdf:reifies <<( :pump1 :label "p1"@en )>> ; :source ?src }',
+    "SELECT ?who ?s WHERE { ?r rdf:reifies <<( ?who :says <<( ?s :hasPower ?v )>> )>> }",
+    "SELECT ?r ?t WHERE { ?r rdf:reifies ?t }",
+    "SELECT ?s ?src WHERE { ?s :hasPower ?o {| :source ?src |} }",
+]
+
+
+@pytest.mark.parametrize("single_file", [True, False])
+def test_triple_terms_survive_serialization(qm, tmp_path, single_file):
+    path = tmp_path / "model.maplib"
+    qm.serialize(path, single_file=single_file)
+    m = Model.deserialize(path)
+    assert count(m, "?s ?p ?o") == count(qm, "?s ?p ?o")
+    for q in ROUND_TRIP_QUERIES:
+        assert rows(m, q) == rows(qm, q), q
+
+
+def test_deserialized_triple_terms_keep_their_ids(tmp_path):
+    m = Model()
+    m.reads(TURTLE, format="turtle")
+    # Garbage collection and compaction run before serializing: delete a triple to give them
+    # something to remove and renumber.
+    m.update(f"DELETE DATA {{ <{EX}pump2> <{EX}hasPower> 12.0 }}")
+    path = tmp_path / "model.maplib"
+    m.serialize(path)
+    m2 = Model.deserialize(path)
+    # A triple term read again is the stored one, a new one gets a new id.
+    m2.reads(
+        f"PREFIX : <{EX}>\n"
+        f":r9 <{RDF}reifies> <<( :pump1 :hasPower 37.5 )>> .\n"
+        f":r10 <{RDF}reifies> <<( :pump3 :hasPower 1.0 )>> .\n",
+        format="turtle",
+    )
+    assert same_triple_term(m2, ":r3", ":r9")
+    assert not same_triple_term(m2, ":r3", ":r10")
+    assert not same_triple_term(m2, ":r2", ":r10")
+    assert count(m2, "?r rdf:reifies ?t") == count(m, "?r rdf:reifies ?t") + 2
+    # And saving the extended model again keeps all of them.
+    path2 = tmp_path / "model2.maplib"
+    m2.serialize(path2)
+    m3 = Model.deserialize(path2)
+    assert rows(m3, "SELECT ?r ?t WHERE { ?r rdf:reifies ?t }") == rows(
+        m2, "SELECT ?r ?t WHERE { ?r rdf:reifies ?t }")
+
+
+def test_serializations_without_triple_terms_have_no_entry(tmp_path):
+    import json
+
+    m = Model()
+    m.reads(f"<{EX}a> <{EX}p> <{EX}b> .", format="ntriples")
+    m.serialize(tmp_path / "m", single_file=False)
+    meta = json.loads((tmp_path / "m" / "cats" / "metadata.json").read_text())
+    assert "triple_terms" not in meta
+    assert count(Model.deserialize(tmp_path / "m"), "?s ?p ?o") == 1

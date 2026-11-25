@@ -1,3 +1,4 @@
+use super::triple_terms::{TripleTermPartitionKey, TripleTerms};
 use super::{CatEncs, CatType, Cats};
 use crate::bundle::{SerializationSource, SerializationTarget};
 use crate::cats::maps::CatMaps;
@@ -5,6 +6,7 @@ use arrow::array::{AsArray, RecordBatch, StringArray, UInt32Array};
 use arrow::datatypes::{DataType, Field, Schema};
 use disk::CatMapsOnDisk;
 use crate::vectors::is_vector_literal_type;
+use crate::BaseRDFNodeType;
 use in_memory::vectors::stored_to_lexical;
 use in_memory::CatMapsInMemory;
 use oxrdf::NamedNode;
@@ -38,6 +40,8 @@ pub const CATS_FOLDER: &str = "cats";
 const CAT_MAP_FILE_EXTENSION: &str = "parquet";
 const STR_COLUMN: &str = "str";
 const CAT_COLUMN: &str = "cat";
+/// The folder, in the cats folder, of the partitions of the dictionary of RDF 1.2 triple terms.
+const TRIPLE_TERMS_FOLDER: &str = "triple_terms";
 
 fn create_path(path: &Path, s: &str) -> PathBuf {
     let mut pb = path.to_owned();
@@ -51,10 +55,28 @@ pub struct CatsMetadata {
     blank_counter: u32,
     literal_counter_map: Vec<(NamedNode, u32)>,
     uuid_cat_type_map: HashMap<String, CatMapOnDiskMetadata>,
+    /// The partitions of the dictionary of triple terms, in the order of their ids' locations.
+    /// Missing in serializations of earlier versions and of triplestores without triple terms.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    triple_terms: Vec<TripleTermPartitionMetadata>,
+}
+
+/// A partition of the dictionary of triple terms: its key, and its table (the columns id,
+/// subject and object) as a parquet file, relative to the cats folder.
+#[derive(Serialize, Deserialize)]
+pub struct TripleTermPartitionMetadata {
+    file: String,
+    predicate: NamedNode,
+    subject_type: BaseRDFNodeType,
+    object_type: BaseRDFNodeType,
 }
 
 impl CatsMetadata {
-    pub fn new(cats: &Cats, uuid_cat_type_map: HashMap<String, CatMapOnDiskMetadata>) -> Self {
+    pub fn new(
+        cats: &Cats,
+        uuid_cat_type_map: HashMap<String, CatMapOnDiskMetadata>,
+        triple_terms: Vec<TripleTermPartitionMetadata>,
+    ) -> Self {
         Self {
             iri_counter: cats.iri_counter,
             blank_counter: cats.blank_counter,
@@ -64,6 +86,7 @@ impl CatsMetadata {
                 .map(|(x, y)| (x.clone(), *y))
                 .collect(),
             uuid_cat_type_map,
+            triple_terms,
         }
     }
 }
@@ -156,7 +179,8 @@ impl Cats {
                 Ok((t.cat_type.clone(), CatEncs { maps }))
             })
             .collect();
-        let cats = Cats::from_map(map?, storage_folder);
+        let mut cats = Cats::from_map(map?, storage_folder);
+        cats.triple_terms = deserialize_triple_terms(source, &cats_metadata.triple_terms)?;
         Ok(cats)
     }
 
@@ -205,7 +229,8 @@ impl Cats {
                 Ok((path_uuid, CatMapOnDiskMetadata::new(name, t.clone())))
             })
             .collect();
-        let cats_metadata = CatsMetadata::new(self, map?);
+        let triple_terms = self.serialize_triple_terms(target)?;
+        let cats_metadata = CatsMetadata::new(self, map?, triple_terms);
         let cats_string = serde_json::to_string_pretty(&cats_metadata)?;
         target.write_bytes(
             &format!("{CATS_FOLDER}/{CATS_METADATA_FILE}"),
@@ -214,6 +239,62 @@ impl Cats {
 
         Ok(())
     }
+}
+
+impl Cats {
+    /// Writes each partition of the dictionary of triple terms as a parquet file. The codes in
+    /// them are those of the string dictionaries written with them.
+    fn serialize_triple_terms(
+        &self,
+        target: &SerializationTarget,
+    ) -> Result<Vec<TripleTermPartitionMetadata>, CatSerializationError> {
+        self.triple_terms
+            .partitions()
+            .par_iter()
+            .map(|p| {
+                let file = format!(
+                    "{TRIPLE_TERMS_FOLDER}/{}.{CAT_MAP_FILE_EXTENSION}",
+                    Uuid::new_v4()
+                );
+                target.write_parquet(
+                    &format!("{CATS_FOLDER}/{file}"),
+                    &mut p.df().clone(),
+                    ParquetCompression::Snappy,
+                    None,
+                )?;
+                Ok(TripleTermPartitionMetadata {
+                    file,
+                    predicate: p.key.predicate.clone(),
+                    subject_type: p.key.subject_type.clone(),
+                    object_type: p.key.object_type.clone(),
+                })
+            })
+            .collect()
+    }
+}
+
+/// The dictionary of triple terms of the partitions in the metadata. They are held in memory
+/// whatever the storage, as when they are added.
+fn deserialize_triple_terms(
+    source: &SerializationSource,
+    partitions: &[TripleTermPartitionMetadata],
+) -> Result<TripleTerms, CatSerializationError> {
+    let parts: Result<Vec<_>, CatSerializationError> = partitions
+        .par_iter()
+        .map(|m| {
+            let df = source
+                .file(&format!("{CATS_FOLDER}/{}", m.file))
+                .read_parquet()?;
+            let key = TripleTermPartitionKey {
+                predicate: m.predicate.clone(),
+                subject_type: m.subject_type.clone(),
+                object_type: m.object_type.clone(),
+            };
+            Ok((key, df))
+        })
+        .collect();
+    TripleTerms::from_partitions(parts?)
+        .map_err(|e| malformed(&format!("{CATS_FOLDER}/{TRIPLE_TERMS_FOLDER}"), e))
 }
 
 /// Copies a raw DuckDB cat map database, with its write-ahead log if there is one, out of a
