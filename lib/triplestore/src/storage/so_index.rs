@@ -628,7 +628,11 @@ impl SubjectObjectIndex {
             {
                 if object_type.is_lang_string() {
                     SubjectObjectIndex::U32LangIndex(U32LangIndex::new())
-                } else if object_type.stored_cat() || object_type.is_lit_type(xsd::UNSIGNED_INT) {
+                } else if object_type.stored_cat()
+                    || object_type.is_lit_type(xsd::UNSIGNED_INT)
+                    // Triple terms are u32 ids.
+                    || object_type.is_triple_term()
+                {
                     SubjectObjectIndex::U32U32Index(U32U32Index::new())
                 } else if object_type.is_lit_type(xsd::DATE) {
                     SubjectObjectIndex::U32DateIndex(U32DateIndex::new())

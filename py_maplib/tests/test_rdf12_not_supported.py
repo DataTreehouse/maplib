@@ -1,10 +1,10 @@
 """RDF 1.2 features that maplib does not support yet are refused with a clear error.
 
 The parsers and the SPARQL parser are built with RDF 1.2, so RDF 1.2 syntax is read. Triple terms
-and literals with a base direction cannot be stored or queried yet; they must give an error
-instead of being stored wrongly (a base direction would be lost, as language strings have no place
-for it) or being matched like an unbound variable. RDF 1.2 syntax without these features (the
-VERSION directive) is read.
+are stored (see test_rdf12_triple_terms.py), but cannot be queried yet, and literals with a base
+direction cannot be stored or queried yet: they must give an error instead of being stored wrongly
+(a base direction would be lost, as language strings have no place for it) or being matched like
+an unbound variable. RDF 1.2 syntax without these features (the VERSION directive) is read.
 
 When triple terms become supported, the tests of them move to the tests of that support.
 """
@@ -31,26 +31,10 @@ def size(m):
 @pytest.mark.parametrize(
     "fmt,doc",
     [
-        ("ntriples", f"<{EX}r> <http://www.w3.org/1999/02/22-rdf-syntax-ns#reifies> <<( <{EX}a> <{EX}p> <{EX}b> )>> ."),
-        ("nquads", f"<{EX}r> <http://www.w3.org/1999/02/22-rdf-syntax-ns#reifies> <<( <{EX}a> <{EX}p> <{EX}b> )>> <{EX}g> ."),
-        ("turtle", f"PREFIX : <{EX}>\n:a :p :b {{| :source :log |}} ."),
-        ("turtle", f"PREFIX : <{EX}>\n<< :a :p :b >> :source :log ."),
-        ("trig", f"PREFIX : <{EX}>\n:g {{ :a :p :b ~ :r {{| :source :log |}} }}"),
-    ],
-)
-def test_reading_triple_terms_is_refused(fmt, doc):
-    m = model_with_data()
-    with pytest.raises(MaplibException, match=TRIPLE_TERMS):
-        m.reads(doc, format=fmt)
-    # Nothing of the refused document is stored.
-    assert size(m) == 1
-
-
-@pytest.mark.parametrize(
-    "fmt,doc",
-    [
         ("ntriples", f'<{EX}a> <{EX}label> "abc"@en--rtl .'),
         ("turtle", f'PREFIX : <{EX}>\n:a :label "abc"@ar--ltr .'),
+        # Also inside a triple term.
+        ("ntriples", f'<{EX}r> <http://www.w3.org/1999/02/22-rdf-syntax-ns#reifies> <<( <{EX}a> <{EX}label> "abc"@en--rtl )>> .'),
     ],
 )
 def test_reading_base_directions_is_refused(fmt, doc):

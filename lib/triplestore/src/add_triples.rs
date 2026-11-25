@@ -288,7 +288,7 @@ impl Triplestore {
 
 /// Stores xsd:dateTime objects as UTC instants even when they come from naive or non-UTC
 /// datetime columns, so that all stored dateTimes compare and union with each other.
-fn normalize_datetime_objects(mut t: TriplesToAdd) -> TriplesToAdd {
+pub(crate) fn normalize_datetime_objects(mut t: TriplesToAdd) -> TriplesToAdd {
     if let Ok(c) = t.df.column(OBJECT_COL_NAME) {
         if let Some(dt) = normalized_datetime_dtype(c.dtype()) {
             t.df = t

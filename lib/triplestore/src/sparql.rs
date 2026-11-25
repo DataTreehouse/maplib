@@ -763,7 +763,11 @@ impl Triplestore {
             }
             // Triples with values that cannot be parsed cannot be stored, so there is nothing
             // to delete for them.
-            let (ttas, _dropped) = triples_to_triples_to_add(triples, &g)?;
+            let (ttas, _dropped) = triples_to_triples_to_add(triples, &g, &mut |_| {
+                Err(crate::errors::TriplestoreError::Rdf12NotSupported(
+                    representation::rdf12::TRIPLE_TERMS_NOT_SUPPORTED.to_string(),
+                ))
+            })?;
             let sms: Vec<_> = ttas
                 .into_iter()
                 .map(|tta| {

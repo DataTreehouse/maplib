@@ -13,11 +13,6 @@ rdf-n-triples/c14n/triple-term-04  # Triple terms, reified triples and annotatio
 rdf-n-triples/syntax/ntriples-langdir-1  # Literals with a base direction (rdf:dirLangString) are not supported
 rdf-n-triples/syntax/ntriples-langdir-2  # Literals with a base direction (rdf:dirLangString) are not supported
 rdf-n-triples/syntax/ntriples-version-1  # The N-Triples / N-Quads parser (oxttl, as Oxigraph) does not read the VERSION directive
-rdf-n-triples/syntax/ntriples12-01  # Triple terms, reified triples and annotations are not supported yet
-rdf-n-triples/syntax/ntriples12-02  # Triple terms, reified triples and annotations are not supported yet
-rdf-n-triples/syntax/ntriples12-03  # Triple terms, reified triples and annotations are not supported yet
-rdf-n-triples/syntax/ntriples12-bnode-1  # Triple terms, reified triples and annotations are not supported yet
-rdf-n-triples/syntax/ntriples12-nested-1  # Triple terms, reified triples and annotations are not supported yet
 rdf-n-quads/c14n/dirlangtagged_string  # Literals with a base direction (rdf:dirLangString) are not supported
 rdf-n-quads/c14n/triple-term-01  # Triple terms, reified triples and annotations are not supported yet
 rdf-n-quads/c14n/triple-term-02  # Triple terms, reified triples and annotations are not supported yet
@@ -25,11 +20,6 @@ rdf-n-quads/c14n/triple-term-03  # Triple terms, reified triples and annotations
 rdf-n-quads/c14n/triple-term-04  # Triple terms, reified triples and annotations are not supported yet
 rdf-n-quads/syntax/nquads-langdir-1  # Literals with a base direction (rdf:dirLangString) are not supported
 rdf-n-quads/syntax/nquads-langdir-2  # Literals with a base direction (rdf:dirLangString) are not supported
-rdf-n-quads/syntax/nquads12-01  # Triple terms, reified triples and annotations are not supported yet
-rdf-n-quads/syntax/nquads12-02  # Triple terms, reified triples and annotations are not supported yet
-rdf-n-quads/syntax/nquads12-03  # Triple terms, reified triples and annotations are not supported yet
-rdf-n-quads/syntax/nquads12-bnode-1  # Triple terms, reified triples and annotations are not supported yet
-rdf-n-quads/syntax/nquads12-nested-1  # Triple terms, reified triples and annotations are not supported yet
 rdf-turtle/eval/turtle12-annotation-01  # Triple terms, reified triples and annotations are not supported yet
 rdf-turtle/eval/turtle12-annotation-02  # Triple terms, reified triples and annotations are not supported yet
 rdf-turtle/eval/turtle12-annotation-03  # Triple terms, reified triples and annotations are not supported yet
@@ -62,39 +52,8 @@ rdf-turtle/eval/turtle12-tt-02  # Triple terms, reified triples and annotations 
 rdf-turtle/eval/turtle12-tt-03  # Triple terms, reified triples and annotations are not supported yet
 rdf-turtle/eval/turtle12-tt-04  # Triple terms, reified triples and annotations are not supported yet
 rdf-turtle/eval/turtle12-tt-05  # Triple terms, reified triples and annotations are not supported yet
-rdf-turtle/syntax/nt-ttl12-1  # Triple terms, reified triples and annotations are not supported yet
-rdf-turtle/syntax/nt-ttl12-2  # Triple terms, reified triples and annotations are not supported yet
-rdf-turtle/syntax/nt-ttl12-3  # Triple terms, reified triples and annotations are not supported yet
-rdf-turtle/syntax/nt-ttl12-bnode-1  # Triple terms, reified triples and annotations are not supported yet
 rdf-turtle/syntax/nt-ttl12-langdir-1  # Literals with a base direction (rdf:dirLangString) are not supported
 rdf-turtle/syntax/nt-ttl12-langdir-2  # Literals with a base direction (rdf:dirLangString) are not supported
-rdf-turtle/syntax/nt-ttl12-nested-1  # Triple terms, reified triples and annotations are not supported yet
-rdf-turtle/syntax/turtle12-1  # Triple terms, reified triples and annotations are not supported yet
-rdf-turtle/syntax/turtle12-2  # Triple terms, reified triples and annotations are not supported yet
-rdf-turtle/syntax/turtle12-3  # Triple terms, reified triples and annotations are not supported yet
-rdf-turtle/syntax/turtle12-4  # Triple terms, reified triples and annotations are not supported yet
-rdf-turtle/syntax/turtle12-5  # Triple terms, reified triples and annotations are not supported yet
-rdf-turtle/syntax/turtle12-6  # Triple terms, reified triples and annotations are not supported yet
-rdf-turtle/syntax/turtle12-7  # Triple terms, reified triples and annotations are not supported yet
-rdf-turtle/syntax/turtle12-8  # Triple terms, reified triples and annotations are not supported yet
-rdf-turtle/syntax/turtle12-ann-1  # Triple terms, reified triples and annotations are not supported yet
-rdf-turtle/syntax/turtle12-ann-2  # Triple terms, reified triples and annotations are not supported yet
-rdf-turtle/syntax/turtle12-ann-3  # Triple terms, reified triples and annotations are not supported yet
-rdf-turtle/syntax/turtle12-ann-4  # Triple terms, reified triples and annotations are not supported yet
-rdf-turtle/syntax/turtle12-ann-5  # Triple terms, reified triples and annotations are not supported yet
-rdf-turtle/syntax/turtle12-ann-6  # Triple terms, reified triples and annotations are not supported yet
-rdf-turtle/syntax/turtle12-ann-7  # Triple terms, reified triples and annotations are not supported yet
-rdf-turtle/syntax/turtle12-ann-8  # Triple terms, reified triples and annotations are not supported yet
-rdf-turtle/syntax/turtle12-bnode-1  # Triple terms, reified triples and annotations are not supported yet
-rdf-turtle/syntax/turtle12-bnode-2  # Triple terms, reified triples and annotations are not supported yet
-rdf-turtle/syntax/turtle12-bnode-3  # Triple terms, reified triples and annotations are not supported yet
-rdf-turtle/syntax/turtle12-compound-1  # Triple terms, reified triples and annotations are not supported yet
-rdf-turtle/syntax/turtle12-inside-1  # Triple terms, reified triples and annotations are not supported yet
-rdf-turtle/syntax/turtle12-inside-2  # Triple terms, reified triples and annotations are not supported yet
-rdf-turtle/syntax/turtle12-inside-3  # Triple terms, reified triples and annotations are not supported yet
-rdf-turtle/syntax/turtle12-inside-4  # Triple terms, reified triples and annotations are not supported yet
-rdf-turtle/syntax/turtle12-nested-1  # Triple terms, reified triples and annotations are not supported yet
-rdf-turtle/syntax/turtle12-nested-2  # Triple terms, reified triples and annotations are not supported yet
 rdf-trig/eval/trig12-annotation-01  # Triple terms, reified triples and annotations are not supported yet
 rdf-trig/eval/trig12-annotation-02  # Triple terms, reified triples and annotations are not supported yet
 rdf-trig/eval/trig12-annotation-03  # Triple terms, reified triples and annotations are not supported yet
@@ -121,30 +80,8 @@ rdf-trig/eval/trig12-rt-05  # Triple terms, reified triples and annotations are 
 rdf-trig/eval/trig12-rt-06  # Triple terms, reified triples and annotations are not supported yet
 rdf-trig/eval/trig12-rt-07  # Triple terms, reified triples and annotations are not supported yet
 rdf-trig/eval/trig12-rt-08  # Triple terms, reified triples and annotations are not supported yet
-rdf-trig/syntax/trig12-1  # Triple terms, reified triples and annotations are not supported yet
-rdf-trig/syntax/trig12-2  # Triple terms, reified triples and annotations are not supported yet
-rdf-trig/syntax/trig12-3  # Triple terms, reified triples and annotations are not supported yet
-rdf-trig/syntax/trig12-4  # Triple terms, reified triples and annotations are not supported yet
-rdf-trig/syntax/trig12-ann-1  # Triple terms, reified triples and annotations are not supported yet
-rdf-trig/syntax/trig12-ann-2  # Triple terms, reified triples and annotations are not supported yet
-rdf-trig/syntax/trig12-ann-3  # Triple terms, reified triples and annotations are not supported yet
-rdf-trig/syntax/trig12-ann-4  # Triple terms, reified triples and annotations are not supported yet
-rdf-trig/syntax/trig12-ann-5  # Triple terms, reified triples and annotations are not supported yet
-rdf-trig/syntax/trig12-ann-6  # Triple terms, reified triples and annotations are not supported yet
-rdf-trig/syntax/trig12-ann-7  # Triple terms, reified triples and annotations are not supported yet
-rdf-trig/syntax/trig12-ann-8  # Triple terms, reified triples and annotations are not supported yet
 rdf-trig/syntax/trig12-base-1  # Literals with a base direction (rdf:dirLangString) are not supported
 rdf-trig/syntax/trig12-base-2  # Literals with a base direction (rdf:dirLangString) are not supported
-rdf-trig/syntax/trig12-bnode-1  # Triple terms, reified triples and annotations are not supported yet
-rdf-trig/syntax/trig12-bnode-2  # Triple terms, reified triples and annotations are not supported yet
-rdf-trig/syntax/trig12-bnode-3  # Triple terms, reified triples and annotations are not supported yet
-rdf-trig/syntax/trig12-compound-1  # Triple terms, reified triples and annotations are not supported yet
-rdf-trig/syntax/trig12-inside-1  # Triple terms, reified triples and annotations are not supported yet
-rdf-trig/syntax/trig12-inside-2  # Triple terms, reified triples and annotations are not supported yet
-rdf-trig/syntax/trig12-inside-3  # Triple terms, reified triples and annotations are not supported yet
-rdf-trig/syntax/trig12-inside-4  # Triple terms, reified triples and annotations are not supported yet
-rdf-trig/syntax/trig12-nested-1  # Triple terms, reified triples and annotations are not supported yet
-rdf-trig/syntax/trig12-nested-2  # Triple terms, reified triples and annotations are not supported yet
 rdf-xml/eval/rdf12-xml-an-01  # RDF/XML annotations (rdf:annotation, rdf:annotationNodeID) are not supported
 rdf-xml/eval/rdf12-xml-an-02  # RDF/XML annotations (rdf:annotation, rdf:annotationNodeID) are not supported
 rdf-xml/eval/rdf12-xml-an-03  # RDF/XML annotations (rdf:annotation, rdf:annotationNodeID) are not supported

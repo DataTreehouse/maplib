@@ -26,8 +26,6 @@ eval-triple-terms/pattern-1  # Triple terms, reified triples and annotations are
 eval-triple-terms/pattern-10  # Triple terms, reified triples and annotations are not supported yet
 eval-triple-terms/pattern-11  # Triple terms, reified triples and annotations are not supported yet
 eval-triple-terms/pattern-2  # Triple terms, reified triples and annotations are not supported yet
-eval-triple-terms/pattern-3  # Triple terms, reified triples and annotations are not supported yet
-eval-triple-terms/pattern-3-nomatch  # Triple terms, reified triples and annotations are not supported yet
 eval-triple-terms/pattern-4  # Triple terms, reified triples and annotations are not supported yet
 eval-triple-terms/pattern-5  # Triple terms, reified triples and annotations are not supported yet
 eval-triple-terms/pattern-6  # Triple terms, reified triples and annotations are not supported yet

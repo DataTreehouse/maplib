@@ -290,7 +290,8 @@ fn stats_and_codes(
     let mut most_common_objects = vec![];
     // Only scalar columns: language-tagged strings are stored as structs.
     let scalar = !matches!(o.dtype(), DataType::Struct(_) | DataType::List(_) | DataType::Array(..));
-    if distinct_objects < rows && scalar {
+    // Triple terms are not compared with the constants of queries here yet.
+    if distinct_objects < rows && scalar && !t.object_type.is_triple_term() {
         let counts = collect_in_memory(
             df.select([OBJECT_COL_NAME])
                 .unwrap()
@@ -424,7 +425,11 @@ pub(crate) fn merged_table_stats(
     let max_subject_rows = max_rows(&subject_sketch, distinct_subjects);
     let max_object_rows = max_rows(&object_sketch, distinct_objects);
     let mut most_common_objects = vec![];
-    if let Some(sk) = &object_sketch {
+    // Triple terms are not compared with the constants of queries here yet.
+    let object_sketch_terms = object_sketch
+        .as_ref()
+        .filter(|_| !t.object_type.is_triple_term());
+    if let Some(sk) = object_sketch_terms {
         let top: Vec<&(u32, u64)> = sk.top.iter().take(MOST_COMMON_OBJECTS).collect();
         if !top.is_empty() {
             let codes = polars::prelude::Column::new(

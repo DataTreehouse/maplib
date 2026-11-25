@@ -46,6 +46,12 @@ impl SolutionMappingsBuilder {
         }
         for sol in sols {
             for (v, s) in sol.variables().iter().zip(sol.values()) {
+                // Results with triple terms (of SERVICE) cannot be represented yet.
+                if let Some(oxrdf::Term::Triple(_)) = s {
+                    return Err(RepresentationError::Rdf12NotSupported(
+                        crate::rdf12::TRIPLE_TERMS_NOT_SUPPORTED.to_string(),
+                    ));
+                }
                 let builder = self.map.get_mut(v.as_str()).unwrap();
                 builder.push_maybe_term(s)?;
             }

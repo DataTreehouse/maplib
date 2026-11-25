@@ -22,6 +22,7 @@ pub mod sparql;
 pub mod statistics;
 pub mod storage;
 pub mod triples_read;
+mod triple_terms;
 pub mod triples_write;
 
 use crate::errors::TriplestoreError;
@@ -167,9 +168,11 @@ impl Triplestore {
             .encode_series(&pred_graph_series, &BaseRDFNodeType::IRI);
         assert!(locals.is_none());
 
-        let garbage_collected: Result<Vec<_>, TriplestoreError> = self
-            .global_cats
-            .write()?
+        let mut cats_guard = self.global_cats.write()?;
+        let cats = &mut *cats_guard;
+        // The subjects and objects of triple terms are codes that are used as well.
+        let triple_terms = &cats.triple_terms;
+        let garbage_collected: Result<Vec<_>, TriplestoreError> = cats
             .cat_map
             .par_iter_mut()
             .map(|(ct, ce)| {
@@ -220,6 +223,23 @@ impl Triplestore {
                                     }
                                 }
                             }
+                        }
+                    }
+                }
+                for part in triple_terms.partitions() {
+                    let df = part.df();
+                    if part.key.subject_type == t {
+                        mark(df.column(SUBJECT_COL_NAME).unwrap());
+                    }
+                    if part.key.object_type == t {
+                        let o_col = df.column(OBJECT_COL_NAME).unwrap();
+                        if t.is_lang_string() {
+                            let st = o_col.struct_().unwrap();
+                            for f in [LANG_STRING_VALUE_FIELD, LANG_STRING_LANG_FIELD] {
+                                mark(&st.field_by_name(f).unwrap().into_column());
+                            }
+                        } else {
+                            mark(o_col);
                         }
                     }
                 }
@@ -282,10 +302,23 @@ impl Triplestore {
             })
             .collect();
         let compacted = compacted?;
-        self.global_cats
-            .write()
-            .expect("Should be writable")
-            .compact();
+        {
+            let mut cats = self.global_cats.write().expect("Should be writable");
+            // The codes of triple terms become their ranks, which are their codes after the
+            // compaction, as for the codes of the tables above (see Triples::compact).
+            let mapped = cats
+                .triple_terms
+                .mapped_codes(&|t, codes| {
+                    let mut u32s: Vec<u32> = codes.iter().flatten().collect();
+                    u32s.sort_unstable();
+                    u32s.dedup();
+                    let rank_map = cats.global_ranks(&u32s, t);
+                    Ok(crate::storage::codes_to_ranks(codes, &rank_map))
+                })
+                .map_err(TriplestoreError::LazyLoadError)?;
+            cats.triple_terms.set_partition_tables(mapped);
+            cats.compact();
+        }
         // Collects in memory, see IN_MEMORY_COLLECT_LOOPS.
         let data_and_triples: Result<Vec<_>, TriplestoreError> = compacted
             .into_par_iter()

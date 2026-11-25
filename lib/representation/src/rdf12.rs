@@ -17,10 +17,11 @@ pub fn has_base_direction(l: &Literal) -> bool {
     l.direction().is_some()
 }
 
-/// The message for an RDF 1.2 feature of the term that maplib does not support yet, if any.
+/// The message for an RDF 1.2 feature of a term in data that maplib does not support yet, if
+/// any: a base direction, also inside a triple term. Triple terms are supported in data.
 pub fn unsupported_in_term(t: &Term) -> Option<&'static str> {
     match t {
-        Term::Triple(_) => Some(TRIPLE_TERMS_NOT_SUPPORTED),
+        Term::Triple(tt) => unsupported_in_term(&tt.object),
         Term::Literal(l) if has_base_direction(l) => Some(BASE_DIRECTION_NOT_SUPPORTED),
         _ => None,
     }

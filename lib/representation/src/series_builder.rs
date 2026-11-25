@@ -6,7 +6,7 @@ use crate::{BaseRDFNodeType, LANG_STRING_LANG_FIELD, LANG_STRING_VALUE_FIELD};
 use chrono::{DateTime, NaiveDate, NaiveDateTime, Utc};
 use memchr::memchr;
 use oxrdf::vocab::{rdf, xsd};
-use oxrdf::{NamedOrBlankNode, Term};
+use oxrdf::{NamedOrBlankNode, Term, Triple};
 use polars::prelude::{DataType, NamedFrom, PlSmallStr, Series};
 use polars_arrow::array::{Utf8ViewArray, View};
 use polars_arrow::bitmap::{Bitmap, MutableBitmap};
@@ -168,6 +168,9 @@ pub enum SeriesBuilder {
         values: StringColumnBuilder,
         langs: StringColumnBuilder,
     },
+    /// RDF 1.2 triple terms, which get their ids in the triplestore (see
+    /// cats::triple_terms) before they become a column, so they have no into_series.
+    TripleTerms(Vec<Option<Triple>>),
 }
 
 impl SeriesBuilder {
@@ -202,10 +205,18 @@ impl SeriesBuilder {
                 },
                 _ => SeriesBuilder::String(StringColumnBuilder::with_capacity(cap)),
             },
-            BaseRDFNodeType::TripleTerm => crate::rdf12::unreachable_triple_term(),
+            BaseRDFNodeType::TripleTerm => SeriesBuilder::TripleTerms(Vec::with_capacity(cap)),
             BaseRDFNodeType::None => {
                 unreachable!("Should never happen")
             }
+        }
+    }
+
+    /// The triple terms of a TripleTerms builder, None where unbound.
+    pub fn into_triple_terms(self) -> Vec<Option<Triple>> {
+        match self {
+            SeriesBuilder::TripleTerms(v) => v,
+            _ => panic!("Not a builder of triple terms"),
         }
     }
 
@@ -227,6 +238,7 @@ impl SeriesBuilder {
             SeriesBuilder::Datetime(v) => v.len(),
             SeriesBuilder::Decimal(v) => v.len(),
             SeriesBuilder::LangString { values, .. } => values.len(),
+            SeriesBuilder::TripleTerms(v) => v.len(),
         }
     }
 
@@ -252,6 +264,7 @@ impl SeriesBuilder {
             (SeriesBuilder::Date(v), SeriesBuilder::Date(o)) => v.extend(o),
             (SeriesBuilder::Datetime(v), SeriesBuilder::Datetime(o)) => v.extend(o),
             (SeriesBuilder::Decimal(v), SeriesBuilder::Decimal(o)) => v.extend(o),
+            (SeriesBuilder::TripleTerms(v), SeriesBuilder::TripleTerms(o)) => v.extend(o),
             (
                 SeriesBuilder::LangString { values, langs },
                 SeriesBuilder::LangString {
@@ -350,6 +363,7 @@ impl SeriesBuilder {
                 values.append_null();
                 langs.append_null();
             }
+            SeriesBuilder::TripleTerms(v) => v.push(None),
         }
     }
 
@@ -370,9 +384,16 @@ impl SeriesBuilder {
                 ))
             }
             Term::Literal(l) => self.parse_literal(l.value(), l.language()),
-            Term::Triple(_) => Err(RepresentationError::Rdf12NotSupported(
-                crate::rdf12::TRIPLE_TERMS_NOT_SUPPORTED.to_string(),
-            )),
+            Term::Triple(t) => {
+                if let SeriesBuilder::TripleTerms(v) = self {
+                    v.push(Some(t.as_ref().clone()));
+                    Ok(())
+                } else {
+                    Err(RepresentationError::DatatypeError(format!(
+                        "the triple term {term} is not a value of this column"
+                    )))
+                }
+            }
         }
     }
 
@@ -390,6 +411,11 @@ impl SeriesBuilder {
         lang: Option<&str>,
     ) -> Result<(), RepresentationError> {
         match self {
+            SeriesBuilder::TripleTerms(_) => {
+                return Err(RepresentationError::DatatypeError(format!(
+                    "the literal {lex} is not a triple term"
+                )))
+            }
             SeriesBuilder::String(v) => {
                 v.append_value(lex);
             }
@@ -512,6 +538,8 @@ impl SeriesBuilder {
                 ser.rename(PlSmallStr::from_str(name));
                 ser
             }
+            // Triple terms get their ids before they become a column.
+            SeriesBuilder::TripleTerms(_) => crate::rdf12::unreachable_triple_term(),
             SeriesBuilder::LangString { values, langs } => {
                 let len = values.len();
                 let val_ser = values.finish(LANG_STRING_VALUE_FIELD).into_series();

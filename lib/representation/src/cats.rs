@@ -6,6 +6,7 @@ mod image;
 pub mod maps;
 mod re_encode;
 pub mod serialization;
+pub mod triple_terms;
 
 pub use decode::*;
 pub use encode::*;
@@ -164,6 +165,8 @@ pub struct Cats {
     literal_counter_map: HashMap<NamedNode, u32>,
     pub uuid: String,
     path: Option<PathBuf>,
+    /// The RDF 1.2 triple terms, whose subjects and objects are codes of these dictionaries.
+    pub triple_terms: triple_terms::TripleTerms,
 }
 
 impl Cats {
@@ -262,6 +265,7 @@ impl Cats {
             literal_counter_map: Default::default(),
             uuid: Uuid::new_v4().to_string(),
             path: path_buf,
+            triple_terms: Default::default(),
         };
         cats.recompute_counters();
         cats
@@ -292,6 +296,7 @@ impl Cats {
             literal_counter_map,
             uuid: Uuid::new_v4().to_string(),
             path: path_buf,
+            triple_terms: Default::default(),
         }
     }
 

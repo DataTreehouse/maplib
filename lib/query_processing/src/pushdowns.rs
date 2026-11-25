@@ -8,6 +8,7 @@ use oxrdf::{Literal, NamedNodeRef, Term, Variable};
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use representation::cats::LockedCats;
 use representation::solution_mapping::SolutionMappings;
+use representation::BaseRDFNodeType;
 use spargebra::algebra::{Expression, Function, GraphPattern};
 use spargebra::term::{GroundTerm, NamedNodePattern, TermPattern, TriplePattern};
 use std::collections::{HashMap, HashSet};
@@ -146,6 +147,18 @@ impl Pushdowns {
         } else {
             vec![]
         };
+        // Triple terms are not pushed down yet: their ids cannot be looked up as codes of the
+        // string dictionaries. A variable that may hold them gets no pushed down values, so
+        // that its triple terms are not left out; the join with its solutions keeps the matches.
+        let columns: Vec<_> = columns
+            .into_iter()
+            .filter(|c| {
+                !eager_sm
+                    .rdf_node_types
+                    .get(c.name().as_str())
+                    .is_some_and(|t| t.map.contains_key(&BaseRDFNodeType::TripleTerm))
+            })
+            .collect();
         if !columns.is_empty() {
             fast_path::hit(FastPath::BgpValuesPushed);
             let pushdowns: HashMap<_, _> = columns

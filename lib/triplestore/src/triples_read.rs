@@ -17,7 +17,7 @@ use oxttl::ntriples::SliceNTriplesParser;
 use oxttl::turtle::SliceTurtleParser;
 use oxttl::{NQuadsParser, NTriplesParser, TurtleParser};
 use polars::prelude::DataFrame;
-use polars_core::prelude::IntoColumn;
+use polars_core::prelude::{IntoColumn, IntoSeries, UInt32Chunked};
 use rayon::iter::ParallelIterator;
 use rayon::prelude::IntoParallelIterator;
 use representation::dataset::NamedGraph;
@@ -339,7 +339,43 @@ impl Triplestore {
             );
 
             let start_tripleproc_now = Instant::now();
-            let ttas: Vec<_> = grouped
+            // Triples whose objects are triple terms: the triple terms get their ids first.
+            let mut triple_term_ttas = vec![];
+            let triple_term_keys: Vec<_> = grouped
+                .keys()
+                .filter(|k| k.3.is_triple_term())
+                .cloned()
+                .collect();
+            for k in triple_term_keys {
+                let builders = grouped.remove(&k).unwrap();
+                let (graph, predicate, subject_type, object_type) = k;
+                let mut builders = builders.into_iter();
+                let (mut subjects, mut objects) = builders.next().unwrap();
+                for (s, o) in builders {
+                    subjects.append(s);
+                    objects.append(o);
+                }
+                let ids = self.add_triple_terms(&objects.into_triple_terms())?;
+                let df = DataFrame::new(
+                    subjects.len(),
+                    vec![
+                        subjects.into_series(SUBJECT_COL_NAME).into_column(),
+                        ids.into_series().into_column(),
+                    ],
+                )
+                .unwrap();
+                triple_term_ttas.push(TriplesToAdd {
+                    df,
+                    subject_cat_state: subject_type.default_input_cat_state(),
+                    object_cat_state: object_type.default_input_cat_state(),
+                    subject_type,
+                    object_type,
+                    predicate: Some(predicate),
+                    graph,
+                    predicate_cat_state: None,
+                });
+            }
+            let mut ttas: Vec<_> = grouped
                 .into_par_iter()
                 .map(
                     |((graph, predicate, subject_type, object_type), builders)| {
@@ -371,6 +407,7 @@ impl Triplestore {
                     },
                 )
                 .collect();
+            ttas.extend(triple_term_ttas);
 
             debug!(
                 "Creating the triples to add as DFs took {} seconds",
@@ -401,7 +438,8 @@ impl Triplestore {
         triples: Vec<Triple>,
         graph: &NamedGraph,
     ) -> Result<Vec<NewTriples>, TriplestoreError> {
-        let (ttas, dropped) = triples_to_triples_to_add(triples, graph)?;
+        let (ttas, dropped) =
+            triples_to_triples_to_add(triples, graph, &mut |t| self.add_triple_terms(t))?;
         dropped.warn("triples");
         self.add_triples_vec(ttas)
     }
@@ -410,9 +448,11 @@ impl Triplestore {
 /// Groups in-memory triples by predicate and subject/object type, and builds one subject/object
 /// DataFrame per group, in the same column representation the RDF readers produce. Triples whose
 /// object cannot be parsed into its column type are dropped and counted in [`DroppedValues`].
+/// `triple_term_ids` gives the ids of triple terms that are objects.
 pub(crate) fn triples_to_triples_to_add(
     triples: Vec<Triple>,
     graph: &NamedGraph,
+    triple_term_ids: &mut dyn FnMut(&[Option<Triple>]) -> Result<UInt32Chunked, TriplestoreError>,
 ) -> Result<(Vec<TriplesToAdd>, DroppedValues), TriplestoreError> {
     let mut dropped = DroppedValues::default();
     let mut subj_type_map: HashMap<String, Vec<BaseRDFNodeType>> = HashMap::new();
@@ -455,11 +495,16 @@ pub(crate) fn triples_to_triples_to_add(
         for (subject_type, by_object) in by_subject {
             for (object_type, (subjects, objects)) in by_object {
                 let l = subjects.len();
+                let objects = if object_type.is_triple_term() {
+                    triple_term_ids(&objects.into_triple_terms())?.into_series()
+                } else {
+                    objects.into_series(OBJECT_COL_NAME)
+                };
                 let df = DataFrame::new(
                     l,
                     vec![
                         subjects.into_series(SUBJECT_COL_NAME).into_column(),
-                        objects.into_series(OBJECT_COL_NAME).into_column(),
+                        objects.into_column(),
                     ],
                 )
                 .unwrap();
@@ -495,10 +540,22 @@ fn drop_base_direction(t: Term) -> Term {
 }
 
 pub(crate) fn term_to_oxrdf_term(t: Term, parser_call: &str) -> Term {
-    if let Term::BlankNode(bn) = t {
-        Term::BlankNode(blank_node_to_oxrdf_blank_node(bn, parser_call))
-    } else {
-        t
+    match t {
+        Term::BlankNode(bn) => Term::BlankNode(blank_node_to_oxrdf_blank_node(bn, parser_call)),
+        // The blank nodes of a triple term are blank nodes of the document as well.
+        Term::Triple(tt) => {
+            let Triple {
+                subject,
+                predicate,
+                object,
+            } = *tt;
+            Term::Triple(Box::new(Triple::new(
+                subject_to_oxrdf_subject(subject, parser_call),
+                predicate,
+                term_to_oxrdf_term(object, parser_call),
+            )))
+        }
+        t => t,
     }
 }
 
