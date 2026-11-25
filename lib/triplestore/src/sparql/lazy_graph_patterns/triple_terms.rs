@@ -94,7 +94,170 @@ fn constant_matches_type(t: &Term, bt: &BaseRDFNodeType) -> bool {
     }
 }
 
+/// Whether the triple pattern has one of the variables of the triple term patterns.
+pub(crate) fn uses_any(
+    tp: &TriplePattern,
+    triple_term_patterns: &[(Variable, TriplePattern)],
+) -> bool {
+    triple_term_patterns.iter().any(|(v, _)| {
+        matches!(&tp.subject, TermPattern::Variable(s) if s == v)
+            || matches!(&tp.object, TermPattern::Variable(o) if o == v)
+    })
+}
+
+/// The variables of a term pattern (and of its triple term patterns, which are joined with it).
+fn term_variables(
+    t: &TermPattern,
+    triple_term_patterns: &[(Variable, TriplePattern)],
+    out: &mut Vec<String>,
+) {
+    if let Some(name) = variable_name(t) {
+        if let Some((_, tp)) = triple_term_patterns
+            .iter()
+            .find(|(v, _)| v.as_str() == name)
+        {
+            term_variables(&tp.subject, triple_term_patterns, out);
+            if let NamedNodePattern::Variable(p) = &tp.predicate {
+                out.push(p.as_str().to_string());
+            }
+            term_variables(&tp.object, triple_term_patterns, out);
+        }
+        out.push(name);
+    } else if let TermPattern::Triple(tp) = t {
+        term_variables(&tp.subject, triple_term_patterns, out);
+        term_variables(&tp.object, triple_term_patterns, out);
+    }
+}
+
+/// The variables a triple pattern binds, with those of its triple term patterns.
+fn pattern_variables(
+    tp: &TriplePattern,
+    triple_term_patterns: &[(Variable, TriplePattern)],
+) -> Vec<String> {
+    let mut out = vec![];
+    term_variables(&tp.subject, triple_term_patterns, &mut out);
+    if let NamedNodePattern::Variable(p) = &tp.predicate {
+        out.push(p.as_str().to_string());
+    }
+    term_variables(&tp.object, triple_term_patterns, &mut out);
+    out
+}
+
+/// The patterns in the order chosen for them, except that a pattern that shares no variable with
+/// the patterns before it (and the incoming solutions), which would be joined with them as a
+/// cross product, is preceded by a pattern with triple term patterns that shares variables with
+/// them. The order is chosen without the triple term patterns, so it does not know that their
+/// variables connect the pattern they are in with the patterns that use their variables
+/// (`?r rdf:reifies <<( ?s :p ?o )>> . ?s :p ?o`), and could otherwise join those as a cross
+/// product before the triple term pattern connects them.
+pub(crate) fn connect_triple_term_patterns(
+    ordered: Vec<TriplePattern>,
+    triple_term_patterns: &[(Variable, TriplePattern)],
+    solution_mappings: &Option<SolutionMappings>,
+) -> Vec<TriplePattern> {
+    if triple_term_patterns.is_empty() {
+        return ordered;
+    }
+    let mut bound: std::collections::HashSet<String> = solution_mappings
+        .as_ref()
+        .map(|sm| sm.rdf_node_types.keys().cloned().collect())
+        .unwrap_or_default();
+    let mut remaining: std::collections::VecDeque<TriplePattern> = ordered.into();
+    let mut out = Vec::with_capacity(remaining.len());
+    while let Some(next) = remaining.pop_front() {
+        let shares = |tp: &TriplePattern, bound: &std::collections::HashSet<String>| {
+            pattern_variables(tp, triple_term_patterns)
+                .iter()
+                .any(|v| bound.contains(v))
+        };
+        if !bound.is_empty() && !shares(&next, &bound) {
+            if let Some(i) = remaining
+                .iter()
+                .position(|tp| uses_any(tp, triple_term_patterns) && shares(tp, &bound))
+            {
+                let connecting = remaining.remove(i).unwrap();
+                bound.extend(pattern_variables(&connecting, triple_term_patterns));
+                out.push(connecting);
+                remaining.push_front(next);
+                continue;
+            }
+        }
+        bound.extend(pattern_variables(&next, triple_term_patterns));
+        out.push(next);
+    }
+    out
+}
+
 impl Triplestore {
+    /// A triple pattern of a basic graph pattern. A pattern with triple term patterns that
+    /// shares no variable with the solutions itself, only through its triple term patterns, is
+    /// evaluated on its own and joined with them, so that it is not joined with the solutions as
+    /// a cross product before its triple term patterns connect them.
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn lazy_bgp_triple_pattern(
+        &self,
+        solution_mappings: Option<SolutionMappings>,
+        tp: &TriplePattern,
+        pending: &mut Vec<(Variable, TriplePattern)>,
+        context: &representation::query_context::Context,
+        pushdowns: &mut Pushdowns,
+        query_settings: &crate::sparql::QuerySettings,
+        dataset: &representation::dataset::QueryGraph,
+    ) -> Result<SolutionMappings, SparqlError> {
+        if let Some(sm) = &solution_mappings {
+            let own: Vec<String> = [&tp.subject, &tp.object]
+                .into_iter()
+                .filter_map(variable_name)
+                .chain(match &tp.predicate {
+                    NamedNodePattern::Variable(v) => Some(v.as_str().to_string()),
+                    NamedNodePattern::NamedNode(_) => None,
+                })
+                .collect();
+            if uses_any(tp, pending) && !own.iter().any(|v| sm.rdf_node_types.contains_key(v)) {
+                let unit = self.lazy_triple_pattern(
+                    None,
+                    tp,
+                    context,
+                    pushdowns,
+                    query_settings,
+                    dataset,
+                )?;
+                let unit =
+                    self.join_bound_triple_term_patterns(unit, pending, query_settings.max_rows)?;
+                return Ok(join(
+                    solution_mappings.unwrap(),
+                    unit,
+                    JoinType::Inner,
+                    self.global_cats.clone(),
+                    query_settings.max_rows,
+                )?);
+            }
+        }
+        self.lazy_triple_pattern(
+            solution_mappings,
+            tp,
+            context,
+            pushdowns,
+            query_settings,
+            dataset,
+        )
+    }
+
+    /// Joins the solutions with the matches of the triple term patterns whose variables they
+    /// bind, which are removed from `pending`.
+    pub(crate) fn join_bound_triple_term_patterns(
+        &self,
+        sm: SolutionMappings,
+        pending: &mut Vec<(Variable, TriplePattern)>,
+        max_rows: Option<usize>,
+    ) -> Result<SolutionMappings, SparqlError> {
+        let (bound, rest): (Vec<_>, Vec<_>) = std::mem::take(pending)
+            .into_iter()
+            .partition(|(v, _)| sm.rdf_node_types.contains_key(v.as_str()));
+        *pending = rest;
+        self.join_triple_term_patterns(sm, &bound, max_rows)
+    }
+
     /// Joins the solutions of a basic graph pattern with the matches of its triple term
     /// patterns, and drops the variables that stood for them.
     pub(crate) fn join_triple_term_patterns(

@@ -241,6 +241,8 @@ impl Triplestore {
                 };
                 let patterns = if proven_empty { vec![] } else { patterns };
                 let bgp_context = context.extension_with(PathEntry::BGP);
+                // Triple term patterns are joined as soon as their variables are bound (below).
+                let mut pending_triple_terms = triple_term_patterns;
                 // One pattern on its own needs no order.
                 let statistics = estimate::statistics_enabled();
                 let estimated = statistics && patterns.len() > 1;
@@ -262,6 +264,13 @@ impl Triplestore {
                         &pushdowns,
                     )
                 };
+                // The variables of triple term patterns connect patterns that the order does not
+                // know are connected, see triple_terms::connect_triple_term_patterns.
+                let ordered_patterns = triple_terms::connect_triple_term_patterns(
+                    ordered_patterns,
+                    &pending_triple_terms,
+                    &updated_solution_mappings,
+                );
                 let groups = group_triple_patterns(ordered_patterns, &updated_solution_mappings);
                 for group in &groups {
                     match updated_solution_mappings {
@@ -279,15 +288,27 @@ impl Triplestore {
                         sm => {
                             updated_solution_mappings = sm;
                             for tp in group {
-                                updated_solution_mappings = Some(self.lazy_triple_pattern(
+                                updated_solution_mappings = Some(self.lazy_bgp_triple_pattern(
                                     updated_solution_mappings,
                                     tp,
+                                    &mut pending_triple_terms,
                                     &bgp_context,
                                     &mut pushdowns,
                                     query_settings,
                                     dataset,
                                 )?);
                             }
+                        }
+                    }
+                    // Triple term patterns are joined as soon as their variables are bound.
+                    if !pending_triple_terms.is_empty() {
+                        if let Some(sm) = updated_solution_mappings.take() {
+                            updated_solution_mappings =
+                                Some(self.join_bound_triple_term_patterns(
+                                    sm,
+                                    &mut pending_triple_terms,
+                                    query_settings.max_rows,
+                                )?);
                         }
                     }
                 }
@@ -305,7 +326,7 @@ impl Triplestore {
                     )?);
                 }
 
-                if !triple_term_patterns.is_empty() {
+                if !pending_triple_terms.is_empty() {
                     let sm = updated_solution_mappings.unwrap_or_else(|| SolutionMappings {
                         mappings: DataFrame::empty_with_height(1).lazy(),
                         rdf_node_types: HashMap::new(),
@@ -313,7 +334,7 @@ impl Triplestore {
                     });
                     updated_solution_mappings = Some(self.join_triple_term_patterns(
                         sm,
-                        &triple_term_patterns,
+                        &pending_triple_terms,
                         query_settings.max_rows,
                     )?);
                 }
