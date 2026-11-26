@@ -17,21 +17,24 @@
 
 use super::Triplestore;
 use crate::sparql::errors::SparqlError;
-use oxrdf::{Term, Variable};
+use oxrdf::{NamedNode, Term, Variable};
 use polars::prelude::{
-    by_name, col, lit, Column, DataFrame, IntoLazy, JoinType, LazyFrame, NamedFrom, Series,
+    by_name, col, lit, Column, DataFrame, IdxCa, IdxSize, IntoLazy, JoinType, LazyFrame, NamedFrom,
+    PolarsResult, Series,
 };
 use query_processing::expressions::{literal_enc, named_node_enc};
 use query_processing::graph_patterns::{join, union};
 use query_processing::pushdown_values::PushdownValues;
 use query_processing::pushdowns::Pushdowns;
 use query_processing::type_constraints::{ConstraintBaseRDFNodeType, PossibleTypes};
-use representation::cats::triple_terms::{TripleTermPartition, TRIPLE_TERM_ID_COL_NAME};
+use representation::cats::triple_terms::{
+    TripleTermPartition, TripleTermPartitionKey, TRIPLE_TERM_ID_COL_NAME,
+};
 use representation::cats::Cats;
 use representation::solution_mapping::{BaseCatState, EagerSolutionMappings, SolutionMappings};
 use representation::{BaseRDFNodeType, RDFNodeState, OBJECT_COL_NAME, SUBJECT_COL_NAME};
 use spargebra::term::{NamedNodePattern, TermPattern, TriplePattern};
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 /// The most solutions whose triple term ids are pushed down to the triple pattern that the
@@ -348,8 +351,13 @@ impl Triplestore {
     ) -> Result<SolutionMappings, SparqlError> {
         for (v, tp) in triple_term_patterns {
             // With few solutions, their triple terms are found by their ids (see
-            // TripleTerms::rows_of_ids), and no other triple terms are read.
-            let ids = if sm.height_estimate <= MAX_PUSHED_DOWN_TRIPLE_TERMS {
+            // TripleTerms::rows_of_ids), and no other triple terms are read. The solutions are
+            // collected for their ids only when the ids can be few enough to be used (see
+            // ID_LOOKUP_FRACTION), judged by the estimate of their number.
+            let ids_can_be_used = sm.height_estimate <= MAX_PUSHED_DOWN_TRIPLE_TERMS
+                && sm.height_estimate.saturating_mul(ID_LOOKUP_FRACTION)
+                    <= self.candidate_triple_terms(tp)?;
+            let ids = if ids_can_be_used {
                 let eager = sm.as_eager();
                 let ids = if eager.mappings.height() <= MAX_PUSHED_DOWN_TRIPLE_TERMS {
                     triple_term_ids(&eager, v)?
@@ -378,6 +386,20 @@ impl Triplestore {
             sm = drop_variable(sm, v.as_str());
         }
         Ok(sm)
+    }
+
+    /// The number of triple terms that a triple term pattern can match: those of the partitions
+    /// of its predicate, or all of them for a variable predicate.
+    fn candidate_triple_terms(&self, tp: &TriplePattern) -> Result<usize, SparqlError> {
+        let cats = self.global_cats.read()?;
+        Ok(match &tp.predicate {
+            NamedNodePattern::NamedNode(p) => cats
+                .triple_terms
+                .partitions_with_predicate(p)
+                .map(|p| p.height())
+                .sum(),
+            NamedNodePattern::Variable(_) => cats.triple_terms.len(),
+        })
     }
 
     /// The triple terms that match the triple term pattern, with their ids in `var` and the
@@ -423,6 +445,12 @@ impl Triplestore {
         // the objects of the rows of these that hold triple terms.
         let mut nested_ids: Option<Vec<u32>> = None;
         let uses_ids;
+        let subject_targets = pattern_targets(&tp.subject, values);
+        let object_targets = if nested.is_none() {
+            pattern_targets(&tp.object, values)
+        } else {
+            None
+        };
         {
             // Held while the partitions are read, and released before the union and the
             // nested pattern, which take it again.
@@ -438,10 +466,16 @@ impl Triplestore {
             let candidate_rows: usize = candidates.iter().map(|p| p.height()).sum();
             let ids = ids.filter(|ids| ids.len() * ID_LOOKUP_FRACTION <= candidate_rows);
             uses_ids = ids.is_some();
-            let partitions: Vec<(&TripleTermPartition, LazyFrame, usize)> = match ids {
+            // The rows to match, per partition: the rows of the ids, or the rows of the
+            // partitions left after their filters. The rows of small partitions with the codes
+            // looked for are found now, and those partitions can be stacked (see stack_tables);
+            // large ones are filtered in the query plan, which is faster for many rows.
+            let mut tables: Vec<MatchTable> = vec![];
+            let mut subject_codes = HashMap::new();
+            let mut object_codes = HashMap::new();
+            match ids {
                 Some(ids) => {
                     let taken = cats.triple_terms.rows_of_ids(ids).map_err(polars_error)?;
-                    let mut out = vec![];
                     for (part, df) in taken {
                         if let NamedNodePattern::NamedNode(p) = &tp.predicate {
                             if &part.key.predicate != p {
@@ -457,19 +491,61 @@ impl Triplestore {
                                 .get_or_insert_with(Vec::new)
                                 .extend(objects.iter().flatten());
                         }
-                        let height = df.height();
-                        out.push((part, df.lazy(), height));
+                        tables.push(MatchTable::of(part.key.clone(), df, true));
                     }
-                    out
                 }
-                None => candidates
-                    .iter()
-                    .map(|p| (*p, p.lazy(), p.height()))
-                    .collect(),
-            };
-            for (part, lf, height) in partitions {
-                let key = &part.key;
-                let mut lf = lf;
+                None => {
+                    // Partitions whose filters hold none of the subjects or objects looked for
+                    // are skipped.
+                    for p in candidates {
+                        if may_hold_targets(p, &subject_targets, false, &mut subject_codes, &cats)
+                            && may_hold_targets(p, &object_targets, true, &mut object_codes, &cats)
+                        {
+                            let small = p.height() <= MAX_SCANNED_ROWS;
+                            tables.push(MatchTable::of(p.key.clone(), p.df().clone(), small));
+                        }
+                    }
+                }
+            }
+            // Stacked tables keep only the rows with the codes looked for, found by a scan, so
+            // that the predicates are made only for those rows. Other tables are filtered in the
+            // query plan, whose filters are faster on many rows.
+            let mut units = vec![];
+            'units: for mut unit in
+                stack_tables(tables, predicate_name.is_some()).map_err(polars_error)?
+            {
+                if !uses_ids && unit.stacked.is_some() {
+                    for (c, targets, by_object, codes) in [
+                        (
+                            SUBJECT_COL_NAME,
+                            &subject_targets,
+                            false,
+                            &mut subject_codes,
+                        ),
+                        (OBJECT_COL_NAME, &object_targets, true, &mut object_codes),
+                    ] {
+                        let bt = if by_object {
+                            &unit.key.object_type
+                        } else {
+                            &unit.key.subject_type
+                        };
+                        if let Some(codes) = target_codes(targets, bt, codes, &cats) {
+                            if codes.len() <= MAX_FILTER_PROBES {
+                                match rows_with_codes(&unit.df, c, codes).map_err(polars_error)? {
+                                    Some(kept) => unit.df = kept,
+                                    None => continue 'units,
+                                }
+                            }
+                        }
+                    }
+                }
+                unit.add_stacked_predicates().map_err(polars_error)?;
+                units.push(unit);
+            }
+            for unit in units {
+                let key = &unit.key;
+                let height = unit.df.height();
+                let mut lf = unit.df.lazy();
                 let Some(filtered) =
                     filter_constant(lf, SUBJECT_COL_NAME, &tp.subject, &key.subject_type, &cats)?
                 else {
@@ -537,7 +613,11 @@ impl Triplestore {
                     }
                 }
                 if let Some(p) = &predicate_name {
-                    columns.push(lit(key.predicate.as_str().to_string()).alias(p));
+                    columns.push(if unit.stacked.is_some() {
+                        col(STACKED_PREDICATE_COL_NAME).alias(p)
+                    } else {
+                        lit(key.predicate.as_str().to_string()).alias(p)
+                    });
                     types.insert(
                         p.clone(),
                         RDFNodeState::from_bases(BaseRDFNodeType::IRI, BaseCatState::String),
@@ -641,6 +721,230 @@ fn filter_pushed_down(
             Some(lf.filter(col(c).is_in(lit(codes).implode(false), false)))
         }
     }
+}
+
+/// The most codes looked for that are checked against the filters of each partition, and below
+/// which the partitions left are filtered before they are planned. More codes are not checked:
+/// they would cost more than reading the partitions.
+const MAX_FILTER_PROBES: usize = 1000;
+
+/// The values the subject or object of a triple term pattern can have: its constant, or the
+/// values pushed down for its variable. None when it can have any value.
+fn pattern_targets(
+    t: &TermPattern,
+    values: &HashMap<String, PushdownValues>,
+) -> Option<PushdownValues> {
+    match t {
+        TermPattern::NamedNode(nn) => Some(PushdownValues::from_terms(HashSet::from([
+            Term::NamedNode(nn.clone()),
+        ]))),
+        TermPattern::Literal(l) => {
+            Some(PushdownValues::from_terms(HashSet::from([Term::Literal(
+                l.clone(),
+            )])))
+        }
+        TermPattern::Variable(_) | TermPattern::BlankNode(_) => {
+            variable_name(t).and_then(|n| values.get(&n).cloned())
+        }
+        TermPattern::Triple(_) => None,
+    }
+}
+
+/// The codes of the target values that a column of type `bt` can hold (ids for triple terms),
+/// None when the targets can be any value, or values of the type are not codes. The codes of
+/// each type are found once, in `codes`.
+fn target_codes<'c>(
+    targets: &Option<PushdownValues>,
+    bt: &BaseRDFNodeType,
+    codes: &'c mut HashMap<BaseRDFNodeType, Option<Vec<u32>>>,
+    cats: &Cats,
+) -> Option<&'c Vec<u32>> {
+    let t = targets.as_ref()?;
+    codes
+        .entry(bt.clone())
+        .or_insert_with(|| {
+            if bt.is_triple_term() {
+                t.codes.get(bt).cloned()
+            } else {
+                t.codes_of_type(bt, cats)
+            }
+        })
+        .as_ref()
+}
+
+/// Whether the partition may hold one of the target values in its subjects (or objects, if
+/// `by_object`): false only when its filter holds none of their codes, or no target can be of
+/// the type of the column.
+fn may_hold_targets(
+    part: &TripleTermPartition,
+    targets: &Option<PushdownValues>,
+    by_object: bool,
+    codes: &mut HashMap<BaseRDFNodeType, Option<Vec<u32>>>,
+    cats: &Cats,
+) -> bool {
+    if !part.has_filter(by_object) {
+        return true;
+    }
+    let bt = if by_object {
+        &part.key.object_type
+    } else {
+        &part.key.subject_type
+    };
+    match target_codes(targets, bt, codes, cats) {
+        None => true,
+        Some(c) if c.len() > MAX_FILTER_PROBES => true,
+        Some(c) => c.iter().any(|c| part.may_hold_code(*c, by_object)),
+    }
+}
+
+/// Partitions of at most this many triple terms are scanned for the codes looked for before
+/// the query is planned, and can then be stacked; larger ones are filtered in the plan, whose
+/// filters are faster on many rows.
+const MAX_SCANNED_ROWS: usize = 65_536;
+
+/// The rows of `df` whose column `c` holds one of the codes (sorted), None if no row does, and
+/// `df` as it is if the column does not hold codes. A scan of the column, which for a small
+/// table costs far less than a filter in a query plan.
+fn rows_with_codes(df: &DataFrame, c: &str, codes: &[u32]) -> PolarsResult<Option<DataFrame>> {
+    let Ok(column) = df.column(c).and_then(|c| c.u32().cloned()) else {
+        return Ok(Some(df.clone()));
+    };
+    let wanted = |u: u32| {
+        if codes.len() <= 8 {
+            codes.contains(&u)
+        } else {
+            codes.binary_search(&u).is_ok()
+        }
+    };
+    let mut rows: Vec<IdxSize> = vec![];
+    if column.null_count() == 0 {
+        // The values of the chunks as they are, without a check per row for nulls.
+        let mut i: IdxSize = 0;
+        for arr in column.downcast_iter() {
+            for &u in arr.values().iter() {
+                if wanted(u) {
+                    rows.push(i);
+                }
+                i += 1;
+            }
+        }
+    } else {
+        rows.extend(
+            column
+                .iter()
+                .enumerate()
+                .filter(|(_, u)| u.is_some_and(wanted))
+                .map(|(i, _)| i as IdxSize),
+        );
+    }
+    if rows.is_empty() {
+        Ok(None)
+    } else if rows.len() == df.height() {
+        Ok(Some(df.clone()))
+    } else {
+        Ok(Some(df.take(&IdxCa::from_vec("rows".into(), rows))?))
+    }
+}
+
+/// With more tables than this to match against a variable predicate, the small tables of the
+/// same subject and object types are stacked into one, so that the query has a few branches
+/// rather than one per partition (each costs about 0.1 ms to run, whatever its size).
+const MAX_UNION_BRANCHES: usize = 16;
+/// The column of the predicates of stacked tables.
+const STACKED_PREDICATE_COL_NAME: &str = "#predicate";
+/// The column of the partition of each row of a stacked table, an index into its predicates,
+/// from which STACKED_PREDICATE_COL_NAME is made for the rows that are kept.
+const STACKED_PART_COL_NAME: &str = "#part";
+
+/// The rows of one or more partitions to match a triple term pattern against. `key` gives the
+/// subject and object types. The predicate is the one of `key`, or for a table stacked from
+/// several partitions (`stacked`, their predicates) the column STACKED_PREDICATE_COL_NAME.
+/// Only `stackable` tables (small ones) are stacked.
+struct MatchTable {
+    key: TripleTermPartitionKey,
+    df: DataFrame,
+    stacked: Option<Vec<NamedNode>>,
+    stackable: bool,
+}
+
+impl MatchTable {
+    fn of(key: TripleTermPartitionKey, df: DataFrame, stackable: bool) -> Self {
+        MatchTable {
+            key,
+            df,
+            stacked: None,
+            stackable,
+        }
+    }
+
+    /// Adds the column of predicates to a stacked table, from the partition of each row.
+    fn add_stacked_predicates(&mut self) -> PolarsResult<()> {
+        let Some(predicates) = &self.stacked else {
+            return Ok(());
+        };
+        let parts = self.df.column(STACKED_PART_COL_NAME)?.u32()?.clone();
+        let column: Vec<&str> = parts
+            .into_no_null_iter()
+            .map(|i| predicates[i as usize].as_str())
+            .collect();
+        self.df
+            .with_column(Column::new(STACKED_PREDICATE_COL_NAME.into(), column))?;
+        Ok(())
+    }
+}
+
+/// The tables to match, with the stackable tables of the same types stacked when the predicate
+/// is a variable and there are many tables (see MAX_UNION_BRANCHES). Stacking copies the rows
+/// of small tables, which costs less than a branch per partition.
+fn stack_tables(
+    tables: Vec<MatchTable>,
+    variable_predicate: bool,
+) -> PolarsResult<Vec<MatchTable>> {
+    if !variable_predicate || tables.len() <= MAX_UNION_BRANCHES {
+        return Ok(tables);
+    }
+    let mut out = vec![];
+    let mut groups: BTreeMap<(BaseRDFNodeType, BaseRDFNodeType), Vec<MatchTable>> = BTreeMap::new();
+    for t in tables {
+        if t.stackable {
+            groups
+                .entry((t.key.subject_type.clone(), t.key.object_type.clone()))
+                .or_default()
+                .push(t);
+        } else {
+            out.push(t);
+        }
+    }
+    for (_, mut group) in groups {
+        if group.len() == 1 {
+            out.push(group.pop().unwrap());
+            continue;
+        }
+        let key = group[0].key.clone();
+        let mut stacked: Option<DataFrame> = None;
+        let mut predicates = Vec::with_capacity(group.len());
+        for (i, t) in group.into_iter().enumerate() {
+            let mut df = t.df;
+            let parts = vec![i as u32; df.height()];
+            df.with_column(Column::new(STACKED_PART_COL_NAME.into(), parts))?;
+            predicates.push(t.key.predicate);
+            match &mut stacked {
+                None => stacked = Some(df),
+                Some(s) => {
+                    s.vstack_mut_owned(df)?;
+                }
+            }
+        }
+        let mut df = stacked.unwrap();
+        df.rechunk_mut();
+        out.push(MatchTable {
+            key,
+            df,
+            stacked: Some(predicates),
+            stackable: false,
+        });
+    }
+    Ok(out)
 }
 
 /// Pushes the ids of the triple terms of the variable `v` of the solutions down to the triple

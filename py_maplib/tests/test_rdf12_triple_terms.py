@@ -385,3 +385,87 @@ def test_serializations_without_triple_terms_have_no_entry(tmp_path):
     meta = json.loads((tmp_path / "m" / "cats" / "metadata.json").read_text())
     assert "triple_terms" not in meta
     assert count(Model.deserialize(tmp_path / "m"), "?s ?p ?o") == 1
+
+
+# --- many partitions -------------------------------------------------------------------
+# Subjects and objects looked for skip the partitions whose filters can't hold them. These
+# check that no match is skipped: with 300 predicates, for subjects in one, several and no
+# partitions, for string and IRI objects, and after compaction and saving, which renumber codes.
+
+
+def wide_model():
+    lines = []
+    for i in range(3000):
+        p = f"<{EX}p{i % 300}>"
+        o = f'"v{i % 11}"' if i % 2 else f"<{EX}o{i % 13}>"
+        lines.append(f"<{EX}r{i}> <{RDF}reifies> <<( <{EX}s{i % 1000}> {p} {o} )>> .")
+    lines.append(f"<{EX}rb> <{RDF}reifies> <<( _:b <{EX}p7> <{EX}o1> )>> .")
+    m = Model()
+    m.reads("\n".join(lines) + "\n", format="ntriples")
+    return m
+
+
+WIDE_QUERIES = [
+    "SELECT ?r ?p ?o WHERE { ?r rdf:reifies <<( :s5 ?p ?o )>> }",
+    "SELECT ?r WHERE { ?r rdf:reifies <<( :nobody ?p ?o )>> }",
+    "SELECT ?r ?s WHERE { ?r rdf:reifies <<( ?s ?p \"v3\" )>> }",
+    "SELECT ?r ?s WHERE { ?r rdf:reifies <<( ?s ?p :o4 )>> }",
+    "SELECT ?r ?s ?p WHERE { VALUES ?s { :s1 :s2 :s999 :nobody } ?r rdf:reifies <<( ?s ?p ?o )>> }",
+    "SELECT ?r WHERE { ?r rdf:reifies <<( ?s :p7 :o1 )>> }",
+]
+
+
+def expected_wide(query):
+    """The answer of the query computed from the generated statements, in Python."""
+    rows = []
+    for i in range(3000):
+        s, p = f"<{EX}s{i % 1000}>", f"<{EX}p{i % 300}>"
+        # Strings are returned as their values.
+        o = f"v{i % 11}" if i % 2 else f"<{EX}o{i % 13}>"
+        rows.append((f"<{EX}r{i}>", s, p, o))
+    if ":s5 ?p" in query:
+        return sorted((r, p, o) for r, s, p, o in rows if s == f"<{EX}s5>")
+    if ":nobody ?p" in query:
+        return []
+    if '"v3"' in query:
+        return sorted((r, s) for r, s, p, o in rows if o == "v3")
+    if ":o4" in query:
+        return sorted((r, s) for r, s, p, o in rows if o == f"<{EX}o4>")
+    if "VALUES" in query:
+        keep = {f"<{EX}s1>", f"<{EX}s2>", f"<{EX}s999>"}
+        return sorted((r, s, p) for r, s, p, o in rows if s in keep)
+    # :p7 :o1 includes the statement about the blank node.
+    return sorted([(r,) for r, s, p, o in rows if p == f"<{EX}p7>" and o == f"<{EX}o1>"]
+                  + [(f"<{EX}rb>",)])
+
+
+@pytest.mark.parametrize("query", WIDE_QUERIES)
+def test_many_partitions(query):
+    m = wide_model()
+    assert rows(m, query) == expected_wide(query), query
+
+
+def test_many_partitions_after_compaction_and_saving(tmp_path):
+    m = wide_model()
+    m.compact()
+    for q in WIDE_QUERIES:
+        assert rows(m, q) == expected_wide(q), q
+    m.serialize(tmp_path / "wide.maplib")
+    m2 = Model.deserialize(tmp_path / "wide.maplib")
+    for q in WIDE_QUERIES:
+        assert rows(m2, q) == expected_wide(q), q
+
+
+def test_many_partitions_stacked_by_type():
+    # Over 16 partitions with a variable predicate, partitions of the same types are stacked
+    # into one table with a column of their predicates.
+    m = wide_model()
+    assert count(m, "?r rdf:reifies <<( ?s ?p ?o )>>") == 3001
+    df = m.query(PREFIXES + "SELECT ?p (COUNT(*) AS ?c) WHERE { ?r rdf:reifies <<( ?s ?p ?o )>> } GROUP BY ?p")
+    counts = {p: c for p, c in df.iter_rows()}
+    assert len(counts) == 300
+    assert counts[f"<{EX}p7>"] == 11  # with the statement about the blank node
+    assert all(c == 10 for p, c in counts.items() if p != f"<{EX}p7>")
+    # IRI and string objects are stacked separately and unioned.
+    assert count(m, "?r rdf:reifies <<( ?s ?p ?o )>> FILTER(isIRI(?o))") == 1501
+    assert count(m, "?r rdf:reifies <<( ?s ?p ?o )>> FILTER(isLiteral(?o))") == 1500

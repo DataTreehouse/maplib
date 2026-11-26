@@ -27,6 +27,7 @@ use polars::prelude::{
     UniqueKeepStrategy,
 };
 use std::collections::{BTreeMap, HashMap};
+use utils::bloom::SplitBlockBloom;
 use utils::polars::collect_in_memory;
 
 pub const TRIPLE_TERM_ID_COL_NAME: &str = "id";
@@ -47,9 +48,113 @@ pub struct TripleTermPartitionKey {
 pub struct TripleTermPartition {
     pub key: TripleTermPartitionKey,
     df: DataFrame,
+    /// Bloom filters of the subjects and objects, for columns of codes (see holds_codes), so
+    /// that a query looking for given codes skips the partitions that cannot hold them, as it
+    /// skips the segments of triple tables.
+    subject_filter: Option<CodeFilter>,
+    object_filter: Option<CodeFilter>,
+}
+
+/// Bits of a Bloom filter per triple term, as for the segments of triple tables: about 1% of
+/// absent codes pass.
+const FILTER_BITS_PER_KEY: usize = 10;
+/// A filter is made for at least this many triple terms.
+const MIN_FILTER_CAPACITY: usize = 1024;
+
+/// A Bloom filter of a column, sized for `capacity` triple terms. New codes are added to it
+/// until the partition holds more, and it is then made again for twice as many, so that adding
+/// triple terms costs the same per triple term however large the partition is.
+#[derive(Debug, Clone)]
+struct CodeFilter {
+    bloom: SplitBlockBloom,
+    capacity: usize,
+}
+
+/// Whether a column of the type holds codes of the string dictionaries, or ids of triple
+/// terms: single u32 values that pushed down codes and ids are compared with.
+fn holds_codes(bt: &BaseRDFNodeType) -> bool {
+    bt.is_triple_term() || (bt.stored_cat() && !bt.is_lang_string())
+}
+
+fn build_filter(df: &DataFrame, c: &str, bt: &BaseRDFNodeType) -> Option<CodeFilter> {
+    if !holds_codes(bt) {
+        return None;
+    }
+    let codes = df.column(c).ok()?.u32().ok()?;
+    let capacity = (2 * df.height()).max(MIN_FILTER_CAPACITY);
+    let mut bloom = SplitBlockBloom::new(capacity, FILTER_BITS_PER_KEY);
+    for u in codes.iter().flatten() {
+        bloom.insert_code(u);
+    }
+    Some(CodeFilter { bloom, capacity })
 }
 
 impl TripleTermPartition {
+    fn new(key: TripleTermPartitionKey, df: DataFrame) -> Self {
+        let mut p = TripleTermPartition {
+            key,
+            df,
+            subject_filter: None,
+            object_filter: None,
+        };
+        p.rebuild_filters();
+        p
+    }
+
+    fn rebuild_filters(&mut self) {
+        self.subject_filter = build_filter(&self.df, SUBJECT, &self.key.subject_type);
+        self.object_filter = build_filter(&self.df, OBJECT, &self.key.object_type);
+    }
+
+    /// Adds the codes of rows just appended to the table (`added`) to the filters, or makes the
+    /// filters again when the table has outgrown them.
+    fn extend_filters(&mut self, added: &DataFrame) {
+        let height = self.df.height();
+        for (c, by_object) in [(SUBJECT, false), (OBJECT, true)] {
+            let filter = if by_object {
+                &mut self.object_filter
+            } else {
+                &mut self.subject_filter
+            };
+            let Some(f) = filter.as_mut() else { continue };
+            if height > f.capacity {
+                let bt = if by_object {
+                    &self.key.object_type
+                } else {
+                    &self.key.subject_type
+                };
+                *filter = build_filter(&self.df, c, bt);
+            } else if let Some(codes) = added.column(c).ok().and_then(|c| c.u32().ok()) {
+                for u in codes.iter().flatten() {
+                    f.bloom.insert_code(u);
+                }
+            }
+        }
+    }
+
+    /// False if the partition holds no triple term with the subject (or object, if
+    /// `by_object`) code `code`. True when the column has no filter, as it does not hold codes.
+    pub fn may_hold_code(&self, code: u32, by_object: bool) -> bool {
+        let filter = if by_object {
+            &self.object_filter
+        } else {
+            &self.subject_filter
+        };
+        filter
+            .as_ref()
+            .is_none_or(|f| f.bloom.may_contain_code(code))
+    }
+
+    /// Whether the subjects (or objects, if `by_object`) have a filter, so that may_hold_code
+    /// tells codes apart.
+    pub fn has_filter(&self, by_object: bool) -> bool {
+        if by_object {
+            self.object_filter.is_some()
+        } else {
+            self.subject_filter.is_some()
+        }
+    }
+
     pub fn df(&self) -> &DataFrame {
         &self.df
     }
@@ -201,7 +306,7 @@ impl TripleTerms {
             triple_terms.index.insert(key.clone(), p);
             triple_terms
                 .partitions
-                .push(TripleTermPartition { key, df });
+                .push(TripleTermPartition::new(key, df));
         }
         // n distinct ids below n fill every slot.
         triple_terms.locations = locations.into_iter().map(Option::unwrap).collect();
@@ -215,6 +320,8 @@ impl TripleTerms {
         for (p, df) in self.partitions.iter_mut().zip(dfs) {
             assert_eq!(p.df.height(), df.height());
             p.df = df;
+            // The codes are renumbered, so the filters are made again.
+            p.rebuild_filters();
         }
     }
 
@@ -279,7 +386,7 @@ impl TripleTerms {
         let df = DataFrame::new(0, columns)?;
         let p = self.partitions.len();
         self.index.insert(key.clone(), p);
-        self.partitions.push(TripleTermPartition { key, df });
+        self.partitions.push(TripleTermPartition::new(key, df));
         Ok(p)
     }
 
@@ -310,12 +417,13 @@ impl TripleTerms {
             .extend((first_row..first_row + n).map(|row| (p as u32, row)));
         let part = &mut self.partitions[p];
         part.df = if part.df.height() == 0 {
-            missing
+            missing.clone()
         } else {
             let mut df = part.df.vstack(&missing)?;
             df.rechunk_mut();
             df
         };
+        part.extend_filters(&missing);
         // Every triple term of the input is now in the partition.
         found_ids(&self.partitions[p].df, input)
     }
@@ -374,7 +482,7 @@ pub fn concat_partitions(lfs: Vec<LazyFrame>) -> PolarsResult<LazyFrame> {
 mod tests {
     use super::*;
     use oxrdf::vocab::xsd;
-    use polars::prelude::{Column, Float64Chunked};
+    use polars::prelude::{Column, Float64Chunked, NewChunkedArray};
 
     fn key(object_type: BaseRDFNodeType) -> TripleTermPartitionKey {
         TripleTermPartitionKey {
@@ -483,6 +591,62 @@ mod tests {
         // In the order of the partitions; partition b holds none of the ids, and 99 is unknown.
         assert_eq!(found, vec![(a, vec![1], vec![2]), (c, vec![3], vec![3])]);
         assert!(tt.rows_of_ids(&[]).unwrap().is_empty());
+    }
+
+    #[test]
+    fn filters_hold_every_code_as_partitions_grow() {
+        let mut tt = TripleTerms::default();
+        let k = key(BaseRDFNodeType::IRI);
+        // Batches of 500 new triple terms, well past the first filter's capacity (1024).
+        for b in 0..10u32 {
+            let s: Vec<u32> = (b * 500..(b + 1) * 500).collect();
+            let o: Vec<u32> = s.iter().map(|x| x + 100_000).collect();
+            tt.ids(&k, &codes(&s, &o), true).unwrap();
+        }
+        let p = &tt.partitions()[0];
+        assert!(p.has_filter(false) && p.has_filter(true));
+        for c in 0..5000u32 {
+            assert!(p.may_hold_code(c, false), "subject {c}");
+            assert!(p.may_hold_code(c + 100_000, true), "object {c}");
+        }
+        // Codes that are not there are mostly rejected (about 1% pass).
+        let passed = (200_000..210_000u32)
+            .filter(|c| p.may_hold_code(*c, false))
+            .count();
+        assert!(passed < 500, "{passed} of 10000 absent codes passed");
+
+        // Renumbered codes (as compaction does) give new filters.
+        let mapped = tt
+            .mapped_codes(&|_, c| {
+                Ok(UInt32Chunked::from_iter_options(
+                    c.name().clone(),
+                    c.iter().map(|u| u.map(|u| u + 1_000_000)),
+                ))
+            })
+            .unwrap();
+        tt.set_partition_tables(mapped);
+        let p = &tt.partitions()[0];
+        assert!(p.may_hold_code(1_000_000, false));
+        assert!(p.may_hold_code(1_100_000, true));
+    }
+
+    #[test]
+    fn columns_without_codes_have_no_filter() {
+        let mut tt = TripleTerms::default();
+        let doubles = DataFrame::new(
+            1,
+            vec![
+                Column::new(SUBJECT.into(), [1u32]),
+                Float64Chunked::from_vec(OBJECT.into(), vec![37.5]).into_column(),
+            ],
+        )
+        .unwrap();
+        let k = key(BaseRDFNodeType::literal(xsd::DOUBLE.into_owned()));
+        tt.ids(&k, &doubles, true).unwrap();
+        let p = &tt.partitions()[0];
+        assert!(p.has_filter(false));
+        assert!(!p.has_filter(true));
+        assert!(p.may_hold_code(12345, true));
     }
 
     #[test]
