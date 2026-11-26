@@ -244,6 +244,51 @@ def test_triple_term_patterns_with_bound_variables(qm, query, expected):
     assert rows(qm, query) == expected
 
 
+@pytest.mark.parametrize(
+    "query,expected",
+    [
+        # The reifiers are found first, and their triple terms by their ids.
+        ("SELECT ?s ?p WHERE { :r2 rdf:reifies <<( ?s ?p ?o )>> }",
+         [(f"<{EX}pump2>", f"<{EX}hasPower>")]),
+        # Triple terms in two partitions (a decimal and a language string object).
+        ("SELECT ?s ?p WHERE { ?r :source :log2 . ?r rdf:reifies <<( ?s ?p ?o )>> }",
+         [(f"<{EX}pump1>", f"<{EX}label>"), (f"<{EX}pump2>", f"<{EX}hasPower>")]),
+        ("SELECT ?s WHERE { :r2 rdf:reifies <<( ?s :label ?o )>> }", []),
+        ("SELECT ?s WHERE { :r2 rdf:reifies <<( ?s :hasPower 12.0 )>> }", [(f"<{EX}pump2>",)]),
+        ("SELECT ?s WHERE { :r2 rdf:reifies <<( ?s :hasPower 13.0 )>> }", []),
+        ("SELECT ?s WHERE { :r2 rdf:reifies <<( :pump1 ?p ?o )>> }", []),
+        # A reifier without a triple term, and a resource that reifies nothing.
+        ("SELECT ?s WHERE { :pump1 rdf:reifies <<( ?s ?p ?o )>> }", []),
+        # Nested: the ids of the inner triple terms are the objects of the outer ones.
+        ("SELECT ?who ?s ?p WHERE { :r4 rdf:reifies <<( ?who :says <<( ?s ?p ?o )>> )>> }",
+         [(f"<{EX}x>", f"<{EX}pump1>", f"<{EX}hasPower>")]),
+        ("SELECT ?who WHERE { :r4 rdf:reifies <<( ?who :says <<( ?s :label ?o )>> )>> }", []),
+        ("SELECT ?who WHERE { :r2 rdf:reifies <<( ?who :says <<( ?s ?p ?o )>> )>> }", []),
+    ],
+)
+def test_triple_terms_found_by_their_ids(qm, query, expected):
+    assert rows(qm, query) == expected
+
+
+def test_triple_terms_found_by_ids_above_the_cap():
+    # More reifiers than ids are looked up directly (100,000): the triple terms are matched
+    # as before, with the same answer.
+    n = 100_050
+    m = Model()
+    m.reads(
+        "".join(
+            f"<{EX}r{i}> <{RDF}reifies> <<( <{EX}s{i}> <{EX}p{i % 3}> <{EX}o{i % 7}> )>> .\n"
+            f"<{EX}r{i}> <{EX}source> <{EX}{'a' if i % 2 else 'b'}> .\n"
+            for i in range(n)
+        ),
+        format="ntriples",
+    )
+    assert count(m, "?r :source ?src . ?r rdf:reifies <<( ?s ?p ?o )>>") == n
+    assert count(m, "?r :source :a . ?r rdf:reifies <<( ?s :p1 ?o )>>") == len(
+        [i for i in range(n) if i % 2 and i % 3 == 1])
+    assert count(m, "?r :source :b . ?r rdf:reifies <<( ?s ?p ?o )>>") == n // 2
+
+
 def test_triple_terms_in_sparql_json(qm):
     import json
 

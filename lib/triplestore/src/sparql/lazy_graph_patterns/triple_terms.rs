@@ -26,9 +26,9 @@ use query_processing::graph_patterns::{join, union};
 use query_processing::pushdown_values::PushdownValues;
 use query_processing::pushdowns::Pushdowns;
 use query_processing::type_constraints::{ConstraintBaseRDFNodeType, PossibleTypes};
-use representation::cats::triple_terms::TRIPLE_TERM_ID_COL_NAME;
+use representation::cats::triple_terms::{TripleTermPartition, TRIPLE_TERM_ID_COL_NAME};
 use representation::cats::Cats;
-use representation::solution_mapping::{BaseCatState, SolutionMappings};
+use representation::solution_mapping::{BaseCatState, EagerSolutionMappings, SolutionMappings};
 use representation::{BaseRDFNodeType, RDFNodeState, OBJECT_COL_NAME, SUBJECT_COL_NAME};
 use spargebra::term::{NamedNodePattern, TermPattern, TriplePattern};
 use std::collections::{BTreeMap, HashMap};
@@ -37,6 +37,11 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 /// The most solutions whose triple term ids are pushed down to the triple pattern that the
 /// triple term pattern is in (see Triplestore::lazy_bgp_triple_pattern).
 const MAX_PUSHED_DOWN_TRIPLE_TERMS: usize = 100_000;
+
+/// Known ids of triple terms are looked up directly when they are at most this fraction (as
+/// 1/n) of the triple terms of the partitions they could be in; with more, reading the
+/// partitions is cheaper.
+const ID_LOOKUP_FRACTION: usize = 4;
 
 /// Variables that stand for triple term patterns are named `#tt<n>`: `#` cannot occur in a SPARQL
 /// variable name, so they do not clash with the variables of the query.
@@ -248,6 +253,7 @@ impl Triplestore {
                         &ttp,
                         query_settings.max_rows,
                         &pushdowns.variables_values,
+                        None,
                     )?;
                     sm = join(
                         sm,
@@ -341,7 +347,27 @@ impl Triplestore {
         values: &HashMap<String, PushdownValues>,
     ) -> Result<SolutionMappings, SparqlError> {
         for (v, tp) in triple_term_patterns {
-            let matches = self.triple_term_pattern_solution_mappings(v, tp, max_rows, values)?;
+            // With few solutions, their triple terms are found by their ids (see
+            // TripleTerms::rows_of_ids), and no other triple terms are read.
+            let ids = if sm.height_estimate <= MAX_PUSHED_DOWN_TRIPLE_TERMS {
+                let eager = sm.as_eager();
+                let ids = if eager.mappings.height() <= MAX_PUSHED_DOWN_TRIPLE_TERMS {
+                    triple_term_ids(&eager, v)?
+                } else {
+                    None
+                };
+                sm = eager.as_lazy();
+                ids
+            } else {
+                None
+            };
+            let matches = self.triple_term_pattern_solution_mappings(
+                v,
+                tp,
+                max_rows,
+                values,
+                ids.as_deref(),
+            )?;
             sm = join(
                 sm,
                 matches,
@@ -356,13 +382,15 @@ impl Triplestore {
 
     /// The triple terms that match the triple term pattern, with their ids in `var` and the
     /// values of the variables of the pattern, which are limited to the values pushed down for
-    /// them in `values`.
+    /// them in `values`. With `ids`, only the triple terms with those ids are matched, read
+    /// from the partitions that hold them, and so are the triple terms of a nested pattern.
     fn triple_term_pattern_solution_mappings(
         &self,
         var: &Variable,
         tp: &TriplePattern,
         max_rows: Option<usize>,
         values: &HashMap<String, PushdownValues>,
+        ids: Option<&[u32]>,
     ) -> Result<SolutionMappings, SparqlError> {
         let subject_name = variable_name(&tp.subject);
         let predicate_name = match &tp.predicate {
@@ -391,17 +419,57 @@ impl Triplestore {
         }
 
         let mut sms = vec![];
+        // The ids of the triple terms of the nested pattern, when the ids of these are known:
+        // the objects of the rows of these that hold triple terms.
+        let mut nested_ids: Option<Vec<u32>> = None;
+        let uses_ids;
         {
+            // Held while the partitions are read, and released before the union and the
+            // nested pattern, which take it again.
             let cats = self.global_cats.read()?;
-            let partitions: Vec<_> = match &tp.predicate {
+            let candidates: Vec<&TripleTermPartition> = match &tp.predicate {
                 NamedNodePattern::NamedNode(p) => {
                     cats.triple_terms.partitions_with_predicate(p).collect()
                 }
                 NamedNodePattern::Variable(_) => cats.triple_terms.partitions().iter().collect(),
             };
-            for part in partitions {
+            // Taking the rows of many ids costs more than reading their partitions, so the
+            // ids are used only when they are few compared with the triple terms they could be.
+            let candidate_rows: usize = candidates.iter().map(|p| p.height()).sum();
+            let ids = ids.filter(|ids| ids.len() * ID_LOOKUP_FRACTION <= candidate_rows);
+            uses_ids = ids.is_some();
+            let partitions: Vec<(&TripleTermPartition, LazyFrame, usize)> = match ids {
+                Some(ids) => {
+                    let taken = cats.triple_terms.rows_of_ids(ids).map_err(polars_error)?;
+                    let mut out = vec![];
+                    for (part, df) in taken {
+                        if let NamedNodePattern::NamedNode(p) = &tp.predicate {
+                            if &part.key.predicate != p {
+                                continue;
+                            }
+                        }
+                        if nested.is_some() && part.key.object_type.is_triple_term() {
+                            let objects = df
+                                .column(OBJECT_COL_NAME)
+                                .and_then(|c| c.u32().cloned())
+                                .map_err(polars_error)?;
+                            nested_ids
+                                .get_or_insert_with(Vec::new)
+                                .extend(objects.iter().flatten());
+                        }
+                        let height = df.height();
+                        out.push((part, df.lazy(), height));
+                    }
+                    out
+                }
+                None => candidates
+                    .iter()
+                    .map(|p| (*p, p.lazy(), p.height()))
+                    .collect(),
+            };
+            for (part, lf, height) in partitions {
                 let key = &part.key;
-                let mut lf = part.lazy();
+                let mut lf = lf;
                 let Some(filtered) =
                     filter_constant(lf, SUBJECT_COL_NAME, &tp.subject, &key.subject_type, &cats)?
                 else {
@@ -478,7 +546,7 @@ impl Triplestore {
                 sms.push(SolutionMappings {
                     mappings: lf.select(columns),
                     rdf_node_types: types,
-                    height_estimate: part.height(),
+                    height_estimate: height,
                 });
             }
         }
@@ -493,7 +561,17 @@ impl Triplestore {
         };
         if let Some((v, inner)) = &nested {
             let inner_sm =
-                self.triple_term_pattern_solution_mappings(v, inner, max_rows, values)?;
+                self.triple_term_pattern_solution_mappings(v, inner, max_rows, values, {
+                    // Known ids of these give the ids of the nested ones; none if no row of
+                    // these holds a triple term.
+                    if uses_ids {
+                        let mut n = nested_ids.take().unwrap_or_default();
+                        n.sort_unstable();
+                        n.dedup();
+                        nested_ids = Some(n);
+                    }
+                    nested_ids.as_deref()
+                })?;
             sm = join(
                 sm,
                 inner_sm,
@@ -578,33 +656,48 @@ fn push_down_triple_term_ids(
     }
     let eager = sm.as_eager();
     if eager.mappings.height() <= MAX_PUSHED_DOWN_TRIPLE_TERMS {
-        // No triple term matched when the variable is not of the type of triple terms (the
-        // matches are empty), and then no ids are pushed down, so the pattern has no matches.
-        let is_triple_term = eager
-            .rdf_node_types
-            .get(v.as_str())
-            .is_some_and(|t| t.map.contains_key(&BaseRDFNodeType::TripleTerm));
-        let mut ids: Vec<u32> = if is_triple_term {
-            let ids = eager
-                .mappings
-                .column(v.as_str())
-                .and_then(|c| c.u32().cloned())
-                .map_err(|e| SparqlError::NotSupportedYet(e.to_string()))?;
-            ids.iter().flatten().collect()
-        } else {
-            vec![]
-        };
-        ids.sort_unstable();
-        ids.dedup();
-        pushdowns.variables_values.insert(
-            v.as_str().to_string(),
-            PushdownValues {
-                terms: Default::default(),
-                codes: BTreeMap::from([(BaseRDFNodeType::TripleTerm, ids)]),
-            },
-        );
+        if let Some(ids) = triple_term_ids(&eager, v)? {
+            pushdowns.variables_values.insert(
+                v.as_str().to_string(),
+                PushdownValues {
+                    terms: Default::default(),
+                    codes: BTreeMap::from([(BaseRDFNodeType::TripleTerm, ids)]),
+                },
+            );
+        }
     }
     Ok(eager.as_lazy())
+}
+
+/// The distinct ids of the triple terms of the variable `v` of the solutions, sorted. Empty
+/// when the variable holds no triple terms (as when none matched, and the column is untyped),
+/// and None when it holds other values as well, as its column is then not one of ids.
+fn triple_term_ids(
+    eager: &EagerSolutionMappings,
+    v: &Variable,
+) -> Result<Option<Vec<u32>>, SparqlError> {
+    let Some(state) = eager.rdf_node_types.get(v.as_str()) else {
+        return Ok(Some(vec![]));
+    };
+    if !state.map.contains_key(&BaseRDFNodeType::TripleTerm) {
+        return Ok(Some(vec![]));
+    }
+    if state.map.len() > 1 {
+        return Ok(None);
+    }
+    let column = eager
+        .mappings
+        .column(v.as_str())
+        .and_then(|c| c.u32().cloned())
+        .map_err(polars_error)?;
+    let mut ids: Vec<u32> = column.iter().flatten().collect();
+    ids.sort_unstable();
+    ids.dedup();
+    Ok(Some(ids))
+}
+
+fn polars_error(e: polars::prelude::PolarsError) -> SparqlError {
+    SparqlError::TriplestoreError(crate::errors::TriplestoreError::LazyLoadError(e))
 }
 
 fn drop_variable(mut sm: SolutionMappings, v: &str) -> SolutionMappings {

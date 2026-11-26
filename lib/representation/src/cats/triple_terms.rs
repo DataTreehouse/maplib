@@ -22,11 +22,11 @@
 use crate::BaseRDFNodeType;
 use oxrdf::NamedNode;
 use polars::prelude::{
-    col, concat, lit, ChunkFullNull, DataFrame, IntoColumn, IntoLazy, IntoSeries, JoinArgs,
-    JoinType, LazyFrame, MaintainOrderJoin, PolarsResult, UInt32Chunked, UnionArgs,
+    col, concat, lit, ChunkFullNull, DataFrame, IdxCa, IdxSize, IntoColumn, IntoLazy, IntoSeries,
+    JoinArgs, JoinType, LazyFrame, MaintainOrderJoin, PolarsResult, UInt32Chunked, UnionArgs,
     UniqueKeepStrategy,
 };
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use utils::polars::collect_in_memory;
 
 pub const TRIPLE_TERM_ID_COL_NAME: &str = "id";
@@ -98,6 +98,26 @@ impl TripleTerms {
     pub fn location(&self, id: u32) -> Option<(&TripleTermPartition, usize)> {
         let (p, row) = self.locations.get(id as usize)?;
         Some((&self.partitions[*p as usize], *row as usize))
+    }
+
+    /// The partitions that hold the triple terms with the ids, in the order of the partitions,
+    /// each with the rows of those triple terms (the columns id, subject and object), so that
+    /// triple terms with known ids are found without reading the other partitions. Ids that are
+    /// not in the dictionary are left out, and an id given twice gives its row twice.
+    pub fn rows_of_ids(&self, ids: &[u32]) -> PolarsResult<Vec<(&TripleTermPartition, DataFrame)>> {
+        let mut rows: BTreeMap<u32, Vec<IdxSize>> = BTreeMap::new();
+        for id in ids {
+            if let Some((p, row)) = self.locations.get(*id as usize) {
+                rows.entry(*p).or_default().push(*row as IdxSize);
+            }
+        }
+        rows.into_iter()
+            .map(|(p, rows)| {
+                let part = &self.partitions[p as usize];
+                let df = part.df.take(&IdxCa::from_vec("rows".into(), rows))?;
+                Ok((part, df))
+            })
+            .collect()
     }
 
     /// The tables of the partitions, with the codes of the columns of types that are stored as
@@ -422,6 +442,47 @@ mod tests {
         assert!(TripleTerms::from_partitions(twice).is_err());
         let same_key = vec![parts[0].clone(), (parts[0].0.clone(), parts[1].1.clone())];
         assert!(TripleTerms::from_partitions(same_key).is_err());
+    }
+
+    #[test]
+    fn rows_of_ids_reads_only_the_partitions_that_hold_them() {
+        let mut tt = TripleTerms::default();
+        let (a, b, c) = (
+            key(BaseRDFNodeType::IRI),
+            key(BaseRDFNodeType::BlankNode),
+            TripleTermPartitionKey {
+                predicate: NamedNode::new_unchecked("http://example.org/q"),
+                subject_type: BaseRDFNodeType::IRI,
+                object_type: BaseRDFNodeType::IRI,
+            },
+        );
+        tt.ids(&a, &codes(&[1, 2], &[5, 5]), true).unwrap(); // ids 0, 1
+        tt.ids(&b, &codes(&[1], &[7]), true).unwrap(); // id 2
+        tt.ids(&c, &codes(&[3], &[8]), true).unwrap(); // id 3
+        let rows = tt.rows_of_ids(&[3, 1, 99]).unwrap();
+        let found: Vec<_> = rows
+            .iter()
+            .map(|(p, df)| {
+                let ids: Vec<_> = df
+                    .column(TRIPLE_TERM_ID_COL_NAME)
+                    .unwrap()
+                    .u32()
+                    .unwrap()
+                    .into_no_null_iter()
+                    .collect();
+                let subjects: Vec<_> = df
+                    .column(SUBJECT)
+                    .unwrap()
+                    .u32()
+                    .unwrap()
+                    .into_no_null_iter()
+                    .collect();
+                (p.key.clone(), ids, subjects)
+            })
+            .collect();
+        // In the order of the partitions; partition b holds none of the ids, and 99 is unknown.
+        assert_eq!(found, vec![(a, vec![1], vec![2]), (c, vec![3], vec![3])]);
+        assert!(tt.rows_of_ids(&[]).unwrap().is_empty());
     }
 
     #[test]
