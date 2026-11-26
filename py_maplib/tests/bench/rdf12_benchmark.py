@@ -93,8 +93,18 @@ def mix32(i, seed: int, k: int):
     return x ^ (x // 2**16)
 
 
-def generate(path: Path, n: int, encoding: str, predicates: int, reified: float, seed: int):
-    """Writes the graph as N-Triples (N-Triples 1.2 for rdf12) to `path`."""
+def generate(
+    path: Path,
+    n: int,
+    encoding: str,
+    predicates: int,
+    reified: float,
+    seed: int,
+    described_predicates: int | None = None,
+):
+    """Writes the graph as N-Triples (N-Triples 1.2 for rdf12) to `path`. With
+    `described_predicates` k, only triples of the predicates p0 to p(k-1) are described (a
+    fraction `reified` of them), so that the statements are about a few predicates."""
     import polars as pl
 
     n_subjects = max(1, n // predicates)
@@ -156,21 +166,28 @@ def generate(path: Path, n: int, encoding: str, predicates: int, reified: float,
                         pl.format("{} <{}reifies> <<( {} {} {} )>> .", r, pl.lit(RDF), "s", "p", "o")
                     ]
                 described = pl.concat_str([asserted, *statement, *annotations], separator="\n")
-                lines = pl.when(pl.col("g") % 1_000_000 < threshold).then(described).otherwise(asserted)
+                is_described = pl.col("g") % 1_000_000 < threshold
+                if described_predicates is not None:
+                    is_described = is_described & (pl.col("pj") < described_predicates)
+                lines = pl.when(is_described).then(described).otherwise(asserted)
             df.select(lines.alias("line")).write_csv(f, include_header=False, quote_style="never")
     tmp.rename(path)
 
 
-def data_path(data_dir: Path, n: int, encoding: str, predicates: int, reified: float, seed: int) -> Path:
-    return data_dir / f"g_{n}_{encoding}_p{predicates}_r{reified}_s{seed}.nt"
+def data_path(
+    data_dir: Path, n: int, encoding: str, predicates: int, reified: float, seed: int,
+    described_predicates: int | None = None,
+) -> Path:  # fmt: skip
+    d = "" if described_predicates is None else f"_d{described_predicates}"
+    return data_dir / f"g_{n}_{encoding}_p{predicates}_r{reified}{d}_s{seed}.nt"
 
 
-def ensure_data(data_dir: Path, n, encoding, predicates, reified, seed) -> Path:
-    path = data_path(data_dir, n, encoding, predicates, reified, seed)
+def ensure_data(data_dir: Path, n, encoding, predicates, reified, seed, described_predicates=None) -> Path:
+    path = data_path(data_dir, n, encoding, predicates, reified, seed, described_predicates)
     if not path.exists():
         data_dir.mkdir(parents=True, exist_ok=True)
         t = time.perf_counter()
-        generate(path, n, encoding, predicates, reified, seed)
+        generate(path, n, encoding, predicates, reified, seed, described_predicates)
         print(
             f"  generated {path.name} ({path.stat().st_size / 1e6:.0f} MB) "
             f"in {time.perf_counter() - t:.1f}s",

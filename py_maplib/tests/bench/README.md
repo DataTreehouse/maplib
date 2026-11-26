@@ -6,6 +6,7 @@ Scripts that measure maplib's speed and memory. They are not part of the pytest 
 | Script | Measures | Needs |
 |---|---|---|
 | `rdf12_benchmark.py` | Statements about statements (plain triples, classic reification, RDF 1.2 `rdf:reifies`): load time, memory per triple, query latency | Only this repository |
+| `rdf12_scaling.py` | How the costs of statements grow with the size of the store (slopes), to find and verify fixes of scaling issues | Only this repository |
 | `run_maplib_benches.py` | The maplib_benches suite: workload memory and scaling, storage modes, BSBM, real datasets | A local checkout of **maplib_benches** (see below) |
 | `r2rml_benchmark.py` | `Model.map_r2rml` against hand-built `map_triples` | `duckdb` |
 
@@ -19,7 +20,7 @@ source .venv/bin/activate
 maturin develop --release
 ```
 
-Both `rdf12_benchmark.py` and `run_maplib_benches.py` refuse to run in two cases:
+`rdf12_benchmark.py`, `rdf12_scaling.py` and `run_maplib_benches.py` refuse to run in two cases:
 
 - while `cargo`, `rustc` or `maturin` is running;
 - when the compiled maplib module is older than its Rust sources, for example after a `git pull`
@@ -36,8 +37,32 @@ python rdf12_benchmark.py compare rdf12_results/main.json rdf12_results/other.js
 
 - Generated data goes to the system temporary folder.
 - Results go to `rdf12_results/`, which git ignores.
-- The `rdf12` encoding is recorded as an error until maplib can read RDF 1.2 triple terms.
 - At 10⁷ triples, loading peaks at about 3.5 GB. Going beyond that needs more memory than 24 GB.
+
+## rdf12_scaling.py
+
+```sh
+python rdf12_scaling.py run --triples 1e6,3e6,1e7,3e7 --label baseline
+python rdf12_scaling.py run --triples 1e6,1e7 --configs wide --label wide-fix
+python rdf12_scaling.py compare rdf12_results/scaling-baseline.json rdf12_results/scaling-wide-fix.json
+```
+
+Billions of triples don't fit on one development machine, so this benchmark measures each cost at
+several sizes and reports the slope of log(cost) against log(size). A slope of 0 means the cost
+doesn't grow with the store (looking up one statement, adding a few). A slope of 1 means it grows
+in proportion (loading, an answer that grows with the store). A row is flagged `GROWS` when its
+slope is more than 0.3 above what the operation needs. Each row names the issue it checks.
+
+- **Graphs:**
+  - `uniform`: the graph of `rdf12_benchmark.py`.
+  - `hot`: every triple of one predicate described, so all triple terms are one partition.
+  - `wide`: 2000 predicates, so 2000 partitions.
+- **Encodings:** classic reification and RDF 1.2, which must return the same numbers of rows.
+- **Batches:** files are read in batches of 1M triples (`--batch-size`), not the default 10M,
+  which would read files of up to 10M triples in one batch and hide costs paid per batch.
+- **Output:** results go to `rdf12_results/scaling-<label>.json`.
+- **Sizes:** use at least three sizes so a slope isn't fitted through two noisy points.
+  Times under a millisecond vary by about 0.1 ms between runs.
 
 ## run_maplib_benches.py and maplib_benches
 
